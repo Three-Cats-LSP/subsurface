@@ -1,16 +1,18 @@
 # Subsurface Neo — Working Roadmap
 
-This document is the working implementation schedule for **Subsurface Neo**. Neo keeps the mature Subsurface dive engine and hardware support while modernizing the user experience and adding carefully selected capabilities from SeaBirds and new Neo-specific services.
+This document is the working implementation schedule for **Subsurface Neo**. Neo keeps the mature Subsurface dive engine and hardware support while modernizing the user experience and adding carefully selected capabilities from SeaBirds, LSP D-Planner+, and new Neo-specific services.
 
 ## Guiding principles
 
 - Preserve the mature Subsurface core wherever possible instead of rewriting it.
 - Keep compatibility with Subsurface data formats and libdivecomputer.
 - Treat SeaBirds as a source of proven UX/product ideas and web-device transport concepts, not as a replacement backend.
+- Treat LSP D-Planner+ as a source of planner algorithms, validation cases, technical-diving workflows, schedule/export UX, and decompression-planning ideas; reuse Subsurface calculation code where it already provides the required capability.
 - Keep native Android and Windows builds fully capable of Bluetooth/USB dive-computer downloads.
 - Share as much Qt/QML/core code as practical with the future WebAssembly build.
 - Never ship OAuth client secrets or provider access/refresh tokens in source or plaintext preferences.
 - Maintain a clean path for continuously receiving upstream Subsurface fixes, libraries, formats and dive-computer support.
+- For decompression/planner calculations, numerical correctness and reproducible regression tests take priority over UI speed or feature count.
 
 ---
 
@@ -57,7 +59,7 @@ The sync PR is the review boundary for:
 - new dive-computer models,
 - library/dependency changes,
 - parser/import/export improvements,
-- decompression/profile fixes,
+- decompression/profile/planner fixes,
 - bug fixes,
 - data-model changes,
 - Qt/platform compatibility changes.
@@ -68,7 +70,7 @@ Initial policy: **manual merge after green CI**. Later, conflict-free upstream s
 
 To reduce future upstream conflicts:
 
-- avoid modifying `core/`, `libdivecomputer/`, parsers and other mature upstream code unless required;
+- avoid modifying `core/`, libdivecomputer-facing code, parsers and other mature upstream code unless required;
 - prefer Neo adapters, QML views and provider abstractions around upstream APIs;
 - document unavoidable upstream-file modifications;
 - keep Neo-only files in clearly named locations where practical.
@@ -125,21 +127,8 @@ Preferred architecture: a small versioned **Neo update manifest** generated from
 - Shared Qt/QML design tokens.
 - Modern reusable cards/components.
 - Deep navy/teal visual system with cyan accents.
-- Phone bottom navigation:
-  - Home
-  - Dives
-  - Sites
-  - Stats
-  - More
-- Desktop sidebar:
-  - Dashboard
-  - Dives
-  - Dive Sites
-  - Map
-  - Statistics
-  - Equipment
-  - Import
-  - Settings
+- Phone bottom navigation: Home / Dives / Sites / Stats / More.
+- Desktop sidebar: Dashboard / Dives / Dive Sites / Map / Statistics / Equipment / Import / Planner / Settings.
 - Responsive layouts for native and future WebAssembly use.
 
 **Exit:** Neo launches into a coherent responsive modern shell on Android and Windows.
@@ -168,8 +157,7 @@ Preferred architecture: a small versioned **Neo update manifest** generated from
 ### Dive list
 
 - Modern metadata-first dive cards/list rows.
-- Search.
-- Sorting.
+- Search and sorting.
 - Pagination/virtualized handling as appropriate.
 - Quick filter chips.
 
@@ -204,14 +192,6 @@ Add:
 - **Collections** — manually selected arbitrary dive groups.
 - **Smart Collections** — saved filter rules that automatically resolve to matching dives.
 
-Examples:
-
-- Favourite dives.
-- Training dives.
-- CCR dives in Japan deeper than 30 m.
-- Dives missing notes or site information.
-- Dives made with a particular computer or equipment kit.
-
 Allow **Save current filter as Smart Collection**.
 
 **Exit:** a diver can quickly locate and organize dives without losing the power of Subsurface's existing filter engine.
@@ -242,23 +222,9 @@ Profile graph:
 - floating tooltip,
 - multiple dive-computer awareness where available.
 
-Tooltip may include available values such as:
+Tooltip may include available values such as time, depth, water temperature, NDL/deco, GF99, PPO2, pressure and SAC/RMV.
 
-- time,
-- depth,
-- water temperature,
-- NDL/deco,
-- GF99,
-- PPO2,
-- pressure,
-- SAC/RMV.
-
-Show computer metadata where available:
-
-- computer model,
-- dive mode,
-- decompression algorithm,
-- gradient factors.
+Show computer metadata where available: computer model, dive mode, decompression algorithm and gradient factors.
 
 Graph controls become a collapsible descriptive checkbox panel on desktop and a mobile-friendly sheet/panel on phones.
 
@@ -287,7 +253,7 @@ Graph controls become a collapsible descriptive checkbox panel on desktop and a 
 
 **Goal:** preserve and modernize one of Subsurface's strongest capabilities.
 
-Native Android/Windows:
+### Native Android/Windows
 
 - libdivecomputer,
 - Bluetooth LE,
@@ -295,27 +261,260 @@ Native Android/Windows:
 - USB/serial,
 - existing Subsurface import/parsers.
 
-Future web proof:
+### Web desktop
 
-- libdivecomputer/WebAssembly feasibility,
-- Web Bluetooth,
-- Web Serial,
-- SeaBirds Shearwater transport as a useful reference/prototype.
+SeaBirds demonstrates usable browser dive-computer transport and is the reference for this workstream.
 
-UI:
+- evaluate/implement libdivecomputer in WebAssembly,
+- Web Bluetooth byte-stream adapter,
+- Web Serial byte-stream adapter,
+- start with Shearwater because SeaBirds already proves the browser transport/protocol workflow,
+- generalize transport so manufacturer protocols remain in libdivecomputer rather than being duplicated in JavaScript where practical,
+- detect browser capabilities at runtime and degrade gracefully.
+
+### Import UI
 
 - remembered dive computers,
 - device discovery/connect workflow,
-- download progress,
-- duplicate handling,
+- manifest-first dive list where the device/protocol permits,
+- stable fingerprints and duplicate/deleted-dive handling,
+- selective download,
+- progress,
 - import preview/results,
-- meaningful errors/retry.
+- meaningful errors/retry/reconnect.
 
-**Exit:** Neo retains native Subsurface device compatibility while presenting a simpler import experience.
+**Exit:** Neo retains native Subsurface device compatibility and can directly download from supported dive computers in compatible desktop browsers.
 
 ---
 
-## Milestone 8 — Dive Sites & Map
+## Milestone 8 — Advanced Dive Planner & Decompression Lab
+
+**Goal:** retain Subsurface's mature planner/decompression core while incorporating the strongest technical-planning workflows proven in LSP D-Planner+.
+
+LSP D-Planner+ is MIT-licensed and can be used as a reference/source where appropriate. Do not create a parallel calculation engine merely to reproduce a feature that the Subsurface C++ planner already performs. New algorithm code must be isolated, documented and regression-tested.
+
+### 8A. Existing Subsurface planner capabilities to preserve/reuse
+
+Audit and expose the mature native capabilities before replacing anything, including where currently supported:
+
+- Bühlmann/ZHL + Gradient Factors,
+- VPM-B,
+- OC,
+- CCR,
+- pSCR,
+- cylinders and gas-use tracking,
+- bailout/deco-gas handling,
+- surface interval/repetitive tissue initialization,
+- configurable SAC/deco SAC,
+- plan segments/setpoints/gas changes,
+- planner warnings and failure states.
+
+Neo should primarily provide a better shared planner UI over this engine.
+
+### 8B. Profile Builder
+
+Build a modern multi-segment profile editor:
+
+- depth/time waypoints,
+- editable descent, bottom, multilevel and ascent segments,
+- configurable descent rate,
+- deep ascent rate,
+- deco ascent rate,
+- final/surface ascent rate,
+- deco stop increment,
+- last stop depth,
+- travel-gas switch depth,
+- gas/setpoint changes on profile segments,
+- reusable profile/planner presets,
+- surface interval and repetitive-dive chaining,
+- multi-dive-day planning.
+
+Profile editing should work both numerically and graphically where practical.
+
+### 8C. Decompression algorithms
+
+Required algorithm/settings presentation:
+
+- Bühlmann ZHL-16C + GF,
+- custom/preset GF,
+- VPM-B conservatism,
+- investigate **VPM-B/GFS** from LSP+ as an additional Neo mode where it is not already provided by upstream,
+- preserve any additional algorithms added by future upstream Subsurface updates.
+
+For VPM-B/GFS or any other new engine behavior:
+
+1. document the mathematical/reference source,
+2. isolate it from the UI,
+3. create deterministic reference profiles,
+4. compare results against LSP+ and other available reference implementations,
+5. test OC/CCR combinations separately,
+6. test metric/imperial conversion independently of engine calculations,
+7. do not silently substitute one algorithm for another.
+
+Always display the active decompression model and its key settings prominently with a generated plan.
+
+### 8D. OC / CCR / pSCR modes
+
+Expose and validate:
+
+- Open Circuit,
+- CCR setpoint planning,
+- CCR bailout planning,
+- pSCR where supported by the native planner,
+- bottom/travel/deco gases,
+- gas switches,
+- bailout/emergency gases,
+- mode-specific consumption calculations.
+
+Use LSP+ pSCR/CCR regression suites and workflows as useful comparison material where compatible.
+
+### 8E. Environment & physiology-related planner settings
+
+Bring useful LSP+ controls into Neo where technically sound:
+
+- altitude,
+- acclimatized/not-acclimatized state,
+- surface pressure,
+- salt/fresh/EN13319/custom water density where supported by the calculation path,
+- configurable narcotic-gas assumptions,
+- END/EAD information,
+- MOD/MinOD,
+- PPO2 limits,
+- CNS/OTU calculations/warnings.
+
+Environmental settings must be visible in exported plans so a schedule cannot be detached from important assumptions.
+
+### 8F. Gas Planning & Reserves
+
+Make gas sufficiency a first-class planner result rather than an afterthought:
+
+- cylinder size/working pressure/start pressure,
+- bottom SAC/RMV,
+- deco SAC/RMV,
+- CCR/pSCR-specific consumption where appropriate,
+- consumption by cylinder,
+- predicted end pressure/remaining gas,
+- reserve/minimum-gas target,
+- travel gas,
+- deco gases,
+- bailout gas,
+- insufficient/critical/no-gas states,
+- MOD/MinOD violations,
+- gas-switch schedule,
+- optional reserve strategies where they can be modeled clearly.
+
+Use LSP+'s per-cylinder remaining-gas cards and severity presentation as a UX reference.
+
+### 8G. Contingency / Emergency Planner
+
+Port the strong LSP+ contingency workflow concept into Neo:
+
+- extra bottom time,
+- deeper-than-planned profile,
+- lost deco/travel gas,
+- bailout/emergency scenario where applicable,
+- side-by-side or quickly switchable main/contingency schedules,
+- separate gas sufficiency for the contingency,
+- clear identification of which gas/profile assumption changed.
+
+Never silently replace the main plan with a contingency result.
+
+### 8H. Planner Visualization & Analysis
+
+Provide an integrated planner analysis surface including available data such as:
+
+- depth profile,
+- stop/deco ceiling profile,
+- NDL/TTS,
+- GF/GF99,
+- tissue saturation/loading,
+- GF/tissue visualization,
+- gas switches,
+- cylinder pressure/remaining gas,
+- PPO2,
+- CNS/OTU where appropriate,
+- algorithm/settings annotation.
+
+Add **planned vs actual** comparison after a real dive as a Neo extension when practical, using the same graph design language as Dive Details.
+
+### 8I. Schedule table
+
+Adopt the clarity of LSP+'s common schedule contract. Depending on the selected mode/available fields, a stop/segment table should support:
+
+- Phase,
+- Depth,
+- Stop/segment time,
+- Run time,
+- TTS,
+- Gas/Mix,
+- PPO2,
+- CNS,
+- EAD/END where meaningful,
+- gas switch and warning rows.
+
+The same underlying schedule data should drive screen, clipboard, TXT/slate and PDF exports so those views cannot drift apart.
+
+### 8J. Planner Export / Share
+
+Integrate planner exports with Neo's unified Export/Share system.
+
+Required LSP+-inspired outputs:
+
+- **Copy** — messenger-friendly plain-text plan to clipboard,
+- **Deco Slate** — compact monospaced schedule suitable for a wet-notes/slate reference,
+- **TXT** — complete human-readable plan,
+- **PDF** — printable plan with schedule, plan assumptions/settings, gas analysis, profile graph, tissues/GF analysis and warnings as appropriate,
+- **Emergency/Contingency Plan** — export of the selected contingency with its changed assumptions and gas status.
+
+Allow a full plan package to include main plan plus selected contingencies.
+
+All exported schedules must carry the algorithm/settings, gases, units, altitude/environment assumptions and planning-aid disclaimer needed to interpret them correctly.
+
+### 8K. Planner Tools
+
+Where not already available elsewhere in Neo, expose LSP+-style technical tools using shared calculation primitives:
+
+- MOD,
+- Best Mix,
+- END,
+- EAD,
+- gas reference table,
+- NDL table,
+- unit converter,
+- CNS/OTU calculator.
+
+Avoid duplicating calculation logic between standalone tools and the planner.
+
+### 8L. Planner validation & release gates
+
+Planner code is safety-critical engineering even though Neo remains a planning aid.
+
+Before release:
+
+- build a permanent reference-profile suite,
+- include recreational, deep air/nitrox, trimix, CCR, pSCR, altitude and repetitive cases,
+- include VPM-B and any VPM-B/GFS cases,
+- include contingency and gas-loss cases,
+- test gas exhaustion/reserve boundaries,
+- compare selected cases against current Subsurface, LSP+, and trusted independent references where available,
+- run the same fixtures on Windows, Android and WebAssembly calculation paths,
+- ensure platform differences remain inside documented numerical tolerances,
+- add regression tests whenever upstream planner/deco changes are merged.
+
+No upstream sync that materially changes decompression/planner output should be auto-merged solely because it compiles.
+
+### 8M. Planner persistence
+
+- Store plans in normal Subsurface-compatible structures wherever possible.
+- Store Neo-only presets/templates/contingency metadata separately when upstream has no equivalent representation.
+- Include Neo planner metadata in the portable backup bundle and cloud sync where safe.
+- Keep a path to open/save a plan without turning it into a completed dive until the user chooses to do so.
+
+**Exit:** Neo can plan recreational and advanced technical dives using the strongest existing Subsurface calculations plus validated LSP+-derived improvements, with gas/reserve analysis, contingencies, visualization and high-quality schedule exports.
+
+---
+
+## Milestone 9 — Dive Sites & Map
 
 **Goal:** modern site browsing/editing without replacing mature Subsurface site data.
 
@@ -330,7 +529,7 @@ UI:
 
 ---
 
-## Milestone 9 — Statistics
+## Milestone 10 — Statistics
 
 **Goal:** modern, responsive statistics based on real Subsurface dive data.
 
@@ -344,13 +543,11 @@ UI:
 
 ---
 
-## Milestone 10 — Equipment Library & Gear Management
+## Milestone 11 — Equipment Library & Gear Management
 
 **Goal:** turn equipment into a reusable diver-owned library rather than repetitive per-dive typing.
 
-### Equipment Library
-
-Potential fields, according to what can be stored compatibly or in Neo metadata:
+Potential Equipment Library fields, according to what can be stored compatibly or in Neo metadata:
 
 - name,
 - category,
@@ -364,15 +561,7 @@ Potential fields, according to what can be stored compatibly or in Neo metadata:
 - usage count,
 - active/retired state.
 
-### Gear Kits / Loadouts
-
-Reusable combinations such as:
-
-- Single Tank,
-- Sidemount,
-- CCR,
-- Warm Water Travel,
-- Drysuit setup.
+Gear Kits / Loadouts can represent reusable combinations such as Single Tank, Sidemount, CCR, Warm Water Travel and Drysuit setups.
 
 Features:
 
@@ -385,7 +574,7 @@ Features:
 
 ---
 
-## Milestone 11 — Data, Export, Backup & Portability
+## Milestone 12 — Data, Export, Backup & Portability
 
 **Goal:** make Neo data easy to share, archive, move and restore.
 
@@ -397,24 +586,10 @@ Support a modern central export workflow for the formats available/implemented i
 - human-readable plain text,
 - UDDF,
 - Subsurface XML,
-- CSV/other useful existing Subsurface exporters.
+- CSV/other useful existing Subsurface exporters,
+- planner-specific Copy / Deco Slate / TXT / PDF / Emergency Plan outputs from Milestone 8.
 
-Where the format permits, support:
-
-- one dive,
-- selected dives,
-- complete log.
-
-PDF reports should use Neo's high-quality profile/data presentation and may include:
-
-- summary metrics,
-- site/date,
-- graph,
-- gases/cylinders,
-- computer/deco metadata,
-- buddies,
-- equipment,
-- notes.
+Where the format permits, support one dive, selected dives and complete log.
 
 Before implementing a duplicate exporter, audit existing Subsurface export paths and reuse them where they already provide the required fidelity.
 
@@ -440,32 +615,33 @@ Investigate a single-file Neo backup package such as `.subsurface-neo`, containi
 - Neo settings/metadata,
 - equipment-library metadata,
 - collections/smart-collection metadata,
+- planner presets/Neo planner metadata,
 - future optional attachments.
 
 The XML remains the canonical dive data; Neo-specific metadata lives alongside it rather than breaking Subsurface compatibility.
 
-**Exit:** users can export useful reports, move data between systems and safely restore a Neo library.
+**Exit:** users can export useful reports/plans, move data between systems and safely restore a Neo library.
 
 ---
 
-## Milestone 12 — Cloud Sync, Accounts, Settings & Security
+## Milestone 13 — Cloud Sync, Accounts, Settings & Security
 
 **Goal:** productionize Neo cloud/account features and overall application settings.
 
-Keep existing Subsurface Cloud support and add a provider abstraction for optional additional providers.
+Keep existing Subsurface Cloud support and add the Neo provider abstraction.
 
-Planned providers:
+Providers:
 
-- Subsurface Cloud,
+- Subsurface Cloud (legacy compatibility),
 - Google Drive App Data,
-- Dropbox App Folder,
-- OneDrive App Folder.
+- Dropbox App Folder.
 
 Sync model:
 
 - one Primary Sync provider,
-- optional Backup providers,
-- avoid uncontrolled multi-master three-way sync until a robust conflict model exists.
+- optional Backup provider,
+- conflict-safe revision/hash metadata,
+- never silently overwrite diverged logs.
 
 OAuth/security:
 
@@ -478,40 +654,69 @@ OAuth/security:
 - account identity/status UI,
 - conflict and sync-state metadata.
 
-Also complete:
-
-- settings polish,
-- release/update preferences,
-- privacy/terms links,
-- production OAuth readiness.
+Also complete settings polish, release/update preferences, privacy/terms links and production OAuth readiness.
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
 
 ---
 
-## Milestone 13 — Web / WebAssembly Proof & Deployment
+## Milestone 14 — Web / WebAssembly & Deployment
 
 **Goal:** deploy a useful browser version while maximizing code sharing.
 
-Initial browser scope:
+Browser scope:
 
 - full dive-log viewer/editor,
-- cloud sync,
+- Google Drive/Dropbox sync,
 - maps,
 - statistics,
-- planning where feasible.
+- advanced planner where feasible,
+- import/export/backup workflows.
 
-Device support proof:
+Desktop-browser dive-computer support:
 
-- evaluate Web Bluetooth/Web Serial and libdivecomputer/WASM integration,
-- start with well-supported devices/SeaBirds transport reference where practical,
-- do not hold the first web release hostage to complete browser hardware parity.
+- libdivecomputer/WebAssembly transport bridge,
+- Web Bluetooth,
+- Web Serial,
+- Shearwater first/reference via the proven SeaBirds approach,
+- expand support by libdivecomputer transport capability rather than maintaining separate JS manufacturer parsers whenever possible.
+
+Mobile browsers must detect unsupported hardware APIs and offer file/cloud/native-app alternatives rather than presenting a broken connect button.
 
 Deployment target:
 
 - `https://threecats-lsp.com/subsurface-neo/`
 
-**Exit:** Neo has a deployable web build sharing substantial QML/core logic with native applications.
+**Exit:** Neo has a deployable web build sharing substantial QML/core logic with native applications and direct desktop-browser computer download on supported hardware/browser combinations.
+
+---
+
+## Milestone 15 — Production Hardening & Public Release
+
+**Goal:** turn the integrated engineering build into a trustworthy public release.
+
+- Large real-world Subsurface logs.
+- Old/current Subsurface XML compatibility.
+- Import/export round-trip tests.
+- Cloud corruption/offline/multi-device conflict tests.
+- Planner numerical/reference regression gates.
+- Dive-computer hardware matrix tests.
+- Windows Bluetooth/USB/serial tests.
+- Android Bluetooth/USB tests.
+- Desktop Web Bluetooth/Web Serial tests.
+- Performance/memory profiling.
+- Accessibility and keyboard navigation.
+- Translation/localization review.
+- Crash/error handling.
+- GPL/upstream attribution review.
+- Privacy/terms review.
+- Google/Dropbox production OAuth readiness.
+- Android release signing.
+- Windows code signing.
+- Update-manifest verification from the prior stable release.
+- Tagged GitHub release, signed installers/APKs, checksums and release notes.
+
+**Exit:** Subsurface Neo 1.0 is suitable for public installation and ongoing upstream-maintained releases.
 
 ---
 
@@ -524,19 +729,32 @@ For every upstream sync PR:
 1. inspect data-model/API changes,
 2. run Android CI,
 3. run Windows CI,
-4. run relevant import/profile/filter tests,
+4. run relevant import/profile/filter/planner tests,
 5. inspect conflicts in Neo-modified upstream files,
 6. update Neo adapters when upstream APIs evolve,
-7. merge only when Neo behavior remains correct.
+7. review any changed decompression/planner numerical output,
+8. merge only when Neo behavior remains correct.
 
 A feature is not considered complete if it makes future Subsurface upstream synchronization unnecessarily difficult without a documented reason.
+
+# Ongoing workstream — Planner/decompression verification
+
+Planner work has an independent safety/reliability gate:
+
+1. algorithm implementation and UI are separated,
+2. assumptions/settings are visible,
+3. deterministic reference profiles are stored in tests,
+4. gas/reserve results are regression-tested as well as decompression times,
+5. exports are generated from the same schedule model shown on screen,
+6. Windows/Android/WebAssembly outputs are compared,
+7. upstream decompression changes trigger focused review rather than blind auto-merge.
 
 # Ongoing workstream — Release readiness
 
 For release candidates:
 
 1. build signed/reproducible native artifacts,
-2. run smoke tests,
+2. run smoke and planner regression tests,
 3. generate release notes and update manifest,
 4. publish GitHub Release,
 5. publish hashes/metadata,
