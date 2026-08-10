@@ -7,19 +7,33 @@ import org.subsurfacedivelog.mobile 1.0
 Kirigami.ScrollablePage {
 	id: aboutPage
 	property int pageWidth: aboutPage.width - aboutPage.leftPadding - aboutPage.rightPadding
-	title: qsTr("About Subsurface-mobile")
+	title: qsTr("About Subsurface Neo")
 	background: Rectangle { color: subsurfaceTheme.backgroundColor }
+
+	function openCloudSyncPage() {
+		var component = Qt.createComponent("qrc:/qml/modern/pages/CloudSyncPage.qml")
+		if (component.status !== Component.Ready) {
+			showPassiveNotification(qsTr("Unable to load Cloud & Sync: %1").arg(component.errorString()), 6000)
+			return
+		}
+		var cloudPage = component.createObject(rootItem)
+		if (cloudPage === null) {
+			showPassiveNotification(qsTr("Unable to create Cloud & Sync page"), 6000)
+			return
+		}
+		showPage(cloudPage)
+	}
 
 	function openModernPreview() {
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDashboard.qml")
 		if (component.status !== Component.Ready) {
-			showPassiveNotification(qsTr("Unable to load Modern UI Preview: %1").arg(component.errorString()), 6000)
+			showPassiveNotification(qsTr("Unable to load Subsurface Neo Preview: %1").arg(component.errorString()), 6000)
 			return
 		}
 
 		var dashboard = component.createObject(rootItem)
 		if (dashboard === null) {
-			showPassiveNotification(qsTr("Unable to create Modern UI Preview"), 6000)
+			showPassiveNotification(qsTr("Unable to create Subsurface Neo Preview"), 6000)
 			return
 		}
 
@@ -30,6 +44,9 @@ Kirigami.ScrollablePage {
 			downloadFromDc.dcImportModel.clearTable()
 			showPageFromDrawer(downloadFromDc)
 		})
+		dashboard.openCloudSync.connect(function() {
+			aboutPage.openCloudSyncPage()
+		})
 		showPage(dashboard)
 	}
 
@@ -38,9 +55,8 @@ Kirigami.ScrollablePage {
 		width: aboutPage.width
 		Layout.margins: Kirigami.Units.gridUnit / 2
 
-
 		Kirigami.Heading {
-			text: qsTr("About Subsurface-mobile")
+			text: qsTr("About Subsurface Neo")
 			color: subsurfaceTheme.textColor
 			Layout.topMargin: Kirigami.Units.gridUnit
 			Layout.alignment: Qt.AlignHCenter
@@ -58,8 +74,8 @@ Kirigami.ScrollablePage {
 		}
 
 		Kirigami.Heading {
-			text: qsTr("A mobile version of the free Subsurface divelog software.\n") +
-				qsTr("View your dive logs while on the go.")
+			text: qsTr("A modern cross-platform interface built on the mature Subsurface dive log engine.\n") +
+				qsTr("View, edit, analyze and synchronize your dives.")
 			level: 4
 			color: subsurfaceTheme.textColor
 			Layout.alignment: Qt.AlignHCenter
@@ -71,7 +87,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Kirigami.Heading {
-			text: qsTr("Version: %1\n\n© Subsurface developer team\n2011-2026").arg(manager.getVersion())
+			text: qsTr("Version: %1\n\nBased on Subsurface\nGPL-2.0").arg(manager.getVersion())
 			level: 5
 			color: subsurfaceTheme.textColor
 			font.pointSize: subsurfaceTheme.smallPointSize + 1
@@ -85,7 +101,7 @@ Kirigami.ScrollablePage {
 		TemplateButton {
 			id: modernPreviewButton
 			Layout.alignment: Qt.AlignHCenter
-			text: qsTr("Open Modern UI Preview")
+			text: qsTr("Open Subsurface Neo Preview")
 			onClicked: aboutPage.openModernPreview()
 		}
 		TemplateButton {
@@ -95,7 +111,7 @@ Kirigami.ScrollablePage {
 			onClicked: {
 				manager.copyAppLogToClipboard()
 				rootItem.returnTopPage()
-				}
+			}
 		}
 	}
 }
