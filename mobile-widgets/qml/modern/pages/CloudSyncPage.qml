@@ -10,8 +10,14 @@ Kirigami.ScrollablePage {
 	id: page
 	title: qsTr("Cloud & Sync")
 	background: Rectangle { color: tokens.background }
+	property string lastBackupProvider: ""
 
 	Modern.DesignTokens { id: tokens }
+
+	Connections {
+		target: CloudSync
+		function onDiveLogBackupFinished(providerId) { page.lastBackupProvider = providerId }
+	}
 
 	ColumnLayout {
 		width: page.availableWidth
@@ -61,6 +67,12 @@ Kirigami.ScrollablePage {
 							font.pixelSize: 14
 						}
 						Text {
+							visible: page.lastBackupProvider === modelData.id
+							text: qsTr("Dive-log backup uploaded successfully")
+							color: tokens.success
+							font.pixelSize: 12
+						}
+						Text {
 							visible: modelData.id === "google-drive" && !modelData.configured
 							text: qsTr("Google requires a platform-specific Android OAuth client. Desktop and web clients are already configured.")
 							color: tokens.textSecondary
@@ -70,15 +82,26 @@ Kirigami.ScrollablePage {
 						}
 					}
 
-					Button {
-						text: modelData.connected ? qsTr("Disconnect") : qsTr("Connect")
-						enabled: modelData.connected || (modelData.configured && !CloudSync.authorizationInProgress)
-						onClicked: {
-							if (modelData.connected)
-								CloudSync.disconnectProvider(modelData.id)
-							else
-								CloudSync.beginAuthorization(modelData.id)
+					RowLayout {
+						visible: modelData.connected
+						Button {
+							text: qsTr("Backup now")
+							onClicked: {
+								page.lastBackupProvider = ""
+								CloudSync.backupDiveLog(modelData.id)
+							}
 						}
+						Button {
+							text: qsTr("Disconnect")
+							onClicked: CloudSync.disconnectProvider(modelData.id)
+						}
+					}
+
+					Button {
+						visible: !modelData.connected
+						text: qsTr("Connect")
+						enabled: modelData.configured && !CloudSync.authorizationInProgress
+						onClicked: CloudSync.beginAuthorization(modelData.id)
 					}
 				}
 			}
@@ -97,7 +120,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Text {
-			text: qsTr("Subsurface Cloud remains available through the existing Subsurface account workflow. Neo cloud providers are additive and do not replace the legacy backend.")
+			text: qsTr("Backup now uploads a complete Subsurface XML snapshot. Bidirectional conflict-aware synchronization will build on the same provider transport. Subsurface Cloud remains available through the existing account workflow.")
 			color: tokens.textSecondary
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
