@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "qmlinterface.h"
+#include "core/cloudstorage.h"
+#include "core/cloudsyncmanager.h"
 #include <QQmlEngine>
 
 QMLInterface::QMLInterface()
@@ -87,6 +89,12 @@ void QMLInterface::setup(QQmlContext *ct)
 	// Register interface class
 	static QMLInterface self;
 	ct->setContextProperty("Backend", &self);
+
+	// Neo cloud sync coordinator. It deliberately shares Subsurface's existing
+	// QNetworkAccessManager, while keeping OAuth/provider state separate from
+	// the legacy Subsurface Cloud account backend.
+	static CloudSyncManager cloudSync(manager());
+	ct->setContextProperty("CloudSync", &cloudSync);
 
 	// Make enums available as types
 	qmlRegisterUncreatableType<QMLInterface>("org.subsurfacedivelog.mobile", 1, 0, "Enums", "Enum is not a type");
