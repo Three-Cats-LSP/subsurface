@@ -155,7 +155,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&fileStore, &CloudSyncFileStore::operationError, this,
 		[this](CloudSyncProviderType type, const QString &fileName, const QString &message) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
-			if (providerId == syncProviderId && syncOperation == SyncOperation::SyncDownloadManifest &&
+			if (!forceCloudDownload && providerId == syncProviderId && syncOperation == SyncOperation::SyncDownloadManifest &&
 			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && isNotFoundError(message)) {
 				startUploadSequence(providerId, syncLocalPayload, QString(), false);
 				return;
@@ -542,6 +542,7 @@ void CloudSyncManager::clearSyncOperation()
 	syncLocalSha256.clear();
 	syncRemoteManifest = CloudSyncManifest();
 	syncUploadManifest = CloudSyncManifest();
+	forceCloudDownload = false;
 	if (wasActive)
 		emit syncInProgressChanged();
 }
@@ -601,9 +602,29 @@ void CloudSyncManager::syncDiveLog(const QString &providerId)
 		return;
 
 	setError(QString());
+	forceCloudDownload = false;
 	syncProviderId = providerId;
 	syncLocalPayload = payload;
 	syncLocalSha256 = CloudSyncManifest::sha256(payload);
+	syncOperation = SyncOperation::SyncDownloadManifest;
+	emit syncInProgressChanged();
+	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
+}
+
+void CloudSyncManager::useCloudDiveLog(const QString &providerId)
+{
+	if (!descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+	if (syncInProgress()) {
+		setError(tr("Another cloud operation is already in progress."));
+		return;
+	}
+
+	setError(QString());
+	forceCloudDownload = true;
+	syncProviderId = providerId;
 	syncOperation = SyncOperation::SyncDownloadManifest;
 	emit syncInProgressChanged();
 	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
@@ -620,6 +641,12 @@ void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const
 	}
 
 	syncRemoteManifest = remote;
+	if (forceCloudDownload) {
+		syncOperation = SyncOperation::SyncDownloadPayload;
+		downloadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME));
+		return;
+	}
+
 	const CloudSyncManifest previous = lastSyncManifest(providerId);
 	const CloudSyncRelation relation = compareCloudSyncState(syncLocalSha256, remote.payloadSha256,
 		previous.isValid() ? previous.payloadSha256 : QString());
