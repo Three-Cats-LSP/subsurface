@@ -36,6 +36,7 @@ private:
 	CloudSyncManager *neoCloudSync = nullptr;
 	QHash<QString, QLabel *> neoStatusLabels;
 	QHash<QString, QPushButton *> neoActionButtons;
+	QHash<QString, QPushButton *> neoBackupButtons;
 };
 
 #endif
