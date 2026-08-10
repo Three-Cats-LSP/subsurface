@@ -8,11 +8,12 @@ import "../components" as Components
 
 Kirigami.ScrollablePage {
 	id: page
-	title: qsTr("Modern UI Preview")
+	title: qsTr("Subsurface Neo Preview")
 	background: Rectangle { color: tokens.background }
 
 	signal openDiveList()
 	signal openImport()
+	signal openCloudSync()
 
 	Modern.DesignTokens { id: tokens }
 
@@ -33,7 +34,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 			}
 			Text {
-				text: qsTr("A first preview of the new Subsurface experience. Existing features remain untouched while we migrate them here.")
+				text: qsTr("Subsurface Neo is the modern interface for your existing Subsurface dive data. We are migrating features incrementally while keeping the mature dive engine intact.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
@@ -77,7 +78,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 			}
 			Text {
-				text: qsTr("Real dive data is the next wiring step. This preview establishes the new layout and component system first.")
+				text: qsTr("Real dive data is the next dashboard wiring step. Cloud authentication is now connected to the Neo provider layer.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
@@ -85,9 +86,11 @@ Kirigami.ScrollablePage {
 			}
 		}
 
-		RowLayout {
+		GridLayout {
 			Layout.fillWidth: true
-			spacing: tokens.space12
+			columns: page.width >= 700 ? 3 : 1
+			columnSpacing: tokens.space12
+			rowSpacing: tokens.space12
 
 			Button {
 				text: qsTr("Open dive list")
@@ -98,6 +101,11 @@ Kirigami.ScrollablePage {
 				text: qsTr("Import dives")
 				Layout.fillWidth: true
 				onClicked: page.openImport()
+			}
+			Button {
+				text: qsTr("Cloud & Sync")
+				Layout.fillWidth: true
+				onClicked: page.openCloudSync()
 			}
 		}
 	}
