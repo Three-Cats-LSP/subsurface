@@ -37,6 +37,7 @@ public:
 	Q_INVOKABLE void disconnectProvider(const QString &providerId);
 	Q_INVOKABLE void uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data);
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
+	Q_INVOKABLE void backupDiveLog(const QString &providerId);
 
 signals:
 	void providersChanged();
@@ -47,6 +48,7 @@ signals:
 	void providerDisconnected(const QString &providerId);
 	void uploadFinished(const QString &providerId, const QString &fileName);
 	void downloadFinished(const QString &providerId, const QString &fileName, const QByteArray &data);
+	void diveLogBackupFinished(const QString &providerId);
 
 private:
 	const CloudSyncProviderDescriptor *descriptorForId(const QString &providerId) const;
