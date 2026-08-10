@@ -10,6 +10,29 @@ Kirigami.ScrollablePage {
 	title: qsTr("About Subsurface-mobile")
 	background: Rectangle { color: subsurfaceTheme.backgroundColor }
 
+	function openModernPreview() {
+		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDashboard.qml")
+		if (component.status !== Component.Ready) {
+			showPassiveNotification(qsTr("Unable to load Modern UI Preview: %1").arg(component.errorString()), 6000)
+			return
+		}
+
+		var dashboard = component.createObject(rootItem)
+		if (dashboard === null) {
+			showPassiveNotification(qsTr("Unable to create Modern UI Preview"), 6000)
+			return
+		}
+
+		dashboard.openDiveList.connect(function() {
+			rootItem.returnTopPage()
+		})
+		dashboard.openImport.connect(function() {
+			downloadFromDc.dcImportModel.clearTable()
+			showPageFromDrawer(downloadFromDc)
+		})
+		showPage(dashboard)
+	}
+
 	ColumnLayout {
 		spacing: Kirigami.Units.largeSpacing
 		width: aboutPage.width
@@ -58,6 +81,12 @@ Kirigami.ScrollablePage {
 			wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
 			anchors.horizontalCenter: parent.Center
 			horizontalAlignment: Text.AlignHCenter
+		}
+		TemplateButton {
+			id: modernPreviewButton
+			Layout.alignment: Qt.AlignHCenter
+			text: qsTr("Open Modern UI Preview")
+			onClicked: aboutPage.openModernPreview()
 		}
 		TemplateButton {
 			id: copyAppLogToClipboard
