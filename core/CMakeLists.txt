@@ -58,6 +58,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudstorage.h
 	cloudsyncfilestore.cpp
 	cloudsyncfilestore.h
+	cloudsyncmanager.cpp
+	cloudsyncmanager.h
 	cloudsyncprovider.cpp
 	cloudsyncprovider.h
 	oauth2pkce.cpp
