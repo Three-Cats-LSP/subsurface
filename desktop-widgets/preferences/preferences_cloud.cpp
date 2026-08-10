@@ -117,13 +117,19 @@ void PreferencesCloud::setupNeoCloudProviders()
 				message = tr("%1 is up to date.").arg(providerName);
 			QMessageBox::information(this, tr("Subsurface Neo cloud sync"), message);
 		});
-	connect(neoCloudSync, &CloudSyncManager::diveLogSyncConflict, this, [this](const QString &) {
-		QMessageBox::warning(this, tr("Subsurface Neo cloud sync"),
-			tr("Sync stopped because both the local dive log and the cloud copy changed since the last sync. Nothing was overwritten."));
+	connect(neoCloudSync, &CloudSyncManager::diveLogSyncConflict, this, [this](const QString &providerId) {
+		const auto choice = QMessageBox::question(this, tr("Subsurface Neo sync conflict"),
+			tr("Both this device and the cloud copy changed since the last sync. Nothing has been overwritten.\n\nUse the cloud copy now?\n\nChoose No to keep the local log unchanged. You can use Backup now afterward if you intentionally want the local log to replace the cloud baseline."),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+		if (choice == QMessageBox::Yes)
+			neoCloudSync->useCloudDiveLog(providerId);
 	});
-	connect(neoCloudSync, &CloudSyncManager::diveLogInitialChoiceRequired, this, [this](const QString &) {
-		QMessageBox::warning(this, tr("Subsurface Neo cloud sync"),
-			tr("Different data already exists in the cloud and this device has no common sync history yet. Neo will not choose a winner automatically. Use Backup now only if you intentionally want this device to become the cloud baseline."));
+	connect(neoCloudSync, &CloudSyncManager::diveLogInitialChoiceRequired, this, [this](const QString &providerId) {
+		const auto choice = QMessageBox::question(this, tr("Subsurface Neo first sync"),
+			tr("Different data already exists in the cloud and this device has no common sync history yet. Neo will not choose a winner automatically.\n\nUse the cloud copy now?\n\nChoose No to keep the local log unchanged. Use Backup now if you intentionally want this device to become the cloud baseline."),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+		if (choice == QMessageBox::Yes)
+			neoCloudSync->useCloudDiveLog(providerId);
 	});
 	connect(neoCloudSync, &CloudSyncManager::lastErrorChanged, this, [this]() {
 		updateNeoCloudProviders();
