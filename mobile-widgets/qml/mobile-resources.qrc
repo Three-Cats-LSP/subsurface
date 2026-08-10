@@ -42,6 +42,12 @@
 		<file>StartPage.qml</file>
 		<file>RecoverCache.qml</file>
 
+		<!-- ********** modern UI preview ********** -->
+		<file>modern/DesignTokens.qml</file>
+		<file>modern/components/ModernCard.qml</file>
+		<file>modern/components/MetricCard.qml</file>
+		<file>modern/pages/ModernDashboard.qml</file>
+
 		<file>SsrfSwitch.qml</file>
 		<file>SsrfTextField.qml</file>
 		<file>SsrfToolButton.qml</file>
