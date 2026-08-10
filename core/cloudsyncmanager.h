@@ -12,6 +12,9 @@
 #include <QUrl>
 #include <QVariantList>
 
+#include <functional>
+#include <memory>
+
 class QNetworkAccessManager;
 class QTcpServer;
 class QTcpSocket;
@@ -26,7 +29,7 @@ public:
 	~CloudSyncManager() override;
 
 	QVariantList providers() const;
-	bool authorizationInProgress() const { return activeProviderId.size() > 0; }
+	bool authorizationInProgress() const { return !activeProviderId.isEmpty(); }
 	QString lastError() const { return errorText; }
 
 	Q_INVOKABLE void beginAuthorization(const QString &providerId);
