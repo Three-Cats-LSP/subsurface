@@ -7,7 +7,7 @@ Rectangle {
 	id: card
 	Modern.DesignTokens { id: tokens }
 
-	property alias contentItem: content.data
+	default property alias contentData: content.data
 	property int contentPadding: tokens.space16
 
 	color: tokens.surface
