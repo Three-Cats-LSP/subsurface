@@ -16,6 +16,8 @@ namespace {
 constexpr auto GOOGLE_DESKTOP_CLIENT_ID = "1014878739336-vpgn495hlm5lnu0kf5ipp8sm4o91bdnt.apps.googleusercontent.com";
 constexpr auto GOOGLE_WEB_CLIENT_ID = "1014878739336-pdnmro56alegmna158grah0tf4mrqjnt.apps.googleusercontent.com";
 constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
+constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
+constexpr auto DROPBOX_MOBILE_REDIRECT = "https://threecats-lsp.com/subsurface-neo/oauth/dropbox/callback";
 
 QString connectionState(bool configured, bool connected)
 {
@@ -154,9 +156,6 @@ QString CloudSyncManager::configuredClientId(const CloudSyncProviderDescriptor &
 	switch (provider.type) {
 	case CloudSyncProviderType::GoogleDrive:
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-		// Google requires platform-specific mobile OAuth clients. Keep mobile Google
-		// disabled until the Neo Android/iOS application IDs and signing identities
-		// are finalized; never fall back to the desktop client on mobile.
 		return QString();
 #elif defined(__EMSCRIPTEN__)
 		return QString::fromLatin1(GOOGLE_WEB_CLIENT_ID);
@@ -195,13 +194,16 @@ void CloudSyncManager::clearAuthorization()
 		emit authorizationInProgressChanged();
 }
 
-QUrl CloudSyncManager::startLoopbackListener()
+QUrl CloudSyncManager::startLoopbackListener(const CloudSyncProviderDescriptor &provider)
 {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+	if (provider.type == CloudSyncProviderType::Dropbox)
+		return QUrl(QString::fromLatin1(DROPBOX_MOBILE_REDIRECT));
 	return QUrl(QStringLiteral("subsurface-neo://oauth/callback"));
 #else
 	QTcpServer *server = new QTcpServer(this);
-	if (!server->listen(QHostAddress::LocalHost, 0)) {
+	const quint16 requestedPort = provider.type == CloudSyncProviderType::Dropbox ? DROPBOX_DESKTOP_CALLBACK_PORT : 0;
+	if (!server->listen(QHostAddress::LocalHost, requestedPort)) {
 		server->deleteLater();
 		return QUrl();
 	}
@@ -230,9 +232,11 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 	activeProviderId = providerId;
 	activeClientId = clientId;
 	activePkce = std::make_unique<OAuth2PkceSession>();
-	activeRedirectUri = startLoopbackListener();
+	activeRedirectUri = startLoopbackListener(*provider);
 	if (!activeRedirectUri.isValid() || activeRedirectUri.isEmpty()) {
-		setError(tr("Could not start the OAuth callback listener."));
+		setError(provider->type == CloudSyncProviderType::Dropbox
+			? tr("Dropbox OAuth callback port %1 is already in use.").arg(DROPBOX_DESKTOP_CALLBACK_PORT)
+			: tr("Could not start the OAuth callback listener."));
 		clearAuthorization();
 		return;
 	}
