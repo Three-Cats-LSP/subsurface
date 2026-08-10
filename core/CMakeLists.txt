@@ -283,6 +283,7 @@ source_group("Subsurface Core" FILES ${SUBSURFACE_CORE_LIB_SRCS})
 
 add_library(subsurface_corelib STATIC ${SUBSURFACE_CORE_LIB_SRCS})
 target_link_libraries(subsurface_corelib ${QT_LIBRARIES})
-if(WIN32)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	# CloudCredentialStore uses Windows Credential Manager (CredRead/CredWrite/CredDelete).
 	target_link_libraries(subsurface_corelib advapi32)
 endif()
