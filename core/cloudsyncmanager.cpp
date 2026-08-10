@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncmanager.h"
+#include "cloudcredentialstore.h"
 
 #include <QDesktopServices>
 #include <QHostAddress>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -10,11 +13,42 @@
 
 namespace {
 
+constexpr auto GOOGLE_DESKTOP_CLIENT_ID = "1014878739336-vpgn495hlm5lnu0kf5ipp8sm4o91bdnt.apps.googleusercontent.com";
+constexpr auto GOOGLE_WEB_CLIENT_ID = "1014878739336-pdnmro56alegmna158grah0tf4mrqjnt.apps.googleusercontent.com";
+constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
+
 QString connectionState(bool configured, bool connected)
 {
 	if (connected)
 		return QStringLiteral("connected");
 	return configured ? QStringLiteral("ready") : QStringLiteral("not-configured");
+}
+
+QByteArray serializeTokens(const OAuth2TokenSet &tokens)
+{
+	QJsonObject object;
+	object.insert(QStringLiteral("access_token"), tokens.accessToken);
+	object.insert(QStringLiteral("refresh_token"), tokens.refreshToken);
+	object.insert(QStringLiteral("token_type"), tokens.tokenType);
+	object.insert(QStringLiteral("scope"), tokens.scope);
+	if (tokens.expiresAt.isValid())
+		object.insert(QStringLiteral("expires_at"), tokens.expiresAt.toUTC().toString(Qt::ISODateWithMs));
+	return QJsonDocument(object).toJson(QJsonDocument::Compact);
+}
+
+OAuth2TokenSet deserializeTokens(const QByteArray &payload)
+{
+	OAuth2TokenSet tokens;
+	const QJsonDocument document = QJsonDocument::fromJson(payload);
+	if (!document.isObject())
+		return tokens;
+	const QJsonObject object = document.object();
+	tokens.accessToken = object.value(QStringLiteral("access_token")).toString();
+	tokens.refreshToken = object.value(QStringLiteral("refresh_token")).toString();
+	tokens.tokenType = object.value(QStringLiteral("token_type")).toString(QStringLiteral("Bearer"));
+	tokens.scope = object.value(QStringLiteral("scope")).toString();
+	tokens.expiresAt = QDateTime::fromString(object.value(QStringLiteral("expires_at")).toString(), Qt::ISODateWithMs);
+	return tokens;
 }
 
 } // namespace
@@ -27,27 +61,41 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 {
 	Q_ASSERT(networkManager);
 
+	for (const auto &provider : cloudSyncProviderDescriptors()) {
+		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
+			continue;
+		const OAuth2TokenSet restored = deserializeTokens(CloudCredentialStore::load(provider.id));
+		if (restored.hasAccessToken() || restored.canRefresh())
+			tokens.insert(provider.id, restored);
+	}
+
 	connect(&tokenClient, &OAuth2TokenClient::tokenReceived, this, [this](const OAuth2TokenSet &newTokens) {
-		if (!pendingTokenContinuation) {
-			if (activeProviderId.isEmpty())
-				return;
-			tokens.insert(activeProviderId, newTokens);
-			const QString connectedProvider = activeProviderId;
-			clearAuthorization();
-			emit providersChanged();
-			emit providerConnected(connectedProvider);
+		if (pendingTokenContinuation) {
+			const QString providerId = refreshProviderId;
+			const auto continuation = std::move(pendingTokenContinuation);
+			pendingTokenContinuation = {};
+			refreshProviderId.clear();
+			if (!providerId.isEmpty()) {
+				tokens.insert(providerId, newTokens);
+				CloudCredentialStore::save(providerId, serializeTokens(newTokens));
+				emit providersChanged();
+			}
+			continuation(newTokens.accessToken);
 			return;
 		}
 
-		const auto continuation = std::move(pendingTokenContinuation);
-		pendingTokenContinuation = {};
-		OAuth2TokenSet merged = newTokens;
-		if (!activeProviderId.isEmpty())
-			tokens.insert(activeProviderId, merged);
-		continuation(merged.accessToken);
+		if (activeProviderId.isEmpty())
+			return;
+		const QString connectedProvider = activeProviderId;
+		tokens.insert(connectedProvider, newTokens);
+		CloudCredentialStore::save(connectedProvider, serializeTokens(newTokens));
+		clearAuthorization();
+		emit providersChanged();
+		emit providerConnected(connectedProvider);
 	});
 	connect(&tokenClient, &OAuth2TokenClient::tokenError, this, [this](const QString &message) {
 		pendingTokenContinuation = {};
+		refreshProviderId.clear();
 		setError(message);
 		clearAuthorization();
 	});
@@ -73,12 +121,13 @@ QVariantList CloudSyncManager::providers() const
 		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
 			continue;
 		const QString clientId = configuredClientId(provider);
+		const OAuth2TokenSet tokenSet = tokens.value(provider.id);
 		QVariantMap row;
 		row.insert(QStringLiteral("id"), provider.id);
 		row.insert(QStringLiteral("name"), provider.displayName);
 		row.insert(QStringLiteral("configured"), !clientId.isEmpty());
-		row.insert(QStringLiteral("connected"), tokens.value(provider.id).hasAccessToken());
-		row.insert(QStringLiteral("state"), connectionState(!clientId.isEmpty(), tokens.value(provider.id).hasAccessToken()));
+		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
+		row.insert(QStringLiteral("state"), connectionState(!clientId.isEmpty(), tokenSet.hasAccessToken() || tokenSet.canRefresh()));
 		row.insert(QStringLiteral("scope"), provider.scopes.join(QLatin1Char(' ')));
 		result.append(row);
 	}
@@ -96,9 +145,30 @@ const CloudSyncProviderDescriptor *CloudSyncManager::descriptorForId(const QStri
 
 QString CloudSyncManager::configuredClientId(const CloudSyncProviderDescriptor &provider) const
 {
-	if (provider.clientIdEnvironmentVariable.isEmpty())
+	if (!provider.clientIdEnvironmentVariable.isEmpty()) {
+		const QString overrideId = qEnvironmentVariable(provider.clientIdEnvironmentVariable.toUtf8().constData()).trimmed();
+		if (!overrideId.isEmpty())
+			return overrideId;
+	}
+
+	switch (provider.type) {
+	case CloudSyncProviderType::GoogleDrive:
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+		// Google requires platform-specific mobile OAuth clients. Keep mobile Google
+		// disabled until the Neo Android/iOS application IDs and signing identities
+		// are finalized; never fall back to the desktop client on mobile.
 		return QString();
-	return qEnvironmentVariable(provider.clientIdEnvironmentVariable.toUtf8().constData()).trimmed();
+#elif defined(__EMSCRIPTEN__)
+		return QString::fromLatin1(GOOGLE_WEB_CLIENT_ID);
+#else
+		return QString::fromLatin1(GOOGLE_DESKTOP_CLIENT_ID);
+#endif
+	case CloudSyncProviderType::Dropbox:
+		return QString::fromLatin1(DROPBOX_CLIENT_ID);
+	case CloudSyncProviderType::SubsurfaceCloud:
+		return QString();
+	}
+	return QString();
 }
 
 void CloudSyncManager::setError(const QString &message)
@@ -151,8 +221,7 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 
 	const QString clientId = configuredClientId(*provider);
 	if (clientId.isEmpty()) {
-		setError(tr("%1 OAuth client ID is not configured (%2).")
-			 .arg(provider->displayName, provider->clientIdEnvironmentVariable));
+		setError(tr("%1 OAuth client is not available on this platform yet.").arg(provider->displayName));
 		return;
 	}
 
@@ -267,7 +336,9 @@ void CloudSyncManager::finishLoopbackSocket(QTcpSocket *socket, bool success, co
 
 void CloudSyncManager::disconnectProvider(const QString &providerId)
 {
-	if (tokens.remove(providerId) > 0) {
+	const bool hadToken = tokens.remove(providerId) > 0;
+	CloudCredentialStore::remove(providerId);
+	if (hadToken) {
 		emit providersChanged();
 		emit providerDisconnected(providerId);
 	}
@@ -277,11 +348,11 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 					   const std::function<void(const QString &)> &continuation)
 {
 	const OAuth2TokenSet current = tokens.value(providerId);
-	if (!current.hasAccessToken()) {
+	if (!current.hasAccessToken() && !current.canRefresh()) {
 		setError(tr("%1 is not connected.").arg(provider.displayName));
 		return;
 	}
-	if (!current.isExpired()) {
+	if (current.hasAccessToken() && !current.isExpired()) {
 		continuation(current.accessToken);
 		return;
 	}
@@ -291,10 +362,10 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 	}
 	const QString clientId = configuredClientId(provider);
 	if (clientId.isEmpty()) {
-		setError(tr("%1 OAuth client ID is not configured.").arg(provider.displayName));
+		setError(tr("%1 OAuth client is not available on this platform.").arg(provider.displayName));
 		return;
 	}
-	activeProviderId = providerId;
+	refreshProviderId = providerId;
 	pendingTokenContinuation = continuation;
 	tokenClient.refreshAccessToken(provider, clientId, current.refreshToken);
 }
