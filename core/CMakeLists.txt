@@ -56,10 +56,14 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	checkcloudconnection.h
 	cloudstorage.cpp
 	cloudstorage.h
+	cloudsyncfilestore.cpp
+	cloudsyncfilestore.h
 	cloudsyncprovider.cpp
 	cloudsyncprovider.h
 	oauth2pkce.cpp
 	oauth2pkce.h
+	oauth2tokenclient.cpp
+	oauth2tokenclient.h
 	cochran.cpp
 	cochran.h
 	color.cpp
