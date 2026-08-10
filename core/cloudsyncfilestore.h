@@ -7,8 +7,11 @@
 #include <QByteArray>
 #include <QObject>
 
+#include <functional>
+
 class QNetworkAccessManager;
 class QNetworkReply;
+class QNetworkRequest;
 
 class CloudSyncFileStore : public QObject {
 	Q_OBJECT
