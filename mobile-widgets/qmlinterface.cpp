@@ -3,6 +3,17 @@
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
 #include <QQmlEngine>
+#include <QMetaObject>
+#include <QUrl>
+
+#if defined(Q_OS_ANDROID)
+#include <QJniObject>
+#include <jni.h>
+#endif
+
+namespace {
+CloudSyncManager *neoCloudSync = nullptr;
+}
 
 QMLInterface::QMLInterface()
 {
@@ -94,6 +105,7 @@ void QMLInterface::setup(QQmlContext *ct)
 	// QNetworkAccessManager, while keeping OAuth/provider state separate from
 	// the legacy Subsurface Cloud account backend.
 	static CloudSyncManager cloudSync(manager());
+	neoCloudSync = &cloudSync;
 	ct->setContextProperty("CloudSync", &cloudSync);
 
 	// Make enums available as types
@@ -102,3 +114,17 @@ void QMLInterface::setup(QQmlContext *ct)
 	qmlRegisterUncreatableType<DivePlannerPointsModel>("org.subsurfacedivelog.mobile", 1, 0, "DivePlannerPointsModel", "Planner model cannot be created in QML.");
 	qmlRegisterUncreatableType<CylindersModel>("org.subsurfacedivelog.mobile", 1, 0, "CylindersModel", "Cylinder model cannot be created in QML.");
 }
+
+#if defined(Q_OS_ANDROID)
+extern "C" JNIEXPORT void JNICALL
+Java_org_subsurfacedivelog_mobile_SubsurfaceMobileActivity_oauthCallback(JNIEnv *, jobject, jstring url)
+{
+	if (!neoCloudSync || !url)
+		return;
+	const QString callbackUrl = QJniObject::fromLocalRef(url).toString();
+	QMetaObject::invokeMethod(neoCloudSync, [callbackUrl]() {
+		if (neoCloudSync)
+			neoCloudSync->handleAuthorizationRedirect(QUrl(callbackUrl));
+	}, Qt::QueuedConnection);
+}
+#endif
