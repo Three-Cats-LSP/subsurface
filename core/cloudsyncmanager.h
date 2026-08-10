@@ -70,6 +70,7 @@ private:
 	std::unique_ptr<OAuth2PkceSession> activePkce;
 	QPointer<QTcpServer> loopbackServer;
 	QString errorText;
+	QString refreshProviderId;
 	std::function<void(const QString &)> pendingTokenContinuation;
 };
 
