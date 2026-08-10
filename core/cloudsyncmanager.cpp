@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncmanager.h"
 #include "cloudcredentialstore.h"
+#include "divelog.h"
+#include "file.h"
+#include "qthelper.h"
 #include "save-xml.h"
 
 #include <QDesktopServices>
@@ -22,6 +25,7 @@ constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
 constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
 constexpr auto DROPBOX_MOBILE_REDIRECT = "https://threecats-lsp.com/subsurface-neo/oauth/dropbox/callback";
 constexpr auto NEO_DIVELOG_FILENAME = "subsurface-neo.xml";
+constexpr auto NEO_MANIFEST_FILENAME = "subsurface-neo-sync.json";
 
 QString connectionState(bool configured, bool connected)
 {
@@ -104,21 +108,62 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 		refreshProviderId.clear();
 		setError(message);
 		clearAuthorization();
+		if (syncInProgress())
+			clearSyncOperation();
 	});
 
 	connect(&fileStore, &CloudSyncFileStore::uploadFinished, this,
 		[this](CloudSyncProviderType type, const QString &fileName) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
 			emit uploadFinished(providerId, fileName);
-			if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME))
-				emit diveLogBackupFinished(providerId);
+
+			if (providerId != syncProviderId)
+				return;
+
+			if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) &&
+			    (syncOperation == SyncOperation::BackupUploadPayload || syncOperation == SyncOperation::SyncUploadPayload)) {
+				syncOperation = syncOperation == SyncOperation::BackupUploadPayload
+					? SyncOperation::BackupUploadManifest : SyncOperation::SyncUploadManifest;
+				uploadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME), syncUploadManifest.toJson());
+				return;
+			}
+
+			if (fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) &&
+			    (syncOperation == SyncOperation::BackupUploadManifest || syncOperation == SyncOperation::SyncUploadManifest)) {
+				const bool backupOnly = syncOperation == SyncOperation::BackupUploadManifest;
+				saveLastSyncManifest(providerId, syncUploadManifest);
+				clearSyncOperation();
+				if (backupOnly)
+					emit diveLogBackupFinished(providerId);
+				else
+					emit diveLogSyncFinished(providerId, QStringLiteral("uploaded"));
+			}
 		});
+
 	connect(&fileStore, &CloudSyncFileStore::downloadFinished, this,
 		[this](CloudSyncProviderType type, const QString &fileName, const QByteArray &data) {
-			emit downloadFinished(cloudSyncProviderDescriptor(type).id, fileName, data);
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			emit downloadFinished(providerId, fileName, data);
+			if (providerId != syncProviderId)
+				return;
+			if (fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && syncOperation == SyncOperation::SyncDownloadManifest)
+				handleDownloadedManifest(providerId, data);
+			else if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) && syncOperation == SyncOperation::SyncDownloadPayload)
+				handleDownloadedDiveLog(providerId, data);
 		});
+
 	connect(&fileStore, &CloudSyncFileStore::operationError, this,
-		[this](CloudSyncProviderType, const QString &, const QString &message) { setError(message); });
+		[this](CloudSyncProviderType type, const QString &fileName, const QString &message) {
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			if (providerId == syncProviderId && syncOperation == SyncOperation::SyncDownloadManifest &&
+			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && isNotFoundError(message)) {
+				startUploadSequence(providerId, syncLocalPayload, QString(), false);
+				return;
+			}
+			setError(message);
+			if (providerId == syncProviderId)
+				clearSyncOperation();
+		});
 }
 
 CloudSyncManager::~CloudSyncManager() = default;
@@ -349,6 +394,9 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 {
 	const bool hadToken = tokens.remove(providerId) > 0;
 	CloudCredentialStore::remove(providerId);
+	CloudCredentialStore::remove(syncStateCredentialKey(providerId));
+	if (providerId == syncProviderId)
+		clearSyncOperation();
 	if (hadToken) {
 		emit providersChanged();
 		emit providerDisconnected(providerId);
@@ -401,36 +449,227 @@ void CloudSyncManager::downloadBytes(const QString &providerId, const QString &f
 	});
 }
 
-void CloudSyncManager::backupDiveLog(const QString &providerId)
+QByteArray CloudSyncManager::serializeCurrentDiveLog()
 {
-	if (!descriptorForId(providerId)) {
-		setError(tr("Unknown cloud provider."));
-		return;
-	}
-
 	QTemporaryFile temporaryFile;
 	if (!temporaryFile.open()) {
 		setError(tr("Could not create a temporary dive-log file."));
-		return;
+		return {};
 	}
 	const QString fileName = temporaryFile.fileName();
 	temporaryFile.close();
 
 	if (save_dives(fileName.toUtf8().constData()) != 0) {
 		setError(tr("Could not serialize the current dive log."));
-		return;
+		return {};
 	}
 
 	QFile file(fileName);
 	if (!file.open(QIODevice::ReadOnly)) {
 		setError(tr("Could not read the serialized dive log."));
-		return;
+		return {};
 	}
 	const QByteArray payload = file.readAll();
 	if (payload.isEmpty()) {
 		setError(tr("The serialized dive log is empty."));
+		return {};
+	}
+	return payload;
+}
+
+bool CloudSyncManager::applyCloudDiveLog(const QByteArray &payload)
+{
+	if (payload.isEmpty()) {
+		setError(tr("The downloaded dive log is empty."));
+		return false;
+	}
+
+	QTemporaryFile temporaryFile;
+	if (!temporaryFile.open()) {
+		setError(tr("Could not create a temporary file for the cloud dive log."));
+		return false;
+	}
+	if (temporaryFile.write(payload) != payload.size() || !temporaryFile.flush()) {
+		setError(tr("Could not stage the downloaded dive log."));
+		return false;
+	}
+	const QString fileName = temporaryFile.fileName();
+	temporaryFile.close();
+
+	struct divelog replacement;
+	if (parse_file(fileName.toUtf8().constData(), &replacement) != 0) {
+		setError(tr("The downloaded cloud dive log could not be parsed."));
+		return false;
+	}
+	replacement.process_loaded_dives();
+	::divelog = std::move(replacement);
+	emit_reset_signal();
+	return true;
+}
+
+QString CloudSyncManager::syncStateCredentialKey(const QString &providerId)
+{
+	return QStringLiteral("sync-state-%1").arg(providerId);
+}
+
+CloudSyncManifest CloudSyncManager::lastSyncManifest(const QString &providerId) const
+{
+	QString error;
+	const CloudSyncManifest manifest = CloudSyncManifest::fromJson(
+		CloudCredentialStore::load(syncStateCredentialKey(providerId)), &error);
+	return manifest.isValid() ? manifest : CloudSyncManifest();
+}
+
+void CloudSyncManager::saveLastSyncManifest(const QString &providerId, const CloudSyncManifest &manifest)
+{
+	if (manifest.isValid())
+		CloudCredentialStore::save(syncStateCredentialKey(providerId), manifest.toJson());
+}
+
+bool CloudSyncManager::isNotFoundError(const QString &message)
+{
+	const QString lower = message.toLower();
+	return lower.contains(QStringLiteral("not found")) || lower.contains(QStringLiteral("not_found")) ||
+	       lower.contains(QStringLiteral("path/not_found"));
+}
+
+void CloudSyncManager::clearSyncOperation()
+{
+	const bool wasActive = syncInProgress();
+	syncOperation = SyncOperation::None;
+	syncProviderId.clear();
+	syncLocalPayload.clear();
+	syncLocalSha256.clear();
+	syncRemoteManifest = CloudSyncManifest();
+	syncUploadManifest = CloudSyncManifest();
+	if (wasActive)
+		emit syncInProgressChanged();
+}
+
+void CloudSyncManager::startUploadSequence(const QString &providerId, const QByteArray &payload,
+					   const QString &parentSha256, bool backupOnly)
+{
+	if (payload.isEmpty()) {
+		setError(tr("Cannot upload an empty dive log."));
+		clearSyncOperation();
 		return;
 	}
 
+	syncProviderId = providerId;
+	syncLocalPayload = payload;
+	syncLocalSha256 = CloudSyncManifest::sha256(payload);
+	syncUploadManifest = CloudSyncManifest::forPayload(payload, parentSha256);
+	syncOperation = backupOnly ? SyncOperation::BackupUploadPayload : SyncOperation::SyncUploadPayload;
 	uploadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME), payload);
+}
+
+void CloudSyncManager::backupDiveLog(const QString &providerId)
+{
+	if (!descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+	if (syncInProgress()) {
+		setError(tr("Another cloud operation is already in progress."));
+		return;
+	}
+
+	const QByteArray payload = serializeCurrentDiveLog();
+	if (payload.isEmpty())
+		return;
+
+	setError(QString());
+	const CloudSyncManifest previous = lastSyncManifest(providerId);
+	syncProviderId = providerId;
+	emit syncInProgressChanged();
+	startUploadSequence(providerId, payload, previous.payloadSha256, true);
+}
+
+void CloudSyncManager::syncDiveLog(const QString &providerId)
+{
+	if (!descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+	if (syncInProgress()) {
+		setError(tr("Another cloud operation is already in progress."));
+		return;
+	}
+
+	const QByteArray payload = serializeCurrentDiveLog();
+	if (payload.isEmpty())
+		return;
+
+	setError(QString());
+	syncProviderId = providerId;
+	syncLocalPayload = payload;
+	syncLocalSha256 = CloudSyncManifest::sha256(payload);
+	syncOperation = SyncOperation::SyncDownloadManifest;
+	emit syncInProgressChanged();
+	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
+}
+
+void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const QByteArray &data)
+{
+	QString error;
+	const CloudSyncManifest remote = CloudSyncManifest::fromJson(data, &error);
+	if (!remote.isValid()) {
+		setError(error.isEmpty() ? tr("The cloud sync manifest is invalid.") : error);
+		clearSyncOperation();
+		return;
+	}
+
+	syncRemoteManifest = remote;
+	const CloudSyncManifest previous = lastSyncManifest(providerId);
+	const CloudSyncRelation relation = compareCloudSyncState(syncLocalSha256, remote.payloadSha256,
+		previous.isValid() ? previous.payloadSha256 : QString());
+
+	switch (relation) {
+	case CloudSyncRelation::Identical:
+		saveLastSyncManifest(providerId, remote);
+		clearSyncOperation();
+		emit diveLogSyncFinished(providerId, QStringLiteral("up-to-date"));
+		break;
+	case CloudSyncRelation::LocalOnlyChanged:
+		startUploadSequence(providerId, syncLocalPayload, remote.payloadSha256, false);
+		break;
+	case CloudSyncRelation::CloudOnlyChanged:
+		syncOperation = SyncOperation::SyncDownloadPayload;
+		downloadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME));
+		break;
+	case CloudSyncRelation::Conflict:
+		clearSyncOperation();
+		emit diveLogSyncConflict(providerId);
+		break;
+	case CloudSyncRelation::Unknown:
+		clearSyncOperation();
+		emit diveLogInitialChoiceRequired(providerId);
+		break;
+	}
+}
+
+void CloudSyncManager::handleDownloadedDiveLog(const QString &providerId, const QByteArray &data)
+{
+	if (!syncRemoteManifest.isValid()) {
+		setError(tr("Cloud dive-log payload arrived without a valid sync manifest."));
+		clearSyncOperation();
+		return;
+	}
+
+	const QString downloadedSha = CloudSyncManifest::sha256(data);
+	if (downloadedSha != syncRemoteManifest.payloadSha256) {
+		setError(tr("Cloud dive-log checksum does not match its sync manifest."));
+		clearSyncOperation();
+		return;
+	}
+
+	if (!applyCloudDiveLog(data)) {
+		clearSyncOperation();
+		return;
+	}
+
+	const CloudSyncManifest appliedManifest = syncRemoteManifest;
+	saveLastSyncManifest(providerId, appliedManifest);
+	clearSyncOperation();
+	emit diveLogSyncFinished(providerId, QStringLiteral("downloaded"));
 }
