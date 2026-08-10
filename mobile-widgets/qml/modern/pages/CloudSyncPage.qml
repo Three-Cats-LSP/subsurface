@@ -29,6 +29,8 @@ Kirigami.ScrollablePage {
 		target: CloudSync
 		function onDiveLogBackupFinished(providerId) {
 			page.lastBackupProvider = providerId
+			page.conflictProvider = ""
+			page.initialChoiceProvider = ""
 		}
 		function onDiveLogSyncFinished(providerId, result) {
 			page.lastSyncProvider = providerId
@@ -74,60 +76,88 @@ Kirigami.ScrollablePage {
 				required property var modelData
 				Layout.fillWidth: true
 
-				RowLayout {
+				ColumnLayout {
 					Layout.fillWidth: true
 					spacing: tokens.space12
 
-					ColumnLayout {
+					RowLayout {
 						Layout.fillWidth: true
-						spacing: tokens.space4
-						Text {
-							text: modelData.name
-							color: tokens.textPrimary
-							font.pixelSize: 18
-							font.weight: Font.DemiBold
-						}
-						Text {
-							text: modelData.connected ? qsTr("Connected") :
-								  modelData.configured ? qsTr("Ready to connect") : qsTr("Not available on this platform yet")
-							color: modelData.connected ? tokens.accent : tokens.textSecondary
-							font.pixelSize: 14
-						}
-						Text {
-							visible: page.lastSyncProvider === modelData.id
-							text: page.resultText(page.lastSyncResult)
-							color: tokens.success
-							font.pixelSize: 12
-						}
-						Text {
-							visible: page.lastBackupProvider === modelData.id
-							text: qsTr("Backup uploaded successfully")
-							color: tokens.success
-							font.pixelSize: 12
-						}
-						Text {
-							visible: page.conflictProvider === modelData.id
-							text: qsTr("Sync conflict: both this device and the cloud changed since the last sync. Nothing was overwritten.")
-							color: "#FFB84D"
-							font.pixelSize: 12
-							wrapMode: Text.WordWrap
+						spacing: tokens.space12
+
+						ColumnLayout {
 							Layout.fillWidth: true
+							spacing: tokens.space4
+							Text {
+								text: modelData.name
+								color: tokens.textPrimary
+								font.pixelSize: 18
+								font.weight: Font.DemiBold
+							}
+							Text {
+								text: modelData.connected ? (CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
+									  modelData.configured ? qsTr("Ready to connect") : qsTr("Not available on this platform yet")
+								color: modelData.connected ? tokens.accent : tokens.textSecondary
+								font.pixelSize: 14
+							}
+							Text {
+								visible: page.lastSyncProvider === modelData.id
+								text: page.resultText(page.lastSyncResult)
+								color: tokens.success
+								font.pixelSize: 12
+							}
+							Text {
+								visible: page.lastBackupProvider === modelData.id
+								text: qsTr("Backup uploaded successfully")
+								color: tokens.success
+								font.pixelSize: 12
+							}
+							Text {
+								visible: page.conflictProvider === modelData.id
+								text: qsTr("Sync conflict: both this device and the cloud changed since the last sync. Nothing was overwritten.")
+								color: "#FFB84D"
+								font.pixelSize: 12
+								wrapMode: Text.WordWrap
+								Layout.fillWidth: true
+							}
+							Text {
+								visible: page.initialChoiceProvider === modelData.id
+								text: qsTr("This is the first sync and different data already exists in the cloud. Choose which copy should become the baseline.")
+								color: "#FFB84D"
+								font.pixelSize: 12
+								wrapMode: Text.WordWrap
+								Layout.fillWidth: true
+							}
+							Text {
+								visible: modelData.id === "google-drive" && !modelData.configured
+								text: qsTr("Google requires a platform-specific Android OAuth client. Desktop and web clients are already configured.")
+								color: tokens.textSecondary
+								font.pixelSize: 12
+								wrapMode: Text.WordWrap
+								Layout.fillWidth: true
+							}
 						}
-						Text {
-							visible: page.initialChoiceProvider === modelData.id
-							text: qsTr("This is the first sync and different data already exists in the cloud. Neo will not choose a winner automatically. Use Backup now only if you intentionally want this device to become the cloud baseline.")
-							color: "#FFB84D"
-							font.pixelSize: 12
-							wrapMode: Text.WordWrap
-							Layout.fillWidth: true
+					}
+
+					RowLayout {
+						visible: (page.conflictProvider === modelData.id || page.initialChoiceProvider === modelData.id) && modelData.connected
+						Layout.fillWidth: true
+						Button {
+							text: qsTr("Keep this device")
+							enabled: !CloudSync.syncInProgress
+							onClicked: {
+								page.conflictProvider = ""
+								page.initialChoiceProvider = ""
+								CloudSync.backupDiveLog(modelData.id)
+							}
 						}
-						Text {
-							visible: modelData.id === "google-drive" && !modelData.configured
-							text: qsTr("Google requires a platform-specific Android OAuth client. Desktop and web clients are already configured.")
-							color: tokens.textSecondary
-							font.pixelSize: 12
-							wrapMode: Text.WordWrap
-							Layout.fillWidth: true
+						Button {
+							text: qsTr("Use cloud copy")
+							enabled: !CloudSync.syncInProgress
+							onClicked: {
+								page.conflictProvider = ""
+								page.initialChoiceProvider = ""
+								CloudSync.useCloudDiveLog(modelData.id)
+							}
 						}
 					}
 
@@ -181,7 +211,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Text {
-			text: qsTr("Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and reports a conflict. Backup now is an explicit one-way snapshot operation. Subsurface Cloud remains available through the existing account workflow.")
+			text: qsTr("Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and asks which copy to keep. Every downloaded log is checksum-verified before it replaces the local copy. Backup now is an explicit one-way snapshot operation.")
 			color: tokens.textSecondary
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
