@@ -16,15 +16,6 @@ QByteArray compactJson(const QJsonObject &object)
 	return QJsonDocument(object).toJson(QJsonDocument::Compact);
 }
 
-QUrl oneDriveContentUrl(const QString &fileName)
-{
-	QUrl url(QStringLiteral("https://graph.microsoft.com/v1.0/me/special/approot:/placeholder:/content"));
-	QString path = url.path();
-	path.replace(QStringLiteral("placeholder"), fileName);
-	url.setPath(path);
-	return url;
-}
-
 } // namespace
 
 CloudSyncFileStore::CloudSyncFileStore(QNetworkAccessManager *networkManager, QObject *parent) :
@@ -50,9 +41,6 @@ void CloudSyncFileStore::upload(CloudSyncProviderType provider, const QString &a
 	case CloudSyncProviderType::Dropbox:
 		dropboxUpload(accessToken, remoteName, data);
 		break;
-	case CloudSyncProviderType::OneDrive:
-		oneDriveUpload(accessToken, remoteName, data);
-		break;
 	case CloudSyncProviderType::SubsurfaceCloud:
 		emit operationError(provider, remoteName, tr("Legacy Subsurface Cloud uses its existing sync backend."));
 		break;
@@ -74,9 +62,6 @@ void CloudSyncFileStore::download(CloudSyncProviderType provider, const QString 
 		break;
 	case CloudSyncProviderType::Dropbox:
 		dropboxDownload(accessToken, remoteName);
-		break;
-	case CloudSyncProviderType::OneDrive:
-		oneDriveDownload(accessToken, remoteName);
 		break;
 	case CloudSyncProviderType::SubsurfaceCloud:
 		emit operationError(provider, remoteName, tr("Legacy Subsurface Cloud uses its existing sync backend."));
@@ -257,37 +242,5 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 			emit downloadFinished(CloudSyncProviderType::Dropbox, fileName, payload);
 		else
 			emit operationError(CloudSyncProviderType::Dropbox, fileName, error);
-	});
-}
-
-void CloudSyncFileStore::oneDriveUpload(const QString &accessToken, const QString &fileName, const QByteArray &data)
-{
-	QNetworkRequest request = authorizedRequest(oneDriveContentUrl(fileName), accessToken);
-	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
-	QNetworkReply *reply = networkManager->put(request, data);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
-		const QByteArray payload = reply->readAll();
-		const bool ok = reply->error() == QNetworkReply::NoError;
-		const QString error = ok ? QString() : replyError(reply, payload);
-		reply->deleteLater();
-		if (ok)
-			emit uploadFinished(CloudSyncProviderType::OneDrive, fileName);
-		else
-			emit operationError(CloudSyncProviderType::OneDrive, fileName, error);
-	});
-}
-
-void CloudSyncFileStore::oneDriveDownload(const QString &accessToken, const QString &fileName)
-{
-	QNetworkReply *reply = networkManager->get(authorizedRequest(oneDriveContentUrl(fileName), accessToken));
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
-		const QByteArray payload = reply->readAll();
-		const bool ok = reply->error() == QNetworkReply::NoError;
-		const QString error = ok ? QString() : replyError(reply, payload);
-		reply->deleteLater();
-		if (ok)
-			emit downloadFinished(CloudSyncProviderType::OneDrive, fileName, payload);
-		else
-			emit operationError(CloudSyncProviderType::OneDrive, fileName, error);
 	});
 }
