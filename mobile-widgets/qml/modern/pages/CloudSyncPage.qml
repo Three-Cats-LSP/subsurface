@@ -11,12 +11,39 @@ Kirigami.ScrollablePage {
 	title: qsTr("Cloud & Sync")
 	background: Rectangle { color: tokens.background }
 	property string lastBackupProvider: ""
+	property string lastSyncProvider: ""
+	property string lastSyncResult: ""
+	property string conflictProvider: ""
+	property string initialChoiceProvider: ""
 
 	Modern.DesignTokens { id: tokens }
 
+	function resultText(result) {
+		if (result === "up-to-date") return qsTr("Up to date")
+		if (result === "uploaded") return qsTr("Local changes uploaded")
+		if (result === "downloaded") return qsTr("Cloud changes downloaded")
+		return result
+	}
+
 	Connections {
 		target: CloudSync
-		function onDiveLogBackupFinished(providerId) { page.lastBackupProvider = providerId }
+		function onDiveLogBackupFinished(providerId) {
+			page.lastBackupProvider = providerId
+		}
+		function onDiveLogSyncFinished(providerId, result) {
+			page.lastSyncProvider = providerId
+			page.lastSyncResult = result
+			page.conflictProvider = ""
+			page.initialChoiceProvider = ""
+		}
+		function onDiveLogSyncConflict(providerId) {
+			page.conflictProvider = providerId
+			page.lastSyncProvider = ""
+		}
+		function onDiveLogInitialChoiceRequired(providerId) {
+			page.initialChoiceProvider = providerId
+			page.lastSyncProvider = ""
+		}
 	}
 
 	ColumnLayout {
@@ -33,7 +60,7 @@ Kirigami.ScrollablePage {
 				font.weight: Font.DemiBold
 			}
 			Text {
-				text: qsTr("Connect Google Drive or Dropbox to keep your Subsurface Neo data available across devices. OAuth credentials are stored using the platform secure credential store.")
+				text: qsTr("Connect Google Drive or Dropbox to keep your Subsurface Neo data available across devices. Sync uses revision manifests and SHA-256 checksums so divergent logs are never silently overwritten.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
@@ -67,10 +94,32 @@ Kirigami.ScrollablePage {
 							font.pixelSize: 14
 						}
 						Text {
-							visible: page.lastBackupProvider === modelData.id
-							text: qsTr("Dive-log backup uploaded successfully")
+							visible: page.lastSyncProvider === modelData.id
+							text: page.resultText(page.lastSyncResult)
 							color: tokens.success
 							font.pixelSize: 12
+						}
+						Text {
+							visible: page.lastBackupProvider === modelData.id
+							text: qsTr("Backup uploaded successfully")
+							color: tokens.success
+							font.pixelSize: 12
+						}
+						Text {
+							visible: page.conflictProvider === modelData.id
+							text: qsTr("Sync conflict: both this device and the cloud changed since the last sync. Nothing was overwritten.")
+							color: "#FFB84D"
+							font.pixelSize: 12
+							wrapMode: Text.WordWrap
+							Layout.fillWidth: true
+						}
+						Text {
+							visible: page.initialChoiceProvider === modelData.id
+							text: qsTr("This is the first sync and different data already exists in the cloud. Neo will not choose a winner automatically. Use Backup now only if you intentionally want this device to become the cloud baseline.")
+							color: "#FFB84D"
+							font.pixelSize: 12
+							wrapMode: Text.WordWrap
+							Layout.fillWidth: true
 						}
 						Text {
 							visible: modelData.id === "google-drive" && !modelData.configured
@@ -85,7 +134,18 @@ Kirigami.ScrollablePage {
 					RowLayout {
 						visible: modelData.connected
 						Button {
+							text: qsTr("Sync now")
+							enabled: !CloudSync.syncInProgress
+							onClicked: {
+								page.lastSyncProvider = ""
+								page.conflictProvider = ""
+								page.initialChoiceProvider = ""
+								CloudSync.syncDiveLog(modelData.id)
+							}
+						}
+						Button {
 							text: qsTr("Backup now")
+							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.lastBackupProvider = ""
 								CloudSync.backupDiveLog(modelData.id)
@@ -93,6 +153,7 @@ Kirigami.ScrollablePage {
 						}
 						Button {
 							text: qsTr("Disconnect")
+							enabled: !CloudSync.syncInProgress
 							onClicked: CloudSync.disconnectProvider(modelData.id)
 						}
 					}
@@ -100,7 +161,7 @@ Kirigami.ScrollablePage {
 					Button {
 						visible: !modelData.connected
 						text: qsTr("Connect")
-						enabled: modelData.configured && !CloudSync.authorizationInProgress
+						enabled: modelData.configured && !CloudSync.authorizationInProgress && !CloudSync.syncInProgress
 						onClicked: CloudSync.beginAuthorization(modelData.id)
 					}
 				}
@@ -120,7 +181,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Text {
-			text: qsTr("Backup now uploads a complete Subsurface XML snapshot. Bidirectional conflict-aware synchronization will build on the same provider transport. Subsurface Cloud remains available through the existing account workflow.")
+			text: qsTr("Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and reports a conflict. Backup now is an explicit one-way snapshot operation. Subsurface Cloud remains available through the existing account workflow.")
 			color: tokens.textSecondary
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
