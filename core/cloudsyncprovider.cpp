@@ -5,7 +5,7 @@
 
 namespace {
 
-const std::array<CloudSyncProviderDescriptor, 4> providers = {{
+const std::array<CloudSyncProviderDescriptor, 3> providers = {{
 	{
 		CloudSyncProviderType::SubsurfaceCloud,
 		QStringLiteral("subsurface"),
@@ -33,18 +33,13 @@ const std::array<CloudSyncProviderDescriptor, 4> providers = {{
 		CloudSyncStorageMode::PrivateAppFolder,
 		QUrl(QStringLiteral("https://www.dropbox.com/oauth2/authorize")),
 		QUrl(QStringLiteral("https://api.dropboxapi.com/oauth2/token")),
-		{QStringLiteral("files.content.read"), QStringLiteral("files.content.write")},
+		{
+			QStringLiteral("account_info.read"),
+			QStringLiteral("files.metadata.read"),
+			QStringLiteral("files.content.read"),
+			QStringLiteral("files.content.write"),
+		},
 		QStringLiteral("SUBSURFACE_NEO_DROPBOX_CLIENT_ID"),
-	},
-	{
-		CloudSyncProviderType::OneDrive,
-		QStringLiteral("onedrive"),
-		QStringLiteral("OneDrive"),
-		CloudSyncStorageMode::PrivateAppFolder,
-		QUrl(QStringLiteral("https://login.microsoftonline.com/common/oauth2/v2.0/authorize")),
-		QUrl(QStringLiteral("https://login.microsoftonline.com/common/oauth2/v2.0/token")),
-		{QStringLiteral("offline_access"), QStringLiteral("Files.ReadWrite.AppFolder")},
-		QStringLiteral("SUBSURFACE_NEO_ONEDRIVE_CLIENT_ID"),
 	},
 }};
 
