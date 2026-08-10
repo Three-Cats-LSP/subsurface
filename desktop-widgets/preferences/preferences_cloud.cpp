@@ -48,16 +48,22 @@ void PreferencesCloud::setupNeoCloudProviders()
 		auto *row = new QHBoxLayout();
 		auto *nameLabel = new QLabel(name, group);
 		auto *statusLabel = new QLabel(group);
+		auto *backupButton = new QPushButton(tr("Backup now"), group);
 		auto *actionButton = new QPushButton(group);
 		nameLabel->setMinimumWidth(140);
 		statusLabel->setMinimumWidth(100);
 		row->addWidget(nameLabel);
 		row->addWidget(statusLabel, 1);
+		row->addWidget(backupButton);
 		row->addWidget(actionButton);
 		layout->addLayout(row);
 
 		neoStatusLabels.insert(id, statusLabel);
+		neoBackupButtons.insert(id, backupButton);
 		neoActionButtons.insert(id, actionButton);
+		connect(backupButton, &QPushButton::clicked, this, [this, id]() {
+			neoCloudSync->backupDiveLog(id);
+		});
 		connect(actionButton, &QPushButton::clicked, this, [this, id]() {
 			for (const QVariant &providerVariant : neoCloudSync->providers()) {
 				const QVariantMap provider = providerVariant.toMap();
@@ -75,6 +81,16 @@ void PreferencesCloud::setupNeoCloudProviders()
 	ui->verticalLayout->insertWidget(1, group);
 	connect(neoCloudSync, &CloudSyncManager::providersChanged, this, &PreferencesCloud::updateNeoCloudProviders);
 	connect(neoCloudSync, &CloudSyncManager::authorizationInProgressChanged, this, &PreferencesCloud::updateNeoCloudProviders);
+	connect(neoCloudSync, &CloudSyncManager::diveLogBackupFinished, this, [this](const QString &providerId) {
+		for (const QVariant &providerVariant : neoCloudSync->providers()) {
+			const QVariantMap provider = providerVariant.toMap();
+			if (provider.value(QStringLiteral("id")).toString() == providerId) {
+				QMessageBox::information(this, tr("Subsurface Neo cloud sync"),
+					tr("Dive-log backup uploaded to %1.").arg(provider.value(QStringLiteral("name")).toString()));
+				break;
+			}
+		}
+	});
 	connect(neoCloudSync, &CloudSyncManager::lastErrorChanged, this, [this]() {
 		updateNeoCloudProviders();
 		if (!neoCloudSync->lastError().isEmpty())
@@ -92,13 +108,16 @@ void PreferencesCloud::updateNeoCloudProviders()
 		const QString id = provider.value(QStringLiteral("id")).toString();
 		QLabel *status = neoStatusLabels.value(id);
 		QPushButton *button = neoActionButtons.value(id);
-		if (!status || !button)
+		QPushButton *backup = neoBackupButtons.value(id);
+		if (!status || !button || !backup)
 			continue;
 		const bool configured = provider.value(QStringLiteral("configured")).toBool();
 		const bool connected = provider.value(QStringLiteral("connected")).toBool();
 		status->setText(connected ? tr("Connected") : configured ? tr("Not connected") : tr("Unavailable"));
 		button->setText(connected ? tr("Disconnect") : tr("Connect"));
 		button->setEnabled(configured && (!neoCloudSync->authorizationInProgress() || connected));
+		backup->setVisible(connected);
+		backup->setEnabled(connected);
 	}
 }
 
