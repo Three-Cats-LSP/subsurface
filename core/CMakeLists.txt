@@ -54,6 +54,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	bluetoothaddress.h
 	checkcloudconnection.cpp
 	checkcloudconnection.h
+	cloudcredentialstore.cpp
+	cloudcredentialstore.h
 	cloudstorage.cpp
 	cloudstorage.h
 	cloudsyncfilestore.cpp
@@ -281,3 +283,6 @@ source_group("Subsurface Core" FILES ${SUBSURFACE_CORE_LIB_SRCS})
 
 add_library(subsurface_corelib STATIC ${SUBSURFACE_CORE_LIB_SRCS})
 target_link_libraries(subsurface_corelib ${QT_LIBRARIES})
+if(WIN32)
+	target_link_libraries(subsurface_corelib advapi32)
+endif()
