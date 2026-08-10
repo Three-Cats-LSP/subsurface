@@ -35,8 +35,6 @@ private:
 	void googleDownload(const QString &accessToken, const QString &fileName);
 	void dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data);
 	void dropboxDownload(const QString &accessToken, const QString &fileName);
-	void oneDriveUpload(const QString &accessToken, const QString &fileName, const QByteArray &data);
-	void oneDriveDownload(const QString &accessToken, const QString &fileName);
 
 	QNetworkRequest authorizedRequest(const QUrl &url, const QString &accessToken) const;
 	QString replyError(QNetworkReply *reply, const QByteArray &payload) const;
