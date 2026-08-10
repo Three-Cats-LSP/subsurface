@@ -174,8 +174,6 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 		extra.insert(QStringLiteral("prompt"), QStringLiteral("consent"));
 	} else if (provider->type == CloudSyncProviderType::Dropbox) {
 		extra.insert(QStringLiteral("token_access_type"), QStringLiteral("offline"));
-	} else if (provider->type == CloudSyncProviderType::OneDrive) {
-		extra.insert(QStringLiteral("prompt"), QStringLiteral("select_account"));
 	}
 
 	const QUrl url = activePkce->authorizationUrl(provider->authorizationEndpoint, clientId,
