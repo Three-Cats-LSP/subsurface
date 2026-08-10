@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncmanager.h"
 #include "cloudcredentialstore.h"
+#include "save-xml.h"
 
 #include <QDesktopServices>
+#include <QFile>
 #include <QHostAddress>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QTemporaryFile>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUrlQuery>
@@ -18,6 +21,7 @@ constexpr auto GOOGLE_WEB_CLIENT_ID = "1014878739336-pdnmro56alegmna158grah0tf4m
 constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
 constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
 constexpr auto DROPBOX_MOBILE_REDIRECT = "https://threecats-lsp.com/subsurface-neo/oauth/dropbox/callback";
+constexpr auto NEO_DIVELOG_FILENAME = "subsurface-neo.xml";
 
 QString connectionState(bool configured, bool connected)
 {
@@ -104,7 +108,10 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 
 	connect(&fileStore, &CloudSyncFileStore::uploadFinished, this,
 		[this](CloudSyncProviderType type, const QString &fileName) {
-			emit uploadFinished(cloudSyncProviderDescriptor(type).id, fileName);
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			emit uploadFinished(providerId, fileName);
+			if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME))
+				emit diveLogBackupFinished(providerId);
 		});
 	connect(&fileStore, &CloudSyncFileStore::downloadFinished, this,
 		[this](CloudSyncProviderType type, const QString &fileName, const QByteArray &data) {
@@ -392,4 +399,38 @@ void CloudSyncManager::downloadBytes(const QString &providerId, const QString &f
 	refreshThen(*provider, providerId, [this, type = provider->type, fileName](const QString &accessToken) {
 		fileStore.download(type, accessToken, fileName);
 	});
+}
+
+void CloudSyncManager::backupDiveLog(const QString &providerId)
+{
+	if (!descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+
+	QTemporaryFile temporaryFile;
+	if (!temporaryFile.open()) {
+		setError(tr("Could not create a temporary dive-log file."));
+		return;
+	}
+	const QString fileName = temporaryFile.fileName();
+	temporaryFile.close();
+
+	if (save_dives(fileName.toUtf8().constData()) != 0) {
+		setError(tr("Could not serialize the current dive log."));
+		return;
+	}
+
+	QFile file(fileName);
+	if (!file.open(QIODevice::ReadOnly)) {
+		setError(tr("Could not read the serialized dive log."));
+		return;
+	}
+	const QByteArray payload = file.readAll();
+	if (payload.isEmpty()) {
+		setError(tr("The serialized dive log is empty."));
+		return;
+	}
+
+	uploadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME), payload);
 }
