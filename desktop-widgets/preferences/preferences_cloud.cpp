@@ -3,10 +3,17 @@
 #include "ui_preferences_cloud.h"
 #include "subsurfacewebservices.h"
 #include "core/cloudstorage.h"
+#include "core/cloudsyncmanager.h"
 #include "core/errorhelper.h"
 #include "core/settings/qPrefCloudStorage.h"
-#include <QMessageBox>
+
 #include <QDesktopServices>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QVBoxLayout>
 
 PreferencesCloud::PreferencesCloud() : AbstractPreferencesWidget(tr("Cloud"),QIcon(":preferences-cloud-icon"), 9), ui(new Ui::PreferencesCloud())
 {
@@ -15,11 +22,84 @@ PreferencesCloud::PreferencesCloud() : AbstractPreferencesWidget(tr("Cloud"),QIc
 	ui->label_help2->setWordWrap(true);
 	ui->label_help3->setWordWrap(true);
 	ui->label_help4->setWordWrap(true);
+	setupNeoCloudProviders();
 }
 
 PreferencesCloud::~PreferencesCloud()
 {
 	delete ui;
+}
+
+void PreferencesCloud::setupNeoCloudProviders()
+{
+	neoCloudSync = new CloudSyncManager(manager(), this);
+
+	auto *group = new QGroupBox(tr("Subsurface Neo cloud sync"), this);
+	auto *layout = new QVBoxLayout(group);
+	auto *description = new QLabel(tr("Connect Google Drive or Dropbox for Subsurface Neo synchronization. OAuth credentials are stored securely by the operating system."), group);
+	description->setWordWrap(true);
+	layout->addWidget(description);
+
+	for (const QVariant &providerVariant : neoCloudSync->providers()) {
+		const QVariantMap provider = providerVariant.toMap();
+		const QString id = provider.value(QStringLiteral("id")).toString();
+		const QString name = provider.value(QStringLiteral("name")).toString();
+
+		auto *row = new QHBoxLayout();
+		auto *nameLabel = new QLabel(name, group);
+		auto *statusLabel = new QLabel(group);
+		auto *actionButton = new QPushButton(group);
+		nameLabel->setMinimumWidth(140);
+		statusLabel->setMinimumWidth(100);
+		row->addWidget(nameLabel);
+		row->addWidget(statusLabel, 1);
+		row->addWidget(actionButton);
+		layout->addLayout(row);
+
+		neoStatusLabels.insert(id, statusLabel);
+		neoActionButtons.insert(id, actionButton);
+		connect(actionButton, &QPushButton::clicked, this, [this, id]() {
+			for (const QVariant &providerVariant : neoCloudSync->providers()) {
+				const QVariantMap provider = providerVariant.toMap();
+				if (provider.value(QStringLiteral("id")).toString() != id)
+					continue;
+				if (provider.value(QStringLiteral("connected")).toBool())
+					neoCloudSync->disconnectProvider(id);
+				else
+					neoCloudSync->beginAuthorization(id);
+				break;
+			}
+		});
+	}
+
+	ui->verticalLayout->insertWidget(1, group);
+	connect(neoCloudSync, &CloudSyncManager::providersChanged, this, &PreferencesCloud::updateNeoCloudProviders);
+	connect(neoCloudSync, &CloudSyncManager::authorizationInProgressChanged, this, &PreferencesCloud::updateNeoCloudProviders);
+	connect(neoCloudSync, &CloudSyncManager::lastErrorChanged, this, [this]() {
+		updateNeoCloudProviders();
+		if (!neoCloudSync->lastError().isEmpty())
+			QMessageBox::warning(this, tr("Subsurface Neo cloud sync"), neoCloudSync->lastError());
+	});
+	updateNeoCloudProviders();
+}
+
+void PreferencesCloud::updateNeoCloudProviders()
+{
+	if (!neoCloudSync)
+		return;
+	for (const QVariant &providerVariant : neoCloudSync->providers()) {
+		const QVariantMap provider = providerVariant.toMap();
+		const QString id = provider.value(QStringLiteral("id")).toString();
+		QLabel *status = neoStatusLabels.value(id);
+		QPushButton *button = neoActionButtons.value(id);
+		if (!status || !button)
+			continue;
+		const bool configured = provider.value(QStringLiteral("configured")).toBool();
+		const bool connected = provider.value(QStringLiteral("connected")).toBool();
+		status->setText(connected ? tr("Connected") : configured ? tr("Not connected") : tr("Unavailable"));
+		button->setText(connected ? tr("Disconnect") : tr("Connect"));
+		button->setEnabled(configured && (!neoCloudSync->authorizationInProgress() || connected));
+	}
 }
 
 void PreferencesCloud::on_resetPassword_clicked()
@@ -33,6 +113,7 @@ void PreferencesCloud::refreshSettings()
 	ui->cloud_storage_password->setText(QString::fromStdString(prefs.cloud_storage_password));
 	ui->save_password_local->setChecked(prefs.save_password_local);
 	updateCloudAuthenticationState();
+	updateNeoCloudProviders();
 }
 
 void PreferencesCloud::syncSettings()
@@ -44,11 +125,8 @@ void PreferencesCloud::syncSettings()
 	QString newpassword = ui->cloud_storage_new_passwd->text();
 	QString emailpasswordformatwarning = tr("Change ignored. Cloud storage email and new password can only consist of letters, numbers, and '.', '-', '_', and '+'.");
 
-	//TODO: Change this to the Cloud Storage Stuff, not preferences.
 	if (prefs.cloud_verification_status == qPrefCloudStorage::CS_VERIFIED && !newpassword.isEmpty()) {
-		// deal with password change
 		if (!email.isEmpty() && !password.isEmpty()) {
-			// connect to backend server to check / create credentials
 			if (!isValidEmail(email) || !isValidPassword(password)) {
 				QMessageBox::warning(this, tr("Warning"), emailpasswordformatwarning);
 				return;
@@ -69,11 +147,9 @@ void PreferencesCloud::syncSettings()
 		   email.toStdString() != prefs.cloud_storage_email ||
 		   password.toStdString() != prefs.cloud_storage_password) {
 
-		// different credentials - reset verification status
 		int oldVerificationStatus = cloud->cloud_verification_status();
 		cloud->set_cloud_verification_status(qPrefCloudStorage::CS_UNKNOWN);
 		if (!email.isEmpty() && !password.isEmpty()) {
-			// connect to backend server to check / create credentials
 			if (!isValidEmail(email) || !isValidPassword(password)) {
 				QMessageBox::warning(this, tr("Warning"), emailpasswordformatwarning);
 				cloud->set_cloud_verification_status(oldVerificationStatus);
@@ -86,7 +162,6 @@ void PreferencesCloud::syncSettings()
 	} else if (prefs.cloud_verification_status == qPrefCloudStorage::CS_NEED_TO_VERIFY) {
 		QString pin = ui->cloud_storage_pin->text();
 		if (!pin.isEmpty()) {
-			// connect to backend server to check / create credentials
 			if (!isValidEmail(email) || !isValidPassword(password)) {
 				QMessageBox::warning(this, tr("Warning"), emailpasswordformatwarning);
 				return;
