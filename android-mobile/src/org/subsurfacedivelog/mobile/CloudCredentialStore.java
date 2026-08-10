@@ -7,8 +7,6 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
 
-import org.qtproject.qt.android.QtNative;
-
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 
@@ -25,7 +23,7 @@ public final class CloudCredentialStore {
     private CloudCredentialStore() {}
 
     private static Context context() {
-        return QtNative.getContext();
+        return SubsurfaceMobileActivity.getAppContext();
     }
 
     private static SecretKey getOrCreateKey() throws Exception {
@@ -48,12 +46,15 @@ public final class CloudCredentialStore {
 
     public static boolean save(String providerId, String base64Payload) {
         try {
+            Context appContext = context();
+            if (appContext == null)
+                return false;
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
             byte[] encrypted = cipher.doFinal(base64Payload.getBytes(StandardCharsets.UTF_8));
             String iv = Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP);
             String ciphertext = Base64.encodeToString(encrypted, Base64.NO_WRAP);
-            return context().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            return appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()
                     .putString(providerId + ".iv", iv)
                     .putString(providerId + ".data", ciphertext)
@@ -65,7 +66,10 @@ public final class CloudCredentialStore {
 
     public static String load(String providerId) {
         try {
-            SharedPreferences preferences = context().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            Context appContext = context();
+            if (appContext == null)
+                return null;
+            SharedPreferences preferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
             String iv = preferences.getString(providerId + ".iv", null);
             String ciphertext = preferences.getString(providerId + ".data", null);
             if (iv == null || ciphertext == null)
@@ -83,7 +87,10 @@ public final class CloudCredentialStore {
 
     public static boolean remove(String providerId) {
         try {
-            return context().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            Context appContext = context();
+            if (appContext == null)
+                return false;
+            return appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()
                     .remove(providerId + ".iv")
                     .remove(providerId + ".data")
