@@ -42,6 +42,7 @@ public:
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
 	Q_INVOKABLE void backupDiveLog(const QString &providerId);
 	Q_INVOKABLE void syncDiveLog(const QString &providerId);
+	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
 
 signals:
 	void providersChanged();
@@ -110,6 +111,7 @@ private:
 	QString syncLocalSha256;
 	CloudSyncManifest syncRemoteManifest;
 	CloudSyncManifest syncUploadManifest;
+	bool forceCloudDownload = false;
 };
 
 #endif // CLOUD_SYNC_MANAGER_H
