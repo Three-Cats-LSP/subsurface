@@ -36,7 +36,7 @@ void PreferencesCloud::setupNeoCloudProviders()
 
 	auto *group = new QGroupBox(tr("Subsurface Neo cloud sync"), this);
 	auto *layout = new QVBoxLayout(group);
-	auto *description = new QLabel(tr("Connect Google Drive or Dropbox for Subsurface Neo synchronization. OAuth credentials are stored securely by the operating system."), group);
+	auto *description = new QLabel(tr("Connect Google Drive or Dropbox for Subsurface Neo synchronization. Sync uses revision manifests and SHA-256 checksums so divergent logs are never silently overwritten."), group);
 	description->setWordWrap(true);
 	layout->addWidget(description);
 
@@ -48,19 +48,25 @@ void PreferencesCloud::setupNeoCloudProviders()
 		auto *row = new QHBoxLayout();
 		auto *nameLabel = new QLabel(name, group);
 		auto *statusLabel = new QLabel(group);
+		auto *syncButton = new QPushButton(tr("Sync now"), group);
 		auto *backupButton = new QPushButton(tr("Backup now"), group);
 		auto *actionButton = new QPushButton(group);
 		nameLabel->setMinimumWidth(140);
 		statusLabel->setMinimumWidth(100);
 		row->addWidget(nameLabel);
 		row->addWidget(statusLabel, 1);
+		row->addWidget(syncButton);
 		row->addWidget(backupButton);
 		row->addWidget(actionButton);
 		layout->addLayout(row);
 
 		neoStatusLabels.insert(id, statusLabel);
+		neoSyncButtons.insert(id, syncButton);
 		neoBackupButtons.insert(id, backupButton);
 		neoActionButtons.insert(id, actionButton);
+		connect(syncButton, &QPushButton::clicked, this, [this, id]() {
+			neoCloudSync->syncDiveLog(id);
+		});
 		connect(backupButton, &QPushButton::clicked, this, [this, id]() {
 			neoCloudSync->backupDiveLog(id);
 		});
@@ -81,6 +87,7 @@ void PreferencesCloud::setupNeoCloudProviders()
 	ui->verticalLayout->insertWidget(1, group);
 	connect(neoCloudSync, &CloudSyncManager::providersChanged, this, &PreferencesCloud::updateNeoCloudProviders);
 	connect(neoCloudSync, &CloudSyncManager::authorizationInProgressChanged, this, &PreferencesCloud::updateNeoCloudProviders);
+	connect(neoCloudSync, &CloudSyncManager::syncInProgressChanged, this, &PreferencesCloud::updateNeoCloudProviders);
 	connect(neoCloudSync, &CloudSyncManager::diveLogBackupFinished, this, [this](const QString &providerId) {
 		for (const QVariant &providerVariant : neoCloudSync->providers()) {
 			const QVariantMap provider = providerVariant.toMap();
@@ -90,6 +97,33 @@ void PreferencesCloud::setupNeoCloudProviders()
 				break;
 			}
 		}
+	});
+	connect(neoCloudSync, &CloudSyncManager::diveLogSyncFinished, this,
+		[this](const QString &providerId, const QString &result) {
+			QString providerName = providerId;
+			for (const QVariant &providerVariant : neoCloudSync->providers()) {
+				const QVariantMap provider = providerVariant.toMap();
+				if (provider.value(QStringLiteral("id")).toString() == providerId) {
+					providerName = provider.value(QStringLiteral("name")).toString();
+					break;
+				}
+			}
+			QString message;
+			if (result == QStringLiteral("uploaded"))
+				message = tr("Local changes were uploaded to %1.").arg(providerName);
+			else if (result == QStringLiteral("downloaded"))
+				message = tr("Cloud changes from %1 were downloaded and applied.").arg(providerName);
+			else
+				message = tr("%1 is up to date.").arg(providerName);
+			QMessageBox::information(this, tr("Subsurface Neo cloud sync"), message);
+		});
+	connect(neoCloudSync, &CloudSyncManager::diveLogSyncConflict, this, [this](const QString &) {
+		QMessageBox::warning(this, tr("Subsurface Neo cloud sync"),
+			tr("Sync stopped because both the local dive log and the cloud copy changed since the last sync. Nothing was overwritten."));
+	});
+	connect(neoCloudSync, &CloudSyncManager::diveLogInitialChoiceRequired, this, [this](const QString &) {
+		QMessageBox::warning(this, tr("Subsurface Neo cloud sync"),
+			tr("Different data already exists in the cloud and this device has no common sync history yet. Neo will not choose a winner automatically. Use Backup now only if you intentionally want this device to become the cloud baseline."));
 	});
 	connect(neoCloudSync, &CloudSyncManager::lastErrorChanged, this, [this]() {
 		updateNeoCloudProviders();
@@ -108,16 +142,20 @@ void PreferencesCloud::updateNeoCloudProviders()
 		const QString id = provider.value(QStringLiteral("id")).toString();
 		QLabel *status = neoStatusLabels.value(id);
 		QPushButton *button = neoActionButtons.value(id);
+		QPushButton *sync = neoSyncButtons.value(id);
 		QPushButton *backup = neoBackupButtons.value(id);
-		if (!status || !button || !backup)
+		if (!status || !button || !sync || !backup)
 			continue;
 		const bool configured = provider.value(QStringLiteral("configured")).toBool();
 		const bool connected = provider.value(QStringLiteral("connected")).toBool();
-		status->setText(connected ? tr("Connected") : configured ? tr("Not connected") : tr("Unavailable"));
+		const bool busy = neoCloudSync->syncInProgress();
+		status->setText(connected ? (busy ? tr("Syncing…") : tr("Connected")) : configured ? tr("Not connected") : tr("Unavailable"));
 		button->setText(connected ? tr("Disconnect") : tr("Connect"));
-		button->setEnabled(configured && (!neoCloudSync->authorizationInProgress() || connected));
+		button->setEnabled(configured && !busy && (!neoCloudSync->authorizationInProgress() || connected));
+		sync->setVisible(connected);
+		sync->setEnabled(connected && !busy);
 		backup->setVisible(connected);
-		backup->setEnabled(connected);
+		backup->setEnabled(connected && !busy);
 	}
 }
 
