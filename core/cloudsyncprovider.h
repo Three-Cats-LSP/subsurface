@@ -10,7 +10,6 @@ enum class CloudSyncProviderType {
 	SubsurfaceCloud,
 	GoogleDrive,
 	Dropbox,
-	OneDrive,
 };
 
 enum class CloudSyncStorageMode {
