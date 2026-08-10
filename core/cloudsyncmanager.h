@@ -54,7 +54,7 @@ private:
 	void setError(const QString &message);
 	void clearAuthorization();
 	void exchangeCode(const QString &code);
-	QUrl startLoopbackListener();
+	QUrl startLoopbackListener(const CloudSyncProviderDescriptor &provider);
 	void handleLoopbackConnection();
 	void finishLoopbackSocket(QTcpSocket *socket, bool success, const QString &message);
 	void refreshThen(const CloudSyncProviderDescriptor &provider, const QString &providerId,
