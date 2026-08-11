@@ -42,10 +42,11 @@
 		<file>StartPage.qml</file>
 		<file>RecoverCache.qml</file>
 
-		<!-- ********** modern UI preview ********** -->
+		<!-- ********** modern UI ********** -->
 		<file>modern/DesignTokens.qml</file>
 		<file>modern/components/ModernCard.qml</file>
 		<file>modern/components/MetricCard.qml</file>
+		<file>modern/components/NeoBottomNavigation.qml</file>
 		<file>modern/pages/ModernDashboard.qml</file>
 		<file>modern/pages/CloudSyncPage.qml</file>
 
