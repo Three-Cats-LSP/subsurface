@@ -30,7 +30,8 @@ Kirigami.Page {
 		target: swipeModel
 		function onCurrentDiveChanged(index) {
 			diveView.currentIndex = index.row
-			diveView.positionViewAtIndex(index.row, ListView.Contain)
+			if (!diveView.swipeInProgress)
+				diveView.contentX = diveView.originX + index.row * diveView.width
 		}
 	}
 
@@ -43,13 +44,36 @@ Kirigami.Page {
 		clip: true
 		currentIndex: -1
 		highlightFollowsCurrentItem: false
+		property bool swipeInProgress: false
+
+		onWidthChanged: {
+			if (currentIndex >= 0 && !swipeInProgress)
+				contentX = originX + currentIndex * width
+		}
 
 		delegate: Item {
 			id: delegateRoot
 			required property int index
 			property var modelData: model
+			property bool panningProfile: false
 			width: diveView.width
 			height: diveView.height
+
+			function resetProfileZoom() {
+				profile.scale = 1.0
+				profile.lastScale = 1.0
+				profile.xOffset = 0
+				profile.yOffset = 0
+				profile.opacity = 1.0
+				profileMouseArea.dragging = false
+				panningProfile = false
+				profile.triggerUpdate()
+			}
+
+			ListView.onIsCurrentItemChanged: {
+				if (!ListView.isCurrentItem)
+					resetProfileZoom()
+			}
 
 			Flickable {
 				anchors.fill: parent
@@ -167,6 +191,11 @@ Kirigami.Page {
 								}
 
 								ToolButton {
+									visible: profile.scale > 1.02
+									text: qsTr("Reset")
+									onClicked: delegateRoot.resetProfileZoom()
+								}
+								ToolButton {
 									visible: profile.numDC > 1
 									text: "‹"
 									onClicked: profile.prevDC()
@@ -189,6 +218,68 @@ Kirigami.Page {
 									anchors.fill: parent
 									diveId: delegateRoot.modelData.id
 									clip: true
+									property real lastScale: 1.0
+
+									PinchArea {
+										anchors.fill: parent
+										pinch.dragAxis: Pinch.XAndYAxis
+										onPinchUpdated: {
+											var nextScale = pinch.scale * profile.lastScale
+											profile.scale = Math.max(1.0, Math.min(4.0, nextScale))
+										}
+										onPinchFinished: profile.lastScale = profile.scale
+
+										MouseArea {
+											id: profileMouseArea
+											anchors.fill: parent
+											property bool isZoomed: profile.scale > 1.02
+											property bool dragging: false
+											property real initialX
+											property real initialY
+											property real oldXOffset
+											property real oldYOffset
+											pressAndHoldInterval: isZoomed ? 50 : 50000
+											propagateComposedEvents: true
+											scrollGestureEnabled: true
+
+											onPressed: function(mouse) {
+												if (!isZoomed)
+													mouse.accepted = false
+											}
+											onPressAndHold: function(mouse) {
+												dragging = true
+												delegateRoot.panningProfile = true
+												oldXOffset = profile.xOffset
+												oldYOffset = profile.yOffset
+												initialX = mouse.x
+												initialY = mouse.y
+												profile.opacity = 0.65
+											}
+											onPositionChanged: function(mouse) {
+												if (!dragging)
+													return
+												profile.xOffset = oldXOffset + mouse.x - initialX
+												profile.yOffset = oldYOffset + mouse.y - initialY
+												profile.triggerUpdate()
+											}
+											onReleased: {
+												dragging = false
+												delegateRoot.panningProfile = false
+												profile.opacity = 1.0
+											}
+											onCanceled: {
+												dragging = false
+												delegateRoot.panningProfile = false
+												profile.opacity = 1.0
+											}
+											onWheel: function(wheel) {
+												var delta = wheel.angleDelta.y > 0 ? 0.2 : -0.2
+												profile.scale = Math.max(1.0, Math.min(4.0, profile.scale + delta))
+												profile.lastScale = profile.scale
+												wheel.accepted = true
+											}
+										}
+									}
 								}
 							}
 						}
@@ -262,6 +353,56 @@ Kirigami.Page {
 						}
 					}
 				}
+			}
+		}
+
+		NumberAnimation {
+			id: snapAnimation
+			target: diveView
+			property: "contentX"
+			duration: 250
+			easing.type: Easing.OutCubic
+			onRunningChanged: {
+				if (!running)
+					diveView.swipeInProgress = false
+			}
+		}
+
+		DragHandler {
+			id: horizontalSwipeHandler
+			enabled: !diveView.currentItem || !diveView.currentItem.panningProfile
+			yAxis.enabled: false
+			target: null
+			property real startContentX
+			property real startFingerX
+			property real lastTranslationX: 0
+
+			onActiveChanged: {
+				if (active) {
+					startContentX = diveView.contentX
+					startFingerX = centroid.position.x
+					lastTranslationX = 0
+					diveView.swipeInProgress = true
+				} else if (diveView.swipeInProgress) {
+					var dx = lastTranslationX
+					var targetIndex = diveView.currentIndex
+					if (dx < -diveView.width / 4 && targetIndex < diveView.count - 1)
+						targetIndex++
+					else if (dx > diveView.width / 4 && targetIndex > 0)
+						targetIndex--
+					snapAnimation.to = diveView.originX + targetIndex * diveView.width
+					snapAnimation.start()
+					diveView.currentIndex = targetIndex
+					manager.selectSwipeRow(targetIndex)
+				}
+			}
+
+			onActiveTranslationChanged: {
+				if (!active)
+					return
+				var dx = centroid.position.x - startFingerX
+				lastTranslationX = dx
+				diveView.contentX = startContentX - dx
 			}
 		}
 	}
