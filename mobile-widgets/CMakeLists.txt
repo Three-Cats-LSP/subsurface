@@ -1,6 +1,7 @@
 # mobile backend functions
 
 set(SUBSURFACE_MOBILE_SRCS
+	neodashboardmodel.cpp
 	neoupdatecheck.cpp
 	qmlinterface.cpp
 	qmlmanager.cpp
