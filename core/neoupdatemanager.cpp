@@ -8,6 +8,7 @@
 #include <QDate>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
@@ -56,7 +57,7 @@ bool isTrustedUrl(const QUrl &url)
 }
 }
 
-NeoUpdateManager::NeoUpdateManager(QObject *parent) : QObject(parent)
+NeoUpdateManager::NeoUpdateManager(QObject *parent) : QObject(parent), m_network(new QNetworkAccessManager(this))
 {
 }
 
@@ -83,7 +84,7 @@ void NeoUpdateManager::checkForUpdates(bool force)
 	QNetworkRequest request(QUrl(QString::fromLatin1(neoUpdateManifestUrl)));
 	request.setRawHeader("Accept", "application/json");
 	request.setRawHeader("User-Agent", getUserAgent().toUtf8());
-	QNetworkReply *reply = manager()->get(request);
+	QNetworkReply *reply = m_network->get(request);
 	connect(reply, &QNetworkReply::finished, this, [this, reply]() { handleReply(reply); });
 }
 
