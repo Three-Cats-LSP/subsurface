@@ -104,6 +104,7 @@ void QMLInterface::setup(QQmlContext *ct)
 	// Register interface class
 	static QMLInterface self;
 	ct->setContextProperty("Backend", &self);
+	ct->setContextProperty("ProfilePrefs", qPrefTechnicalDetails::instance());
 
 	static NeoDashboardModel neoDashboardModel;
 	ct->setContextProperty("NeoDashboard", &neoDashboardModel);
