@@ -1,0 +1,188 @@
+name: Subsurface Neo Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Neo version, for example 0.1.0'
+        required: true
+        type: string
+      prerelease:
+        description: 'Publish as prerelease'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: neo-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION='${{ inputs.version }}'
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid Neo version: $VERSION" >&2
+            exit 1
+          fi
+          echo "NEO_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "NEO_TAG=neo-v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Checkout modern-ui
+        uses: actions/checkout@v7
+        with:
+          ref: modern-ui
+          fetch-depth: 0
+
+      - name: Ensure release tag points at modern-ui head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA=$(git rev-parse HEAD)
+          if git ls-remote --exit-code --tags origin "refs/tags/${NEO_TAG}" >/dev/null 2>&1; then
+            TAG_SHA=$(git rev-list -n1 "${NEO_TAG}" 2>/dev/null || true)
+            if [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+              echo "Tag ${NEO_TAG} already exists at another commit." >&2
+              exit 1
+            fi
+          else
+            git tag -a "${NEO_TAG}" -m "Subsurface Neo ${NEO_VERSION}"
+            git push origin "${NEO_TAG}"
+          fi
+
+      - name: Dispatch Android and Windows builds at release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref "${NEO_TAG}"
+          gh workflow run windows-msvc-qt6.yml --repo "$GITHUB_REPOSITORY" --ref "${NEO_TAG}"
+          sleep 8
+
+      - name: Resolve dispatched run IDs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          find_run() {
+            local workflow="$1"
+            for i in $(seq 1 30); do
+              id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --branch "${NEO_TAG}" --event workflow_dispatch --limit 10 --json databaseId,headBranch,createdAt --jq '.[0].databaseId // empty')
+              if [ -n "$id" ]; then echo "$id"; return 0; fi
+              sleep 4
+            done
+            return 1
+          }
+          ANDROID_RUN=$(find_run android.yml)
+          WINDOWS_RUN=$(find_run windows-msvc-qt6.yml)
+          echo "ANDROID_RUN=$ANDROID_RUN" >> "$GITHUB_ENV"
+          echo "WINDOWS_RUN=$WINDOWS_RUN" >> "$GITHUB_ENV"
+          echo "Android run: $ANDROID_RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo "Windows run: $WINDOWS_RUN" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch "$ANDROID_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Wait for Windows build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Download release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/android release/windows
+          gh run download "$ANDROID_RUN" --repo "$GITHUB_REPOSITORY" --dir release/android
+          gh run download "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --dir release/windows
+          APK=$(find release/android -type f -name '*.apk' | head -1)
+          EXE=$(find release/windows -type f -name '*.exe' | head -1)
+          test -n "$APK" && test -f "$APK"
+          test -n "$EXE" && test -f "$EXE"
+          APK_OUT="release/Subsurface-Neo-${NEO_VERSION}-Android-arm64.apk"
+          EXE_OUT="release/Subsurface-Neo-${NEO_VERSION}-Windows-x64.exe"
+          cp "$APK" "$APK_OUT"
+          cp "$EXE" "$EXE_OUT"
+          sha256sum "$APK_OUT" "$EXE_OUT" > release/SHA256SUMS.txt
+          echo "APK_FILE=$APK_OUT" >> "$GITHUB_ENV"
+          echo "EXE_FILE=$EXE_OUT" >> "$GITHUB_ENV"
+          echo "APK_SHA=$(sha256sum "$APK_OUT" | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "EXE_SHA=$(sha256sum "$EXE_OUT" | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=("${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Subsurface Neo ${NEO_VERSION}" --generate-notes)
+          if [ '${{ inputs.prerelease }}' = 'true' ]; then args+=(--prerelease); fi
+          if gh release view "${NEO_TAG}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "${args[@]}"
+          fi
+
+      - name: Build update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${NEO_TAG}"
+          cat > release/update.json <<EOF
+          {
+            "schema": 1,
+            "channel": "stable",
+            "version": "${NEO_VERSION}",
+            "releaseNotesUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${NEO_TAG}",
+            "summary": "Subsurface Neo ${NEO_VERSION} is available.",
+            "platforms": {
+              "android-arm64": {
+                "url": "${BASE}/Subsurface-Neo-${NEO_VERSION}-Android-arm64.apk",
+                "sha256": "${APK_SHA}"
+              },
+              "windows-x64": {
+                "url": "${BASE}/Subsurface-Neo-${NEO_VERSION}-Windows-x64.exe",
+                "sha256": "${EXE_SHA}"
+              }
+            }
+          }
+          EOF
+          cat release/update.json
+
+      - name: Publish update manifest to website repository
+        env:
+          WEBSITE_TOKEN: ${{ secrets.NEO_WEBSITE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBSITE_TOKEN:-}" ]; then
+            echo "NEO_WEBSITE_TOKEN is not configured. Release is published, but update.json was not promoted." >&2
+            exit 1
+          fi
+          git clone "https://x-access-token:${WEBSITE_TOKEN}@github.com/Three-Cats-LSP/threecats-lsp.com.git" website
+          cd website
+          mkdir -p subsurface-neo
+          cp ../release/update.json subsurface-neo/update.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add subsurface-neo/update.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "release: publish Subsurface Neo ${NEO_VERSION} update manifest"
+          git push origin HEAD
