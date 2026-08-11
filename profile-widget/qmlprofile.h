@@ -7,6 +7,7 @@
 #include <memory>
 
 class ProfileScene;
+struct divecomputer;
 
 class QMLProfile : public QQuickPaintedItem
 {
