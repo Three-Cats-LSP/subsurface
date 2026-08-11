@@ -2,7 +2,7 @@
 
 set(SUBSURFACE_MOBILE_SRCS
 	neoupdatecheck.cpp
-	tqmlinterface.cpp
+	qmlinterface.cpp
 	qmlmanager.cpp
 	statsmanager.cpp
 	themeinterface.cpp
