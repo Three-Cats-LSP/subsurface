@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "qmlinterface.h"
 #include "qmlmanager.h"
+#include "neodashboardmodel.h"
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
 #include "core/neoupdatemanager.h"
@@ -28,17 +29,17 @@ QMLInterface::QMLInterface()
 	connect(qPrefUnits::instance(), &qPrefUnits::lengthChanged,
 			[this] (int value) { emit lengthChanged(LENGTH(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::pressureChanged,
-			[this] (int value) { emit pressureChanged(PRESSURE(value)); });
+			[this] (int value) { emit pressure_unitsChanged(PRESSURE(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::temperatureChanged,
-			[this] (int value) { emit temperatureChanged(TEMPERATURE(value)); });
+			[this] (int value) { emit temperature_unitsChanged(TEMPERATURE(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::unit_systemChanged,
 			[this] (int value) { emit unit_systemChanged(UNIT_SYSTEM(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::vertical_speed_timeChanged,
 			[this] (int value) { emit vertical_speed_timeChanged(TIME(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::volumeChanged,
-			[this] (int value) { emit volumeChanged(VOLUME(value)); });
+			[this] (int value) { emit volume_unitsChanged(VOLUME(value)); });
 	connect(qPrefUnits::instance(), &qPrefUnits::weightChanged,
-			[this] (int value) { emit weightChanged(WEIGHT(value)); });
+			[this] (int value) { emit weight_unitsChanged(WEIGHT(value)); });
 
 	connect(qPrefDivePlanner::instance(), &qPrefDivePlanner::ascratelast6mChanged,
 			this, &QMLInterface::ascratelast6mChanged);
@@ -103,6 +104,9 @@ void QMLInterface::setup(QQmlContext *ct)
 	// Register interface class
 	static QMLInterface self;
 	ct->setContextProperty("Backend", &self);
+
+	static NeoDashboardModel neoDashboardModel;
+	ct->setContextProperty("NeoDashboard", &neoDashboardModel);
 
 	// Neo cloud sync coordinator. It deliberately shares Subsurface's existing
 	// QNetworkAccessManager, while keeping OAuth/provider state separate from
