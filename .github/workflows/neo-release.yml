@@ -43,21 +43,45 @@ jobs:
           ref: modern-ui
           fetch-depth: 0
 
-      - name: Ensure release tag points at modern-ui head
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Stamp exact Neo version into release commit
         shell: bash
         run: |
           set -euo pipefail
-          HEAD_SHA=$(git rev-parse HEAD)
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          p = Path('core/neoversion.h')
+          text = p.read_text()
+          version = os.environ['NEO_VERSION']
+          text, n = re.subn(r'#define SUBSURFACE_NEO_VERSION "[^"]+"', f'#define SUBSURFACE_NEO_VERSION "{version}"', text, count=1)
+          if n != 1:
+              raise SystemExit('Could not stamp SUBSURFACE_NEO_VERSION')
+          p.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- core/neoversion.h; then
+            git add core/neoversion.h
+            git commit -m "release: Subsurface Neo ${NEO_VERSION}"
+            git push origin HEAD:modern-ui
+          fi
+          RELEASE_SHA=$(git rev-parse HEAD)
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
+          echo "Release commit: \`$RELEASE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create immutable release tag
+        shell: bash
+        run: |
+          set -euo pipefail
           if git ls-remote --exit-code --tags origin "refs/tags/${NEO_TAG}" >/dev/null 2>&1; then
-            TAG_SHA=$(git rev-list -n1 "${NEO_TAG}" 2>/dev/null || true)
-            if [ "$TAG_SHA" != "$HEAD_SHA" ]; then
-              echo "Tag ${NEO_TAG} already exists at another commit." >&2
+            git fetch origin "refs/tags/${NEO_TAG}:refs/tags/${NEO_TAG}"
+            TAG_SHA=$(git rev-list -n1 "${NEO_TAG}")
+            if [ "$TAG_SHA" != "$RELEASE_SHA" ]; then
+              echo "Tag ${NEO_TAG} already exists at $TAG_SHA, expected $RELEASE_SHA." >&2
               exit 1
             fi
           else
-            git tag -a "${NEO_TAG}" -m "Subsurface Neo ${NEO_VERSION}"
+            git tag -a "${NEO_TAG}" "$RELEASE_SHA" -m "Subsurface Neo ${NEO_VERSION}"
             git push origin "${NEO_TAG}"
           fi
 
@@ -69,9 +93,8 @@ jobs:
           set -euo pipefail
           gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref "${NEO_TAG}"
           gh workflow run windows-msvc-qt6.yml --repo "$GITHUB_REPOSITORY" --ref "${NEO_TAG}"
-          sleep 8
 
-      - name: Resolve dispatched run IDs
+      - name: Resolve exact dispatched run IDs
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -79,8 +102,9 @@ jobs:
           set -euo pipefail
           find_run() {
             local workflow="$1"
-            for i in $(seq 1 30); do
-              id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --branch "${NEO_TAG}" --event workflow_dispatch --limit 10 --json databaseId,headBranch,createdAt --jq '.[0].databaseId // empty')
+            for i in $(seq 1 40); do
+              id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=30" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${RELEASE_SHA}\") | .id" | head -1)
               if [ -n "$id" ]; then echo "$id"; return 0; fi
               sleep 4
             done
@@ -103,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run watch "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
 
-      - name: Download release artifacts
+      - name: Download and hash release artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -132,11 +156,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=("${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Subsurface Neo ${NEO_VERSION}" --generate-notes)
-          if [ '${{ inputs.prerelease }}' = 'true' ]; then args+=(--prerelease); fi
           if gh release view "${NEO_TAG}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
           else
+            args=("${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Subsurface Neo ${NEO_VERSION}" --generate-notes)
+            if [ '${{ inputs.prerelease }}' = 'true' ]; then args+=(--prerelease); fi
             gh release create "${args[@]}"
           fi
 
