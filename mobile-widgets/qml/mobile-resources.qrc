@@ -47,6 +47,7 @@
 		<file>modern/components/ModernCard.qml</file>
 		<file>modern/components/MetricCard.qml</file>
 		<file>modern/components/NeoBottomNavigation.qml</file>
+		<file>modern/components/DiveActionSheet.qml</file>
 		<file>modern/pages/ModernDashboard.qml</file>
 		<file>modern/pages/ModernDiveList.qml</file>
 		<file>modern/pages/CloudSyncPage.qml</file>
@@ -112,8 +113,8 @@
 	<qresource prefix="/xslt">
 		<!-- ********** xslt ********** -->
 		<file alias="commonTemplates.xsl">../../xslt/commonTemplates.xsl</file>
-		<file alias="uddf-export.xslt">../../xslt/uddf-export.xslt</file>
-		<file alias="divelogs-export.xslt">../../xslt/divelogs-export.xslt</file>
-		<file alias="xml2json.xslt">../../xslt/xml2json.xslt</file>
+		<file alias="uddf-export.xsl">../../xslt/uddf-export.xsl</file>
+		<file alias="divelogs-export.xsl">../../xslt/divelogs-export.xsl</file>
+		<file alias="xml2json.xsl">../../xslt/xml2json.xsl</file>
 	</qresource>
 </RCC>
