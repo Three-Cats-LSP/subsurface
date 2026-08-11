@@ -1,0 +1,134 @@
+name: Sync upstream Subsurface
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-subsurface-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fork master
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "Subsurface Neo Upstream Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch official Subsurface
+        run: |
+          git remote add upstream https://github.com/subsurface/subsurface.git
+          git fetch --prune upstream master
+          git fetch --prune origin modern-ui
+
+      - name: Merge new upstream commits into fork master
+        id: sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/master)
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor "$UPSTREAM" HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Fork master already contains upstream $UPSTREAM"
+            exit 0
+          fi
+
+          # Preserve the fork's small sync-workflow commit and merge upstream
+          # history normally. Never force-push and never auto-resolve conflicts.
+          if ! git merge --no-edit upstream/master; then
+            echo "::error::Upstream merge has conflicts. Resolve them manually on master; automation will not choose a side."
+            git status --short
+            exit 1
+          fi
+
+          AFTER=$(git rev-parse HEAD)
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:master
+
+      - name: Determine whether Neo already contains latest master
+        id: neo
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --prune origin master modern-ui
+          if git merge-base --is-ancestor origin/master origin/modern-ui; then
+            echo "needs_pr=false" >> "$GITHUB_OUTPUT"
+            echo "modern-ui already contains fork master"
+          else
+            echo "needs_pr=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or refresh upstream sync pull request
+        if: steps.neo.outputs.needs_pr == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base modern-ui \
+            --head master \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          RANGE=$(git log --oneline --no-merges origin/modern-ui..origin/master | head -50 || true)
+          if [ -z "$RANGE" ]; then
+            RANGE="(merge-only upstream history; inspect Files changed / Commits in GitHub)"
+          fi
+
+          BODY=$(cat <<EOF
+          Automated Subsurface Neo upstream synchronization.
+
+          Official upstream target: \`subsurface/subsurface:master\`
+          Upstream SHA: \`$UPSTREAM_SHA\`
+
+          Commits currently present on fork \`master\` but not yet integrated into \`modern-ui\`:
+
+          \`\`\`
+          $RANGE
+          \`\`\`
+
+          ### Merge policy
+          - Android and Windows PR CI must pass before merge.
+          - Decompression/planner changes require focused regression review when those gates are available.
+          - Source conflicts are never silently resolved by this automation.
+          - Keep this as the single rolling upstream-sync PR.
+          EOF
+          )
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "chore: sync upstream Subsurface" \
+              --body "$BODY"
+            echo "Updated PR #$PR_NUMBER"
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base modern-ui \
+              --head master \
+              --title "chore: sync upstream Subsurface" \
+              --body "$BODY"
+          fi
