@@ -62,8 +62,7 @@ public:
 		TripBelow,
 		TripLocationRole,
 		TripNotesRole,
-		IsInvalidRole,
-		DiveModeRole
+		IsInvalidRole
 	};
 	QHash<int, QByteArray> roleNames() const override;
 protected:
@@ -159,7 +158,7 @@ private:
 	// Update elements
 	void initData();
 	int removeTopLevel(int begin, int end);
-	void addTopLevel(int row, std::vector<int> items);
+	int addTopLevel(int row, std::vector<int> items);
 	void updateTopLevel(int row, int delta);
 signals:
 	void currentDiveChanged(QModelIndex index);
