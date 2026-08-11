@@ -7,6 +7,7 @@ import org.subsurfacedivelog.mobile 1.0
 Kirigami.ScrollablePage {
 	id: aboutPage
 	property int pageWidth: aboutPage.width - aboutPage.leftPadding - aboutPage.rightPadding
+	property bool manualUpdateCheck: false
 	title: qsTr("About Subsurface Neo")
 	background: Rectangle { color: subsurfaceTheme.backgroundColor }
 
@@ -48,6 +49,21 @@ Kirigami.ScrollablePage {
 			aboutPage.openCloudSyncPage()
 		})
 		showPage(dashboard)
+	}
+
+	Connections {
+		target: NeoUpdate
+		function onStateChanged() {
+			if (!aboutPage.manualUpdateCheck || NeoUpdate.checking)
+				return
+			aboutPage.manualUpdateCheck = false
+			if (NeoUpdate.lastError !== "")
+				showPassiveNotification(qsTr("Unable to check for updates: %1").arg(NeoUpdate.lastError), 6000)
+			else if (NeoUpdate.updateAvailable)
+				showPassiveNotification(qsTr("Subsurface Neo %1 is available.").arg(NeoUpdate.latestVersion), 6000)
+			else
+				showPassiveNotification(qsTr("Subsurface Neo is up to date."), 4000)
+		}
 	}
 
 	ColumnLayout {
@@ -97,6 +113,21 @@ Kirigami.ScrollablePage {
 			wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
 			anchors.horizontalCenter: parent.Center
 			horizontalAlignment: Text.AlignHCenter
+		}
+		TemplateButton {
+			id: updateButton
+			Layout.alignment: Qt.AlignHCenter
+			enabled: !NeoUpdate.checking
+			text: NeoUpdate.checking ? qsTr("Checking for updates…") :
+				  (NeoUpdate.updateAvailable ? qsTr("Download Subsurface Neo %1").arg(NeoUpdate.latestVersion) : qsTr("Check for updates"))
+			onClicked: {
+				if (NeoUpdate.updateAvailable && NeoUpdate.downloadUrl !== "") {
+					Qt.openUrlExternally(NeoUpdate.downloadUrl)
+				} else {
+					aboutPage.manualUpdateCheck = true
+					NeoUpdate.checkForUpdates(true)
+				}
+			}
 		}
 		TemplateButton {
 			id: modernPreviewButton
