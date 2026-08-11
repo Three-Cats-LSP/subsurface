@@ -25,6 +25,49 @@ Kirigami.ScrollablePage {
 		showPage(cloudPage)
 	}
 
+	function openModernDiveDetails(row) {
+		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
+		if (component.status !== Component.Ready) {
+			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
+			return
+		}
+		var detailsPage = component.createObject(rootItem, { "initialRow": row })
+		if (detailsPage === null) {
+			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
+			return
+		}
+		detailsPage.editRequested.connect(function(diveId) {
+			manager.selectDive(diveId)
+			showPage(detailsWindow)
+			detailsWindow.startEditMode()
+		})
+		showPage(detailsPage)
+	}
+
+	function openModernDiveList() {
+		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveList.qml")
+		if (component.status !== Component.Ready) {
+			showPassiveNotification(qsTr("Unable to load Neo dive list: %1").arg(component.errorString()), 6000)
+			return
+		}
+		var divesPage = component.createObject(rootItem, { "diveListModel": diveModel })
+		if (divesPage === null) {
+			showPassiveNotification(qsTr("Unable to create Neo dive list"), 6000)
+			return
+		}
+		divesPage.openDive.connect(function(row) {
+			aboutPage.openModernDiveDetails(row)
+		})
+		divesPage.downloadRequested.connect(function() {
+			downloadFromDc.dcImportModel.clearTable()
+			showPageFromDrawer(downloadFromDc)
+		})
+		divesPage.addDiveRequested.connect(function() {
+			startAddDive()
+		})
+		showPage(divesPage)
+	}
+
 	function openModernPreview() {
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDashboard.qml")
 		if (component.status !== Component.Ready) {
@@ -39,7 +82,7 @@ Kirigami.ScrollablePage {
 		}
 
 		dashboard.openDiveList.connect(function() {
-			rootItem.returnTopPage()
+			aboutPage.openModernDiveList()
 		})
 		dashboard.openImport.connect(function() {
 			downloadFromDc.dcImportModel.clearTable()
