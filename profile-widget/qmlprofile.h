@@ -4,6 +4,7 @@
 
 #include "core/subsurface-qt/divelistnotifier.h"
 #include <QQuickPaintedItem>
+#include <QVariantMap>
 #include <memory>
 
 class ProfileScene;
@@ -40,6 +41,7 @@ public:
 	void setYOffset(qreal value);
 	Q_INVOKABLE void nextDC();
 	Q_INVOKABLE void prevDC();
+	Q_INVOKABLE QVariantMap sampleAtFraction(qreal fraction) const;
 
 public slots:
 	void setMargin(int margin);
