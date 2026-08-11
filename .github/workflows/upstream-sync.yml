@@ -14,7 +14,6 @@ permissions:
   actions: write
   contents: write
   pull-requests: read
-  issues: write
 
 concurrency:
   group: upstream-subsurface-sync
@@ -25,7 +24,6 @@ env:
   UPSTREAM_BRANCH: master
   NEO_BRANCH: modern-ui
   SYNC_BRANCH: upstream-sync/subsurface
-  CONFLICT_ISSUE_TITLE: Upstream Subsurface sync needs conflict resolution
 
 jobs:
   sync:
@@ -50,7 +48,6 @@ jobs:
           git fetch --prune upstream "${UPSTREAM_BRANCH}" --tags
           git fetch --prune origin master "${NEO_BRANCH}" "${SYNC_BRANCH}" || true
           echo "UPSTREAM_SHA=$(git rev-parse upstream/${UPSTREAM_BRANCH})" >> "$GITHUB_ENV"
-          echo "MASTER_BEFORE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "NEO_SHA=$(git rev-parse origin/${NEO_BRANCH})" >> "$GITHUB_ENV"
 
       - name: Update fork master from official upstream
@@ -58,7 +55,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Fork master already contains upstream ${UPSTREAM_SHA}." >> "$GITHUB_STEP_SUMMARY"
@@ -69,9 +65,8 @@ jobs:
           git merge --no-edit "upstream/${UPSTREAM_BRANCH}"
           MERGE_STATUS=$?
           set -e
-
           if [ "$MERGE_STATUS" -ne 0 ]; then
-            echo "::error::Official upstream cannot be merged cleanly into fork master. Automation will not resolve source conflicts."
+            echo "::error::Official upstream cannot be merged cleanly into fork master."
             git diff --name-only --diff-filter=U
             git merge --abort || true
             exit 1
@@ -94,11 +89,8 @@ jobs:
             echo "Neo already contains current fork master." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-
           echo "has_updates=true" >> "$GITHUB_OUTPUT"
-          COUNT=$(git rev-list --count "origin/${NEO_BRANCH}..origin/master" || true)
-          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
-          git log --format='- `%h` %s' --no-merges "origin/${NEO_BRANCH}..origin/master" | head -80 > /tmp/upstream-commits.md || true
+          echo "count=$(git rev-list --count "origin/${NEO_BRANCH}..origin/master" || true)" >> "$GITHUB_OUTPUT"
 
       - name: Build rolling Neo sync branch
         if: steps.pending.outputs.has_updates == 'true'
@@ -117,12 +109,14 @@ jobs:
             git diff --name-only --diff-filter=U > /tmp/upstream-conflicts.txt || true
             echo "conflict=true" >> "$GITHUB_OUTPUT"
             {
-              echo '### Merge conflict detected'
+              echo '### Upstream merge conflict'
               echo
-              echo 'The workflow stopped without resolving or committing conflicts.'
+              echo 'No conflict was auto-resolved and the rolling sync branch was not updated.'
               echo
               echo 'Conflicting files:'
               sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+              echo
+              echo 'Resolve these manually before integrating the upstream update.'
             } >> "$GITHUB_STEP_SUMMARY"
             git merge --abort || true
             exit 0
@@ -131,40 +125,11 @@ jobs:
           echo "conflict=false" >> "$GITHUB_OUTPUT"
           git push --force-with-lease origin "${SYNC_BRANCH}"
 
-      - name: Open or update conflict issue
+      - name: Fail safely on source conflict
         if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -euo pipefail
-          BODY_FILE=/tmp/upstream-conflict-body.md
-          {
-            echo 'The scheduled Subsurface upstream sync found source conflicts and intentionally stopped without resolving them.'
-            echo
-            echo "Neo base: \`${NEO_SHA}\`"
-            echo "Fork master: \`$(git rev-parse origin/master)\`"
-            echo "Official upstream: \`${UPSTREAM_SHA}\`"
-            echo
-            echo 'Conflicting files:'
-            sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
-            echo
-            echo 'Resolve these on the rolling sync branch, then run Android/Windows/planner regression CI before merging.'
-          } > "$BODY_FILE"
-
-          ISSUE_NUMBER=$(gh issue list \
-            --repo "${GITHUB_REPOSITORY}" \
-            --state open \
-            --search "${CONFLICT_ISSUE_TITLE} in:title" \
-            --json number,title \
-            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
-            | head -1)
-
-          if [ -n "$ISSUE_NUMBER" ]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --body-file "$BODY_FILE"
-          else
-            gh issue create --repo "${GITHUB_REPOSITORY}" --title "${CONFLICT_ISSUE_TITLE}" --body-file "$BODY_FILE"
-          fi
+          echo "::error::Upstream Subsurface has source conflicts with Neo. See the workflow summary for the conflicting files."
           exit 1
 
       - name: Verify permanent rolling sync pull request
@@ -182,10 +147,10 @@ jobs:
             --json number \
             --jq '.[0].number // empty')
           if [ -z "$PR_NUMBER" ]; then
-            echo "::error::Permanent rolling PR ${SYNC_BRANCH} -> ${NEO_BRANCH} is missing. Create it once under a user/service account; Actions does not need permission to create PRs."
+            echo "::error::Permanent rolling PR ${SYNC_BRANCH} -> ${NEO_BRANCH} is missing."
             exit 1
           fi
-          echo "Rolling sync PR #${PR_NUMBER} automatically tracks the refreshed branch." >> "$GITHUB_STEP_SUMMARY"
+          echo "Rolling sync PR #${PR_NUMBER} tracks the refreshed branch." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Explicitly dispatch Neo Android and Windows CI
         if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
@@ -197,20 +162,3 @@ jobs:
           gh workflow run android.yml --repo "${GITHUB_REPOSITORY}" --ref "${SYNC_BRANCH}"
           gh workflow run windows-msvc-qt6.yml --repo "${GITHUB_REPOSITORY}" --ref "${SYNC_BRANCH}"
           echo "Dispatched Android and Windows CI for ${SYNC_BRANCH}." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Close resolved conflict issue
-        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          ISSUE_NUMBER=$(gh issue list \
-            --repo "${GITHUB_REPOSITORY}" \
-            --state open \
-            --search "${CONFLICT_ISSUE_TITLE} in:title" \
-            --json number,title \
-            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
-            | head -1)
-          if [ -n "$ISSUE_NUMBER" ]; then
-            gh issue close "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --comment "The latest upstream merge is conflict-free again; the rolling sync PR and explicit CI runs have been refreshed."
-          fi
