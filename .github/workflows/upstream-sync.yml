@@ -1,4 +1,4 @@
-name: Sync upstream Subsurface
+name: Upstream Subsurface Sync
 
 on:
   schedule:
@@ -6,129 +6,243 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
+  issues: write
 
 concurrency:
   group: upstream-subsurface-sync
   cancel-in-progress: false
 
+env:
+  UPSTREAM_REPOSITORY: https://github.com/subsurface/subsurface.git
+  UPSTREAM_BRANCH: master
+  NEO_BRANCH: modern-ui
+  SYNC_BRANCH: upstream-sync/subsurface
+  CONFLICT_ISSUE_TITLE: Upstream Subsurface sync needs conflict resolution
+
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
     steps:
       - name: Check out fork master
         uses: actions/checkout@v7
         with:
           ref: master
           fetch-depth: 0
+          submodules: recursive
 
-      - name: Configure git
+      - name: Configure Git
         run: |
           git config user.name "Subsurface Neo Upstream Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "${UPSTREAM_REPOSITORY}"
 
-      - name: Fetch official Subsurface
+      - name: Fetch official Subsurface and Neo
         run: |
-          git remote add upstream https://github.com/subsurface/subsurface.git
-          git fetch --prune upstream master
-          git fetch --prune origin modern-ui
+          git fetch --prune upstream "${UPSTREAM_BRANCH}" --tags
+          git fetch --prune origin master "${NEO_BRANCH}" "${SYNC_BRANCH}" || true
+          echo "UPSTREAM_SHA=$(git rev-parse upstream/${UPSTREAM_BRANCH})" >> "$GITHUB_ENV"
+          echo "MASTER_BEFORE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "NEO_SHA=$(git rev-parse origin/${NEO_BRANCH})" >> "$GITHUB_ENV"
 
-      - name: Merge new upstream commits into fork master
-        id: sync
+      - name: Update fork master from official upstream
+        id: master_sync
         shell: bash
         run: |
           set -euo pipefail
-          BEFORE=$(git rev-parse HEAD)
-          UPSTREAM=$(git rev-parse upstream/master)
-          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
-          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
 
-          if git merge-base --is-ancestor "$UPSTREAM" HEAD; then
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Fork master already contains upstream $UPSTREAM"
+            echo "Fork master already contains upstream ${UPSTREAM_SHA}." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          # Preserve the fork's small sync-workflow commit and merge upstream
-          # history normally. Never force-push and never auto-resolve conflicts.
-          if ! git merge --no-edit upstream/master; then
-            echo "::error::Upstream merge has conflicts. Resolve them manually on master; automation will not choose a side."
-            git status --short
+          set +e
+          git merge --no-edit "upstream/${UPSTREAM_BRANCH}"
+          MERGE_STATUS=$?
+          set -e
+
+          if [ "$MERGE_STATUS" -ne 0 ]; then
+            echo "::error::Official upstream cannot be merged cleanly into fork master. Automation will not resolve source conflicts."
+            git diff --name-only --diff-filter=U
+            git merge --abort || true
             exit 1
           fi
 
-          AFTER=$(git rev-parse HEAD)
-          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
           git push origin HEAD:master
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Updated fork master to include official upstream ${UPSTREAM_SHA}." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Determine whether Neo already contains latest master
-        id: neo
+      - name: Refresh remote refs
+        run: git fetch --prune origin master "${NEO_BRANCH}"
+
+      - name: Detect whether Neo needs fork master
+        id: pending
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --prune origin master modern-ui
-          if git merge-base --is-ancestor origin/master origin/modern-ui; then
-            echo "needs_pr=false" >> "$GITHUB_OUTPUT"
-            echo "modern-ui already contains fork master"
-          else
-            echo "needs_pr=true" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor origin/master "origin/${NEO_BRANCH}"; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "Neo already contains current fork master." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
-      - name: Create or refresh upstream sync pull request
-        if: steps.neo.outputs.needs_pr == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream }}
+          echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          COUNT=$(git rev-list --count "origin/${NEO_BRANCH}..origin/master" || true)
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          git log --format='- `%h` %s' --no-merges "origin/${NEO_BRANCH}..origin/master" | head -80 > /tmp/upstream-commits.md || true
+
+      - name: Build rolling Neo sync branch
+        if: steps.pending.outputs.has_updates == 'true'
+        id: merge
         shell: bash
         run: |
           set -euo pipefail
+          git checkout -B "${SYNC_BRANCH}" "origin/${NEO_BRANCH}"
+
+          set +e
+          git merge --no-ff --no-edit origin/master
+          MERGE_STATUS=$?
+          set -e
+
+          if [ "$MERGE_STATUS" -ne 0 ]; then
+            git diff --name-only --diff-filter=U > /tmp/upstream-conflicts.txt || true
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            {
+              echo '### Merge conflict detected'
+              echo
+              echo 'The workflow stopped without resolving or committing conflicts.'
+              echo
+              echo 'Conflicting files:'
+              sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+            } >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort || true
+            exit 0
+          fi
+
+          echo "conflict=false" >> "$GITHUB_OUTPUT"
+          git push --force-with-lease origin "${SYNC_BRANCH}"
+
+      - name: Open or update conflict issue
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY_FILE=/tmp/upstream-conflict-body.md
+          {
+            echo 'The scheduled Subsurface upstream sync found source conflicts and intentionally stopped without resolving them.'
+            echo
+            echo "Neo base: \`${NEO_SHA}\`"
+            echo "Fork master: \`$(git rev-parse origin/master)\`"
+            echo "Official upstream: \`${UPSTREAM_SHA}\`"
+            echo
+            echo 'Conflicting files:'
+            sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+            echo
+            echo 'Resolve these on the rolling sync branch, then run Android/Windows/planner regression CI before merging.'
+          } > "$BODY_FILE"
+
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --search "${CONFLICT_ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
+            | head -1)
+
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --body-file "$BODY_FILE"
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "${CONFLICT_ISSUE_TITLE}" --body-file "$BODY_FILE"
+          fi
+          exit 1
+
+      - name: Create or update upstream sync pull request
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY_FILE=/tmp/upstream-pr-body.md
+          {
+            echo 'Automated integration of current fork `master` (kept current with official `subsurface/subsurface:master`) into Subsurface Neo.'
+            echo
+            echo "- Neo base before sync: \`${NEO_SHA}\`"
+            echo "- Fork master: \`$(git rev-parse origin/master)\`"
+            echo "- Official upstream: \`${UPSTREAM_SHA}\`"
+            echo "- Master commits not yet reachable from Neo: ${{ steps.pending.outputs.count }}"
+            echo
+            echo '### Pending commits (first 80)'
+            if [ -s /tmp/upstream-commits.md ]; then
+              cat /tmp/upstream-commits.md
+            else
+              echo '- Merge-only history; inspect the sync merge commit directly.'
+            fi
+            echo
+            echo '### Merge policy'
+            echo '- No source conflicts were auto-resolved.'
+            echo '- Android and Windows CI are explicitly dispatched for this sync branch.'
+            echo '- Planner/decompression changes require focused regression review when those gates are present.'
+            echo '- Merge manually during the initial Neo development period.'
+          } > "$BODY_FILE"
 
           PR_NUMBER=$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --base modern-ui \
-            --head master \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base "${NEO_BRANCH}" \
+            --head "${SYNC_BRANCH}" \
             --state open \
             --json number \
             --jq '.[0].number // empty')
 
-          RANGE=$(git log --oneline --no-merges origin/modern-ui..origin/master | head -50 || true)
-          if [ -z "$RANGE" ]; then
-            RANGE="(merge-only upstream history; inspect Files changed / Commits in GitHub)"
-          fi
-
-          BODY=$(cat <<EOF
-          Automated Subsurface Neo upstream synchronization.
-
-          Official upstream target: \`subsurface/subsurface:master\`
-          Upstream SHA: \`$UPSTREAM_SHA\`
-
-          Commits currently present on fork \`master\` but not yet integrated into \`modern-ui\`:
-
-          \`\`\`
-          $RANGE
-          \`\`\`
-
-          ### Merge policy
-          - Android and Windows PR CI must pass before merge.
-          - Decompression/planner changes require focused regression review when those gates are available.
-          - Source conflicts are never silently resolved by this automation.
-          - Keep this as the single rolling upstream-sync PR.
-          EOF
-          )
-
+          TITLE="Upstream Subsurface Sync — $(date -u +%Y-%m-%d)"
           if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "chore: sync upstream Subsurface" \
-              --body "$BODY"
-            echo "Updated PR #$PR_NUMBER"
+            gh pr edit "$PR_NUMBER" --repo "${GITHUB_REPOSITORY}" --title "$TITLE" --body-file "$BODY_FILE"
           else
             gh pr create \
-              --repo "$GITHUB_REPOSITORY" \
-              --base modern-ui \
-              --head master \
-              --title "chore: sync upstream Subsurface" \
-              --body "$BODY"
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${NEO_BRANCH}" \
+              --head "${SYNC_BRANCH}" \
+              --title "$TITLE" \
+              --body-file "$BODY_FILE"
+            PR_NUMBER=$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$NEO_BRANCH" --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')
+          fi
+          echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Sync PR #${PR_NUMBER} is ready for CI." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Explicitly dispatch Neo Android and Windows CI
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # workflow_dispatch is intentionally used here: unlike ordinary events
+          # created with GITHUB_TOKEN, GitHub allows these dispatches to start
+          # new workflow runs. This guarantees fresh CI for the rolling sync PR.
+          gh workflow run android.yml --repo "${GITHUB_REPOSITORY}" --ref "${SYNC_BRANCH}"
+          gh workflow run windows-msvc-qt6.yml --repo "${GITHUB_REPOSITORY}" --ref "${SYNC_BRANCH}"
+          echo "Dispatched Android and Windows CI for ${SYNC_BRANCH}." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close resolved conflict issue
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --search "${CONFLICT_ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
+            | head -1)
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue close "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --comment "The latest upstream merge is conflict-free again; the rolling sync PR and explicit CI runs have been refreshed."
           fi
