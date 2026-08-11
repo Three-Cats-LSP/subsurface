@@ -21,6 +21,11 @@ Kirigami.Page {
 
 	Modern.DesignTokens { id: tokens }
 
+	function refreshCurrentProfile() {
+		if (page.currentItem)
+			page.currentItem.refreshProfile()
+	}
+
 	Component.onCompleted: {
 		if (initialRow >= 0)
 			manager.selectRow(initialRow)
@@ -67,6 +72,10 @@ Kirigami.Page {
 				profile.opacity = 1.0
 				profileMouseArea.dragging = false
 				panningProfile = false
+				profile.triggerUpdate()
+			}
+
+			function refreshProfile() {
 				profile.triggerUpdate()
 			}
 
@@ -190,6 +199,11 @@ Kirigami.Page {
 									}
 								}
 
+								ToolButton {
+									text: "☷"
+									accessibleName: qsTr("Profile controls")
+									onClicked: profileControls.open()
+								}
 								ToolButton {
 									visible: profile.scale > 1.02
 									text: qsTr("Reset")
@@ -403,6 +417,113 @@ Kirigami.Page {
 				var dx = centroid.position.x - startFingerX
 				lastTranslationX = dx
 				diveView.contentX = startContentX - dx
+			}
+		}
+	}
+
+	Popup {
+		id: profileControls
+		parent: Overlay.overlay
+		modal: true
+		focus: true
+		closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+		width: Math.min(page.width - tokens.space16 * 2, 460)
+		height: Math.min(implicitHeight, page.height - tokens.space24 * 2)
+		x: Math.max(tokens.space8, (page.width - width) / 2)
+		y: Math.max(tokens.space12, page.height - height - tokens.space16)
+		padding: tokens.space16
+		background: Rectangle {
+			color: tokens.surface
+			radius: 18
+			border.width: 1
+			border.color: tokens.border
+		}
+
+		contentItem: Flickable {
+			implicitHeight: Math.min(controlsColumn.implicitHeight, page.height * 0.72)
+			contentWidth: width
+			contentHeight: controlsColumn.implicitHeight
+			clip: true
+			flickableDirection: Flickable.VerticalFlick
+
+			ColumnLayout {
+				id: controlsColumn
+				width: parent.width
+				spacing: tokens.space8
+
+				RowLayout {
+					Layout.fillWidth: true
+					Text {
+						Layout.fillWidth: true
+						text: qsTr("Profile controls")
+						color: tokens.textPrimary
+						font.pixelSize: 20
+						font.weight: Font.DemiBold
+					}
+					ToolButton { text: "×"; onClicked: profileControls.close() }
+				}
+
+				Text { text: qsTr("Profile"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("NDL / TTS")
+					checked: ProfilePrefs.calcndltts
+					onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() }
+				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Ceiling")
+					checked: ProfilePrefs.calcceiling
+					onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() }
+				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Tissue ceiling")
+					checked: ProfilePrefs.calcalltissues
+					onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() }
+				}
+
+				Text { text: qsTr("Gases"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("pO₂ / gas pressure graph")
+					checked: ProfilePrefs.percentagegraph
+					onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() }
+				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("MOD")
+					checked: ProfilePrefs.mod
+					onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() }
+				}
+
+				Text { text: qsTr("Cylinder"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Tank pressure")
+					checked: ProfilePrefs.tankbar
+					onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() }
+				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("SAC")
+					checked: ProfilePrefs.show_sac
+					onToggled: { ProfilePrefs.show_sac = checked; page.refreshCurrentProfile() }
+				}
+
+				Text { text: qsTr("Events & overlays"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Dive-computer ceiling")
+					checked: ProfilePrefs.dcceiling
+					onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() }
+				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Pictures")
+					checked: ProfilePrefs.show_pictures_in_profile
+					onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() }
+				}
 			}
 		}
 	}
