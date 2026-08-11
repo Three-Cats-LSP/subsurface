@@ -1,7 +1,8 @@
 # mobile backend functions
 
 set(SUBSURFACE_MOBILE_SRCS
-	qmlinterface.cpp
+	neoupdatecheck.cpp
+	tqmlinterface.cpp
 	qmlmanager.cpp
 	statsmanager.cpp
 	themeinterface.cpp
