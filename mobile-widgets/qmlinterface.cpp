@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "qmlinterface.h"
+#include "qmlmanager.h"
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
+#include "core/neoupdatemanager.h"
 #include <QQmlEngine>
 #include <QMetaObject>
+#include <QTimer>
 #include <QUrl>
 
 #if defined(Q_OS_ANDROID)
@@ -107,6 +110,20 @@ void QMLInterface::setup(QQmlContext *ct)
 	static CloudSyncManager cloudSync(manager());
 	neoCloudSync = &cloudSync;
 	ct->setContextProperty("CloudSync", &cloudSync);
+
+	// Shared Neo release/update service. The desktop client has a QWidget
+	// presentation for the same manifest; mobile exposes the state to QML and
+	// reuses QMLManager's existing passive-notification channel at startup.
+	static NeoUpdateManager neoUpdate;
+	ct->setContextProperty("NeoUpdate", &neoUpdate);
+	connect(&neoUpdate, &NeoUpdateManager::updateAvailableFound, &neoUpdate, [&neoUpdate]() {
+		if (QMLManager::instance()) {
+			QMLManager::instance()->setNotificationText(
+				QMLInterface::tr("A new Subsurface Neo version (%1) is available. Open Settings / About to download it.")
+					.arg(neoUpdate.latestVersion()));
+		}
+	}, Qt::UniqueConnection);
+	QTimer::singleShot(1500, &neoUpdate, [&neoUpdate]() { neoUpdate.checkForUpdates(false); });
 
 	// Make enums available as types
 	qmlRegisterUncreatableType<QMLInterface>("org.subsurfacedivelog.mobile", 1, 0, "Enums", "Enum is not a type");
