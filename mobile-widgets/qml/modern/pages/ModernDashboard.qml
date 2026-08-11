@@ -8,7 +8,7 @@ import "../components" as Components
 
 Kirigami.ScrollablePage {
 	id: page
-	title: qsTr("Subsurface Neo Preview")
+	title: qsTr("Home")
 	background: Rectangle { color: tokens.background }
 
 	signal openDiveList()
@@ -34,7 +34,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 			}
 			Text {
-				text: qsTr("Subsurface Neo is the modern interface for your existing Subsurface dive data. We are migrating features incrementally while keeping the mature dive engine intact.")
+				text: qsTr("Subsurface Neo keeps the proven Subsurface dive engine underneath a faster, clearer mobile interface.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
@@ -78,7 +78,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 			}
 			Text {
-				text: qsTr("Real dive data is the next dashboard wiring step. Cloud authentication is now connected to the Neo provider layer.")
+				text: qsTr("Dive metrics and recent-dive cards are being connected directly to the existing Subsurface models. No placeholder dive data is generated.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
