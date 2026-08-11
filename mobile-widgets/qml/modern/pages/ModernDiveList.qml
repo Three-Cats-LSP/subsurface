@@ -20,6 +20,11 @@ Kirigami.Page {
 
 	Modern.DesignTokens { id: tokens }
 
+	Components.DiveActionSheet {
+		id: diveActions
+		onOpenDive: function(row) { page.openDive(row) }
+	}
+
 	ColumnLayout {
 		anchors.fill: parent
 		anchors.margins: tokens.space12
@@ -98,6 +103,7 @@ Kirigami.Page {
 				id: delegateRoot
 				required property int index
 				property var modelData: model
+				property bool longPressTriggered: false
 				width: listView.width
 				height: modelData.isTrip ? 64 : diveCard.implicitHeight
 
@@ -226,7 +232,17 @@ Kirigami.Page {
 					}
 
 					TapHandler {
-						onTapped: page.openDive(delegateRoot.modelData.row)
+						onLongPressed: {
+							delegateRoot.longPressTriggered = true
+							diveActions.openForDive(delegateRoot.modelData)
+						}
+						onTapped: {
+							if (delegateRoot.longPressTriggered) {
+								delegateRoot.longPressTriggered = false
+								return
+							}
+							page.openDive(delegateRoot.modelData.row)
+						}
 					}
 				}
 			}
