@@ -116,14 +116,14 @@ void QMLInterface::setup(QQmlContext *ct)
 	// reuses QMLManager's existing passive-notification channel at startup.
 	static NeoUpdateManager neoUpdate;
 	ct->setContextProperty("NeoUpdate", &neoUpdate);
-	connect(&neoUpdate, &NeoUpdateManager::updateAvailableFound, &neoUpdate, [&neoUpdate]() {
+	connect(&neoUpdate, &NeoUpdateManager::updateAvailableFound, &neoUpdate, []() {
 		if (QMLManager::instance()) {
 			QMLManager::instance()->setNotificationText(
 				QMLInterface::tr("A new Subsurface Neo version (%1) is available. Open Settings / About to download it.")
 					.arg(neoUpdate.latestVersion()));
 		}
 	}, Qt::UniqueConnection);
-	QTimer::singleShot(1500, &neoUpdate, [&neoUpdate]() { neoUpdate.checkForUpdates(false); });
+	QTimer::singleShot(1500, &neoUpdate, []() { neoUpdate.checkForUpdates(false); });
 
 	// Make enums available as types
 	qmlRegisterUncreatableType<QMLInterface>("org.subsurfacedivelog.mobile", 1, 0, "Enums", "Enum is not a type");
