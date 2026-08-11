@@ -50,25 +50,26 @@ Kirigami.ScrollablePage {
 
 			Components.MetricCard {
 				label: qsTr("Dives")
-				value: "—"
+				value: String(NeoDashboard.diveCount)
 				Layout.fillWidth: true
 			}
 			Components.MetricCard {
 				label: qsTr("Dive time")
-				value: "—"
+				value: NeoDashboard.totalTimeHours
 				suffix: qsTr("hours")
 				Layout.fillWidth: true
 			}
 			Components.MetricCard {
 				label: qsTr("Max depth")
-				value: "—"
-				suffix: "m"
+				value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"
+				suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""
 				Layout.fillWidth: true
 			}
 		}
 
-		Components.ModernCard {
+		ColumnLayout {
 			Layout.fillWidth: true
+			spacing: tokens.space12
 
 			Text {
 				text: qsTr("Recent dives")
@@ -77,12 +78,73 @@ Kirigami.ScrollablePage {
 				font.weight: Font.DemiBold
 				Layout.fillWidth: true
 			}
+
 			Text {
-				text: qsTr("Dive metrics and recent-dive cards are being connected directly to the existing Subsurface models. No placeholder dive data is generated.")
+				visible: NeoDashboard.recentDives.length === 0
+				text: qsTr("No dives yet. Import from a dive computer or add a dive to get started.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
 				Layout.fillWidth: true
+			}
+
+			Repeater {
+				model: NeoDashboard.recentDives
+
+				delegate: Components.ModernCard {
+					required property var modelData
+					Layout.fillWidth: true
+
+					RowLayout {
+						Layout.fillWidth: true
+						spacing: tokens.space12
+
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: tokens.space4
+
+							Text {
+								text: modelData.location && modelData.location.length > 0 ? modelData.location : qsTr("Dive %1").arg(modelData.number > 0 ? modelData.number : "")
+								color: tokens.textPrimary
+								font.pixelSize: 16
+								font.weight: Font.DemiBold
+								elide: Text.ElideRight
+								Layout.fillWidth: true
+							}
+							Text {
+								text: modelData.date
+								color: tokens.textSecondary
+								font.pixelSize: 12
+								Layout.fillWidth: true
+							}
+						}
+
+						Text {
+							text: modelData.depth
+							color: tokens.accent
+							font.pixelSize: 16
+							font.weight: Font.DemiBold
+						}
+					}
+
+					RowLayout {
+						Layout.fillWidth: true
+						spacing: tokens.space16
+
+						Text {
+							text: modelData.duration
+							color: tokens.textSecondary
+							font.pixelSize: 13
+						}
+						Text {
+							visible: modelData.waterTemp !== undefined && modelData.waterTemp.length > 0
+							text: modelData.waterTemp || ""
+							color: tokens.textSecondary
+							font.pixelSize: 13
+						}
+						Item { Layout.fillWidth: true }
+					}
+				}
 			}
 		}
 
