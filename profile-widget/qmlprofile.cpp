@@ -87,8 +87,58 @@ int QMLProfile::diveId() const
 
 void QMLProfile::setDiveId(int diveId)
 {
+	if (m_diveId == diveId)
+		return;
 	m_diveId = diveId;
+	m_dc = 0;
 	emit numDCChanged();
+	emit currentDCChanged();
+	triggerUpdate();
+}
+
+const divecomputer *QMLProfile::currentDiveComputer() const
+{
+	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	if (!d || m_dc < 0 || m_dc >= d->number_of_computers())
+		return nullptr;
+	return &d->dcs[m_dc];
+}
+
+int QMLProfile::currentDC() const
+{
+	return m_dc;
+}
+
+QString QMLProfile::computerName() const
+{
+	const divecomputer *dc = currentDiveComputer();
+	return dc ? QString::fromStdString(dc->model) : QString();
+}
+
+QString QMLProfile::computerSerial() const
+{
+	const divecomputer *dc = currentDiveComputer();
+	return dc ? QString::fromStdString(dc->serial) : QString();
+}
+
+QString QMLProfile::diveMode() const
+{
+	const divecomputer *dc = currentDiveComputer();
+	if (!dc)
+		return QString();
+
+	switch (dc->divemode) {
+	case OC:
+		return tr("Open circuit");
+	case CCR:
+		return tr("CCR");
+	case PSCR:
+		return tr("PSCR");
+	case FREEDIVE:
+		return tr("Freedive");
+	default:
+		return tr("Unknown");
+	}
 }
 
 qreal QMLProfile::devicePixelRatio() const
@@ -134,6 +184,10 @@ void QMLProfile::divesChanged(const QVector<dive *> &dives, DiveField)
 	for (struct dive *d: dives) {
 		if (d->id == m_diveId) {
 			report_info("dive #%d changed, trigger profile update", d->number);
+			if (m_dc >= d->number_of_computers())
+				m_dc = 0;
+			emit numDCChanged();
+			emit currentDCChanged();
 			triggerUpdate();
 			return;
 		}
@@ -156,11 +210,12 @@ void QMLProfile::rotateDC(int dir)
 	if (!d)
 		return;
 	int numDC = d->number_of_computers();
-	if (numDC == 1)
+	if (numDC <= 1)
 		return;
 	m_dc = (m_dc + dir) % numDC;
 	if (m_dc < 0)
 		m_dc += numDC;
+	emit currentDCChanged();
 	triggerUpdate();
 }
 
