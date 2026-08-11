@@ -1,0 +1,201 @@
+name: Upstream Subsurface Sync
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: upstream-subsurface-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPOSITORY: https://github.com/subsurface/subsurface.git
+  UPSTREAM_BRANCH: master
+  NEO_BRANCH: modern-ui
+  SYNC_BRANCH: upstream-sync/subsurface
+  CONFLICT_ISSUE_TITLE: Upstream Subsurface sync needs conflict resolution
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Neo integration branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.NEO_BRANCH }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "${UPSTREAM_REPOSITORY}"
+
+      - name: Fetch upstream Subsurface
+        run: |
+          git fetch upstream "${UPSTREAM_BRANCH}" --tags
+          echo "UPSTREAM_SHA=$(git rev-parse upstream/${UPSTREAM_BRANCH})" >> "$GITHUB_ENV"
+          echo "NEO_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Detect pending upstream commits
+        id: pending
+        shell: bash
+        run: |
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+            echo "Neo already contains upstream ${UPSTREAM_BRANCH} at $(git rev-parse upstream/${UPSTREAM_BRANCH})." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          COUNT=$(git rev-list --count "HEAD..upstream/${UPSTREAM_BRANCH}" || true)
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Pending upstream Subsurface changes'
+            echo
+            echo "Upstream SHA: \`$(git rev-parse upstream/${UPSTREAM_BRANCH})\`"
+            echo "Commits not reachable from Neo: ${COUNT}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build sync branch and merge upstream
+        if: steps.pending.outputs.has_updates == 'true'
+        id: merge
+        shell: bash
+        run: |
+          git checkout -B "${SYNC_BRANCH}" "origin/${NEO_BRANCH}"
+
+          # Keep a bounded human-readable summary for the pull request.
+          git log --format='- `%h` %s' --no-merges "HEAD..upstream/${UPSTREAM_BRANCH}" | head -80 > /tmp/upstream-commits.md || true
+
+          set +e
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"
+          MERGE_STATUS=$?
+          set -e
+
+          if [ "$MERGE_STATUS" -ne 0 ]; then
+            git diff --name-only --diff-filter=U > /tmp/upstream-conflicts.txt || true
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            {
+              echo '### Merge conflict detected'
+              echo
+              echo 'The workflow did not resolve or commit conflicts.'
+              echo
+              echo 'Conflicting files:'
+              sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+            } >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort || true
+            exit 0
+          fi
+
+          echo "conflict=false" >> "$GITHUB_OUTPUT"
+          git push --force-with-lease origin "${SYNC_BRANCH}"
+
+      - name: Open or update conflict issue
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BODY_FILE=/tmp/upstream-conflict-body.md
+          {
+            echo 'The scheduled Subsurface upstream sync found source conflicts and intentionally stopped without resolving them.'
+            echo
+            echo "Neo base: \`${NEO_SHA}\`"
+            echo "Upstream ${UPSTREAM_BRANCH}: \`${UPSTREAM_SHA}\`"
+            echo
+            echo 'Conflicting files:'
+            sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+            echo
+            echo 'Resolve these on a dedicated sync branch, run Android/Windows/planner regression CI, then merge manually.'
+          } > "$BODY_FILE"
+
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --search "${CONFLICT_ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
+            | head -1)
+
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --body-file "$BODY_FILE"
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "${CONFLICT_ISSUE_TITLE}" --body-file "$BODY_FILE"
+          fi
+
+          exit 1
+
+      - name: Create or update upstream sync pull request
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BODY_FILE=/tmp/upstream-pr-body.md
+          {
+            echo 'Automated integration of the latest official `subsurface/subsurface` master into Subsurface Neo.'
+            echo
+            echo "- Neo base before sync: \`${NEO_SHA}\`"
+            echo "- Upstream ${UPSTREAM_BRANCH}: \`${UPSTREAM_SHA}\`"
+            echo "- Pending upstream commits detected: ${{ steps.pending.outputs.count }}"
+            echo
+            echo '### Upstream commits (first 80)'
+            if [ -s /tmp/upstream-commits.md ]; then
+              cat /tmp/upstream-commits.md
+            else
+              echo '- Commit history diverged; inspect the merge commit directly.'
+            fi
+            echo
+            echo '### Merge policy'
+            echo '- No source conflicts were auto-resolved.'
+            echo '- Android and Windows PR CI must pass before merge.'
+            echo '- Planner/decompression output changes require focused regression review.'
+            echo '- Merge this PR manually during the initial Neo development period.'
+          } > "$BODY_FILE"
+
+          PR_NUMBER=$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base "${NEO_BRANCH}" \
+            --head "${SYNC_BRANCH}" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          TITLE="Upstream Subsurface Sync — $(date -u +%Y-%m-%d)"
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --repo "${GITHUB_REPOSITORY}" --title "$TITLE" --body-file "$BODY_FILE"
+            echo "Updated PR #${PR_NUMBER}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${NEO_BRANCH}" \
+              --head "${SYNC_BRANCH}" \
+              --title "$TITLE" \
+              --body-file "$BODY_FILE"
+          fi
+
+      - name: Close resolved conflict issue
+        if: steps.pending.outputs.has_updates == 'true' && steps.merge.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --search "${CONFLICT_ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${CONFLICT_ISSUE_TITLE}\") | .number" \
+            | head -1)
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue close "$ISSUE_NUMBER" --repo "${GITHUB_REPOSITORY}" --comment "The latest upstream merge is conflict-free again; the sync PR has been created/updated."
+          fi
