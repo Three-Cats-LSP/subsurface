@@ -74,6 +74,7 @@ public class SubsurfaceMobileActivity extends QtActivity
 	public static native void restartDownload(UsbDevice usbDevice);
 	public static native void oauthCallback(String url);
 	private static Context appContext;
+	private static SubsurfaceMobileActivity currentActivity;
 
 	private static boolean isOAuthIntent(Intent intent)
 	{
@@ -88,6 +89,7 @@ public class SubsurfaceMobileActivity extends QtActivity
 		super.onCreate(savedInstanceState);
 		androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
 		appContext = getApplicationContext();
+		currentActivity = this;
 
 		Intent theIntent = getIntent();
 		if (isOAuthIntent(theIntent)) {
@@ -100,6 +102,14 @@ public class SubsurfaceMobileActivity extends QtActivity
 
 		IntentFilter filter = new IntentFilter("org.subsurfacedivelog.mobile.USB_PERMISSION");
 		registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+	}
+
+	@Override
+	protected void onDestroy()
+	{
+		if (currentActivity == this)
+			currentActivity = null;
+		super.onDestroy();
 	}
 
 	@Override
@@ -188,7 +198,6 @@ public class SubsurfaceMobileActivity extends QtActivity
 					} else {
 						Log.d(TAG, "USB device permission denied");
 					}
-				}
 			}
 		}
 	};
@@ -196,6 +205,11 @@ public class SubsurfaceMobileActivity extends QtActivity
 	public static Context getAppContext()
 	{
 		return appContext;
+	}
+
+	public static Activity getCurrentActivity()
+	{
+		return currentActivity;
 	}
 
 	@SuppressWarnings("deprecation")
