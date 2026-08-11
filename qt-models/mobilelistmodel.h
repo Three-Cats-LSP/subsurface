@@ -103,7 +103,7 @@ private:
 	QModelIndex mapFromSource(const QModelIndex &idx) const;
 	QModelIndex mapToSource(const QModelIndex &idx) const;
 	static void updateRowAfterRemove(const IndexRange &range, int &row);
-	static void updateRowAfterMove(const IndexRange &range, const IndexRange &dest, int destRow);
+	static void updateRowAfterMove(const IndexRange &range, const IndexRange &dest, int &destRow);
 	QVariant data(const QModelIndex &index, int role) const override;
 	int rowCount(const QModelIndex &parent) const override;
 	int shown() const;
