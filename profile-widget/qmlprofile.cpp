@@ -6,10 +6,14 @@
 #include "core/errorhelper.h"
 #include "core/subsurface-float.h"
 #include "core/metrics.h"
+#include "core/sample.h"
 #include "core/subsurface-string.h"
+#include "core/units.h"
 #include <QTransform>
 #include <QScreen>
 #include <QElapsedTimer>
+#include <algorithm>
+#include <cmath>
 
 QMLProfile::QMLProfile(QQuickItem *parent) :
 	QQuickPaintedItem(parent),
@@ -139,6 +143,84 @@ QString QMLProfile::diveMode() const
 	default:
 		return tr("Unknown");
 	}
+}
+
+QVariantMap QMLProfile::sampleAtFraction(qreal fraction) const
+{
+	QVariantMap result;
+	const divecomputer *dc = currentDiveComputer();
+	if (!dc || dc->samples.empty())
+		return result;
+
+	fraction = std::clamp(fraction, qreal(0.0), qreal(1.0));
+	const int lastTime = dc->samples.back().time.seconds;
+	const int targetTime = static_cast<int>(std::lround(lastTime * fraction));
+	auto it = std::lower_bound(dc->samples.begin(), dc->samples.end(), targetTime,
+		[](const sample &s, int time) { return s.time.seconds < time; });
+	if (it == dc->samples.end())
+		it = std::prev(dc->samples.end());
+	else if (it != dc->samples.begin()) {
+		auto previous = std::prev(it);
+		if (targetTime - previous->time.seconds <= it->time.seconds - targetTime)
+			it = previous;
+	}
+
+	const sample &s = *it;
+	const int totalSeconds = std::max(0, s.time.seconds);
+	result["timeSeconds"] = totalSeconds;
+	result["time"] = QStringLiteral("%1:%2")
+		.arg(totalSeconds / 60)
+		.arg(totalSeconds % 60, 2, 10, QLatin1Char('0'));
+
+	int depthDecimals = 0;
+	const char *depthUnit = nullptr;
+	const double depth = get_depth_units(s.depth, &depthDecimals, &depthUnit);
+	result["depth"] = QStringLiteral("%1 %2")
+		.arg(depth, 0, 'f', depthDecimals)
+		.arg(QString::fromUtf8(depthUnit ? depthUnit : ""));
+
+	if (s.temperature.mkelvin) {
+		const char *tempUnit = nullptr;
+		const double temp = get_temp_units(s.temperature.mkelvin, &tempUnit);
+		result["temperature"] = QStringLiteral("%1 %2")
+			.arg(temp, 0, 'f', 1)
+			.arg(QString::fromUtf8(tempUnit ? tempUnit : ""));
+	}
+
+	if (s.ndl.seconds >= 0) {
+		result["ndlSeconds"] = s.ndl.seconds;
+		result["ndl"] = QStringLiteral("%1 min").arg(s.ndl.seconds / 60);
+	}
+	result["inDeco"] = s.in_deco;
+	if (s.in_deco && s.stopdepth.mm > 0) {
+		int stopDecimals = 0;
+		const char *stopUnit = nullptr;
+		const double stopDepth = get_depth_units(s.stopdepth, &stopDecimals, &stopUnit);
+		result["decoStop"] = QStringLiteral("%1 %2 · %3 min")
+			.arg(stopDepth, 0, 'f', stopDecimals)
+			.arg(QString::fromUtf8(stopUnit ? stopUnit : ""))
+			.arg(std::max(0, s.stoptime.seconds) / 60);
+	}
+	if (s.tts.seconds > 0)
+		result["tts"] = QStringLiteral("%1 min").arg(s.tts.seconds / 60);
+
+	for (const pressure_t &pressure : s.pressure) {
+		if (pressure.mbar > 0) {
+			const char *pressureUnit = nullptr;
+			const int value = get_pressure_units(pressure.mbar, &pressureUnit);
+			result["pressure"] = QStringLiteral("%1 %2")
+				.arg(value)
+				.arg(QString::fromUtf8(pressureUnit ? pressureUnit : ""));
+			break;
+		}
+	}
+	if (s.setpoint.mbar > 0)
+		result["setpoint"] = QStringLiteral("%1 bar").arg(s.setpoint.mbar / 1000.0, 0, 'f', 2);
+	if (s.cns > 0)
+		result["cns"] = QStringLiteral("%1%").arg(s.cns);
+
+	result["fraction"] = lastTime > 0 ? qreal(s.time.seconds) / qreal(lastTime) : qreal(0.0);
+	return result;
 }
 
 qreal QMLProfile::devicePixelRatio() const
