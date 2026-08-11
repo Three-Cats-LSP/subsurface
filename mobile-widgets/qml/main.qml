@@ -8,16 +8,35 @@ import QtQuick.Layouts
 import org.subsurfacedivelog.mobile 1.0
 import org.kde.kirigami as Kirigami
 import QtQuick.Templates as QtQuickTemplates
+import "modern/pages" as NeoPages
+import "modern/components" as NeoComponents
 
 Kirigami.ApplicationWindow {
 	id: rootItem
-	title: qsTr("Subsurface-mobile")
+	title: qsTr("Subsurface Neo")
 	wideScreen: false // workaround for probably Kirigami bug. See commits.
 
 	// the documentation claims that the ApplicationWindow should pick up the font set on
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
 	background: Rectangle { color: subsurfaceTheme.backgroundColor }
+
+	footer: NeoComponents.NeoBottomNavigation {
+		id: neoBottomNavigation
+		visible: initialized && !startPage.visible &&
+			(pageStack.currentItem === neoDashboard ||
+			 pageStack.currentItem === diveList ||
+			 pageStack.currentItem === mapPage ||
+			 pageStack.currentItem === statistics)
+		currentSection: pageStack.currentItem === diveList ? "dives" :
+			pageStack.currentItem === mapPage ? "sites" :
+			pageStack.currentItem === statistics ? "stats" : "home"
+		onHomeRequested: showNeoHome()
+		onDivesRequested: showPageFromDrawer(diveList)
+		onSitesRequested: showPageFromDrawer(mapPage)
+		onStatsRequested: showPageFromDrawer(statistics)
+		onMoreRequested: globalDrawer.open()
+	}
 
 	// we want to use our own colors for Kirigami, so let's define our colorset
 	Kirigami.Theme.inherit: false
@@ -106,32 +125,27 @@ Kirigami.ApplicationWindow {
 	}
 
 	function returnTopPage() {
-		for (var i=pageStack.depth; i>1; i--) {
-			pageStack.pop()
-		}
-		if (pageStack.currentItem !== diveList) {
-			showDiveList()
-		}
-		detailsWindow.endEditMode()
+		showNeoHome()
 	}
 
 	function scrollToTop() {
 		diveList.scrollToTop()
 	}
 
-	// Navigate to a page from the global drawer menu. Cleans the page
-	// stack back to the dive list first so the target page always opens
-	// from a known-good state.
+	// Navigate from the Neo shell or legacy drawer. Neo Home is the
+	// stable root; mature Subsurface pages continue to be pushed above it.
 	function showPageFromDrawer(page) {
 		detailsWindow.endEditMode()
-		for (var i = pageStack.depth; i > 1; i--)
-			pageStack.pop()
-		if (pageStack.depth === 0 || pageStack.currentItem !== diveList) {
-			pageStack.clear()
-			pageStack.push(diveList)
-		}
-		if (page !== diveList)
+		pageStack.clear()
+		pageStack.push(neoDashboard)
+		if (page !== neoDashboard)
 			showPage(page)
+	}
+
+	function showNeoHome() {
+		detailsWindow.endEditMode()
+		pageStack.clear()
+		pageStack.push(neoDashboard)
 	}
 
 	function showPage(page) {
@@ -161,7 +175,7 @@ Kirigami.ApplicationWindow {
 	}
 
 	function showDiveList() {
-		showPage(diveList)
+		showPageFromDrawer(diveList)
 	}
 
 	function pageIndex(pageToFind) {
@@ -834,9 +848,9 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	onInitializedChanged: {
 		if (initialized) {
 			hideBusy()
-			manager.appendTextToLog("initialization completed - showing the dive list")
-			showPage(diveList) // we want to make sure that gets on the stack
+			manager.appendTextToLog("initialization completed - showing Subsurface Neo home")
 			diveList.diveListModel = diveModel
+			showNeoHome()
 
 			if (Qt.platform.os === "android") {
 				manager.appendTextToLog("if we got started by a plugged in device, switch to download page -- pluggedInDeviceName = " + pluggedInDeviceName)
@@ -873,7 +887,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			if (visible) {
 				pageStack.clear()
 			} else if (initialized) {
-				showDiveList()
+				showNeoHome()
 			}
 		}
 		Component.onCompleted: {
@@ -881,6 +895,19 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				manager.appendTextToLog("Running on " + Screen.manufacturer + " " + Screen.model + " " + Screen.name)
 			manager.appendTextToLog("StartPage completed -- initialized is " + initialized)
 		}
+	}
+
+	NeoPages.ModernDashboard {
+		id: neoDashboard
+		visible: false
+		onOpenDiveList: showPageFromDrawer(diveList)
+		onOpenImport: showDownloadPage()
+		onOpenCloudSync: showPage(cloudSyncPage)
+	}
+
+	NeoPages.CloudSyncPage {
+		id: cloudSyncPage
+		visible: false
 	}
 
 	DiveList {
@@ -999,8 +1026,8 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	}
 
 	function showDownloadForPluggedInDevice() {
-		// don't add this unless the dive list is already shown
-		if (pageIndex(diveList) === -1)
+		// Ignore early Android intents until the application model is ready.
+		if (!initialized)
 			return
 		manager.appendTextToLog("plugged in device name changed to " + pluggedInDeviceName)
 		/* if we recognized the device, we'll pass in a triple of ComboBox indeces as "vendor;product;connection" */
