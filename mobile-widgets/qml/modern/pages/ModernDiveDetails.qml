@@ -116,8 +116,7 @@ Kirigami.Page {
 						Components.MetricCard {
 							Layout.fillWidth: true
 							label: qsTr("Mode")
-							value: delegateRoot.modelData.diveMode !== undefined && delegateRoot.modelData.diveMode.length > 0
-								   ? delegateRoot.modelData.diveMode : "—"
+							value: profile.diveMode.length > 0 ? profile.diveMode : "—"
 						}
 						Components.MetricCard {
 							Layout.fillWidth: true
@@ -152,10 +151,18 @@ Kirigami.Page {
 										font.weight: Font.DemiBold
 									}
 									Text {
-										text: profile.numDC > 1 ? qsTr("%1 dive computers · use arrows to switch").arg(profile.numDC)
-														  : qsTr("Profile calculated by the mature Subsurface engine")
+										text: {
+											var device = profile.computerName.length > 0 ? profile.computerName : qsTr("Dive computer")
+											if (profile.computerSerial.length > 0)
+												device += " · " + profile.computerSerial
+											if (profile.numDC > 1)
+												device += qsTr(" · %1 of %2").arg(profile.currentDC + 1).arg(profile.numDC)
+											return device
+										}
 										color: tokens.textSecondary
 										font.pixelSize: 11
+										elide: Text.ElideRight
+										Layout.fillWidth: true
 									}
 								}
 
