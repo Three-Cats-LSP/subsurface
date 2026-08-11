@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - modern-ui
+    paths:
+      - .github/workflows/upstream-sync.yml
 
 permissions:
   contents: write
