@@ -165,6 +165,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	metadata.h
 	metrics.cpp
 	metrics.h
+	neoupdatemanager.cpp
+	neoupdatemanager.h
 	ostctools.cpp
 	parse-gpx.cpp
 	parse-xml.cpp
