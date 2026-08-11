@@ -5,14 +5,13 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
+import org.qtproject.qt.android.QtNative;
 
 public final class NeoUpdateNotifier {
     private NeoUpdateNotifier() {}
 
     public static void show(final String version, final String url) {
-        final Activity activity = SubsurfaceMobileActivity.getAppContext() instanceof Activity
-                ? (Activity) SubsurfaceMobileActivity.getAppContext()
-                : null;
+        final Activity activity = QtNative.activity();
         if (activity == null || activity.isFinishing())
             return;
 
