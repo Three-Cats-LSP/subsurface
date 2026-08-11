@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 
+class QNetworkAccessManager;
 class QNetworkReply;
 
 class NeoUpdateManager : public QObject
@@ -39,6 +40,7 @@ private:
 	void handleReply(QNetworkReply *reply);
 	void setError(const QString &message);
 
+	QNetworkAccessManager *m_network = nullptr;
 	bool m_checking = false;
 	bool m_updateAvailable = false;
 	QString m_latestVersion;
