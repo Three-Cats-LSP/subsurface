@@ -25,14 +25,14 @@ Kirigami.ApplicationWindow {
 		id: neoBottomNavigation
 		visible: initialized && !startPage.visible &&
 			(pageStack.currentItem === neoDashboard ||
-			 pageStack.currentItem === diveList ||
+			 pageStack.currentItem === modernDiveList ||
 			 pageStack.currentItem === mapPage ||
 			 pageStack.currentItem === statistics)
-		currentSection: pageStack.currentItem === diveList ? "dives" :
+		currentSection: pageStack.currentItem === modernDiveList ? "dives" :
 			pageStack.currentItem === mapPage ? "sites" :
 			pageStack.currentItem === statistics ? "stats" : "home"
 		onHomeRequested: showNeoHome()
-		onDivesRequested: showPageFromDrawer(diveList)
+		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(mapPage)
 		onStatsRequested: showPageFromDrawer(statistics)
 		onMoreRequested: globalDrawer.open()
@@ -175,7 +175,7 @@ Kirigami.ApplicationWindow {
 	}
 
 	function showDiveList() {
-		showPageFromDrawer(diveList)
+		showPageFromDrawer(modernDiveList)
 	}
 
 	function pageIndex(pageToFind) {
@@ -850,6 +850,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			hideBusy()
 			manager.appendTextToLog("initialization completed - showing Subsurface Neo home")
 			diveList.diveListModel = diveModel
+			modernDiveList.diveListModel = diveModel
 			showNeoHome()
 
 			if (Qt.platform.os === "android") {
@@ -900,9 +901,20 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernDashboard {
 		id: neoDashboard
 		visible: false
-		onOpenDiveList: showPageFromDrawer(diveList)
+		onOpenDiveList: showPageFromDrawer(modernDiveList)
 		onOpenImport: showDownloadPage()
 		onOpenCloudSync: showPage(cloudSyncPage)
+	}
+
+	NeoPages.ModernDiveList {
+		id: modernDiveList
+		visible: false
+		onOpenDive: function(row) {
+			manager.selectRow(row)
+			showPage(detailsWindow)
+		}
+		onDownloadRequested: showDownloadPage()
+		onAddDiveRequested: startAddDive()
 	}
 
 	NeoPages.CloudSyncPage {
