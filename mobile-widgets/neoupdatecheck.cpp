@@ -8,6 +8,7 @@
 #include <QDesktopServices>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
@@ -67,9 +68,10 @@ void performCheck()
 		return;
 	settings.setValue(QString::fromLatin1(lastCheckKey), QDate::currentDate());
 
+	static QNetworkAccessManager network;
 	QNetworkRequest request(QUrl(QString::fromLatin1(updateManifestUrl)));
 	request.setRawHeader("Accept", "application/json");
-	QNetworkReply *reply = manager()->get(request);
+	QNetworkReply *reply = network.get(request);
 	QObject::connect(reply, &QNetworkReply::finished, reply, [reply]() {
 		const QByteArray payload = reply->readAll();
 		const auto error = reply->error();
