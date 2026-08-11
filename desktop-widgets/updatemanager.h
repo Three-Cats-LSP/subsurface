@@ -19,6 +19,7 @@ slots:
 
 private:
 	bool isAutomaticCheck;
+	QNetworkAccessManager *networkManager;
 };
 
 #endif // UPDATEMANAGER_H
