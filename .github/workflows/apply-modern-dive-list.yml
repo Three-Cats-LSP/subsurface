@@ -1,0 +1,72 @@
+name: Apply modern dive list route
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - .github/workflows/apply-modern-dive-list.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: modern-ui
+          fetch-depth: 0
+
+      - name: Route Dives to modern list
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("mobile-widgets/qml/main.qml")
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''\tfunction showDiveList() {\n\t\tshowPageFromDrawer(diveList)\n\t}\n''',
+              '''\tfunction showDiveList() {\n\t\tshowPageFromDrawer(modernDiveList)\n\t}\n''',
+              'showDiveList route')
+
+          replace_once(
+              '''\t\tvisible: initialized && !startPage.visible &&\n\t\t\t(pageStack.currentItem === neoDashboard ||\n\t\t\t pageStack.currentItem === diveList ||\n\t\t\t pageStack.currentItem === mapPage ||\n\t\t\t pageStack.currentItem === statistics)\n\t\tcurrentSection: pageStack.currentItem === diveList ? "dives" :\n''',
+              '''\t\tvisible: initialized && !startPage.visible &&\n\t\t\t(pageStack.currentItem === neoDashboard ||\n\t\t\t pageStack.currentItem === modernDiveList ||\n\t\t\t pageStack.currentItem === mapPage ||\n\t\t\t pageStack.currentItem === statistics)\n\t\tcurrentSection: pageStack.currentItem === modernDiveList ? "dives" :\n''',
+              'bottom navigation state')
+
+          replace_once(
+              '''\t\tonDivesRequested: showPageFromDrawer(diveList)\n''',
+              '''\t\tonDivesRequested: showPageFromDrawer(modernDiveList)\n''',
+              'bottom Dives route')
+
+          replace_once(
+              '''\t\t\tdiveList.diveListModel = diveModel\n\t\t\tshowNeoHome()\n''',
+              '''\t\t\tdiveList.diveListModel = diveModel\n\t\t\tmodernDiveList.diveListModel = diveModel\n\t\t\tshowNeoHome()\n''',
+              'model assignment')
+
+          replace_once(
+              '''\tNeoPages.ModernDashboard {\n\t\tid: neoDashboard\n\t\tvisible: false\n\t\tonOpenDiveList: showPageFromDrawer(diveList)\n\t\tonOpenImport: showDownloadPage()\n\t\tonOpenCloudSync: showPage(cloudSyncPage)\n\t}\n''',
+              '''\tNeoPages.ModernDashboard {\n\t\tid: neoDashboard\n\t\tvisible: false\n\t\tonOpenDiveList: showPageFromDrawer(modernDiveList)\n\t\tonOpenImport: showDownloadPage()\n\t\tonOpenCloudSync: showPage(cloudSyncPage)\n\t}\n\n\tNeoPages.ModernDiveList {\n\t\tid: modernDiveList\n\t\tvisible: false\n\t\tonOpenDive: function(row) {\n\t\t\tmanager.selectRow(row)\n\t\t\tshowPage(detailsWindow)\n\t\t}\n\t\tonDownloadRequested: showDownloadPage()\n\t\tonAddDiveRequested: startAddDive()\n\t}\n''',
+              'modern dive list instance')
+
+          path.write_text(text)
+
+      - name: Commit route
+        run: |
+          if git diff --quiet; then
+            echo "No route changes needed"
+            exit 0
+          fi
+          git config user.name "Subsurface Neo CI"
+          git config user.email "sns@rvm.cc"
+          git add mobile-widgets/qml/main.qml
+          git commit -m "ui: route Dives to modern list"
+          git push origin HEAD:modern-ui
