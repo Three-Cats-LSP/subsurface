@@ -198,6 +198,7 @@ public class SubsurfaceMobileActivity extends QtActivity
 					} else {
 						Log.d(TAG, "USB device permission denied");
 					}
+				}
 			}
 		}
 	};
