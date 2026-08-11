@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
@@ -62,7 +63,8 @@ bool isTrustedDownloadUrl(const QUrl &url)
 
 UpdateManager::UpdateManager(QObject *parent) :
 	QObject(parent),
-	isAutomaticCheck(false)
+	isAutomaticCheck(false),
+	networkManager(new QNetworkAccessManager(this))
 {
 	if (qPrefUpdateManager::dont_check_for_updates())
 		return;
@@ -83,7 +85,7 @@ void UpdateManager::checkForUpdates(bool automatic)
 	QNetworkRequest request(QUrl(QString::fromLatin1(neoUpdateManifestUrl)));
 	request.setRawHeader("Accept", "application/json");
 	request.setRawHeader("User-Agent", getUserAgent().toUtf8());
-	connect(manager()->get(request), &QNetworkReply::finished, this, &UpdateManager::requestReceived, Qt::UniqueConnection);
+	connect(networkManager->get(request), &QNetworkReply::finished, this, &UpdateManager::requestReceived, Qt::UniqueConnection);
 }
 
 void UpdateManager::requestReceived()
