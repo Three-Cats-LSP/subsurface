@@ -1,14 +1,64 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "desktop-widgets/updatemanager.h"
+
+#include "core/neoversion.h"
 #include "core/qthelper.h"
-#include <QtNetwork>
-#include <QMessageBox>
-#include <QUuid>
-#include "desktop-widgets/subsurfacewebservices.h"
-#include "core/version.h"
-#include "desktop-widgets/mainwindow.h"
-#include "core/cloudstorage.h"
 #include "core/settings/qPrefUpdateManager.h"
+#include "desktop-widgets/mainwindow.h"
+
+#include <QDate>
+#include <QDesktopServices>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMessageBox>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPushButton>
+#include <QUrl>
+#include <QVersionNumber>
+
+namespace {
+constexpr auto neoUpdateManifestUrl = "https://threecats-lsp.com/subsurface-neo/update.json";
+
+struct ParsedVersion {
+	QVersionNumber number;
+	bool prerelease = false;
+};
+
+ParsedVersion parseVersion(const QString &value)
+{
+	const QString trimmed = value.trimmed();
+	const int suffix = trimmed.indexOf('-');
+	const QString numeric = suffix >= 0 ? trimmed.left(suffix) : trimmed;
+	return { QVersionNumber::fromString(numeric), suffix >= 0 };
+}
+
+bool isNewerVersion(const QString &remote, const QString &current)
+{
+	const ParsedVersion remoteVersion = parseVersion(remote);
+	const ParsedVersion currentVersion = parseVersion(current);
+	if (remoteVersion.number.isNull() || currentVersion.number.isNull())
+		return false;
+
+	const int comparison = QVersionNumber::compare(remoteVersion.number, currentVersion.number);
+	if (comparison != 0)
+		return comparison > 0;
+
+	// A stable release of the same numeric version supersedes a prerelease/dev build.
+	return currentVersion.prerelease && !remoteVersion.prerelease;
+}
+
+bool isTrustedDownloadUrl(const QUrl &url)
+{
+	if (!url.isValid() || url.scheme() != QStringLiteral("https"))
+		return false;
+	const QString host = url.host().toLower();
+	return host == QStringLiteral("threecats-lsp.com") ||
+	       host == QStringLiteral("www.threecats-lsp.com") ||
+	       host == QStringLiteral("github.com") ||
+	       host.endsWith(QStringLiteral(".githubusercontent.com"));
+}
+}
 
 UpdateManager::UpdateManager(QObject *parent) :
 	QObject(parent),
@@ -17,107 +67,118 @@ UpdateManager::UpdateManager(QObject *parent) :
 	if (qPrefUpdateManager::dont_check_for_updates())
 		return;
 
-	if (qPrefUpdateManager::last_version_used() == subsurface_git_version() &&
+	const QString currentVersion = QString::fromLatin1(subsurface_neo_version());
+	if (qPrefUpdateManager::last_version_used() == currentVersion &&
 	    qPrefUpdateManager::next_check() > QDate::currentDate())
 		return;
 
-	qPrefUpdateManager::set_last_version_used(subsurface_git_version());
-
+	qPrefUpdateManager::set_last_version_used(currentVersion);
 	checkForUpdates(true);
 }
 
 void UpdateManager::checkForUpdates(bool automatic)
 {
-	QString os;
-
-#if defined(Q_OS_WIN)
-	os = "win";
-#elif defined(Q_OS_MAC)
-	os = "osx";
-#elif defined(Q_OS_LINUX)
-	os = "linux";
-#else
-	os = "unknown";
-#endif
 	isAutomaticCheck = automatic;
-	QString version = subsurface_canonical_version();
-	QString url = QString("http://updatecheck.subsurface-divelog.org/updatecheck.html?os=%1&version=%2").arg(os, version);
-	QNetworkRequest request;
-	request.setUrl(url);
-	request.setRawHeader("Accept", "text/xml");
-	QString userAgent = getUserAgent();
-	request.setRawHeader("User-Agent", userAgent.toUtf8());
-	connect(manager()->get(request), SIGNAL(finished()), this, SLOT(requestReceived()), Qt::UniqueConnection);
+
+	QNetworkRequest request(QUrl(QString::fromLatin1(neoUpdateManifestUrl)));
+	request.setRawHeader("Accept", "application/json");
+	request.setRawHeader("User-Agent", getUserAgent().toUtf8());
+	connect(manager()->get(request), &QNetworkReply::finished, this, &UpdateManager::requestReceived, Qt::UniqueConnection);
 }
 
 void UpdateManager::requestReceived()
 {
-	bool haveNewVersion = false;
-	QMessageBox msgbox;
-	QString msgTitle = tr("Check for updates.");
-	QString msgText = "<h3>" + tr("Subsurface was unable to check for updates.") + "</h3>";
+	QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+	if (!reply)
+		return;
 
-	QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+	const auto setNextCheck = []() {
+		// Neo releases can happen independently of upstream Subsurface, so a daily
+		// cached check is cheap while still being reasonably responsive.
+		qPrefUpdateManager::set_next_check(QDate::currentDate().addDays(1));
+	};
+
 	if (reply->error() != QNetworkReply::NoError) {
-		//Network Error
-		msgText = msgText + "<br/><b>" + tr("The following error occurred:") + "</b><br/>" + reply->errorString()
-				+ "<br/><br/><b>" + tr("Please check your internet connection.") + "</b>";
-	} else {
-		//No network error
-		QString responseBody(reply->readAll());
-		QString responseLink;
-		if (responseBody.contains('"'))
-			responseLink = responseBody.split("\"").at(1);
+		if (!isAutomaticCheck) {
+			QMessageBox::warning(MainWindow::instance(), tr("Check for updates"),
+				tr("Subsurface Neo was unable to check for updates.\n\n%1")
+					.arg(reply->errorString()));
+		}
+		setNextCheck();
+		reply->deleteLater();
+		return;
+	}
 
-		msgbox.setIcon(QMessageBox::Information);
-		if (responseBody == "OK") {
-			msgText = tr("You are using the latest version of Subsurface.");
-		} else if (responseBody.startsWith("[\"http")) {
-			haveNewVersion = true;
-			msgText = tr("A new version of Subsurface is available.<br/>Click on:<br/><a href=\"%1\">%1</a><br/> to download it.")
-					.arg(responseLink);
-		} else if (responseBody.startsWith("Latest version")) {
-			// the webservice backend doesn't localize - but it's easy enough to just replace the
-			// strings that it is likely to send back
-			haveNewVersion = true;
-			msgText = QString("<b>") + tr("A new version of Subsurface is available.") + QString("</b><br/><br/>") +
-					tr("Latest version is %1, please check %2 our download page %3 for information in how to update.")
-					.arg(responseLink).arg("<a href=\"http://subsurface-divelog.org/download\">").arg("</a>");
-		} else {
-			// the webservice backend doesn't localize - but it's easy enough to just replace the
-			// strings that it is likely to send back
-			if (!responseBody.contains("latest development") &&
-			    !responseBody.contains("newer") &&
-			    !responseBody.contains("beta", Qt::CaseInsensitive))
-				haveNewVersion = true;
-			if (responseBody.contains("Newest release version is "))
-				responseBody.replace("Newest release version is ", tr("Newest release version is "));
-			msgText = tr("The server returned the following information:").append("<br/><br/>").append(responseBody);
-			msgbox.setIcon(QMessageBox::Warning);
+	QJsonParseError parseError;
+	const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+	reply->deleteLater();
+	if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+		if (!isAutomaticCheck)
+			QMessageBox::warning(MainWindow::instance(), tr("Check for updates"), tr("The Subsurface Neo update manifest is invalid."));
+		setNextCheck();
+		return;
+	}
+
+	const QJsonObject root = document.object();
+	if (root.value(QStringLiteral("schema")).toInt() != 1 ||
+	    root.value(QStringLiteral("channel")).toString() != QStringLiteral("stable")) {
+		if (!isAutomaticCheck)
+			QMessageBox::warning(MainWindow::instance(), tr("Check for updates"), tr("The Subsurface Neo update manifest is not supported by this build."));
+		setNextCheck();
+		return;
+	}
+
+	const QString latestVersion = root.value(QStringLiteral("version")).toString().trimmed();
+	const QString currentVersion = QString::fromLatin1(subsurface_neo_version());
+	const bool updateAvailable = isNewerVersion(latestVersion, currentVersion);
+
+	if (!updateAvailable) {
+		if (!isAutomaticCheck) {
+			QMessageBox::information(MainWindow::instance(), tr("Check for updates"),
+				tr("You are using the latest version of Subsurface Neo (%1).")
+					.arg(currentVersion));
 		}
+		setNextCheck();
+		return;
 	}
-	if (haveNewVersion || !isAutomaticCheck) {
-		msgbox.setWindowTitle(msgTitle);
-		msgbox.setWindowIcon(QIcon(":subsurface-icon"));
-		msgbox.setText(msgText);
-		msgbox.setTextFormat(Qt::RichText);
-		msgbox.exec();
+
+	QString download = root.value(QStringLiteral("releaseUrl")).toString();
+	const QJsonObject platforms = root.value(QStringLiteral("platforms")).toObject();
+#if defined(Q_OS_WIN)
+	const QJsonObject platform = platforms.value(QStringLiteral("windows-x64")).toObject();
+#elif defined(Q_OS_ANDROID)
+	const QJsonObject platform = platforms.value(QStringLiteral("android-arm64")).toObject();
+#else
+	const QJsonObject platform;
+#endif
+	if (!platform.value(QStringLiteral("url")).toString().isEmpty())
+		download = platform.value(QStringLiteral("url")).toString();
+
+	const QUrl downloadUrl(download);
+	if (!isTrustedDownloadUrl(downloadUrl)) {
+		if (!isAutomaticCheck)
+			QMessageBox::warning(MainWindow::instance(), tr("Check for updates"), tr("The update manifest contains an untrusted download address."));
+		setNextCheck();
+		return;
 	}
-	if (isAutomaticCheck) {
-		auto update_settings = qPrefUpdateManager::instance();
-		if (!update_settings->dont_check_for_updates() && update_settings->next_check() == QDate::fromJulianDay(0)) {
-			// we allow an opt out of future checks
-			QMessageBox response(MainWindow::instance());
-			QString message = tr("Subsurface is checking every two weeks if a new version is available. "
-								 "\nIf you don't want Subsurface to continue checking, please click Decline.");
-			response.addButton(tr("Decline"), QMessageBox::RejectRole);
-			response.addButton(tr("Accept"), QMessageBox::AcceptRole);
-			response.setText(message);
-			response.setWindowTitle(tr("Automatic check for updates"));
-			response.setIcon(QMessageBox::Question);
-			response.setWindowModality(Qt::WindowModal);
-			update_settings->set_dont_check_for_updates(response.exec() != QMessageBox::Accepted);
-		}
-	}
-	qPrefUpdateManager::set_next_check(QDate::currentDate().addDays(14));
+
+	QString summary = root.value(QStringLiteral("summary")).toString().trimmed();
+	if (summary.isEmpty())
+		summary = tr("A newer Subsurface Neo build is available.");
+
+	QMessageBox message(MainWindow::instance());
+	message.setWindowTitle(tr("Subsurface Neo update available"));
+	message.setWindowIcon(QIcon(":subsurface-icon"));
+	message.setIcon(QMessageBox::Information);
+	message.setText(tr("<b>Subsurface Neo %1 is available.</b><br/><br/>You are running %2.<br/><br/>%3")
+		.arg(latestVersion.toHtmlEscaped(), currentVersion.toHtmlEscaped(), summary.toHtmlEscaped()));
+	message.setTextFormat(Qt::RichText);
+	QPushButton *downloadButton = message.addButton(tr("Download Update"), QMessageBox::AcceptRole);
+	message.addButton(tr("Remind Me Later"), QMessageBox::RejectRole);
+	message.exec();
+
+	if (message.clickedButton() == downloadButton)
+		QDesktopServices::openUrl(downloadUrl);
+
+	setNextCheck();
 }
