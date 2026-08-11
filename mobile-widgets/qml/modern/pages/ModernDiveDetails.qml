@@ -80,8 +80,10 @@ Kirigami.Page {
 			}
 
 			ListView.onIsCurrentItemChanged: {
-				if (!ListView.isCurrentItem)
+				if (!ListView.isCurrentItem) {
 					resetProfileZoom()
+					profileInspector.clear()
+				}
 			}
 
 			Flickable {
@@ -130,32 +132,18 @@ Kirigami.Page {
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
-						Components.MetricCard {
-							Layout.fillWidth: true
-							label: qsTr("Max depth")
-							value: delegateRoot.modelData.depth || "—"
-						}
-						Components.MetricCard {
-							Layout.fillWidth: true
-							label: qsTr("Dive time")
-							value: delegateRoot.modelData.duration || "—"
-						}
+						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Max depth"); value: delegateRoot.modelData.depth || "—" }
+						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Dive time"); value: delegateRoot.modelData.duration || "—" }
 						Components.MetricCard {
 							Layout.fillWidth: true
 							label: qsTr("Water temp")
-							value: delegateRoot.modelData.waterTemp && delegateRoot.modelData.waterTemp.length > 0
-								   ? delegateRoot.modelData.waterTemp : "—"
+							value: delegateRoot.modelData.waterTemp && delegateRoot.modelData.waterTemp.length > 0 ? delegateRoot.modelData.waterTemp : "—"
 						}
-						Components.MetricCard {
-							Layout.fillWidth: true
-							label: qsTr("Mode")
-							value: profile.diveMode.length > 0 ? profile.diveMode : "—"
-						}
+						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Mode"); value: profile.diveMode.length > 0 ? profile.diveMode : "—" }
 						Components.MetricCard {
 							Layout.fillWidth: true
 							label: qsTr("Gear")
-							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0
-								   ? delegateRoot.modelData.suit : "—"
+							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : "—"
 						}
 					}
 
@@ -177,13 +165,12 @@ Kirigami.Page {
 								ColumnLayout {
 									Layout.fillWidth: true
 									spacing: 2
+									Text { text: qsTr("Dive profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 									Text {
-										text: qsTr("Dive profile")
-										color: tokens.textPrimary
-										font.pixelSize: 18
-										font.weight: Font.DemiBold
-									}
-									Text {
+										Layout.fillWidth: true
+										color: tokens.textSecondary
+										font.pixelSize: 11
+										elide: Text.ElideRight
 										text: {
 											var device = profile.computerName.length > 0 ? profile.computerName : qsTr("Dive computer")
 											if (profile.computerSerial.length > 0)
@@ -192,36 +179,17 @@ Kirigami.Page {
 												device += qsTr(" · %1 of %2").arg(profile.currentDC + 1).arg(profile.numDC)
 											return device
 										}
-										color: tokens.textSecondary
-										font.pixelSize: 11
-										elide: Text.ElideRight
-										Layout.fillWidth: true
 									}
 								}
 
-								ToolButton {
-									text: "☷"
-									accessibleName: qsTr("Profile controls")
-									onClicked: profileControls.open()
-								}
-								ToolButton {
-									visible: profile.scale > 1.02
-									text: qsTr("Reset")
-									onClicked: delegateRoot.resetProfileZoom()
-								}
-								ToolButton {
-									visible: profile.numDC > 1
-									text: "‹"
-									onClicked: profile.prevDC()
-								}
-								ToolButton {
-									visible: profile.numDC > 1
-									text: "›"
-									onClicked: profile.nextDC()
-								}
+								ToolButton { text: "☷"; accessibleName: qsTr("Profile controls"); onClicked: profileControls.open() }
+								ToolButton { visible: profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
+								ToolButton { visible: profile.numDC > 1; text: "‹"; onClicked: { profile.prevDC(); profileInspector.clear() } }
+								ToolButton { visible: profile.numDC > 1; text: "›"; onClicked: { profile.nextDC(); profileInspector.clear() } }
 							}
 
 							Rectangle {
+								id: profileFrame
 								Layout.fillWidth: true
 								Layout.preferredHeight: Math.max(260, Math.min(440, page.height * 0.46))
 								color: tokens.surfaceRaised
@@ -237,6 +205,7 @@ Kirigami.Page {
 									PinchArea {
 										anchors.fill: parent
 										pinch.dragAxis: Pinch.XAndYAxis
+										onPinchStarted: profileInspector.clear()
 										onPinchUpdated: {
 											var nextScale = pinch.scale * profile.lastScale
 											profile.scale = Math.max(1.0, Math.min(4.0, nextScale))
@@ -257,6 +226,7 @@ Kirigami.Page {
 											scrollGestureEnabled: true
 
 											onPressed: function(mouse) {
+												profileInspector.clear()
 												if (!isZoomed)
 													mouse.accepted = false
 											}
@@ -287,11 +257,102 @@ Kirigami.Page {
 												profile.opacity = 1.0
 											}
 											onWheel: function(wheel) {
+												profileInspector.clear()
 												var delta = wheel.angleDelta.y > 0 ? 0.2 : -0.2
 												profile.scale = Math.max(1.0, Math.min(4.0, profile.scale + delta))
 												profile.lastScale = profile.scale
 												wheel.accepted = true
 											}
+										}
+									}
+								}
+
+								MouseArea {
+									id: profileInspector
+									anchors.fill: parent
+									enabled: profile.scale <= 1.02
+									hoverEnabled: true
+									preventStealing: true
+									property var sampleInfo: ({})
+									property real cursorX: 0
+									property real cursorY: 0
+									property bool activeSample: false
+
+									function inspect(x, y) {
+										var f = Math.max(0, Math.min(1, x / Math.max(1, width)))
+										var info = profile.sampleAtFraction(f)
+										if (!info || info.time === undefined) {
+											clear()
+											return
+										}
+										sampleInfo = info
+										cursorX = Math.max(0, Math.min(width, info.fraction * width))
+										cursorY = Math.max(0, Math.min(height, y))
+										activeSample = true
+									}
+									function clear() {
+										activeSample = false
+										sampleInfo = ({})
+									}
+
+									onPressed: function(mouse) { inspect(mouse.x, mouse.y) }
+									onPositionChanged: function(mouse) {
+										if (pressed || containsMouse)
+											inspect(mouse.x, mouse.y)
+									}
+									onExited: if (!pressed) clear()
+
+									Rectangle {
+										visible: profileInspector.activeSample
+										x: profileInspector.cursorX
+										y: 0
+										width: 1
+										height: parent.height
+										color: tokens.accent
+									}
+									Rectangle {
+										visible: profileInspector.activeSample
+										x: 0
+										y: profileInspector.cursorY
+										width: parent.width
+										height: 1
+										color: tokens.accent
+										opacity: 0.45
+									}
+
+									Rectangle {
+										id: sampleTooltip
+										visible: profileInspector.activeSample
+										width: Math.min(250, profileInspector.width - tokens.space16)
+										height: sampleColumn.implicitHeight + tokens.space12 * 2
+										x: Math.max(tokens.space8, Math.min(profileInspector.width - width - tokens.space8,
+											profileInspector.cursorX + 12 + width < profileInspector.width ? profileInspector.cursorX + 12 : profileInspector.cursorX - width - 12))
+										y: Math.max(tokens.space8, Math.min(profileInspector.height - height - tokens.space8, profileInspector.cursorY - height / 2))
+										color: tokens.surface
+										radius: 12
+										border.width: 1
+										border.color: tokens.border
+
+										Column {
+											id: sampleColumn
+											anchors.left: parent.left
+											anchors.right: parent.right
+											anchors.top: parent.top
+											anchors.margins: tokens.space12
+											spacing: 3
+											Text { text: (profileInspector.sampleInfo.time || "—") + "  ·  " + (profileInspector.sampleInfo.depth || "—"); color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+											Text { visible: !!profileInspector.sampleInfo.temperature; text: qsTr("Water %1").arg(profileInspector.sampleInfo.temperature || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text {
+												visible: profileInspector.sampleInfo.inDeco || profileInspector.sampleInfo.ndl !== undefined
+												text: profileInspector.sampleInfo.inDeco
+													  ? qsTr("Deco %1").arg(profileInspector.sampleInfo.decoStop || qsTr("required"))
+													  : qsTr("NDL %1").arg(profileInspector.sampleInfo.ndl || "—")
+												color: tokens.textSecondary; font.pixelSize: 11
+											}
+											Text { visible: !!profileInspector.sampleInfo.tts; text: qsTr("TTS %1").arg(profileInspector.sampleInfo.tts || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.pressure; text: qsTr("Pressure %1").arg(profileInspector.sampleInfo.pressure || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.setpoint; text: qsTr("Setpoint %1").arg(profileInspector.sampleInfo.setpoint || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.cns; text: qsTr("CNS %1").arg(profileInspector.sampleInfo.cns || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 										}
 									}
 								}
@@ -310,38 +371,17 @@ Kirigami.Page {
 						Components.ModernCard {
 							Layout.fillWidth: true
 							Text { text: qsTr("Gas"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text {
-								Layout.fillWidth: true
-								text: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0
-									  ? delegateRoot.modelData.firstGas : qsTr("Not recorded")
-								color: tokens.textPrimary
-								font.pixelSize: 15
-								wrapMode: Text.WordWrap
-							}
+							Text { Layout.fillWidth: true; text: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0 ? delegateRoot.modelData.firstGas : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
 						}
 						Components.ModernCard {
 							Layout.fillWidth: true
 							Text { text: qsTr("Buddy"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text {
-								Layout.fillWidth: true
-								text: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0
-									  ? delegateRoot.modelData.buddy : qsTr("Not recorded")
-								color: tokens.textPrimary
-								font.pixelSize: 15
-								wrapMode: Text.WordWrap
-							}
+							Text { Layout.fillWidth: true; text: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0 ? delegateRoot.modelData.buddy : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
 						}
 						Components.ModernCard {
 							Layout.fillWidth: true
 							Text { text: qsTr("Tags / type"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text {
-								Layout.fillWidth: true
-								text: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0
-									  ? delegateRoot.modelData.tags : qsTr("Not recorded")
-								color: tokens.textPrimary
-								font.pixelSize: 15
-								wrapMode: Text.WordWrap
-							}
+							Text { Layout.fillWidth: true; text: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
 						}
 					}
 
@@ -350,16 +390,10 @@ Kirigami.Page {
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
 						Layout.bottomMargin: tokens.space24
-
-						Text {
-							text: qsTr("Notes")
-							color: tokens.textMuted
-							font.pixelSize: 10
-						}
+						Text { text: qsTr("Notes"); color: tokens.textMuted; font.pixelSize: 10 }
 						Text {
 							Layout.fillWidth: true
-							text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0
-								  ? delegateRoot.modelData.notes : qsTr("No notes for this dive.")
+							text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0 ? delegateRoot.modelData.notes : qsTr("No notes for this dive.")
 							color: tokens.textPrimary
 							font.pixelSize: 14
 							wrapMode: Text.WordWrap
@@ -376,10 +410,7 @@ Kirigami.Page {
 			property: "contentX"
 			duration: 250
 			easing.type: Easing.OutCubic
-			onRunningChanged: {
-				if (!running)
-					diveView.swipeInProgress = false
-			}
+			onRunningChanged: if (!running) diveView.swipeInProgress = false
 		}
 
 		DragHandler {
@@ -432,12 +463,7 @@ Kirigami.Page {
 		x: Math.max(tokens.space8, (page.width - width) / 2)
 		y: Math.max(tokens.space12, page.height - height - tokens.space16)
 		padding: tokens.space16
-		background: Rectangle {
-			color: tokens.surface
-			radius: 18
-			border.width: 1
-			border.color: tokens.border
-		}
+		background: Rectangle { color: tokens.surface; radius: 18; border.width: 1; border.color: tokens.border }
 
 		contentItem: Flickable {
 			implicitHeight: Math.min(controlsColumn.implicitHeight, page.height * 0.72)
@@ -453,77 +479,26 @@ Kirigami.Page {
 
 				RowLayout {
 					Layout.fillWidth: true
-					Text {
-						Layout.fillWidth: true
-						text: qsTr("Profile controls")
-						color: tokens.textPrimary
-						font.pixelSize: 20
-						font.weight: Font.DemiBold
-					}
+					Text { Layout.fillWidth: true; text: qsTr("Profile controls"); color: tokens.textPrimary; font.pixelSize: 20; font.weight: Font.DemiBold }
 					ToolButton { text: "×"; onClicked: profileControls.close() }
 				}
 
-				Text { text: qsTr("Profile"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("NDL / TTS")
-					checked: ProfilePrefs.calcndltts
-					onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() }
-				}
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("Ceiling")
-					checked: ProfilePrefs.calcceiling
-					onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() }
-				}
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("Tissue ceiling")
-					checked: ProfilePrefs.calcalltissues
-					onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() }
-				}
+				Text { text: qsTr("Decompression"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch { Layout.fillWidth: true; text: qsTr("NDL / TTS"); checked: ProfilePrefs.calcndltts; onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() } }
+				Switch { Layout.fillWidth: true; text: qsTr("Ceiling"); checked: ProfilePrefs.calcceiling; onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() } }
+				Switch { Layout.fillWidth: true; text: qsTr("Tissue ceiling"); checked: ProfilePrefs.calcalltissues; onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Gases"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("pO₂ / gas pressure graph")
-					checked: ProfilePrefs.percentagegraph
-					onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() }
-				}
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("MOD")
-					checked: ProfilePrefs.mod
-					onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() }
-				}
+				Switch { Layout.fillWidth: true; text: qsTr("Tissue saturation"); checked: ProfilePrefs.percentagegraph; onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() } }
+				Switch { Layout.fillWidth: true; text: qsTr("MOD"); checked: ProfilePrefs.mod; onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Cylinder"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("Tank pressure")
-					checked: ProfilePrefs.tankbar
-					onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() }
-				}
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("SAC")
-					checked: ProfilePrefs.show_sac
-					onToggled: { ProfilePrefs.show_sac = checked; page.refreshCurrentProfile() }
-				}
+				Switch { Layout.fillWidth: true; text: qsTr("Tank pressure"); checked: ProfilePrefs.tankbar; onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() } }
+				Switch { Layout.fillWidth: true; text: qsTr("SAC"); checked: ProfilePrefs.show_sac; onToggled: { ProfilePrefs.show_sac = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Events & overlays"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("Dive-computer ceiling")
-					checked: ProfilePrefs.dcceiling
-					onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() }
-				}
-				Switch {
-					Layout.fillWidth: true
-					text: qsTr("Pictures")
-					checked: ProfilePrefs.show_pictures_in_profile
-					onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() }
-				}
+				Switch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: ProfilePrefs.dcceiling; onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() } }
+				Switch { Layout.fillWidth: true; text: qsTr("Pictures"); checked: ProfilePrefs.show_pictures_in_profile; onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() } }
 			}
 		}
 	}
@@ -541,8 +516,7 @@ Kirigami.Page {
 			}
 			Item { Layout.fillWidth: true }
 			Text {
-				text: page.currentItem && page.currentItem.modelData && page.currentItem.modelData.isInvalid
-					  ? qsTr("Marked invalid") : ""
+				text: page.currentItem && page.currentItem.modelData && page.currentItem.modelData.isInvalid ? qsTr("Marked invalid") : ""
 				color: tokens.warning
 				font.pixelSize: 12
 			}
