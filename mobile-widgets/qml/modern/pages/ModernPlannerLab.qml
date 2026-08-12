@@ -22,6 +22,7 @@ Kirigami.ScrollablePage {
 	property string speedUnit: Backend.length === Enums.METERS ? qsTr("m/min") : qsTr("ft/min")
 	property string plannedDate: Qt.formatDate(new Date(), "yyyy-MM-dd")
 	property string plannedTime: Qt.formatTime(new Date(), "hh:mm:ss")
+	property real surfacePressureBar: 1.013
 	property string planNotes: ""
 	property var profileData: []
 	property var schedule: []
@@ -49,7 +50,7 @@ Kirigami.ScrollablePage {
 		if (name.trim().length === 0)
 			return
 		var saved = plannerStorage.presets || []
-		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex, "plannedDate": plannedDate, "plannedTime": plannedTime,
+		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex, "plannedDate": plannedDate, "plannedTime": plannedTime, "surfacePressureBar": surfacePressureBar,
 			"decoMode": Backend.planner_deco_mode, "gflow": Backend.planner_gflow, "gfhigh": Backend.planner_gfhigh, "vpmbConservatism": Backend.vpmb_conservatism,
 			"bottomSac": Backend.bottomsac, "decoSac": Backend.decosac, "reserveGas": Backend.reserve_gas, "bottomPo2": Backend.bottompo2 / 100, "decoPo2": Backend.decopo2 / 100,
 			"descentRate": Backend.descrate, "deepAscentRate": Backend.ascrate75, "midAscentRate": Backend.ascrate50, "decoAscentRate": Backend.ascratestops, "finalAscentRate": Backend.ascratelast6m,
@@ -74,6 +75,7 @@ Kirigami.ScrollablePage {
 		waterType.currentIndex = preset.waterType
 		if (preset.plannedDate !== undefined) plannedDate = preset.plannedDate
 		if (preset.plannedTime !== undefined) plannedTime = preset.plannedTime
+		if (preset.surfacePressureBar !== undefined) surfacePressureBar = preset.surfacePressureBar
 		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
 		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
 		if (preset.gfhigh !== undefined) Backend.planner_gfhigh = preset.gfhigh
@@ -154,7 +156,7 @@ Kirigami.ScrollablePage {
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : 10200
 		var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData,
 			plannedDate, plannedTime,
-			diveMode.currentIndex, salinity, savePlan === true)
+			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), savePlan === true)
 		planNotes = result.notes || ""
 		updateGasReference()
 		profileData = result.profile || []
@@ -192,7 +194,7 @@ Kirigami.ScrollablePage {
 	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
@@ -270,6 +272,7 @@ Kirigami.ScrollablePage {
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
 				TextField { Layout.fillWidth: true; text: page.plannedDate; inputMask: "0000-00-00"; placeholderText: qsTr("Planned date (YYYY-MM-DD)"); onEditingFinished: { page.plannedDate = text; page.generatePlan() } }
 				TextField { Layout.fillWidth: true; text: page.plannedTime; inputMask: "00:00:00"; placeholderText: qsTr("Planned time (HH:MM:SS)"); onEditingFinished: { page.plannedTime = text; page.generatePlan() } }
+				TextField { Layout.fillWidth: true; text: page.surfacePressureBar.toFixed(3); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Surface pressure (bar)"); onEditingFinished: { var pressure = Number(text); if (!isNaN(pressure) && pressure > 0) { page.surfacePressureBar = pressure; page.generatePlan() } } }
 				ComboBox { id: diveMode; Layout.fillWidth: true; model: [qsTr("Open circuit"), qsTr("CCR"), qsTr("pSCR")]; onActivated: page.generatePlan() }
 				ComboBox { id: waterType; Layout.fillWidth: true; model: [qsTr("Sea water"), qsTr("Fresh water"), qsTr("EN13319")]; onActivated: page.generatePlan() }
 			}

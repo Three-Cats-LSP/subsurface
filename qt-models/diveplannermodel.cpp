@@ -1489,7 +1489,7 @@ void DivePlannerPointsModel::createPlan(bool saveAsNew)
 	planCreated(); // This signal will exit the UI from planner state.
 }
 
-QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersData, const QVariantList &segmentsData, const QString &date, const QString &time, int diveMode, int waterType, bool shouldSave)
+QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersData, const QVariantList &segmentsData, const QString &date, const QString &time, int diveMode, int waterType, int surfacePressureMbar, bool shouldSave)
 {
 	if (d) {
 		delete d;
@@ -1579,7 +1579,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	diveplan.gfhigh = gfHigh();
 	diveplan.bottomsac = qPrefDivePlanner::bottomsac();
 	diveplan.decosac = qPrefDivePlanner::decosac();
-	diveplan.surface_pressure = d->get_surface_pressure();
+	diveplan.surface_pressure = surfacePressureMbar > 0 ? pressure_t { .mbar = surfacePressureMbar } : d->get_surface_pressure();
 	diveplan.vpmb_conservatism = qPrefTechnicalDetails::vpmb_conservatism();
 
 	// Run the planner engine

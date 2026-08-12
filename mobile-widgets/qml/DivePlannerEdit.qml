@@ -97,7 +97,7 @@ TemplatePage {
 
 			var planResult = Backend.divePlannerPointsModel.calculatePlan(
 				cylinderData, segmentData, planDate.text, planTime.text,
-				overallDivemode.currentIndex, salinity, savePlan
+				overallDivemode.currentIndex, salinity, 0, savePlan
 			)
 			// AI-generated (Claude)
 			// Always update the preview so that a refused save still explains why

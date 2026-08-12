@@ -200,7 +200,7 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	cylinders.append(cylinder);
 	QVariantList segments;
 	segments.append(segment);
-	const QVariantMap result = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, false);
+	const QVariantMap result = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	QVERIFY(result.contains("planSaveAllowed"));
 	QVERIFY(result.value("planSaveAllowed").toBool());
 	QVERIFY(result.contains("schedule"));
@@ -218,11 +218,11 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	segment.insert("depth", 50);
 	segment.insert("duration", 50);
 	segments[0] = segment;
-	const QVariantMap exceedsNdl = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, false);
+	const QVariantMap exceedsNdl = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	QVERIFY(exceedsNdl.value("exceedsNDL").toBool());
 	QVERIFY(!exceedsNdl.value("planSaveAllowed").toBool());
 
-	const QVariantMap invalidStart = model->calculatePlan(cylinders, segments, "not-a-date", "not-a-time", OC, 10300, false);
+	const QVariantMap invalidStart = model->calculatePlan(cylinders, segments, "not-a-date", "not-a-time", OC, 10300, 1013, false);
 	QVERIFY(!invalidStart.value("planSaveAllowed").toBool());
 	QVERIFY(!invalidStart.value("notes").toString().isEmpty());
 	prefs = default_prefs;
