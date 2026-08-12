@@ -100,6 +100,17 @@ Kirigami.ScrollablePage {
 		if (activeProfileName.length > 0)
 			activeProfileModified = true
 	}
+	function resetActiveProfile() {
+		if (activeProfileName.length === 0)
+			return
+		var saved = plannerStorage.presets || []
+		for (var i = 0; i < saved.length; ++i) {
+			if (saved[i].name === activeProfileName) {
+				loadPreset(i)
+				return
+			}
+		}
+	}
 	function renamePreset(index, name) {
 		var trimmedName = name.trim()
 		var saved = plannerStorage.presets || []
@@ -402,6 +413,7 @@ Kirigami.ScrollablePage {
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Text { text: qsTr("Personal presets save the exact Neo/Subsurface planner inputs shown below. Compatibility labels are unavailable until their external settings and fixtures are verified."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Button { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
 			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }; Button { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
 			Repeater { model: plannerStorage.presets; delegate: RowLayout {
 				required property int index
