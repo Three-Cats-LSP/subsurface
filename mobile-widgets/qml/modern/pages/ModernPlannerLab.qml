@@ -33,6 +33,7 @@ Kirigami.ScrollablePage {
 	property var gasNames: []
 	property var gasReference: []
 	property string plannerTextExport: ""
+	property string plannerPdfExport: ""
 	property var inspectedProfileSample: null
 	ListModel { id: cylinders }
 	ListModel { id: segments }
@@ -41,6 +42,11 @@ Kirigami.ScrollablePage {
 		id: plannerTextFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: page.plannerTextExport = manager.exportNeoPlannerText(selectedFolder, page.decoSlate())
+	}
+	FolderDialog {
+		id: plannerPdfFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.decoSlate())
 	}
 	function modelData(model) {
 		var values = []
@@ -413,8 +419,9 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
 				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
 			} }
-			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
 			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+			Label { visible: page.plannerPdfExport.length > 0; text: qsTr("Planner PDF saved: %1").arg(page.plannerPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true

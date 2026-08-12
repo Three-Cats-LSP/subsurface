@@ -20,6 +20,10 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonParseError>
+#include <QPdfWriter>
+#include <QPainter>
+#include <QPageLayout>
+#include <QFontMetrics>
 #include <zip.h>
 #include <QLocale>
 #include <QtConcurrent>
@@ -2141,6 +2145,41 @@ QString QMLManager::exportNeoPlannerText(const QString &directory, const QString
 		setErrorMessage(tr("Could not write the planner text export."));
 		return {};
 	}
+	return output;
+}
+
+QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents)
+{
+	QDir targetDirectory(localFileName(directory));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
+		setErrorMessage(tr("Could not create the selected planner export folder."));
+		return {};
+	}
+	const QString output = targetDirectory.filePath(QString("subsurface-neo-plan-%1.pdf").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	QPdfWriter writer(output);
+	writer.setTitle(tr("Subsurface Neo dive plan"));
+	writer.setCreator(QStringLiteral("Subsurface Neo"));
+	QPainter painter(&writer);
+	if (!painter.isActive()) {
+		setErrorMessage(tr("Could not write the planner PDF export."));
+		return {};
+	}
+	QFont font = painter.font();
+	font.setPointSize(10);
+	painter.setFont(font);
+	const QRect pageRect = writer.pageLayout().paintRectPixels(writer.resolution());
+	const QFontMetrics metrics(font);
+	const int lineHeight = metrics.lineSpacing();
+	int y = pageRect.top() + lineHeight;
+	for (const QString &line : contents.split('\n')) {
+		if (y + lineHeight > pageRect.bottom()) {
+			writer.newPage();
+			y = pageRect.top() + lineHeight;
+		}
+		painter.drawText(QRect(pageRect.left(), y - lineHeight, pageRect.width(), lineHeight), Qt::AlignLeft | Qt::AlignVCenter, line);
+		y += lineHeight;
+	}
+	painter.end();
 	return output;
 }
 

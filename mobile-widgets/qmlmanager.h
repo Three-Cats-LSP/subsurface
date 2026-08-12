@@ -245,6 +245,7 @@ public slots:
 	Q_INVOKABLE bool replaceDiveLogFile(const QString &fileUrl);
 	Q_INVOKABLE QString createNeoBackupBundle(const QString &directory);
 	Q_INVOKABLE QString exportNeoPlannerText(const QString &directory, const QString &contents);
+	Q_INVOKABLE QString exportNeoPlannerPdf(const QString &directory, const QString &contents);
 	Q_INVOKABLE void copyToClipboard(const QString &text);
 	QString getVersion() const;
 	void refreshDiveList();
