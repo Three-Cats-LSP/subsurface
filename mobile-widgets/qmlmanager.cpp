@@ -2105,7 +2105,9 @@ QString QMLManager::createNeoBackupBundle(const QString &directory)
 	neoMetadata.insert("collections", QJsonDocument::fromJson(settings.value("subsurface-neo/dive-collections").toByteArray()).array());
 	neoMetadata.insert("plannerPresets", QJsonValue::fromVariant(settings.value("subsurface-neo/planner/presets")));
 	QJsonObject manifest { { "format", "subsurface-neo" }, { "version", 1 }, { "createdAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) }, { "dives", static_cast<int>(divelog.dives.size()) } };
-	QDir targetDirectory(directory);
+	// FolderDialog supplies a file URL. Use the same normalization as the
+	// planner text exporter so the portable package is created in that folder.
+	QDir targetDirectory(localFileName(directory));
 	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
 		setErrorMessage(tr("Could not create the selected backup folder."));
 		return {};
