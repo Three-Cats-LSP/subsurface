@@ -36,10 +36,24 @@ Kirigami.ScrollablePage {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
 			return
 		}
-		detailsPage.editRequested.connect(function(diveId) {
-			manager.selectDive(diveId)
-			showPage(detailsWindow)
-			detailsWindow.startEditMode()
+		detailsPage.editRequested.connect(function(diveData) {
+			var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveEditor.qml")
+			if (component.status !== Component.Ready) {
+				showPassiveNotification(qsTr("Unable to load Neo dive editor: %1").arg(component.errorString()), 6000)
+				return
+			}
+			var editorPage = component.createObject(rootItem, { "dive": diveData })
+			if (editorPage === null) {
+				showPassiveNotification(qsTr("Unable to create Neo dive editor"), 6000)
+				return
+			}
+			editorPage.saved.connect(function() { showPage(detailsPage) })
+			editorPage.advancedEditorRequested.connect(function(diveId) {
+				manager.selectDive(diveId)
+				showPage(detailsWindow)
+				detailsWindow.startEditMode()
+			})
+			showPage(editorPage)
 		})
 		showPage(detailsPage)
 	}

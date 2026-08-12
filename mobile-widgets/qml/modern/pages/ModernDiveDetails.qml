@@ -17,7 +17,7 @@ Kirigami.Page {
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
 
-	signal editRequested(int diveId)
+	signal editRequested(var dive)
 
 	Modern.DesignTokens { id: tokens }
 
@@ -659,7 +659,7 @@ Kirigami.Page {
 			Button {
 				text: qsTr("Edit dive")
 				enabled: page.currentItem && page.currentItem.modelData
-				onClicked: page.editRequested(page.currentItem.modelData.id)
+				onClicked: page.editRequested(page.currentItem.modelData)
 			}
 			Item { Layout.fillWidth: true }
 			Text {

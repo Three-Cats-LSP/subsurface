@@ -51,6 +51,7 @@
 		<file>modern/pages/ModernDashboard.qml</file>
 		<file>modern/pages/ModernDiveList.qml</file>
 		<file>modern/pages/ModernDiveDetails.qml</file>
+		<file>modern/pages/ModernDiveEditor.qml</file>
 		<file>modern/pages/CloudSyncPage.qml</file>
 
 		<file>SsrfSwitch.qml</file>
