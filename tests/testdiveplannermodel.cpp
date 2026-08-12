@@ -217,6 +217,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("cns"));
 	QVERIFY(lastSample.contains("gf"));
 	QVERIFY(lastSample.contains("surfaceGf"));
+	QVERIFY(lastSample.contains("po2"));
+	QVERIFY(lastSample.contains("tissueLoad"));
 
 	segment.insert("divemode", PSCR);
 	segments[0] = segment;

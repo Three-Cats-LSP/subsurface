@@ -1692,6 +1692,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				}
 				point["gf"] = plotIt->current_gf * 100.0;
 				point["surfaceGf"] = plotIt->surface_gf;
+				point["po2"] = std::lround(plotIt->pressures.o2 * 1000.0);
+				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
 			}
 			profileData.append(point);
 		}
