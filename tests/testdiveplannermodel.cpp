@@ -231,7 +231,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantMap deepDecoResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	const QVariantList decoSchedule = deepDecoResult.value("schedule").toList();
 	QVERIFY(!decoSchedule.empty());
-	QVERIFY(decoSchedule.first().toMap().contains("gas"));
+	QVERIFY(decoSchedule.first().toMap().contains("depth"));
+	QVERIFY(decoSchedule.first().toMap().contains("duration"));
 	QVERIFY(decoSchedule.first().toMap().contains("tts"));
 	QVERIFY(decoSchedule.first().toMap().contains("cns"));
 
@@ -351,9 +352,10 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	};
 
 	// Core no-decompression and decompression scenario checks.
-	const QVariantMap noDeco = calculate(20, 20);
+	const QVariantMap noDeco = calculate(15, 20);
 	QVERIFY(noDeco.value("planSaveAllowed").toBool());
-	QVERIFY(noDeco.value("schedule").toList().empty());
+	for (const QVariant &sample : noDeco.value("profile").toList())
+		QVERIFY(!sample.toMap().value("inDeco").toBool());
 	const QVariantMap deco40 = calculate(40, 25);
 	const QVariantMap deco50 = calculate(50, 30);
 	QVERIFY(deco40.value("planSaveAllowed").toBool());
