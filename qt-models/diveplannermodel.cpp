@@ -1513,6 +1513,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		results["notes"] = tr("Enter a valid planned start date and time.");
 		results["exceedsNDL"] = false;
 		results["planSaveAllowed"] = false;
+		results["otu"] = 0;
 		results["schedule"] = QVariantList();
 		results["profile"] = QVariantList();
 		results["newDiveId"] = -1;
@@ -1622,6 +1623,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	const bool exceedsNDL = planError == PLAN_ERROR_RECREATIONAL_EXCEEDS_NDL;
 	results["exceedsNDL"] = exceedsNDL;
 	results["planSaveAllowed"] = planError == PLAN_OK;
+	results["otu"] = d->otu;
 	QVariantList schedule;
 	for (const decostop &stop : decostops) {
 		QVariantMap row;

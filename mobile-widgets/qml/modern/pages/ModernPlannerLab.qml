@@ -29,6 +29,7 @@ Kirigami.ScrollablePage {
 	property var gasAnalysis: []
 	property bool exceedsNDL: false
 	property bool planSaveAllowed: false
+	property int planOtu: 0
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
 	property var gasReference: []
@@ -172,6 +173,7 @@ Kirigami.ScrollablePage {
 		gasAnalysis = result.gasAnalysis || []
 		exceedsNDL = result.exceedsNDL === true
 		planSaveAllowed = result.planSaveAllowed === true
+		planOtu = result.otu || 0
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
 			manager.selectDive(result.newDiveId)
 			showPage(diveList)
@@ -232,7 +234,7 @@ Kirigami.ScrollablePage {
 			var gas = gasAnalysis[analysisIndex]
 			lines.push(qsTr("%1: used %2; remaining %3; end %4").arg(gas.mix).arg(gas.used).arg(gas.remaining).arg(gas.endPressure))
 		}
-		lines.push("", qsTr("DECOMPRESSION SCHEDULE"))
+		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("DECOMPRESSION SCHEDULE"))
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i) {
@@ -357,6 +359,7 @@ Kirigami.ScrollablePage {
 				Components.MetricCard { label: qsTr("Surface GF"); value: page.finalSampleValue("surfaceGf", 0) > 0 ? page.finalSampleValue("surfaceGf", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("surfaceGf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("pO₂"); value: page.finalSampleValue("po2", 0) > 0 ? (page.finalSampleValue("po2", 0) / 1000.0).toFixed(2) : "—"; suffix: page.finalSampleValue("po2", 0) > 0 ? "bar" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Max tissue loading"); value: page.finalSampleValue("tissueLoad", 0) > 0 ? page.finalSampleValue("tissueLoad", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("tissueLoad", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
+				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }
 			}
 			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 190; onPaint: {
 				var ctx = getContext("2d"); ctx.reset(); if (page.profileData.length < 2) return

@@ -203,6 +203,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantMap result = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	QVERIFY(result.contains("planSaveAllowed"));
 	QVERIFY(result.value("planSaveAllowed").toBool());
+	QVERIFY(result.contains("otu"));
+	QVERIFY(result.value("otu").toInt() >= 0);
 	QVERIFY(result.contains("schedule"));
 	QVERIFY(result.value("schedule").canConvert<QVariantList>());
 	QVERIFY(!result.value("gasAnalysis").toList().empty());
