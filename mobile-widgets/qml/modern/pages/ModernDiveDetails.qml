@@ -566,13 +566,14 @@ Kirigami.Page {
 	Popup {
 		id: profileControls
 		parent: Overlay.overlay
-		modal: true
+		property bool desktopPanel: page.width >= 720
+		modal: !desktopPanel
 		focus: true
 		closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-		width: Math.min(page.width - tokens.space16 * 2, 460)
+		width: desktopPanel ? Math.min(380, page.width - tokens.space32) : Math.min(page.width - tokens.space16 * 2, 460)
 		height: Math.min(implicitHeight, page.height - tokens.space24 * 2)
-		x: Math.max(tokens.space8, (page.width - width) / 2)
-		y: Math.max(tokens.space12, page.height - height - tokens.space16)
+		x: desktopPanel ? Math.max(tokens.space16, page.width - width - tokens.space16) : Math.max(tokens.space8, (page.width - width) / 2)
+		y: desktopPanel ? tokens.space16 : Math.max(tokens.space12, page.height - height - tokens.space16)
 		padding: tokens.space16
 		background: Rectangle { color: tokens.surface; radius: 18; border.width: 1; border.color: tokens.border }
 
@@ -595,6 +596,7 @@ Kirigami.Page {
 				}
 
 				Text { text: qsTr("Decompression"); color: tokens.textMuted; font.pixelSize: 11 }
+				Switch { Layout.fillWidth: true; text: qsTr("Analysis model and GF"); checked: ProfilePrefs.decoinfo; onToggled: { ProfilePrefs.decoinfo = checked; page.refreshCurrentProfile() } }
 				Switch { Layout.fillWidth: true; text: qsTr("NDL / TTS"); checked: ProfilePrefs.calcndltts; onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() } }
 				Switch { Layout.fillWidth: true; text: qsTr("Ceiling"); checked: ProfilePrefs.calcceiling; onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() } }
 				Switch { Layout.fillWidth: true; text: qsTr("Tissue ceiling"); checked: ProfilePrefs.calcalltissues; onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() } }
