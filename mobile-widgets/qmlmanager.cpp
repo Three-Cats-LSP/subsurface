@@ -2254,16 +2254,17 @@ static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profil
 	bodyFont.setBold(false);
 	painter.setFont(bodyFont);
 	painter.setPen(QColor("#475569"));
-	painter.drawText(page.left(), page.top() + 48, QMLManager::tr("Profile and GF are rendered from the same native planner result as the schedule."));
+	painter.drawText(page.left(), page.top() + 48, QMLManager::tr("Profile, GF, and tissue loading are rendered from the same native planner result as the schedule."));
 	if (samples.size() < 2 || maxTime <= 0.0 || maxDepth <= 0.0) {
 		painter.drawText(page.left(), page.top() + 82, QMLManager::tr("No profile samples were available for this plan."));
 		painter.end();
 		return true;
 	}
 	const qreal chartWidth = page.width();
-	const qreal chartHeight = (page.height() - 105) / 2.0;
+	const qreal chartHeight = (page.height() - 145) / 3.0;
 	const QRectF depthChart(page.left(), page.top() + 68, chartWidth, chartHeight - 12);
-	const QRectF gfChart(page.left(), depthChart.bottom() + 36, chartWidth, chartHeight - 12);
+	const QRectF gfChart(page.left(), depthChart.bottom() + 32, chartWidth, chartHeight - 12);
+	const QRectF tissueChart(page.left(), gfChart.bottom() + 32, chartWidth, chartHeight - 12);
 	auto drawFrame = [&painter](const QRectF &rect, const QString &label) {
 		painter.setPen(QPen(QColor("#94a3b8"), 1));
 		painter.setBrush(QColor("#f8fafc"));
@@ -2273,8 +2274,10 @@ static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profil
 	};
 	drawFrame(depthChart, QMLManager::tr("Depth (m)"));
 	drawFrame(gfChart, QMLManager::tr("Gradient factor (%)"));
+	drawFrame(tissueChart, QMLManager::tr("Tissue loading (%)"));
 	QPolygonF depthLine;
 	QPolygonF gfLine;
+	QPolygonF tissueLine;
 	for (const QVariantMap &sample : samples) {
 		const qreal x = depthChart.left() + sample.value("time").toDouble() / maxTime * depthChart.width();
 		const qreal depthY = depthChart.top() + sample.value("depth").toDouble() / maxDepth * depthChart.height();
@@ -2282,6 +2285,10 @@ static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profil
 		if (sample.contains("gf")) {
 			const qreal gf = qBound(0.0, sample.value("gf").toDouble(), 100.0);
 			gfLine << QPointF(x, gfChart.bottom() - gf / 100.0 * gfChart.height());
+		}
+		if (sample.contains("tissueLoad")) {
+			const qreal tissueLoad = qBound(0.0, sample.value("tissueLoad").toDouble(), 100.0);
+			tissueLine << QPointF(x, tissueChart.bottom() - tissueLoad / 100.0 * tissueChart.height());
 		}
 	}
 	painter.setRenderHint(QPainter::Antialiasing, true);
@@ -2291,12 +2298,18 @@ static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profil
 		painter.setPen(QPen(QColor("#7c3aed"), 2));
 		painter.drawPolyline(gfLine);
 	}
+	if (tissueLine.size() > 1) {
+		painter.setPen(QPen(QColor("#ea580c"), 2));
+		painter.drawPolyline(tissueLine);
+	}
 	painter.setPen(QColor("#475569"));
 	painter.drawText(depthChart.left(), depthChart.bottom() + 15, QMLManager::tr("0 min"));
 	painter.drawText(depthChart.right() - 60, depthChart.bottom() + 15, QMLManager::tr("%1 min").arg(qRound(maxTime / 60.0)));
 	painter.drawText(depthChart.right() - 55, depthChart.top() + 16, QMLManager::tr("%1 m").arg(QString::number(maxDepth / 1000.0, 'f', 1)));
 	painter.drawText(gfChart.left(), gfChart.bottom() + 15, QMLManager::tr("0%"));
 	painter.drawText(gfChart.left(), gfChart.top() + 16, QMLManager::tr("100%"));
+	painter.drawText(tissueChart.left(), tissueChart.bottom() + 15, QMLManager::tr("0%"));
+	painter.drawText(tissueChart.left(), tissueChart.top() + 16, QMLManager::tr("100%"));
 	painter.end();
 	return true;
 }
