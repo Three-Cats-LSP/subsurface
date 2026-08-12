@@ -111,6 +111,8 @@ Kirigami.ScrollablePage {
 				ComboBox { id: waterType; Layout.fillWidth: true; model: [qsTr("Sea water"), qsTr("Fresh water"), qsTr("EN13319")]; onActivated: page.generatePlan() }
 			}
 			CheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Deco on OC bailout"); checked: Backend.dobailout; onToggled: { Backend.dobailout = checked; page.generatePlan() } }
+			CheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Calculate contingency variations"); checked: Backend.display_variations; onToggled: { Backend.display_variations = checked; page.generatePlan() } }
+			RowLayout { Layout.fillWidth: true; Label { text: qsTr("Reserve gas (%1)").arg(page.pressureUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 0; to: Backend.pressure === Enums.BAR ? 400 : 6000; value: Backend.reserve_gas; onValueModified: { Backend.reserve_gas = value; page.generatePlan() } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
