@@ -53,6 +53,7 @@
 		<file>modern/pages/ModernDiveDetails.qml</file>
 		<file>modern/pages/ModernDiveEditor.qml</file>
 		<file>modern/pages/ModernDiveComputerCenter.qml</file>
+		<file>modern/pages/ModernImportReview.qml</file>
 		<file>modern/pages/CloudSyncPage.qml</file>
 
 		<file>SsrfSwitch.qml</file>

@@ -12,7 +12,7 @@ Kirigami.ScrollablePage {
 	title: qsTr("Dive computers")
 	background: Rectangle { color: tokens.background }
 
-	signal openNativeImport(int vendorIndex, int productIndex, int connectionIndex)
+	signal openNativeImport(string vendor, string product, string connection)
 
 	Modern.DesignTokens { id: tokens }
 
@@ -67,7 +67,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				text: qsTr("Start secure import")
 				enabled: vendorBox.currentIndex >= 0 && productBox.currentIndex >= 0 && connectionBox.currentIndex >= 0
-				onClicked: page.openNativeImport(vendorBox.currentIndex, productBox.currentIndex, connectionBox.currentIndex)
+				onClicked: page.openNativeImport(vendorBox.currentText, productBox.currentText, connectionBox.currentText)
 			}
 		}
 

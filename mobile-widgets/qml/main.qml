@@ -919,7 +919,20 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernDiveComputerCenter {
 		id: neoDiveComputerCenter
 		visible: false
-		onOpenNativeImport: function(vendor, product, connection) { showDownloadPage(vendor, product, connection) }
+		onOpenNativeImport: function(vendor, product, connection) {
+			var component = Qt.createComponent("qrc:/qml/modern/pages/ModernImportReview.qml")
+			if (component.status !== Component.Ready) {
+				showPassiveNotification(qsTr("Unable to load import review: %1").arg(component.errorString()), 6000)
+				return
+			}
+			var review = component.createObject(rootItem, { "vendor": vendor, "product": product, "connection": connection })
+			if (review === null) {
+				showPassiveNotification(qsTr("Unable to create import review"), 6000)
+				return
+			}
+			review.finished.connect(function() { showPageFromDrawer(modernDiveList) })
+			showPage(review)
+		}
 	}
 
 	NeoPages.CloudSyncPage {
