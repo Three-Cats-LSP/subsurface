@@ -2117,6 +2117,23 @@ QString QMLManager::createNeoBackupBundle(const QString &directory)
 	return output;
 }
 
+QString QMLManager::exportNeoPlannerText(const QString &directory, const QString &contents)
+{
+	QDir targetDirectory(localFileName(directory));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
+		setErrorMessage(tr("Could not create the selected planner export folder."));
+		return {};
+	}
+	const QString output = targetDirectory.filePath(QString("subsurface-neo-plan-%1.txt").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	QFile exportFile(output);
+	const QByteArray data = contents.toUtf8();
+	if (!exportFile.open(QIODevice::WriteOnly | QIODevice::Text) || exportFile.write(data) != data.size()) {
+		setErrorMessage(tr("Could not write the planner text export."));
+		return {};
+	}
+	return output;
+}
+
 void QMLManager::copyToClipboard(const QString &text)
 {
 	QApplication::clipboard()->setText(text, QClipboard::Clipboard);

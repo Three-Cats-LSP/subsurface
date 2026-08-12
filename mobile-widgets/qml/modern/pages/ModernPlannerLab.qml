@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import QtCore
 import org.kde.kirigami as Kirigami
 import org.subsurfacedivelog.mobile 1.0
@@ -27,9 +28,15 @@ Kirigami.ScrollablePage {
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
 	property var gasReference: []
+	property string plannerTextExport: ""
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
+	FolderDialog {
+		id: plannerTextFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: page.plannerTextExport = manager.exportNeoPlannerText(selectedFolder, page.decoSlate())
+	}
 	function modelData(model) {
 		var values = []
 		for (var i = 0; i < model.count; ++i)
@@ -150,7 +157,12 @@ Kirigami.ScrollablePage {
 	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("DECOMPRESSION SCHEDULE")]
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
+		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
+			var cylinder = cylinders.get(gasIndex)
+			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
+		}
+		lines.push("", qsTr("DECOMPRESSION SCHEDULE"))
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i) {
@@ -285,7 +297,8 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
 				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
 			} }
-			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
+			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
 		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
