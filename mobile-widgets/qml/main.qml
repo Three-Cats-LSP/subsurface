@@ -947,9 +947,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		visible: false
 		onOpenSites: showPage(mapPage)
 		onOpenStatistics: showPage(statistics)
-		onOpenEquipment: showPage(settingsWindow)
+		onOpenEquipment: showPage(neoEquipmentLibrary)
 		onOpenExport: showPage(exportWindow)
 		onOpenRecovery: showPage(recoverCache)
+	}
+
+	NeoPages.ModernEquipmentLibrary {
+		id: neoEquipmentLibrary
+		visible: false
 	}
 
 	NeoPages.CloudSyncPage {
