@@ -34,6 +34,7 @@ Kirigami.ScrollablePage {
 		itemManufacturer.text = data.manufacturer || ""
 		itemModel.text = data.model || ""
 		itemSerial.text = data.serial || ""
+		itemPurchaseDate.text = data.purchaseDate || ""
 		itemServiceDate.text = data.serviceDate || ""
 		itemServiceInterval.text = data.serviceInterval || ""
 		itemRetired.checked = data.retired === true
@@ -43,6 +44,7 @@ Kirigami.ScrollablePage {
 	function saveEditedItem() {
 		NeoEquipmentKits.saveEquipmentItem(itemName.text, { "category": itemCategory.text,
 			"manufacturer": itemManufacturer.text, "model": itemModel.text, "serial": itemSerial.text,
+			"purchaseDate": itemPurchaseDate.text,
 			"serviceDate": itemServiceDate.text, "serviceInterval": itemServiceInterval.text,
 			"retired": itemRetired.checked, "notes": itemNotes.text })
 		itemEditor.close()
@@ -75,6 +77,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
 				Text { text: [modelData.category, modelData.manufacturer, modelData.model].filter(function(value) { return value && value.length > 0 }).join(" / "); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Text { visible: modelData.purchaseDate && modelData.purchaseDate.length > 0; text: qsTr("Purchased: %1").arg(modelData.purchaseDate); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1%2").arg(modelData.serviceDate).arg(modelData.serviceInterval ? qsTr(" · every %1").arg(modelData.serviceInterval) : ""); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { text: qsTr("Used on %1 dives (matching gear text)").arg(NeoEquipmentKits.usageCount(modelData.name)); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { visible: modelData.retired === true; text: qsTr("Retired"); color: "#FBBF24"; font.pixelSize: 13 }
@@ -134,6 +137,7 @@ Kirigami.ScrollablePage {
 				TextField { id: itemManufacturer; Layout.fillWidth: true; placeholderText: qsTr("Manufacturer") }
 				TextField { id: itemModel; Layout.fillWidth: true; placeholderText: qsTr("Model") }
 				TextField { id: itemSerial; Layout.fillWidth: true; placeholderText: qsTr("Serial number") }
+				TextField { id: itemPurchaseDate; Layout.fillWidth: true; placeholderText: qsTr("Purchase date") }
 				TextField { id: itemServiceDate; Layout.fillWidth: true; placeholderText: qsTr("Last service date") }
 				TextField { id: itemServiceInterval; Layout.fillWidth: true; placeholderText: qsTr("Service interval, e.g. 12 months") }
 				CheckBox { id: itemRetired; text: qsTr("Retired / inactive") }
