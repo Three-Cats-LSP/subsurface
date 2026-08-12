@@ -50,7 +50,19 @@ Kirigami.ScrollablePage {
 	property bool activeProfileBuiltIn: false
 	property var builtInProfiles: [
 		{ "id": "subsurface-native", "name": qsTr("Subsurface native"), "version": 1,
-			"summary": qsTr("Native defaults: Buhlmann GF 30/75 · 18 m/min descent · 9 m/min ascent tiers") }
+			"summary": qsTr("Native defaults: Buhlmann GF 30/75 · 18 m/min descent · 9 m/min ascent tiers") },
+		{ "id": "lsp-default", "name": qsTr("LSP Default (native mapping)"), "version": 1,
+			"summary": qsTr("GF 20/85 · 20 m/min descent · 10/3/3 m/min ascent · 3 m last stop") },
+		{ "id": "lsp-multideco", "name": qsTr("MultiDeco (native mapping)"), "version": 1,
+			"summary": qsTr("GF 30/85 · 22 m/min descent · 9 m/min ascent tiers · 3 m last stop") },
+		{ "id": "lsp-abysner", "name": qsTr("Abysner (native mapping)"), "version": 1,
+			"summary": qsTr("GF 60/70 · 25 m/min descent · 9/3/3 m/min ascent · 3 m last stop") },
+		{ "id": "lsp-subsurface", "name": qsTr("LSP Subsurface (native mapping)"), "version": 1,
+			"summary": qsTr("GF 30/70 · 20 m/min descent · 9/6/3 m/min ascent · 3 m last stop") },
+		{ "id": "lsp-gue", "name": qsTr("GUE DecPlanner (native mapping)"), "version": 1,
+			"summary": qsTr("GF 20/85 · 20 m/min descent · 9/3/3 m/min ascent · 3 m last stop · pO2 1.2") },
+		{ "id": "lsp-divekit", "name": qsTr("DiveKit (native mapping)"), "version": 1,
+			"summary": qsTr("GF 50/80 · 20 m/min descent · 9 m/min ascent tiers · 6 m last stop") }
 	]
 	ListModel { id: cylinders }
 	ListModel { id: segments }
@@ -185,6 +197,56 @@ Kirigami.ScrollablePage {
 			"backGasBreaks": false, "bailout": false, "defaultSetpoint": 1100, "o2Narcotic": true, "sacFactor": 40
 		}
 	}
+	function plannerRate(metersPerMinute) {
+		return Backend.length === Enums.METERS ? metersPerMinute : Math.round(metersPerMinute * 3.28084)
+	}
+	function plannerSac(litresPerMinute) {
+		return Backend.volume === Enums.LITER ? litresPerMinute : Math.round(litresPerMinute * 3.53147)
+	}
+	function lspMappedPlannerSettings(profileId) {
+		var settings = nativePlannerSettings()
+		settings.bottomSac = plannerSac(22)
+		settings.decoSac = plannerSac(20)
+		settings.descentRate = plannerRate(20)
+		settings.deepAscentRate = plannerRate(10)
+		settings.midAscentRate = plannerRate(3)
+		settings.decoAscentRate = plannerRate(3)
+		settings.finalAscentRate = plannerRate(3)
+		settings.gflow = 20
+		settings.gfhigh = 85
+		if (profileId === "lsp-multideco") {
+			settings.gflow = 30; settings.gfhigh = 85; settings.descentRate = plannerRate(22)
+			settings.deepAscentRate = plannerRate(9); settings.midAscentRate = plannerRate(9)
+			settings.decoAscentRate = plannerRate(9); settings.finalAscentRate = plannerRate(9)
+		} else if (profileId === "lsp-abysner") {
+			settings.gflow = 60; settings.gfhigh = 70; settings.descentRate = plannerRate(25)
+			settings.deepAscentRate = plannerRate(9)
+		} else if (profileId === "lsp-subsurface") {
+			settings.gflow = 30; settings.gfhigh = 70; settings.deepAscentRate = plannerRate(9)
+			settings.midAscentRate = plannerRate(6)
+		} else if (profileId === "lsp-gue") {
+			settings.bottomPo2 = 1.2; settings.decoPo2 = 1.2; settings.deepAscentRate = plannerRate(9)
+		} else if (profileId === "lsp-divekit") {
+			settings.gflow = 50; settings.gfhigh = 80; settings.deepAscentRate = plannerRate(9)
+			settings.midAscentRate = plannerRate(9); settings.decoAscentRate = plannerRate(9)
+			settings.lastStop6m = true
+		} else if (profileId !== "lsp-default") {
+			return null
+		}
+		return settings
+	}
+	function activeProfileLimitations() {
+		if (!activeProfileBuiltIn || activeProfileId.indexOf("lsp-") !== 0)
+			return ""
+		return qsTr("This preset contains only native Neo planner settings.")
+	}
+	function profileExportIdentity() {
+		var lines = [qsTr("Profile: %1").arg(profileLabel())]
+		var limitations = activeProfileLimitations()
+		if (limitations.length > 0)
+			lines.push(qsTr("Profile mapping: %1").arg(limitations))
+		return lines
+	}
 	function applyPlannerSettings(preset) {
 		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
 		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
@@ -214,9 +276,12 @@ Kirigami.ScrollablePage {
 	}
 	function loadBuiltInProfile(index) {
 		var profile = builtInProfiles[index]
-		if (!profile || profile.id !== "subsurface-native")
+		if (!profile)
 			return
-		applyPlannerSettings(nativePlannerSettings())
+		var settings = profile.id === "subsurface-native" ? nativePlannerSettings() : lspMappedPlannerSettings(profile.id)
+		if (!settings)
+			return
+		applyPlannerSettings(settings)
 		activeProfileName = profile.name
 		activeProfileId = profile.id
 		activeProfileVersion = profile.version
@@ -407,7 +472,7 @@ Kirigami.ScrollablePage {
 	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Profile: %1").arg(profileLabel()), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")])
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
@@ -464,14 +529,14 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Text { text: qsTr("App reference presets use verified native Subsurface settings. Third-party compatibility labels remain unavailable until their settings and fixtures are verified."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Native profiles and external native mappings contain only settings Subsurface supports. Mappings do not claim schedule compatibility."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Button { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
 			Text { text: qsTr("App reference presets"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
 			Repeater { model: page.builtInProfiles; delegate: RowLayout {
 				required property int index
 				required property var modelData
 				Layout.fillWidth: true
-				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("%1 v%2").arg(modelData.name).arg(modelData.version); color: tokens.textPrimary; font.weight: Font.DemiBold }; Text { text: modelData.summary; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("%1 v%2").arg(modelData.name).arg(modelData.version); color: tokens.textPrimary; font.weight: Font.DemiBold }; Text { text: modelData.summary; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Text { visible: modelData.id.indexOf("lsp-") === 0; text: qsTr("Native settings only."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
 				Button { text: qsTr("Load"); onClicked: page.loadBuiltInProfile(index) }
 			} }
 			Text { text: qsTr("My profiles"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }

@@ -48,10 +48,12 @@ from a compatibility claim.
 
 ## Enablement rule
 
-No external preset name may be exposed as a Neo compatibility profile until a
-versioned native manifest covers every schedule-affecting field in the target
+No external preset name may be exposed as a Neo **compatibility** profile until
+a versioned native manifest covers every schedule-affecting field in the target
 scenario and native Subsurface reference schedules have been captured with
-documented tolerances. A partially matched preset may be used by a diver as a
-personal Neo preset, but must remain labelled **Custom**, not as the external
-planner or profile.
+documented tolerances.
 
+Neo may expose an external preset as an explicitly labelled **native mapping**:
+it must load every representable field, name the source profile, and disclose
+the non-representable assumptions in the UI and exported plan. A native mapping
+is not a claim that its resulting schedule matches the external engine.
