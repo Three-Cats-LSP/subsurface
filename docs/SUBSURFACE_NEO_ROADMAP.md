@@ -196,6 +196,8 @@ Allow **Save current filter as Smart Collection**.
 
 **Exit:** a diver can quickly locate and organize dives without losing the power of Subsurface's existing filter engine.
 
+**Status:** Complete on `modern-ui`. Neo provides trip-aware chronological dive cards, debounced practical filters backed by the Subsurface filter engine, canonical saved-filter Smart Collections, and manual Neo collections stored separately from canonical dive data.
+
 ---
 
 ## Milestone 5 — Dive Details & Modern Profile Graph
