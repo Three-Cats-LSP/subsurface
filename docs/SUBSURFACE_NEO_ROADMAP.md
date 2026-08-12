@@ -291,6 +291,8 @@ SeaBirds demonstrates usable browser dive-computer transport and is the referenc
 
 **Exit:** Neo retains native Subsurface device compatibility and can directly download from supported dive computers in compatible desktop browsers.
 
+**Status:** Native Android and Windows complete on `modern-ui`: Neo provides device discovery, remembered computers, Bluetooth/USB/serial selection, all/new download control, progress, selective import review, retry/cancel recovery, and canonical recording through Subsurface's importer. Browser/WebAssembly transport remains part of Milestone 14.
+
 ---
 
 ## Milestone 8 — Advanced Dive Planner & Decompression Lab
