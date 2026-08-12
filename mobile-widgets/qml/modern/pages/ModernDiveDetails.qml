@@ -323,7 +323,7 @@ Kirigami.Page {
 									Rectangle {
 										id: sampleTooltip
 										visible: profileInspector.activeSample
-										width: Math.min(250, profileInspector.width - tokens.space16)
+										width: Math.min(280, profileInspector.width - tokens.space16)
 										height: sampleColumn.implicitHeight + tokens.space12 * 2
 										x: Math.max(tokens.space8, Math.min(profileInspector.width - width - tokens.space8,
 											profileInspector.cursorX + 12 + width < profileInspector.width ? profileInspector.cursorX + 12 : profileInspector.cursorX - width - 12))
@@ -340,16 +340,42 @@ Kirigami.Page {
 											anchors.top: parent.top
 											anchors.margins: tokens.space12
 											spacing: 3
-											Text { text: (profileInspector.sampleInfo.time || "—") + "  ·  " + (profileInspector.sampleInfo.depth || "—"); color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+
+											Text {
+												text: (profileInspector.sampleInfo.time || "—") + "  ·  " + (profileInspector.sampleInfo.depth || "—")
+												color: tokens.textPrimary
+												font.pixelSize: 14
+												font.weight: Font.DemiBold
+											}
 											Text { visible: !!profileInspector.sampleInfo.temperature; text: qsTr("Water %1").arg(profileInspector.sampleInfo.temperature || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text {
 												visible: profileInspector.sampleInfo.inDeco || profileInspector.sampleInfo.ndl !== undefined
 												text: profileInspector.sampleInfo.inDeco
 													  ? qsTr("Deco %1").arg(profileInspector.sampleInfo.decoStop || qsTr("required"))
 													  : qsTr("NDL %1").arg(profileInspector.sampleInfo.ndl || "—")
-												color: tokens.textSecondary; font.pixelSize: 11
+												color: tokens.textSecondary
+												font.pixelSize: 11
 											}
 											Text { visible: !!profileInspector.sampleInfo.tts; text: qsTr("TTS %1").arg(profileInspector.sampleInfo.tts || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+
+											Rectangle {
+												visible: profileInspector.sampleInfo.gf !== undefined || profileInspector.sampleInfo.surfaceGf !== undefined || !!profileInspector.sampleInfo.calculatedCeiling || !!profileInspector.sampleInfo.calculatedNdl || !!profileInspector.sampleInfo.calculatedTts
+												width: parent.width
+												height: 1
+												color: tokens.border
+											}
+											Text { visible: profileInspector.sampleInfo.gf !== undefined; text: qsTr("GF %1").arg(profileInspector.sampleInfo.gf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: profileInspector.sampleInfo.surfaceGf !== undefined; text: qsTr("Surface GF %1").arg(profileInspector.sampleInfo.surfaceGf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.calculatedCeiling; text: qsTr("Calculated ceiling %1").arg(profileInspector.sampleInfo.calculatedCeiling || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.calculatedNdl; text: qsTr("Calculated NDL %1").arg(profileInspector.sampleInfo.calculatedNdl || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: !!profileInspector.sampleInfo.calculatedTts; text: qsTr("Calculated TTS %1").arg(profileInspector.sampleInfo.calculatedTts || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+
+											Rectangle {
+												visible: !!profileInspector.sampleInfo.pressure || !!profileInspector.sampleInfo.setpoint || !!profileInspector.sampleInfo.cns
+												width: parent.width
+												height: 1
+												color: tokens.border
+											}
 											Text { visible: !!profileInspector.sampleInfo.pressure; text: qsTr("Pressure %1").arg(profileInspector.sampleInfo.pressure || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text { visible: !!profileInspector.sampleInfo.setpoint; text: qsTr("Setpoint %1").arg(profileInspector.sampleInfo.setpoint || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text { visible: !!profileInspector.sampleInfo.cns; text: qsTr("CNS %1").arg(profileInspector.sampleInfo.cns || ""); color: tokens.textSecondary; font.pixelSize: 11 }
