@@ -18,6 +18,7 @@ Kirigami.ScrollablePage {
 	property string depthUnit: Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
 	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
 	property string sacUnit: Backend.volume === Enums.LITER ? qsTr("L/min") : qsTr("cu ft/min")
+	property string speedUnit: Backend.length === Enums.METERS ? qsTr("m/min") : qsTr("ft/min")
 	property string planNotes: ""
 	property var profileData: []
 	property var schedule: []
@@ -176,6 +177,21 @@ Kirigami.ScrollablePage {
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }; Button { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
 			Repeater { model: plannerStorage.presets; delegate: RowLayout { required property int index; required property var modelData; Layout.fillWidth: true; Label { text: modelData.name; color: tokens.textPrimary; Layout.fillWidth: true }; Button { text: qsTr("Load"); onClicked: page.loadPreset(index) }; Button { text: qsTr("Remove"); onClicked: { var saved = plannerStorage.presets || []; saved.splice(index, 1); plannerStorage.presets = saved } } } }
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Travel and stop settings"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("These rates and stop choices are sent directly to the established Subsurface planner."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Descent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.descrate; enabled: Backend.drop_stone_mode; onValueModified: { Backend.descrate = value; page.generatePlan() } } }
+				CheckBox { text: qsTr("Drop to first depth"); checked: Backend.drop_stone_mode; onToggled: { Backend.drop_stone_mode = checked; page.generatePlan() } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deep ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.ascrate75; onValueModified: { Backend.ascrate75 = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Mid ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.ascrate50; onValueModified: { Backend.ascrate50 = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deco ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.ascratestops; onValueModified: { Backend.ascratestops = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Final ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.ascratelast6m; onValueModified: { Backend.ascratelast6m = value; page.generatePlan() } } }
+				CheckBox { text: qsTr("Last stop at 6 m / 20 ft"); checked: Backend.last_stop6m; onToggled: { Backend.last_stop6m = checked; page.generatePlan() } }
+				CheckBox { text: qsTr("Switch gas only at required stops"); checked: Backend.switch_at_req_stop; onToggled: { Backend.switch_at_req_stop = checked; page.generatePlan() } }
+			}
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
