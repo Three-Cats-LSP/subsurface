@@ -222,6 +222,16 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("po2"));
 	QVERIFY(lastSample.contains("tissueLoad"));
 
+	segment.insert("depth", 45);
+	segment.insert("duration", 30);
+	segments[0] = segment;
+	const QVariantList decoSchedule = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false).value("schedule").toList();
+	QVERIFY(!decoSchedule.empty());
+	QVERIFY(decoSchedule.first().toMap().contains("gas"));
+	segment.insert("depth", 18);
+	segment.insert("duration", 20);
+	segments[0] = segment;
+
 	segment.insert("divemode", PSCR);
 	segments[0] = segment;
 	const QVariantMap pscrResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", PSCR, 10300, 1013, false);

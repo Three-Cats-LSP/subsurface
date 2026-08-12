@@ -1634,6 +1634,9 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			for (const struct sample &sample : d->dcs[0].samples) {
 				if (!sample.in_deco || sample.depth.mm != stop.depth)
 					continue;
+				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], sample.time);
+				if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
+					row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
 				row.insert("runTime", sample.time.seconds);
 				row.insert("tts", sample.tts.seconds);
 				row.insert("cns", sample.cns);

@@ -242,7 +242,7 @@ Kirigami.ScrollablePage {
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i) {
 			var stop = schedule[i]
-			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
+			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "") + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
 		}
 		if (planNotes.length > 0)
 			lines.push("", qsTr("PLANNER NOTES AND WARNINGS"), planNotes)
@@ -418,10 +418,11 @@ Kirigami.ScrollablePage {
 			Repeater { model: page.schedule; delegate: GridLayout {
 				required property var modelData
 				Layout.fillWidth: true
-				columns: page.width >= 700 ? 7 : 2
+				columns: page.width >= 700 ? 8 : 2
 				Label { text: qsTr("Deco stop"); color: tokens.textMuted; Layout.fillWidth: true }
 				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
 				Label { text: qsTr("Stop %1").arg(page.formatDuration(modelData.duration)); color: tokens.textPrimary }
+				Label { visible: modelData.gas !== undefined; text: modelData.gas || ""; color: tokens.textSecondary }
 				Label { visible: modelData.runTime !== undefined; text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textSecondary }
 				Label { visible: modelData.tts !== undefined; text: qsTr("TTS %1").arg(page.formatDuration(modelData.tts)); color: tokens.textSecondary }
 				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
