@@ -1904,6 +1904,14 @@ bool QMLManager::updateSite(const QString &siteName, const QString &description,
 	if (QString::fromStdString(ds->notes) != notes)
 		Command::editDiveSiteNotes(ds, notes);
 	if (printGPSCoords(&ds->location) != gps) {
+		if (gps.trimmed().isEmpty()) {
+			// A blank field means remove the site's coordinates. Keep this as a
+			// normal undoable Subsurface site edit rather than rejecting it as an
+			// unparsable coordinate string.
+			Command::editDiveSiteLocation(ds, location_t {});
+			emit locationListChanged();
+			return true;
+		}
 		double latitude, longitude;
 		if (!parseGpsText(gps, &latitude, &longitude)) {
 			setErrorMessage(tr("Unable to parse dive-site GPS coordinates."));
