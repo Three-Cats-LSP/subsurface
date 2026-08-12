@@ -125,6 +125,9 @@ public:
 	Q_INVOKABLE int getConnectionIndex(const QString &deviceSubstr);
 	Q_INVOKABLE void setGitLocalOnly(const bool &value);
 	Q_INVOKABLE void setFilter(const QString filterText, int mode);
+	Q_INVOKABLE void setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
+					       const QString &location, const QString &suit, const QString &computer,
+					       const QString &minimumDepth, const QString &minimumDuration, const QString &year);
 	Q_INVOKABLE void selectRow(int row);
 	Q_INVOKABLE void selectSwipeRow(int row);
 	Q_INVOKABLE void importCacheRepo(QString repo);

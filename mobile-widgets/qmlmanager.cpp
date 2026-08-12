@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QClipboard>
 #include <QFile>
+#include <QLocale>
 #include <QtConcurrent>
 #include <QFuture>
 #include <QUndoStack>
@@ -2199,6 +2200,51 @@ void QMLManager::setFilter(const QString filterText, int index)
 			data.constraints.push_back(make_filter_constraint(FILTER_CONSTRAINT_TAGS, f));
 			break;
 		}
+	}
+	DiveFilter::instance()->setFilter(data);
+}
+
+static void add_string_constraint(FilterData &data, filter_constraint_type type, const QString &text)
+{
+	if (!text.trimmed().isEmpty())
+		data.constraints.push_back(make_filter_constraint(type, text.trimmed()));
+}
+
+static void add_minimum_constraint(FilterData &data, filter_constraint_type type, const QString &text)
+{
+	bool ok = false;
+	double value = QLocale().toDouble(text.trimmed(), &ok);
+	if (!ok)
+		value = text.trimmed().toDouble(&ok);
+	if (!ok)
+		return;
+	filter_constraint constraint(type);
+	constraint.range_mode = FILTER_CONSTRAINT_GREATER;
+	filter_constraint_set_float_from(constraint, value);
+	data.constraints.push_back(constraint);
+}
+
+void QMLManager::setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
+					     const QString &location, const QString &suit, const QString &computer,
+					     const QString &minimumDepth, const QString &minimumDuration, const QString &year)
+{
+	FilterData data;
+	data.fullText = fullText.trimmed();
+	add_string_constraint(data, FILTER_CONSTRAINT_PEOPLE, people);
+	add_string_constraint(data, FILTER_CONSTRAINT_TAGS, tags);
+	add_string_constraint(data, FILTER_CONSTRAINT_LOCATION, location);
+	add_string_constraint(data, FILTER_CONSTRAINT_SUIT, suit);
+	add_string_constraint(data, FILTER_CONSTRAINT_DIVE_COMPUTER, computer);
+	add_minimum_constraint(data, FILTER_CONSTRAINT_DEPTH, minimumDepth);
+	add_minimum_constraint(data, FILTER_CONSTRAINT_DURATION, minimumDuration);
+
+	bool yearOk = false;
+	const int yearValue = year.trimmed().toInt(&yearOk);
+	if (yearOk) {
+		filter_constraint constraint(FILTER_CONSTRAINT_YEAR);
+		constraint.range_mode = FILTER_CONSTRAINT_EQUAL;
+		filter_constraint_set_integer_from(constraint, yearValue);
+		data.constraints.push_back(constraint);
 	}
 	DiveFilter::instance()->setFilter(data);
 }

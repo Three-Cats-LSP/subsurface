@@ -13,12 +13,31 @@ Kirigami.Page {
 
 	property QtObject diveListModel: null
 	property bool filterVisible: false
+	property bool advancedFiltersVisible: false
 
 	signal openDive(int row)
 	signal downloadRequested()
 	signal addDiveRequested()
 
 	Modern.DesignTokens { id: tokens }
+
+	function applyFilters() {
+		manager.setModernDiveFilter(searchField.text, peopleField.text, tagsField.text, locationField.text,
+			suitField.text, computerField.text, depthField.text, durationField.text, yearField.text)
+	}
+
+	function clearFilters() {
+		searchField.clear()
+		peopleField.clear()
+		tagsField.clear()
+		locationField.clear()
+		suitField.clear()
+		computerField.clear()
+		depthField.clear()
+		durationField.clear()
+		yearField.clear()
+		applyFilters()
+	}
 
 	Components.DiveActionSheet {
 		id: diveActions
@@ -51,12 +70,11 @@ Kirigami.Page {
 			}
 
 			Button {
-				text: page.filterVisible ? qsTr("Close filter") : qsTr("Filter")
+				text: page.filterVisible ? qsTr("Close filters") : qsTr("Filter")
 				onClicked: {
 					page.filterVisible = !page.filterVisible
-					manager.setFilter("", 0)
 					if (!page.filterVisible)
-						filterField.text = ""
+						page.clearFilters()
 				}
 			}
 		}
@@ -66,26 +84,40 @@ Kirigami.Page {
 			Layout.fillWidth: true
 			spacing: tokens.space8
 
-			ComboBox {
-				id: filterMode
-				model: [qsTr("Fulltext"), qsTr("People"), qsTr("Tags")]
-				Layout.preferredWidth: Math.min(150, page.width * 0.34)
-				onActivated: manager.setFilter(filterField.text, currentIndex)
-			}
-
 			TextField {
-				id: filterField
+				id: searchField
 				Layout.fillWidth: true
-				placeholderText: filterMode.currentText
+				placeholderText: qsTr("Search all dive data")
 				onTextEdited: filterTimer.restart()
-				onAccepted: manager.setFilter(text, filterMode.currentIndex)
+				onAccepted: page.applyFilters()
 			}
+			Button { text: page.advancedFiltersVisible ? qsTr("Less") : qsTr("More"); onClicked: page.advancedFiltersVisible = !page.advancedFiltersVisible }
+			Button { text: qsTr("Clear"); onClicked: page.clearFilters() }
 
 			Timer {
 				id: filterTimer
 				interval: 250
 				repeat: false
-				onTriggered: manager.setFilter(filterField.text, filterMode.currentIndex)
+				onTriggered: page.applyFilters()
+			}
+		}
+
+		Components.ModernCard {
+			visible: page.filterVisible && page.advancedFiltersVisible
+			Layout.fillWidth: true
+			GridLayout {
+				Layout.fillWidth: true
+				columns: page.width >= 700 ? 3 : 2
+				columnSpacing: tokens.space8
+				rowSpacing: tokens.space8
+				TextField { id: locationField; Layout.fillWidth: true; placeholderText: qsTr("Site or location"); onTextEdited: filterTimer.restart() }
+				TextField { id: peopleField; Layout.fillWidth: true; placeholderText: qsTr("Buddy or guide"); onTextEdited: filterTimer.restart() }
+				TextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Tag"); onTextEdited: filterTimer.restart() }
+				TextField { id: suitField; Layout.fillWidth: true; placeholderText: qsTr("Suit / gear"); onTextEdited: filterTimer.restart() }
+				TextField { id: computerField; Layout.fillWidth: true; placeholderText: qsTr("Dive computer"); onTextEdited: filterTimer.restart() }
+				TextField { id: yearField; Layout.fillWidth: true; placeholderText: qsTr("Year"); inputMethodHints: Qt.ImhDigitsOnly; onTextEdited: filterTimer.restart() }
+				TextField { id: depthField; Layout.fillWidth: true; placeholderText: qsTr("Minimum depth"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
+				TextField { id: durationField; Layout.fillWidth: true; placeholderText: qsTr("Minimum duration"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
 			}
 		}
 
