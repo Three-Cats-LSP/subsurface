@@ -38,6 +38,7 @@ Kirigami.ScrollablePage {
 	property string plannerPdfExport: ""
 	property int contingencyScenario: 0
 	property int contingencyDelta: 5
+	property int contingencyGasIndex: 0
 	property var contingencyResult: null
 	property string contingencyTextExport: ""
 	property string contingencyPdfExport: ""
@@ -199,18 +200,20 @@ Kirigami.ScrollablePage {
 			segmentData[j].divemode = diveMode.currentIndex === 2 ? 2 : segmentData[j].divemode
 		if (contingencyScenario === 0) {
 			segmentData[segmentData.length - 1].duration += contingencyDelta
-		} else {
+		} else if (contingencyScenario === 1) {
 			var deepest = 0
 			for (var k = 1; k < segmentData.length; ++k)
 				if (segmentData[k].depth > segmentData[deepest].depth) deepest = k
 			segmentData[deepest].depth += contingencyDelta
+		} else if (contingencyGasIndex >= 0 && contingencyGasIndex < cylinderData.length) {
+			cylinderData[contingencyGasIndex].use = 3 // NOT_USED: remove this gas from the mature planner input
 		}
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
 		contingencyResult = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData, plannedDate, plannedTime,
 			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
 		generatePlan(false)
 	}
-	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) }
+	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : contingencyScenario === 1 ? qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) : qsTr("Lost gas: %1").arg(gasNames[contingencyGasIndex] || qsTr("selected gas")) }
 	function contingencySlate() {
 		if (!contingencyResult) return ""
 		var lines = [qsTr("SUBSURFACE NEO CONTINGENCY PLAN"), qsTr("Scenario: %1").arg(contingencyName()), qsTr("This is a separately calculated contingency; it does not replace the main plan."), qsTr("Model: %1").arg(algorithmName()), "", qsTr("DECOMPRESSION SCHEDULE")]
@@ -374,7 +377,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Contingency scenario"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Calculate a separate mature-planner result; the main plan remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			RowLayout { Layout.fillWidth: true; ComboBox { Layout.fillWidth: true; model: [qsTr("Extra bottom time"), qsTr("Deeper profile")]; currentIndex: page.contingencyScenario; onActivated: page.contingencyScenario = currentIndex }; SpinBox { from: 1; to: 30; value: page.contingencyDelta; onValueModified: page.contingencyDelta = value }; Label { text: page.contingencyScenario === 0 ? qsTr("minutes") : page.depthUnit; color: tokens.textMuted } }
+			RowLayout { Layout.fillWidth: true; ComboBox { Layout.fillWidth: true; model: [qsTr("Extra bottom time"), qsTr("Deeper profile"), qsTr("Lost deco/travel gas")]; currentIndex: page.contingencyScenario; onActivated: page.contingencyScenario = currentIndex }; SpinBox { visible: page.contingencyScenario !== 2; from: 1; to: 30; value: page.contingencyDelta; onValueModified: page.contingencyDelta = value }; ComboBox { visible: page.contingencyScenario === 2; Layout.fillWidth: true; model: page.gasNames; currentIndex: page.contingencyGasIndex; onActivated: page.contingencyGasIndex = currentIndex }; Label { visible: page.contingencyScenario !== 2; text: page.contingencyScenario === 0 ? qsTr("minutes") : page.depthUnit; color: tokens.textMuted } }
 			Button { Layout.fillWidth: true; text: qsTr("Calculate %1").arg(page.contingencyName()); onClicked: page.calculateContingency() }
 			ColumnLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true
 				Text { text: qsTr("Separate result: %1").arg(page.contingencyName()); color: tokens.accent; font.weight: Font.DemiBold }
