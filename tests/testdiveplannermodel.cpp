@@ -238,6 +238,10 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	segment.insert("depth", 18);
 	segment.insert("duration", 20);
 	segments[0] = segment;
+	prefs.planner_deco_mode = VPMB;
+	const QVariantMap vpmbResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	QVERIFY(!vpmbResult.value("profile").toList().empty());
+	prefs.planner_deco_mode = BUEHLMANN;
 
 	segment.insert("divemode", PSCR);
 	segments[0] = segment;
