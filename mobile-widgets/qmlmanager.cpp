@@ -2148,22 +2148,18 @@ QString QMLManager::exportNeoPlannerText(const QString &directory, const QString
 	return output;
 }
 
-QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents)
+static QString exportNeoPdfDocument(const QString &directory, const QString &contents, const QString &filePrefix, const QString &title)
 {
 	QDir targetDirectory(localFileName(directory));
-	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
-		setErrorMessage(tr("Could not create the selected planner export folder."));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath("."))
 		return {};
-	}
-	const QString output = targetDirectory.filePath(QString("subsurface-neo-plan-%1.pdf").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	const QString output = targetDirectory.filePath(QString("%1-%2.pdf").arg(filePrefix, QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
 	QPdfWriter writer(output);
-	writer.setTitle(tr("Subsurface Neo dive plan"));
+	writer.setTitle(title);
 	writer.setCreator(QStringLiteral("Subsurface Neo"));
 	QPainter painter(&writer);
-	if (!painter.isActive()) {
-		setErrorMessage(tr("Could not write the planner PDF export."));
+	if (!painter.isActive())
 		return {};
-	}
 	QFont font = painter.font();
 	font.setPointSize(10);
 	painter.setFont(font);
@@ -2180,6 +2176,22 @@ QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString 
 		y += lineHeight;
 	}
 	painter.end();
+	return output;
+}
+
+QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents)
+{
+	const QString output = exportNeoPdfDocument(directory, contents, QStringLiteral("subsurface-neo-plan"), tr("Subsurface Neo dive plan"));
+	if (output.isEmpty())
+		setErrorMessage(tr("Could not write the planner PDF export."));
+	return output;
+}
+
+QString QMLManager::exportNeoDiveReportPdf(const QString &directory, const QString &contents)
+{
+	const QString output = exportNeoPdfDocument(directory, contents, QStringLiteral("subsurface-neo-dive-report"), tr("Subsurface Neo dive report"));
+	if (output.isEmpty())
+		setErrorMessage(tr("Could not write the dive report PDF export."));
 	return output;
 }
 

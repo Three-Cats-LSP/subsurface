@@ -2,6 +2,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
+import QtCore
 import org.kde.kirigami as Kirigami
 import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
@@ -18,8 +20,24 @@ Kirigami.Page {
 	property bool editOpened: false
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
+	property string diveReportPdfExport: ""
 
 	signal editRequested(var dive)
+	FolderDialog {
+		id: diveReportFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: {
+			if (page.currentItem && page.currentItem.modelData)
+				page.diveReportPdfExport = manager.exportNeoDiveReportPdf(selectedFolder, page.diveReportText(page.currentItem.modelData))
+		}
+	}
+	function diveReportText(dive) {
+		var lines = [qsTr("SUBSURFACE NEO DIVE REPORT"), qsTr("Dive: %1").arg(dive.number > 0 ? "#" + dive.number : qsTr("Unnumbered")), qsTr("Date: %1").arg(dive.dateTime || "—"), qsTr("Site: %1").arg(dive.location || qsTr("Unnamed dive site")), qsTr("Maximum depth: %1").arg(dive.depth || "—"), qsTr("Duration: %1").arg(dive.duration || "—"), qsTr("Water temperature: %1").arg(dive.waterTemp || "—"), qsTr("Equipment: %1").arg(dive.suit || "—")]
+		if (dive.notes && dive.notes.length > 0)
+			lines.push("", qsTr("NOTES"), dive.notes)
+		lines.push("", qsTr("This report is generated from the current canonical Subsurface dive record."))
+		return lines.join("\n")
+	}
 
 	Modern.DesignTokens { id: tokens }
 
@@ -163,6 +181,8 @@ Kirigami.Page {
 							color: tokens.textSecondary
 							font.pixelSize: 13
 						}
+						Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onClicked: diveReportFolder.open() }
+						Text { visible: page.diveReportPdfExport.length > 0; text: qsTr("PDF saved: %1").arg(page.diveReportPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 					}
 
 					GridLayout {
