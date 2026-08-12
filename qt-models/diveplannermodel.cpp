@@ -1614,6 +1614,13 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			QVariantMap point;
 			point["time"] = sample.time.seconds;
 			point["depth"] = sample.depth.mm;
+			point["ndl"] = sample.ndl.seconds;
+			point["tts"] = sample.tts.seconds;
+			point["ceiling"] = sample.stopdepth.mm;
+			point["stopTime"] = sample.stoptime.seconds;
+			point["cns"] = sample.cns;
+			point["setpoint"] = sample.setpoint.mbar;
+			point["inDeco"] = sample.in_deco;
 			profileData.append(point);
 		}
 	}
