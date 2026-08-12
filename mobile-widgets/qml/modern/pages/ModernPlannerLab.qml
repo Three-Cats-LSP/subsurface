@@ -192,12 +192,18 @@ Kirigami.ScrollablePage {
 	function calculateContingency() {
 		if (cylinders.count === 0 || segments.count === 0)
 			return
-		var cylinderData = modelData(cylinders)
-		var segmentData = modelData(segments)
-		for (var i = 0; i < cylinderData.length; ++i)
-			cylinderData[i].use = diveMode.currentIndex === 1 ? cylinderData[i].use : 0
-		for (var j = 0; j < segmentData.length; ++j)
-			segmentData[j].divemode = diveMode.currentIndex === 2 ? 2 : segmentData[j].divemode
+		var cylinderData = []
+		for (var i = 0; i < cylinders.count; ++i) {
+			var cylinder = cylinders.get(i)
+			cylinderData.push({ "type": cylinder.type, "mix": cylinder.mix, "pressure": cylinder.pressure,
+				"use": diveMode.currentIndex === 1 ? cylinder.use : 0 })
+		}
+		var segmentData = []
+		for (var j = 0; j < segments.count; ++j) {
+			var segment = segments.get(j)
+			segmentData.push({ "depth": segment.depth, "duration": segment.duration, "gas": segment.gas,
+				"setpoint": segment.setpoint, "divemode": diveMode.currentIndex === 2 ? 2 : segment.divemode })
+		}
 		if (contingencyScenario === 0) {
 			segmentData[segmentData.length - 1].duration += contingencyDelta
 		} else if (contingencyScenario === 1) {
