@@ -231,6 +231,10 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantList decoSchedule = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false).value("schedule").toList();
 	QVERIFY(!decoSchedule.empty());
 	QVERIFY(decoSchedule.first().toMap().contains("gas"));
+	prefs.display_variations = true;
+	const QVariantMap variationResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	QVERIFY(!variationResult.value("notes").toString().contains("VARIATIONS"));
+	prefs.display_variations = false;
 	segment.insert("depth", 18);
 	segment.insert("duration", 20);
 	segments[0] = segment;
