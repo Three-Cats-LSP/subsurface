@@ -984,7 +984,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernStatisticsHub {
 		id: neoStatisticsHub
 		visible: false
-		onOpenStatistics: showPage(statistics)
 	}
 
 	NeoPages.CloudSyncPage {
