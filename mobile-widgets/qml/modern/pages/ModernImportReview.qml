@@ -17,6 +17,7 @@ Kirigami.Page {
 	property string connection: ""
 	property bool downloading: false
 	property bool importsReady: false
+	property string importError: ""
 	signal finished()
 
 	Modern.DesignTokens { id: tokens }
@@ -42,6 +43,7 @@ Kirigami.Page {
 	function startDownload() {
 		configureConnection()
 		importsReady = false
+		importError = ""
 		downloading = true
 		manager.progressMessage = ""
 		importModel.clearTable()
@@ -56,6 +58,18 @@ Kirigami.Page {
 	}
 
 	Component.onCompleted: startDownload()
+
+	Connections {
+		target: manager
+		function onErrorSignal() {
+			page.downloading = false
+			page.importError = manager.progressMessage.length > 0 ? manager.progressMessage : qsTr("The dive computer did not complete the import. Check the connection and try again.")
+		}
+		function onRestartDownloadSignal() {
+			if (page.downloading)
+				page.startDownload()
+		}
+	}
 
 	ColumnLayout {
 		anchors.fill: parent
@@ -75,6 +89,12 @@ Kirigami.Page {
 		}
 
 		Text { visible: !downloading && !importsReady; text: qsTr("No new dives were found. Check the connection and retry, or choose all dives in the Dive Computer Center."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Components.ModernCard {
+			visible: importError.length > 0
+			Layout.fillWidth: true
+			Text { text: qsTr("Connection needs attention"); color: tokens.accent; font.weight: Font.DemiBold }
+			Text { text: importError; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		}
 		Text { visible: importsReady; text: qsTr("%1 downloaded dives — select the entries to add to your log.").arg(importModel.rowCount()); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
 		ListView {
