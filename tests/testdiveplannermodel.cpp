@@ -221,6 +221,10 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantMap exceedsNdl = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, false);
 	QVERIFY(exceedsNdl.value("exceedsNDL").toBool());
 	QVERIFY(!exceedsNdl.value("planSaveAllowed").toBool());
+
+	const QVariantMap invalidStart = model->calculatePlan(cylinders, segments, "not-a-date", "not-a-time", OC, 10300, false);
+	QVERIFY(!invalidStart.value("planSaveAllowed").toBool());
+	QVERIFY(!invalidStart.value("notes").toString().isEmpty());
 	prefs = default_prefs;
 }
 

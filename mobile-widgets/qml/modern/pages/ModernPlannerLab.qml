@@ -20,6 +20,8 @@ Kirigami.ScrollablePage {
 	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
 	property string sacUnit: Backend.volume === Enums.LITER ? qsTr("L/min") : qsTr("cu ft/min")
 	property string speedUnit: Backend.length === Enums.METERS ? qsTr("m/min") : qsTr("ft/min")
+	property string plannedDate: Qt.formatDate(new Date(), "yyyy-MM-dd")
+	property string plannedTime: Qt.formatTime(new Date(), "hh:mm:ss")
 	property string planNotes: ""
 	property var profileData: []
 	property var schedule: []
@@ -47,7 +49,7 @@ Kirigami.ScrollablePage {
 		if (name.trim().length === 0)
 			return
 		var saved = plannerStorage.presets || []
-		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex,
+		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex, "plannedDate": plannedDate, "plannedTime": plannedTime,
 			"decoMode": Backend.planner_deco_mode, "gflow": Backend.planner_gflow, "gfhigh": Backend.planner_gfhigh, "vpmbConservatism": Backend.vpmb_conservatism,
 			"bottomSac": Backend.bottomsac, "decoSac": Backend.decosac, "reserveGas": Backend.reserve_gas, "bottomPo2": Backend.bottompo2 / 100, "decoPo2": Backend.decopo2 / 100,
 			"descentRate": Backend.descrate, "deepAscentRate": Backend.ascrate75, "midAscentRate": Backend.ascrate50, "decoAscentRate": Backend.ascratestops, "finalAscentRate": Backend.ascratelast6m,
@@ -70,6 +72,8 @@ Kirigami.ScrollablePage {
 		updateGasNames()
 		diveMode.currentIndex = preset.diveMode
 		waterType.currentIndex = preset.waterType
+		if (preset.plannedDate !== undefined) plannedDate = preset.plannedDate
+		if (preset.plannedTime !== undefined) plannedTime = preset.plannedTime
 		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
 		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
 		if (preset.gfhigh !== undefined) Backend.planner_gfhigh = preset.gfhigh
@@ -149,7 +153,7 @@ Kirigami.ScrollablePage {
 		}
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : 10200
 		var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData,
-			Qt.formatDate(new Date(), "yyyy-MM-dd"), Qt.formatTime(new Date(), "hh:mm:ss"),
+			plannedDate, plannedTime,
 			diveMode.currentIndex, salinity, savePlan === true)
 		planNotes = result.notes || ""
 		updateGasReference()
@@ -188,7 +192,7 @@ Kirigami.ScrollablePage {
 	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
@@ -264,9 +268,12 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Plan mode & environment"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
+				TextField { Layout.fillWidth: true; text: page.plannedDate; inputMask: "0000-00-00"; placeholderText: qsTr("Planned date (YYYY-MM-DD)"); onEditingFinished: { page.plannedDate = text; page.generatePlan() } }
+				TextField { Layout.fillWidth: true; text: page.plannedTime; inputMask: "00:00:00"; placeholderText: qsTr("Planned time (HH:MM:SS)"); onEditingFinished: { page.plannedTime = text; page.generatePlan() } }
 				ComboBox { id: diveMode; Layout.fillWidth: true; model: [qsTr("Open circuit"), qsTr("CCR"), qsTr("pSCR")]; onActivated: page.generatePlan() }
 				ComboBox { id: waterType; Layout.fillWidth: true; model: [qsTr("Sea water"), qsTr("Fresh water"), qsTr("EN13319")]; onActivated: page.generatePlan() }
 			}
+			Text { text: qsTr("For a later planned start, Subsurface initializes tissues from compatible logged dives and their surface intervals."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			CheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Deco on OC bailout"); checked: Backend.dobailout; onToggled: { Backend.dobailout = checked; page.generatePlan() } }
 			CheckBox { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL; text: qsTr("Calculate contingency variations"); checked: Backend.display_variations; onToggled: { Backend.display_variations = checked; page.generatePlan() } }
 			Text { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL && Backend.display_variations; text: qsTr("Subsurface adds the calculated contingencies to the plan notes below; the main schedule remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }

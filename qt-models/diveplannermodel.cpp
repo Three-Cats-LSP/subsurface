@@ -1507,6 +1507,16 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// Set Date, Time, and Dive Mode from parameters
 	QString dateTimeString = date + " " + time;
 	QDateTime plannedDateTime = QDateTime::fromString(dateTimeString, "yyyy-MM-dd hh:mm:ss");
+	if (!plannedDateTime.isValid()) {
+		QVariantMap results;
+		results["notes"] = tr("Enter a valid planned start date and time.");
+		results["exceedsNDL"] = false;
+		results["planSaveAllowed"] = false;
+		results["schedule"] = QVariantList();
+		results["profile"] = QVariantList();
+		results["newDiveId"] = -1;
+		return results;
+	}
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 	plannedDateTime = QDateTime(plannedDateTime.date(), plannedDateTime.time(), QTimeZone(QTimeZone::UTC));
 #else
