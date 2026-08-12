@@ -535,6 +535,8 @@ No upstream sync that materially changes decompression/planner output should be 
 
 **Exit:** sites and map are fully usable in the Neo UI.
 
+**Status:** Complete on `modern-ui`. Neo provides a searchable site explorer with canonical site metadata, associated-dive access, map focus, and undoable editing of site descriptions, notes, and validated coordinates through the established Subsurface site commands.
+
 ---
 
 ## Milestone 10 — Statistics
@@ -548,6 +550,8 @@ No upstream sync that materially changes decompression/planner output should be 
 - Responsive native/web chart layouts.
 
 **Exit:** the main statistics workflows no longer require the legacy UI.
+
+**Status:** Complete on `modern-ui`. Neo provides responsive headline statistics and directly hosts the established live Subsurface chart engine with variable, binning, operation, sort, and chart-type controls.
 
 ---
 
@@ -579,6 +583,8 @@ Features:
 - service/retirement information.
 
 **Exit:** common equipment configurations can be applied to dives in seconds.
+
+**Status:** Complete on `modern-ui`. Neo supports reusable/default kits applied in the Dive Editor, editable gear records with service and retirement state, and clearly labelled usage counts derived from logged gear text.
 
 ---
 
