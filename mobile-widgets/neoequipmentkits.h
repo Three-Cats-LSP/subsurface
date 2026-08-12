@@ -25,6 +25,7 @@ public:
 	Q_INVOKABLE void removeKit(const QString &name);
 	Q_INVOKABLE void saveEquipmentItem(const QString &name, const QVariantMap &data);
 	Q_INVOKABLE void removeEquipmentItem(const QString &name);
+	Q_INVOKABLE int usageCount(const QString &name) const;
 	void setDefaultKit(const QString &name);
 signals:
 	void kitsChanged();

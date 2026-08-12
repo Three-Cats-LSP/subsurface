@@ -5,6 +5,9 @@
 #include <QJsonObject>
 #include <QSettings>
 
+#include "core/dive.h"
+#include "core/divelog.h"
+
 NeoEquipmentKits::NeoEquipmentKits(QObject *parent) : QObject(parent)
 {
 	load();
@@ -101,6 +104,19 @@ void NeoEquipmentKits::removeEquipmentItem(const QString &name)
 			return;
 		}
 	}
+}
+
+int NeoEquipmentKits::usageCount(const QString &name) const
+{
+	const QString needle = name.trimmed();
+	if (needle.isEmpty())
+		return 0;
+	int count = 0;
+	for (const auto &dive : divelog.dives) {
+		if (dive && QString::fromStdString(dive->suit).contains(needle, Qt::CaseInsensitive))
+			++count;
+	}
+	return count;
 }
 
 void NeoEquipmentKits::setDefaultKit(const QString &name)

@@ -76,6 +76,7 @@ Kirigami.ScrollablePage {
 				Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
 				Text { text: [modelData.category, modelData.manufacturer, modelData.model].filter(function(value) { return value && value.length > 0 }).join(" / "); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1%2").arg(modelData.serviceDate).arg(modelData.serviceInterval ? qsTr(" · every %1").arg(modelData.serviceInterval) : ""); color: tokens.textMuted; font.pixelSize: 13 }
+				Text { text: qsTr("Used on %1 dives (matching gear text)").arg(NeoEquipmentKits.usageCount(modelData.name)); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { visible: modelData.retired === true; text: qsTr("Retired"); color: "#FBBF24"; font.pixelSize: 13 }
 				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editItem(modelData) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeEquipmentItem(modelData.name) } }
 			}
