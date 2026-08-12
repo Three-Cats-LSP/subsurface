@@ -43,6 +43,8 @@ Kirigami.ScrollablePage {
 	property string contingencyTextExport: ""
 	property string contingencyPdfExport: ""
 	property var inspectedProfileSample: null
+	property string activeProfileName: ""
+	property bool activeProfileModified: false
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
@@ -76,9 +78,66 @@ Kirigami.ScrollablePage {
 			"surfaceSegment": Backend.surface_segment, "problemSolvingTime": Backend.problemsolvingtime, "backGasBreaks": Backend.doo2breaks, "bailout": Backend.dobailout,
 			"defaultSetpoint": Backend.default_setpoint, "o2Narcotic": Backend.o2narcotic, "sacFactor": Backend.sacfactor }
 		for (var i = 0; i < saved.length; ++i) {
-			if (saved[i].name === preset.name) { saved[i] = preset; plannerStorage.presets = saved; return }
+			if (saved[i].name === preset.name) {
+				saved[i] = preset
+				plannerStorage.presets = saved
+				activeProfileName = preset.name
+				activeProfileModified = false
+				return
+			}
 		}
 		saved.push(preset)
+		plannerStorage.presets = saved
+		activeProfileName = preset.name
+		activeProfileModified = false
+	}
+	function profileLabel() {
+		if (activeProfileName.length === 0)
+			return qsTr("Custom")
+		return activeProfileModified ? qsTr("%1 — Modified").arg(activeProfileName) : activeProfileName
+	}
+	function markProfileModified() {
+		if (activeProfileName.length > 0)
+			activeProfileModified = true
+	}
+	function renamePreset(index, name) {
+		var trimmedName = name.trim()
+		var saved = plannerStorage.presets || []
+		if (trimmedName.length === 0 || !saved[index])
+			return
+		for (var i = 0; i < saved.length; ++i) {
+			if (i !== index && saved[i].name === trimmedName)
+				return
+		}
+		var oldName = saved[index].name
+		saved[index].name = trimmedName
+		plannerStorage.presets = saved
+		if (activeProfileName === oldName)
+			activeProfileName = trimmedName
+	}
+	function duplicatePreset(index) {
+		var saved = plannerStorage.presets || []
+		var source = saved[index]
+		if (!source)
+			return
+		var copy = {}
+		for (var key in source)
+			copy[key] = source[key]
+		var baseName = qsTr("%1 copy").arg(source.name)
+		copy.name = baseName
+		var suffix = 2
+		var hasName = true
+		while (hasName) {
+			hasName = false
+			for (var i = 0; i < saved.length; ++i) {
+				if (saved[i].name === copy.name) {
+					hasName = true
+					copy.name = baseName + " " + suffix++
+					break
+				}
+			}
+		}
+		saved.push(copy)
 		plannerStorage.presets = saved
 	}
 	function loadPreset(index) {
@@ -120,7 +179,9 @@ Kirigami.ScrollablePage {
 		if (preset.defaultSetpoint !== undefined) Backend.default_setpoint = preset.defaultSetpoint
 		if (preset.o2Narcotic !== undefined) Backend.o2narcotic = preset.o2Narcotic
 		if (preset.sacFactor !== undefined) Backend.sacfactor = preset.sacFactor
-		generatePlan()
+		activeProfileName = preset.name
+		activeProfileModified = false
+		generatePlan(false, true)
 	}
 
 	function updateGasNames() {
@@ -157,9 +218,11 @@ Kirigami.ScrollablePage {
 			"divemode": last ? last.divemode : 0 })
 		generatePlan()
 	}
-	function generatePlan(savePlan) {
+	function generatePlan(savePlan, retainActiveProfile) {
 		if (cylinders.count === 0 || segments.count === 0)
 			return
+		if (!retainActiveProfile)
+			markProfileModified()
 		var cylinderData = []
 		for (var i = 0; i < cylinders.count; ++i) {
 			var cylinder = cylinders.get(i)
@@ -217,7 +280,7 @@ Kirigami.ScrollablePage {
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
 		contingencyResult = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData, plannedDate, plannedTime,
 			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
-		generatePlan(false)
+		generatePlan(false, true)
 	}
 	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : contingencyScenario === 1 ? qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) : qsTr("Lost gas: %1").arg(gasNames[contingencyGasIndex] || qsTr("selected gas")) }
 	function contingencySlate() {
@@ -281,7 +344,7 @@ Kirigami.ScrollablePage {
 	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Profile: %1").arg(profileLabel()), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")]
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
@@ -337,8 +400,19 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Personal presets save the exact Neo/Subsurface planner inputs shown below. Compatibility labels are unavailable until their external settings and fixtures are verified."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }; Button { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
-			Repeater { model: plannerStorage.presets; delegate: RowLayout { required property int index; required property var modelData; Layout.fillWidth: true; Label { text: modelData.name; color: tokens.textPrimary; Layout.fillWidth: true }; Button { text: qsTr("Load"); onClicked: page.loadPreset(index) }; Button { text: qsTr("Remove"); onClicked: { var saved = plannerStorage.presets || []; saved.splice(index, 1); plannerStorage.presets = saved } } } }
+			Repeater { model: plannerStorage.presets; delegate: RowLayout {
+				required property int index
+				required property var modelData
+				Layout.fillWidth: true
+				TextField { id: savedPresetName; Layout.fillWidth: true; text: modelData.name }
+				Button { text: qsTr("Load"); onClicked: page.loadPreset(index) }
+				Button { text: qsTr("Rename"); enabled: savedPresetName.text.trim().length > 0 && savedPresetName.text !== modelData.name; onClicked: page.renamePreset(index, savedPresetName.text) }
+				Button { text: qsTr("Duplicate"); onClicked: page.duplicatePreset(index) }
+				Button { text: qsTr("Remove"); onClicked: { var removedName = modelData.name; var saved = plannerStorage.presets || []; saved.splice(index, 1); plannerStorage.presets = saved; if (page.activeProfileName === removedName) { page.activeProfileName = ""; page.activeProfileModified = false } } }
+			} }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
@@ -499,7 +573,7 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
 				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
 			} }
-			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan(false, true) }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) } }
 			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 			Label { visible: page.plannerPdfExport.length > 0; text: qsTr("Planner PDF saved: %1").arg(page.plannerPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
