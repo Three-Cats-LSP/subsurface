@@ -47,7 +47,13 @@ Kirigami.ScrollablePage {
 		if (name.trim().length === 0)
 			return
 		var saved = plannerStorage.presets || []
-		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex }
+		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex,
+			"decoMode": Backend.planner_deco_mode, "gflow": Backend.planner_gflow, "gfhigh": Backend.planner_gfhigh, "vpmbConservatism": Backend.vpmb_conservatism,
+			"bottomSac": Backend.bottomsac, "decoSac": Backend.decosac, "reserveGas": Backend.reserve_gas, "bottomPo2": Backend.bottompo2 / 100, "decoPo2": Backend.decopo2 / 100,
+			"descentRate": Backend.descrate, "deepAscentRate": Backend.ascrate75, "midAscentRate": Backend.ascrate50, "decoAscentRate": Backend.ascratestops, "finalAscentRate": Backend.ascratelast6m,
+			"dropToFirstDepth": Backend.drop_stone_mode, "lastStop6m": Backend.last_stop6m, "switchAtRequiredStop": Backend.switch_at_req_stop, "minSwitchDuration": Backend.min_switch_duration,
+			"surfaceSegment": Backend.surface_segment, "problemSolvingTime": Backend.problemsolvingtime, "backGasBreaks": Backend.doo2breaks, "bailout": Backend.dobailout,
+			"defaultSetpoint": Backend.default_setpoint, "o2Narcotic": Backend.o2narcotic, "sacFactor": Backend.sacfactor }
 		for (var i = 0; i < saved.length; ++i) {
 			if (saved[i].name === preset.name) { saved[i] = preset; plannerStorage.presets = saved; return }
 		}
@@ -64,6 +70,31 @@ Kirigami.ScrollablePage {
 		updateGasNames()
 		diveMode.currentIndex = preset.diveMode
 		waterType.currentIndex = preset.waterType
+		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
+		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
+		if (preset.gfhigh !== undefined) Backend.planner_gfhigh = preset.gfhigh
+		if (preset.vpmbConservatism !== undefined) Backend.vpmb_conservatism = preset.vpmbConservatism
+		if (preset.bottomSac !== undefined) Backend.bottomsac = preset.bottomSac
+		if (preset.decoSac !== undefined) Backend.decosac = preset.decoSac
+		if (preset.reserveGas !== undefined) Backend.reserve_gas = preset.reserveGas
+		if (preset.bottomPo2 !== undefined) Backend.bottompo2 = preset.bottomPo2
+		if (preset.decoPo2 !== undefined) Backend.decopo2 = preset.decoPo2
+		if (preset.descentRate !== undefined) Backend.descrate = preset.descentRate
+		if (preset.deepAscentRate !== undefined) Backend.ascrate75 = preset.deepAscentRate
+		if (preset.midAscentRate !== undefined) Backend.ascrate50 = preset.midAscentRate
+		if (preset.decoAscentRate !== undefined) Backend.ascratestops = preset.decoAscentRate
+		if (preset.finalAscentRate !== undefined) Backend.ascratelast6m = preset.finalAscentRate
+		if (preset.dropToFirstDepth !== undefined) Backend.drop_stone_mode = preset.dropToFirstDepth
+		if (preset.lastStop6m !== undefined) Backend.last_stop6m = preset.lastStop6m
+		if (preset.switchAtRequiredStop !== undefined) Backend.switch_at_req_stop = preset.switchAtRequiredStop
+		if (preset.minSwitchDuration !== undefined) Backend.min_switch_duration = preset.minSwitchDuration
+		if (preset.surfaceSegment !== undefined) Backend.surface_segment = preset.surfaceSegment
+		if (preset.problemSolvingTime !== undefined) Backend.problemsolvingtime = preset.problemSolvingTime
+		if (preset.backGasBreaks !== undefined) Backend.doo2breaks = preset.backGasBreaks
+		if (preset.bailout !== undefined) Backend.dobailout = preset.bailout
+		if (preset.defaultSetpoint !== undefined) Backend.default_setpoint = preset.defaultSetpoint
+		if (preset.o2Narcotic !== undefined) Backend.o2narcotic = preset.o2Narcotic
+		if (preset.sacFactor !== undefined) Backend.sacfactor = preset.sacFactor
 		generatePlan()
 	}
 
