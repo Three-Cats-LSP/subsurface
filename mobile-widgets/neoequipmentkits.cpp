@@ -11,6 +11,7 @@ NeoEquipmentKits::NeoEquipmentKits(QObject *parent) : QObject(parent)
 }
 
 QVariantList NeoEquipmentKits::kits() const { return m_kits; }
+QVariantList NeoEquipmentKits::equipmentItems() const { return m_equipmentItems; }
 QStringList NeoEquipmentKits::recentKitNames() const { return m_recentKitNames; }
 QString NeoEquipmentKits::defaultKit() const { return m_defaultKit; }
 
@@ -71,6 +72,37 @@ void NeoEquipmentKits::removeKit(const QString &name)
 	}
 }
 
+void NeoEquipmentKits::saveEquipmentItem(const QString &name, const QVariantMap &data)
+{
+	if (name.trimmed().isEmpty())
+		return;
+	QVariantMap itemData = data;
+	itemData["name"] = name.trimmed();
+	for (int i = 0; i < m_equipmentItems.size(); ++i) {
+		if (m_equipmentItems[i].toMap().value("name").toString() == itemData.value("name").toString()) {
+			m_equipmentItems[i] = itemData;
+			save();
+			emit equipmentItemsChanged();
+			return;
+		}
+	}
+	m_equipmentItems.append(itemData);
+	save();
+	emit equipmentItemsChanged();
+}
+
+void NeoEquipmentKits::removeEquipmentItem(const QString &name)
+{
+	for (int i = 0; i < m_equipmentItems.size(); ++i) {
+		if (m_equipmentItems[i].toMap().value("name").toString() == name) {
+			m_equipmentItems.removeAt(i);
+			save();
+			emit equipmentItemsChanged();
+			return;
+		}
+	}
+}
+
 void NeoEquipmentKits::setDefaultKit(const QString &name)
 {
 	if (m_defaultKit == name)
@@ -86,6 +118,7 @@ void NeoEquipmentKits::load()
 	const QJsonDocument document = QJsonDocument::fromJson(settings.value("subsurface-neo/equipment-kits").toByteArray());
 	if (document.isObject()) {
 		m_kits = document.object().value("kits").toArray().toVariantList();
+		m_equipmentItems = document.object().value("equipmentItems").toArray().toVariantList();
 		m_defaultKit = document.object().value("defaultKit").toString();
 		m_recentKitNames = document.object().value("recentKitNames").toVariant().toStringList();
 	}
@@ -96,6 +129,7 @@ void NeoEquipmentKits::save() const
 	QSettings settings;
 	QJsonObject object;
 	object["kits"] = QJsonArray::fromVariantList(m_kits);
+	object["equipmentItems"] = QJsonArray::fromVariantList(m_equipmentItems);
 	object["defaultKit"] = m_defaultKit;
 	object["recentKitNames"] = QJsonArray::fromStringList(m_recentKitNames);
 	settings.setValue("subsurface-neo/equipment-kits", QJsonDocument(object).toJson(QJsonDocument::Compact));
