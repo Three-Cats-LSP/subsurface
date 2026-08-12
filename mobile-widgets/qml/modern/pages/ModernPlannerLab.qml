@@ -26,6 +26,7 @@ Kirigami.ScrollablePage {
 	property bool planSaveAllowed: false
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
+	property var gasReference: []
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
@@ -65,6 +66,21 @@ Kirigami.ScrollablePage {
 			names.push(qsTr("Gas %1").arg(i + 1))
 		gasNames = names
 	}
+	function updateGasReference() {
+		var references = []
+		for (var i = 0; i < cylinders.count; ++i) {
+			var cylinder = cylinders.get(i)
+			var parts = String(cylinder.mix).split("/")
+			var parsedO2 = Number(parts[0])
+			var o2 = isNaN(parsedO2) ? 21 : Math.max(0, Math.min(100, parsedO2))
+			var parsedHe = Number(parts.length > 1 ? parts[1] : 0)
+			var he = isNaN(parsedHe) ? 0 : Math.max(0, Math.min(100 - o2, parsedHe))
+			var values = Backend.divePlannerPointsModel.calculateGasInfo(cylinder.type, Math.round(o2 * 10), Math.round(he * 10))
+			var reference = values.length > 4 ? values[4] : ({})
+			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he, "mod": reference.mod || "—", "ead": reference.ead || "—" })
+		}
+		gasReference = references
+	}
 	function addCylinder() {
 		cylinders.append({ "type": PrefEquipment.default_cylinder || "AL80", "mix": "21/0",
 			"pressure": Backend.pressure === Enums.BAR ? 200 : 3000, "use": 0 })
@@ -98,6 +114,7 @@ Kirigami.ScrollablePage {
 			Qt.formatDate(new Date(), "yyyy-MM-dd"), Qt.formatTime(new Date(), "hh:mm:ss"),
 			diveMode.currentIndex, salinity, savePlan === true)
 		planNotes = result.notes || ""
+		updateGasReference()
 		profileData = result.profile || []
 		schedule = result.schedule || []
 		exceedsNDL = result.exceedsNDL === true
@@ -217,6 +234,8 @@ Kirigami.ScrollablePage {
 				TextField { Layout.fillWidth: true; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
 				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }; Button { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
 			} }
+			Text { visible: page.gasReference.length > 0; text: qsTr("Gas reference at pO₂ 1.4 bar"); color: tokens.textSecondary; font.weight: Font.DemiBold }
+			Repeater { model: page.gasReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: modelData.name + " " + modelData.mix; color: tokens.textMuted; Layout.fillWidth: true }; Label { text: qsTr("MOD %1").arg(modelData.mod); color: tokens.textPrimary }; Label { text: (Backend.o2narcotic ? qsTr("END %1") : qsTr("EAD %1")).arg(modelData.ead); color: tokens.textPrimary } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
