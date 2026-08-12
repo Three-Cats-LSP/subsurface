@@ -11,13 +11,24 @@ Kirigami.ScrollablePage {
 	title: qsTr("Dive sites")
 	background: Rectangle { color: tokens.background }
 	signal openMap()
+	property string siteFilter: ""
 	Modern.DesignTokens { id: tokens }
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
 		Text { text: qsTr("Sites, locations, and maps"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; Layout.fillWidth: true }
 		Text { text: qsTr("Your log currently contains %1 saved locations.").arg(manager.locationList.length); color: tokens.textSecondary; Layout.fillWidth: true }
-		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Explore dive sites"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established Subsurface map and site model to view markers, associated dives, coordinates, and location details."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open map"); onClicked: page.openMap() } }
+		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Explore dive sites"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; TextField { Layout.fillWidth: true; placeholderText: qsTr("Search sites"); onTextEdited: page.siteFilter = text.toLowerCase() }; Button { Layout.fillWidth: true; text: qsTr("Open map"); onClicked: page.openMap() } }
+		Repeater {
+			model: manager.locationList
+			delegate: Components.ModernCard {
+				required property string modelData
+				visible: page.siteFilter.length === 0 || modelData.toLowerCase().indexOf(page.siteFilter) >= 0
+				Layout.fillWidth: true
+				Text { text: modelData; color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.Medium; Layout.fillWidth: true }
+				Button { text: qsTr("Show on map"); onClicked: page.openMap() }
+			}
+		}
 		Text { text: qsTr("Site edits remain stored in canonical Subsurface site data so they appear consistently in every compatible client."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 	}
 }
