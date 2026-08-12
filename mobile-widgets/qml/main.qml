@@ -410,8 +410,7 @@ Kirigami.ApplicationWindow {
 					enabled: true
 					onTriggered: {
 						globalDrawer.close()
-						downloadFromDc.dcImportModel.clearTable()
-						showPageFromDrawer(downloadFromDc)
+						showPageFromDrawer(neoDiveComputerCenter)
 					}
 				}
 				Kirigami.Action {
@@ -902,7 +901,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		id: neoDashboard
 		visible: false
 		onOpenDiveList: showPageFromDrawer(modernDiveList)
-		onOpenImport: showDownloadPage()
+		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
 		onOpenCloudSync: showPage(cloudSyncPage)
 	}
 
@@ -913,8 +912,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			manager.selectRow(row)
 			showPage(detailsWindow)
 		}
-		onDownloadRequested: showDownloadPage()
+		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
 		onAddDiveRequested: startAddDive()
+	}
+
+	NeoPages.ModernDiveComputerCenter {
+		id: neoDiveComputerCenter
+		visible: false
+		onOpenNativeImport: function(vendor, product, connection) { showDownloadPage(vendor, product, connection) }
 	}
 
 	NeoPages.CloudSyncPage {
