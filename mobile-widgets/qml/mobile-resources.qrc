@@ -57,6 +57,9 @@
 		<file>modern/pages/ModernPlannerLab.qml</file>
 		<file>modern/pages/ModernOperationsHub.qml</file>
 		<file>modern/pages/ModernEquipmentLibrary.qml</file>
+		<file>modern/pages/ModernDataPortability.qml</file>
+		<file>modern/pages/ModernSitesHub.qml</file>
+		<file>modern/pages/ModernStatisticsHub.qml</file>
 		<file>modern/pages/CloudSyncPage.qml</file>
 
 		<file>SsrfSwitch.qml</file>

@@ -26,15 +26,17 @@ Kirigami.ApplicationWindow {
 		visible: initialized && !startPage.visible &&
 			(pageStack.currentItem === neoDashboard ||
 			 pageStack.currentItem === modernDiveList ||
+			 pageStack.currentItem === neoSitesHub ||
+			 pageStack.currentItem === neoStatisticsHub ||
 			 pageStack.currentItem === mapPage ||
 			 pageStack.currentItem === statistics)
 		currentSection: pageStack.currentItem === modernDiveList ? "dives" :
-			pageStack.currentItem === mapPage ? "sites" :
-			pageStack.currentItem === statistics ? "stats" : "home"
+			(pageStack.currentItem === neoSitesHub || pageStack.currentItem === mapPage) ? "sites" :
+			(pageStack.currentItem === neoStatisticsHub || pageStack.currentItem === statistics) ? "stats" : "home"
 		onHomeRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
-		onSitesRequested: showPageFromDrawer(mapPage)
-		onStatsRequested: showPageFromDrawer(statistics)
+		onSitesRequested: showPageFromDrawer(neoSitesHub)
+		onStatsRequested: showPageFromDrawer(neoStatisticsHub)
 		onMoreRequested: globalDrawer.open()
 	}
 
@@ -948,13 +950,33 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenSites: showPage(mapPage)
 		onOpenStatistics: showPage(statistics)
 		onOpenEquipment: showPage(neoEquipmentLibrary)
-		onOpenExport: showPage(exportWindow)
+		onOpenExport: showPage(neoDataPortability)
 		onOpenRecovery: showPage(recoverCache)
 	}
 
 	NeoPages.ModernEquipmentLibrary {
 		id: neoEquipmentLibrary
 		visible: false
+	}
+
+	NeoPages.ModernDataPortability {
+		id: neoDataPortability
+		visible: false
+		onOpenExport: showPage(exportWindow)
+		onOpenRecovery: showPage(recoverCache)
+		onOpenCloudBackup: showPage(cloudSyncPage)
+	}
+
+	NeoPages.ModernSitesHub {
+		id: neoSitesHub
+		visible: false
+		onOpenMap: showPage(mapPage)
+	}
+
+	NeoPages.ModernStatisticsHub {
+		id: neoStatisticsHub
+		visible: false
+		onOpenStatistics: showPage(statistics)
 	}
 
 	NeoPages.CloudSyncPage {
