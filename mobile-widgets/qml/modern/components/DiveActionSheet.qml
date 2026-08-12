@@ -16,6 +16,7 @@ Dialog {
 
 	property var dive: null
 	signal openDive(int row)
+	signal addToCollectionRequested(int diveId)
 
 	Modern.DesignTokens { id: tokens }
 
@@ -64,6 +65,12 @@ Dialog {
 			Layout.fillWidth: true
 			text: qsTr("Open dive")
 			onClicked: sheet.closeAndRun(function() { sheet.openDive(sheet.dive.row) })
+		}
+
+		Button {
+			Layout.fillWidth: true
+			text: qsTr("Add to collection")
+			onClicked: sheet.closeAndRun(function() { sheet.addToCollectionRequested(sheet.dive.id) })
 		}
 
 		Button {

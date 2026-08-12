@@ -2,6 +2,7 @@
 
 set(SUBSURFACE_MOBILE_SRCS
 	neodashboardmodel.cpp
+	neodivecollections.cpp
 	neoequipmentkits.cpp
 	neoupdatecheck.cpp
 	qmlinterface.cpp

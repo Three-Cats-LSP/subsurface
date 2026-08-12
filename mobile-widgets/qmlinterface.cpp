@@ -2,6 +2,7 @@
 #include "qmlinterface.h"
 #include "qmlmanager.h"
 #include "neodashboardmodel.h"
+#include "neodivecollections.h"
 #include "neoequipmentkits.h"
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
@@ -109,6 +110,8 @@ void QMLInterface::setup(QQmlContext *ct)
 
 	static NeoDashboardModel neoDashboardModel;
 	ct->setContextProperty("NeoDashboard", &neoDashboardModel);
+	static NeoDiveCollections neoDiveCollections;
+	ct->setContextProperty("NeoDiveCollections", &neoDiveCollections);
 	static NeoEquipmentKits neoEquipmentKits;
 	ct->setContextProperty("NeoEquipmentKits", &neoEquipmentKits);
 

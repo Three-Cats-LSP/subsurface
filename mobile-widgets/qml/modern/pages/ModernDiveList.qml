@@ -14,6 +14,8 @@ Kirigami.Page {
 	property QtObject diveListModel: null
 	property bool filterVisible: false
 	property bool advancedFiltersVisible: false
+	property string activeCollection: ""
+	property var activeCollectionDiveIds: []
 
 	signal openDive(int row)
 	signal downloadRequested()
@@ -44,9 +46,28 @@ Kirigami.Page {
 			suitField.text, computerField.text, depthField.text, durationField.text, yearField.text)
 	}
 
+	function selectCollection(name) {
+		activeCollection = name
+		activeCollectionDiveIds = name.length > 0 ? NeoDiveCollections.diveIds(name) : []
+	}
+
+	function openCollections(diveId) {
+		collectionsDialog.collectionDiveId = diveId === undefined ? -1 : diveId
+		collectionsDialog.open()
+	}
+
 	Components.DiveActionSheet {
 		id: diveActions
 		onOpenDive: function(row) { page.openDive(row) }
+		onAddToCollectionRequested: function(diveId) { page.openCollections(diveId) }
+	}
+
+	Connections {
+		target: NeoDiveCollections
+		function onCollectionsChanged() {
+			if (page.activeCollection.length > 0)
+				page.activeCollectionDiveIds = NeoDiveCollections.diveIds(page.activeCollection)
+		}
 	}
 
 	ColumnLayout {
@@ -83,6 +104,48 @@ Kirigami.Page {
 				}
 			}
 			Button { text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+			Button { text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+		}
+
+		Dialog {
+			id: collectionsDialog
+			parent: Overlay.overlay
+			anchors.centerIn: parent
+			width: Math.min(page.width - tokens.space24 * 2, 460)
+			title: qsTr("Collections")
+			modal: true
+			standardButtons: Dialog.Close
+			property int collectionDiveId: -1
+			ColumnLayout {
+				width: parent.width
+				spacing: tokens.space8
+				RowLayout {
+					Layout.fillWidth: true
+					TextField { id: collectionName; Layout.fillWidth: true; placeholderText: qsTr("New collection") }
+					Button { text: qsTr("Create"); enabled: collectionName.text.trim().length > 0; onClicked: { NeoDiveCollections.create(collectionName.text); collectionName.clear() } }
+				}
+				Button { Layout.fillWidth: true; text: qsTr("Show all dives"); checkable: true; checked: page.activeCollection.length === 0; onClicked: { page.selectCollection(""); collectionsDialog.close() } }
+				Text { visible: NeoDiveCollections.names.length === 0; text: qsTr("Collections keep your chosen dive IDs in Neo metadata without changing the dive log."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Repeater {
+					model: NeoDiveCollections.names
+					delegate: RowLayout {
+						required property string modelData
+						Layout.fillWidth: true
+						Button {
+							text: collectionsDialog.collectionDiveId >= 0 ? qsTr("Add to %1").arg(modelData) : modelData
+							Layout.fillWidth: true
+							onClicked: {
+								if (collectionsDialog.collectionDiveId >= 0)
+									NeoDiveCollections.addDive(modelData, collectionsDialog.collectionDiveId)
+								else
+									page.selectCollection(modelData)
+								collectionsDialog.close()
+							}
+						}
+						Button { text: qsTr("Remove"); onClicked: { if (page.activeCollection === modelData) page.selectCollection(""); NeoDiveCollections.remove(modelData) } }
+					}
+				}
+			}
 		}
 
 		Dialog {
@@ -171,8 +234,9 @@ Kirigami.Page {
 				required property int index
 				property var modelData: model
 				property bool longPressTriggered: false
+				property bool collectionMatch: page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0
 				width: listView.width
-				height: modelData.isTrip ? 64 : diveCard.implicitHeight
+				height: modelData.isTrip ? 64 : (collectionMatch ? diveCard.implicitHeight : 0)
 
 				Rectangle {
 					anchors.fill: parent
@@ -215,7 +279,7 @@ Kirigami.Page {
 
 				Components.ModernCard {
 					id: diveCard
-					visible: !delegateRoot.modelData.isTrip
+					visible: !delegateRoot.modelData.isTrip && delegateRoot.collectionMatch
 					width: parent.width
 					padding: tokens.space12
 					border.width: delegateRoot.modelData.current ? 1 : 0
