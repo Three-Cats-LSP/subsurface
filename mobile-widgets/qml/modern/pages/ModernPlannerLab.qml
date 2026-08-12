@@ -315,11 +315,13 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Calculated profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 4 : 2
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Components.MetricCard { label: qsTr("NDL"); value: page.formatDuration(page.finalSampleValue("ndl", -1)); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("TTS"); value: page.formatDuration(page.finalSampleValue("tts", -1)); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Ceiling"); value: page.finalSampleValue("ceiling", 0) > 0 ? (page.finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) : "—"; suffix: page.finalSampleValue("ceiling", 0) > 0 ? page.depthUnit : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("CNS"); value: page.finalSampleValue("cns", 0) > 0 ? String(page.finalSampleValue("cns", 0)) : "—"; suffix: page.finalSampleValue("cns", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
+				Components.MetricCard { label: qsTr("Current GF"); value: page.finalSampleValue("gf", 0) > 0 ? page.finalSampleValue("gf", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("gf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
+				Components.MetricCard { label: qsTr("Surface GF"); value: page.finalSampleValue("surfaceGf", 0) > 0 ? page.finalSampleValue("surfaceGf", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("surfaceGf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 			}
 			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 190; onPaint: {
 				var ctx = getContext("2d"); ctx.reset(); if (page.profileData.length < 2) return

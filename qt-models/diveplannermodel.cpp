@@ -10,6 +10,7 @@
 #include "qt-models/cylindermodel.h"
 #include "core/metrics.h" // For defaultModelFont().
 #include "core/planner.h"
+#include "core/profile.h"
 #include "core/device.h"
 #include "core/qthelper.h"
 #include "core/range.h"
@@ -1585,11 +1586,13 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// Run the planner engine
 	// AI-generated (Claude)
 	planner_error_t planError = PLAN_OK;
+	struct deco_state plan_deco_state;
+	bool has_planner_deco_state = false;
 	std::vector<decostop> decostops;
 	if (!diveplan.is_empty()) {
 		deco_state_cache cache;
-		struct deco_state plan_deco_state;
 		planError = plan(&plan_deco_state, diveplan, d, dcNr, 60, cache, true, shouldSave, &decostops);
+		has_planner_deco_state = true;
 		if (shouldComputeVariations()) {
 			QString variations = computeVariations(plan_copy, plan_deco_state, nullptr);
 			if (!variations.isEmpty()) {
@@ -1642,6 +1645,10 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 
 	QVariantList profileData;
 	if (d->dcs.size() > 0) {
+		// Project the planner's established tissue/GF results for display only.
+		const plot_info plot = has_planner_deco_state
+			? create_plot_info_new(d, &d->dcs[0], &plan_deco_state)
+			: create_plot_info_new(d, &d->dcs[0], nullptr);
 		for (const struct sample &sample : d->dcs[0].samples) {
 			QVariantMap point;
 			point["time"] = sample.time.seconds;
@@ -1653,6 +1660,19 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			point["cns"] = sample.cns;
 			point["setpoint"] = sample.setpoint.mbar;
 			point["inDeco"] = sample.in_deco;
+			if (!plot.entry.empty()) {
+				auto plotIt = std::lower_bound(plot.entry.begin(), plot.entry.end(), sample.time.seconds,
+					[](const plot_data &entry, int time) { return entry.sec < time; });
+				if (plotIt == plot.entry.end())
+					plotIt = std::prev(plot.entry.end());
+				else if (plotIt != plot.entry.begin()) {
+					auto previous = std::prev(plotIt);
+					if (sample.time.seconds - previous->sec <= plotIt->sec - sample.time.seconds)
+						plotIt = previous;
+				}
+				point["gf"] = plotIt->current_gf * 100.0;
+				point["surfaceGf"] = plotIt->surface_gf;
+			}
 			profileData.append(point);
 		}
 	}

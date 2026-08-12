@@ -213,6 +213,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("tts"));
 	QVERIFY(lastSample.contains("ceiling"));
 	QVERIFY(lastSample.contains("cns"));
+	QVERIFY(lastSample.contains("gf"));
+	QVERIFY(lastSample.contains("surfaceGf"));
 
 	prefs.planner_deco_mode = RECREATIONAL;
 	segment.insert("depth", 50);
