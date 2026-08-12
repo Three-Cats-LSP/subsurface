@@ -8,6 +8,7 @@
 #include "core/subsurface-float.h"
 #include "core/metrics.h"
 #include "core/profile.h"
+#include "core/qthelper.h"
 #include "core/sample.h"
 #include "core/subsurface-string.h"
 #include "core/units.h"
@@ -340,8 +341,9 @@ void QMLProfile::prevDC()
 QVariantList QMLProfile::profileMarkers() const
 {
 	QVariantList result;
+	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
 	const divecomputer *dc = currentDiveComputer();
-	if (!dc || dc->samples.empty())
+	if (!d || !dc || dc->samples.empty())
 		return result;
 
 	const int lastTime = std::max(1, dc->samples.back().time.seconds);
@@ -351,9 +353,18 @@ QVariantList QMLProfile::profileMarkers() const
 		QVariantMap marker;
 		marker["fraction"] = std::clamp(qreal(profileEvent.time.seconds) / qreal(lastTime), qreal(0.0), qreal(1.0));
 		marker["gasSwitch"] = profileEvent.is_gaschange();
-		marker["label"] = profileEvent.is_gaschange() ? tr("Gas switch")
-			: profileEvent.is_divemodechange() ? tr("Mode change")
-			: QString::fromStdString(profileEvent.name);
+		marker["time"] = QStringLiteral("%1:%2")
+			.arg(profileEvent.time.seconds / 60)
+			.arg(profileEvent.time.seconds % 60, 2, 10, QLatin1Char('0'));
+		if (profileEvent.is_gaschange()) {
+			auto [mix, divemode] = d->get_gasmix_from_event(profileEvent, *dc);
+			Q_UNUSED(divemode);
+			marker["label"] = tr("Gas switch to %1").arg(get_gas_string(mix));
+		} else if (profileEvent.is_divemodechange()) {
+			marker["label"] = tr("Mode change");
+		} else {
+			marker["label"] = QString::fromStdString(profileEvent.name);
+		}
 		result.append(marker);
 	}
 	return result;

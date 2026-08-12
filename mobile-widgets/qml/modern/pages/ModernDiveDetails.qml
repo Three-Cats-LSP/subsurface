@@ -372,16 +372,27 @@ Kirigami.Page {
 
 									Repeater {
 										model: profile.profileMarkers
-										delegate: Rectangle {
+										delegate: Item {
+											id: markerDelegate
 											required property var modelData
-											width: 2
+											property bool pinned: false
+											width: 24
 											height: parent.height
-											x: Math.max(0, Math.min(parent.width - width, modelData.fraction * parent.width - width / 2))
-											color: modelData.gasSwitch ? tokens.warning : tokens.accent
-											opacity: 0.7
-											ToolTip.visible: markerHover.containsMouse
-											ToolTip.text: modelData.label
+											x: Math.max(-width / 2, Math.min(parent.width - width / 2, modelData.fraction * parent.width - width / 2))
+											Accessible.name: qsTr("%1 at %2").arg(modelData.label).arg(modelData.time)
+											Accessible.role: Accessible.Button
+											ToolTip.visible: markerHover.hovered || pinned
+											ToolTip.text: qsTr("%1 at %2").arg(modelData.label).arg(modelData.time)
 											HoverHandler { id: markerHover }
+											TapHandler { onTapped: markerDelegate.pinned = !markerDelegate.pinned }
+
+											Rectangle {
+												anchors.horizontalCenter: parent.horizontalCenter
+												width: 2
+												height: parent.height
+												color: parent.modelData.gasSwitch ? tokens.warning : tokens.accent
+												opacity: parent.pinned ? 1.0 : 0.7
+											}
 										}
 									}
 									Rectangle {
