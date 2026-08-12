@@ -2156,6 +2156,9 @@ static QString exportNeoPdfDocument(const QString &directory, const QString &con
 	QPdfWriter writer(output);
 	writer.setTitle(title);
 	writer.setCreator(QStringLiteral("Subsurface Neo"));
+	QPageLayout layout = writer.pageLayout();
+	layout.setMargins(QMarginsF(18, 18, 18, 18));
+	writer.setPageLayout(layout);
 	QPainter painter(&writer);
 	if (!painter.isActive())
 		return {};
