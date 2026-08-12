@@ -35,13 +35,16 @@ Kirigami.ScrollablePage {
 		itemModel.text = data.model || ""
 		itemSerial.text = data.serial || ""
 		itemServiceDate.text = data.serviceDate || ""
+		itemServiceInterval.text = data.serviceInterval || ""
+		itemRetired.checked = data.retired === true
 		itemNotes.text = data.notes || ""
 		itemEditor.open()
 	}
 	function saveEditedItem() {
 		NeoEquipmentKits.saveEquipmentItem(itemName.text, { "category": itemCategory.text,
 			"manufacturer": itemManufacturer.text, "model": itemModel.text, "serial": itemSerial.text,
-			"serviceDate": itemServiceDate.text, "notes": itemNotes.text })
+			"serviceDate": itemServiceDate.text, "serviceInterval": itemServiceInterval.text,
+			"retired": itemRetired.checked, "notes": itemNotes.text })
 		itemEditor.close()
 	}
 	ColumnLayout {
@@ -72,7 +75,8 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
 				Text { text: [modelData.category, modelData.manufacturer, modelData.model].filter(function(value) { return value && value.length > 0 }).join(" / "); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1").arg(modelData.serviceDate); color: tokens.textMuted; font.pixelSize: 13 }
+				Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1%2").arg(modelData.serviceDate).arg(modelData.serviceInterval ? qsTr(" · every %1").arg(modelData.serviceInterval) : ""); color: tokens.textMuted; font.pixelSize: 13 }
+				Text { visible: modelData.retired === true; text: qsTr("Retired"); color: "#FBBF24"; font.pixelSize: 13 }
 				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editItem(modelData) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeEquipmentItem(modelData.name) } }
 			}
 		}
@@ -130,6 +134,8 @@ Kirigami.ScrollablePage {
 				TextField { id: itemModel; Layout.fillWidth: true; placeholderText: qsTr("Model") }
 				TextField { id: itemSerial; Layout.fillWidth: true; placeholderText: qsTr("Serial number") }
 				TextField { id: itemServiceDate; Layout.fillWidth: true; placeholderText: qsTr("Last service date") }
+				TextField { id: itemServiceInterval; Layout.fillWidth: true; placeholderText: qsTr("Service interval, e.g. 12 months") }
+				CheckBox { id: itemRetired; text: qsTr("Retired / inactive") }
 				TextArea { id: itemNotes; Layout.fillWidth: true; placeholderText: qsTr("Notes") }
 			}
 		}
