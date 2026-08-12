@@ -75,10 +75,10 @@ Kirigami.ScrollablePage {
 	FolderDialog {
 		id: plannerPdfFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.decoSlate())
+		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.decoSlate(), page.profileData)
 	}
 	FolderDialog { id: contingencyTextFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyTextExport = manager.exportNeoPlannerText(selectedFolder, page.contingencySlate()) }
-	FolderDialog { id: contingencyPdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.contingencySlate()) }
+	FolderDialog { id: contingencyPdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.contingencySlate(), page.contingencyResult ? page.contingencyResult.profile || [] : []) }
 	function modelData(model) {
 		var values = []
 		for (var i = 0; i < model.count; ++i)

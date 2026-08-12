@@ -2196,21 +2196,12 @@ QString QMLManager::exportNeoDiveReportText(const QString &directory, const QStr
 	return output;
 }
 
-static QString exportNeoPdfDocument(const QString &directory, const QString &contents, const QString &filePrefix, const QString &title)
+static bool writeNeoPdfText(QPdfWriter &writer, const QString &contents)
+
 {
-	QDir targetDirectory(localFileName(directory));
-	if (!targetDirectory.exists() && !targetDirectory.mkpath("."))
-		return {};
-	const QString output = targetDirectory.filePath(QString("%1-%2.pdf").arg(filePrefix, QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
-	QPdfWriter writer(output);
-	writer.setTitle(title);
-	writer.setCreator(QStringLiteral("Subsurface Neo"));
-	QPageLayout layout = writer.pageLayout();
-	layout.setMargins(QMarginsF(18, 18, 18, 18));
-	writer.setPageLayout(layout);
 	QPainter painter(&writer);
 	if (!painter.isActive())
-		return {};
+		return false;
 	QFont font = painter.font();
 	font.setPointSize(10);
 	const QRect pageRect = writer.pageLayout().paintRectPixels(writer.resolution());
@@ -2232,12 +2223,121 @@ static QString exportNeoPdfDocument(const QString &directory, const QString &con
 			writer.newPage();
 	}
 	painter.end();
-	return output;
+	return true;
 }
 
-QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents)
+static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profile)
 {
-	const QString output = exportNeoPdfDocument(directory, contents, QStringLiteral("subsurface-neo-plan"), tr("Subsurface Neo dive plan"));
+	QVector<QVariantMap> samples;
+	qreal maxTime = 0.0;
+	qreal maxDepth = 0.0;
+	for (const QVariant &value : profile) {
+		const QVariantMap sample = value.toMap();
+		if (!sample.contains("time") || !sample.contains("depth"))
+			continue;
+		maxTime = qMax(maxTime, sample.value("time").toDouble());
+		maxDepth = qMax(maxDepth, sample.value("depth").toDouble());
+		samples.append(sample);
+	}
+	QPainter painter(&writer);
+	if (!painter.isActive())
+		return false;
+	const QRect page = writer.pageLayout().paintRectPixels(writer.resolution());
+	QFont titleFont = painter.font();
+	titleFont.setPointSize(16);
+	titleFont.setBold(true);
+	painter.setFont(titleFont);
+	painter.setPen(QColor("#0f172a"));
+	painter.drawText(page.left(), page.top() + 28, QMLManager::tr("SUBSURFACE NEO PLAN PROFILE"));
+	QFont bodyFont = painter.font();
+	bodyFont.setPointSize(9);
+	bodyFont.setBold(false);
+	painter.setFont(bodyFont);
+	painter.setPen(QColor("#475569"));
+	painter.drawText(page.left(), page.top() + 48, QMLManager::tr("Profile and GF are rendered from the same native planner result as the schedule."));
+	if (samples.size() < 2 || maxTime <= 0.0 || maxDepth <= 0.0) {
+		painter.drawText(page.left(), page.top() + 82, QMLManager::tr("No profile samples were available for this plan."));
+		painter.end();
+		return true;
+	}
+	const qreal chartWidth = page.width();
+	const qreal chartHeight = (page.height() - 105) / 2.0;
+	const QRectF depthChart(page.left(), page.top() + 68, chartWidth, chartHeight - 12);
+	const QRectF gfChart(page.left(), depthChart.bottom() + 36, chartWidth, chartHeight - 12);
+	auto drawFrame = [&painter](const QRectF &rect, const QString &label) {
+		painter.setPen(QPen(QColor("#94a3b8"), 1));
+		painter.setBrush(QColor("#f8fafc"));
+		painter.drawRect(rect);
+		painter.setPen(QColor("#475569"));
+		painter.drawText(rect.left() + 8, rect.top() + 16, label);
+	};
+	drawFrame(depthChart, QMLManager::tr("Depth (m)"));
+	drawFrame(gfChart, QMLManager::tr("Gradient factor (%)"));
+	QPolygonF depthLine;
+	QPolygonF gfLine;
+	for (const QVariantMap &sample : samples) {
+		const qreal x = depthChart.left() + sample.value("time").toDouble() / maxTime * depthChart.width();
+		const qreal depthY = depthChart.top() + sample.value("depth").toDouble() / maxDepth * depthChart.height();
+		depthLine << QPointF(x, depthY);
+		if (sample.contains("gf")) {
+			const qreal gf = qBound(0.0, sample.value("gf").toDouble(), 100.0);
+			gfLine << QPointF(x, gfChart.bottom() - gf / 100.0 * gfChart.height());
+		}
+	}
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	painter.setPen(QPen(QColor("#0891b2"), 2));
+	painter.drawPolyline(depthLine);
+	if (gfLine.size() > 1) {
+		painter.setPen(QPen(QColor("#7c3aed"), 2));
+		painter.drawPolyline(gfLine);
+	}
+	painter.setPen(QColor("#475569"));
+	painter.drawText(depthChart.left(), depthChart.bottom() + 15, QMLManager::tr("0 min"));
+	painter.drawText(depthChart.right() - 60, depthChart.bottom() + 15, QMLManager::tr("%1 min").arg(qRound(maxTime / 60.0)));
+	painter.drawText(depthChart.right() - 55, depthChart.top() + 16, QMLManager::tr("%1 m").arg(QString::number(maxDepth / 1000.0, 'f', 1)));
+	painter.drawText(gfChart.left(), gfChart.bottom() + 15, QMLManager::tr("0%"));
+	painter.drawText(gfChart.left(), gfChart.top() + 16, QMLManager::tr("100%"));
+	painter.end();
+	return true;
+}
+
+static QString exportNeoPdfDocument(const QString &directory, const QString &contents, const QString &filePrefix, const QString &title)
+{
+	QDir targetDirectory(localFileName(directory));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath("."))
+		return {};
+	const QString output = targetDirectory.filePath(QString("%1-%2.pdf").arg(filePrefix, QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	QPdfWriter writer(output);
+	writer.setTitle(title);
+	writer.setCreator(QStringLiteral("Subsurface Neo"));
+	QPageLayout layout = writer.pageLayout();
+	layout.setMargins(QMarginsF(18, 18, 18, 18));
+	writer.setPageLayout(layout);
+	return writeNeoPdfText(writer, contents) ? output : QString();
+}
+
+QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents, const QVariantList &profile)
+{
+	QDir targetDirectory(localFileName(directory));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
+		setErrorMessage(tr("Could not create the selected planner export folder."));
+		return {};
+	}
+	const QString output = targetDirectory.filePath(QString("subsurface-neo-plan-%1.pdf").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	QPdfWriter writer(output);
+	writer.setTitle(tr("Subsurface Neo dive plan"));
+	writer.setCreator(QStringLiteral("Subsurface Neo"));
+	QPageLayout layout = writer.pageLayout();
+	layout.setMargins(QMarginsF(18, 18, 18, 18));
+	writer.setPageLayout(layout);
+	const bool profileDrawn = profile.isEmpty() || drawNeoPlannerProfile(writer, profile);
+	if (profileDrawn && !profile.isEmpty())
+		writer.newPage();
+	const bool textWritten = profileDrawn && writeNeoPdfText(writer, contents);
+	if (!textWritten) {
+		setErrorMessage(tr("Could not write the planner PDF export."));
+		return {};
+	}
 	if (output.isEmpty())
 		setErrorMessage(tr("Could not write the planner PDF export."));
 	return output;
