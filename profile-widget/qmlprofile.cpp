@@ -6,6 +6,7 @@
 #include "core/errorhelper.h"
 #include "core/subsurface-float.h"
 #include "core/metrics.h"
+#include "core/profile.h"
 #include "core/sample.h"
 #include "core/subsurface-string.h"
 #include "core/units.h"
@@ -40,6 +41,16 @@ QMLProfile::~QMLProfile()
 void QMLProfile::createProfileView()
 {
 	m_profileWidget.reset(new ProfileScene(m_devicePixelRatio * 0.8, false, false));
+}
+
+void QMLProfile::rebuildInspectorPlot()
+{
+	m_inspectorPlot.reset();
+	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const divecomputer *dc = currentDiveComputer();
+	if (!d || !dc)
+		return;
+	m_inspectorPlot = std::make_unique<plot_info>(create_plot_info_new(d, dc, nullptr));
 }
 
 // we need this so we can connect update() to the scaleChanged() signal - which the connect above cannot do
@@ -95,6 +106,7 @@ void QMLProfile::setDiveId(int diveId)
 		return;
 	m_diveId = diveId;
 	m_dc = 0;
+	rebuildInspectorPlot();
 	emit numDCChanged();
 	emit currentDCChanged();
 	triggerUpdate();
@@ -219,6 +231,43 @@ QVariantMap QMLProfile::sampleAtFraction(qreal fraction) const
 	if (s.cns > 0)
 		result["cns"] = QStringLiteral("%1%").arg(s.cns);
 
+	if (m_inspectorPlot && !m_inspectorPlot->entry.empty()) {
+		const auto &entries = m_inspectorPlot->entry;
+		auto plotIt = std::lower_bound(entries.begin(), entries.end(), totalSeconds,
+			[](const plot_data &entry, int time) { return entry.sec < time; });
+		if (plotIt == entries.end())
+			plotIt = std::prev(entries.end());
+		else if (plotIt != entries.begin()) {
+			auto previous = std::prev(plotIt);
+			if (totalSeconds - previous->sec <= plotIt->sec - totalSeconds)
+				plotIt = previous;
+		}
+
+		const plot_data &plot = *plotIt;
+		if (plot.current_gf > 0.0) {
+			const int gf = static_cast<int>(std::lround(plot.current_gf * 100.0));
+			result["gfPercent"] = gf;
+			result["gf"] = QStringLiteral("%1%").arg(gf);
+		}
+		if (plot.surface_gf > 0.0) {
+			const int surfaceGf = static_cast<int>(std::lround(plot.surface_gf));
+			result["surfaceGfPercent"] = surfaceGf;
+			result["surfaceGf"] = QStringLiteral("%1%").arg(surfaceGf);
+		}
+		if (plot.ceiling.mm > 0) {
+			int ceilingDecimals = 0;
+			const char *ceilingUnit = nullptr;
+			const double ceiling = get_depth_units(plot.ceiling, &ceilingDecimals, &ceilingUnit);
+			result["calculatedCeiling"] = QStringLiteral("%1 %2")
+				.arg(ceiling, 0, 'f', ceilingDecimals)
+				.arg(QString::fromUtf8(ceilingUnit ? ceilingUnit : ""));
+		}
+		if (plot.ndl_calc > 0)
+			result["calculatedNdl"] = QStringLiteral("%1 min").arg(plot.ndl_calc / 60);
+		if (plot.tts_calc > 0)
+			result["calculatedTts"] = QStringLiteral("%1 min").arg(plot.tts_calc / 60);
+	}
+
 	result["fraction"] = lastTime > 0 ? qreal(s.time.seconds) / qreal(lastTime) : qreal(0.0);
 	return result;
 }
@@ -268,6 +317,7 @@ void QMLProfile::divesChanged(const QVector<dive *> &dives, DiveField)
 			report_info("dive #%d changed, trigger profile update", d->number);
 			if (m_dc >= d->number_of_computers())
 				m_dc = 0;
+			rebuildInspectorPlot();
 			emit numDCChanged();
 			emit currentDCChanged();
 			triggerUpdate();
@@ -297,6 +347,7 @@ void QMLProfile::rotateDC(int dir)
 	m_dc = (m_dc + dir) % numDC;
 	if (m_dc < 0)
 		m_dc += numDC;
+	rebuildInspectorPlot();
 	emit currentDCChanged();
 	triggerUpdate();
 }
