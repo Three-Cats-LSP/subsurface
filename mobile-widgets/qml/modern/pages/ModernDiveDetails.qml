@@ -78,6 +78,33 @@ Kirigami.Page {
 				profile.triggerUpdate()
 			}
 
+			function clampProfileOffsets() {
+				if (profile.scale <= 1.0) {
+					profile.xOffset = 0
+					profile.yOffset = 0
+					return
+				}
+				var maxX = profileFrame.width * (profile.scale - 1.0) / (2.0 * profile.scale)
+				var maxY = profileFrame.height * (profile.scale - 1.0) / (2.0 * profile.scale)
+				profile.xOffset = Math.max(-maxX, Math.min(maxX, profile.xOffset))
+				profile.yOffset = Math.max(-maxY, Math.min(maxY, profile.yOffset))
+			}
+
+			function zoomProfileAt(nextScale, focusX, focusY, previousFocusX, previousFocusY) {
+				var oldScale = profile.scale
+				nextScale = Math.max(1.0, Math.min(4.0, nextScale))
+				if (Math.abs(nextScale - oldScale) < 0.001 &&
+					Math.abs(focusX - previousFocusX) < 0.1 && Math.abs(focusY - previousFocusY) < 0.1)
+					return
+				var centerX = profileFrame.width / 2.0
+				var centerY = profileFrame.height / 2.0
+				profile.xOffset += (focusX - centerX) / nextScale - (previousFocusX - centerX) / oldScale
+				profile.yOffset += (focusY - centerY) / nextScale - (previousFocusY - centerY) / oldScale
+				profile.scale = nextScale
+				clampProfileOffsets()
+				profile.triggerUpdate()
+			}
+
 			function refreshProfile() {
 				profile.triggerUpdate()
 			}
@@ -210,16 +237,27 @@ Kirigami.Page {
 									diveId: delegateRoot.modelData.id
 									clip: true
 									property real lastScale: 1.0
+									property real lastPinchCenterX: 0
+									property real lastPinchCenterY: 0
 
 									PinchArea {
 										anchors.fill: parent
 										pinch.dragAxis: Pinch.XAndYAxis
-										onPinchStarted: { delegateRoot.profileGestureActive = true; profileInspector.clear() }
+										onPinchStarted: {
+											delegateRoot.profileGestureActive = true
+											profileInspector.clear()
+											profile.lastPinchCenterX = pinch.center.x
+											profile.lastPinchCenterY = pinch.center.y
+										}
 										onPinchUpdated: {
 											var nextScale = pinch.scale * profile.lastScale
-											profile.scale = Math.max(1.0, Math.min(4.0, nextScale))
+											delegateRoot.zoomProfileAt(nextScale, pinch.center.x, pinch.center.y,
+												profile.lastPinchCenterX, profile.lastPinchCenterY)
+											profile.lastPinchCenterX = pinch.center.x
+											profile.lastPinchCenterY = pinch.center.y
 										}
 										onPinchFinished: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
+										onPinchCanceled: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
 
 									MouseArea {
 											id: profileMouseArea
@@ -252,8 +290,9 @@ Kirigami.Page {
 											onPositionChanged: function(mouse) {
 												if (!dragging)
 													return
-												profile.xOffset = oldXOffset + mouse.x - initialX
-												profile.yOffset = oldYOffset + mouse.y - initialY
+												profile.xOffset = oldXOffset + (mouse.x - initialX) / profile.scale
+												profile.yOffset = oldYOffset + (mouse.y - initialY) / profile.scale
+												delegateRoot.clampProfileOffsets()
 												profile.triggerUpdate()
 											}
 											onReleased: {
@@ -271,7 +310,7 @@ Kirigami.Page {
 											onWheel: function(wheel) {
 												profileInspector.clear()
 												var delta = wheel.angleDelta.y > 0 ? 0.2 : -0.2
-												profile.scale = Math.max(1.0, Math.min(4.0, profile.scale + delta))
+												delegateRoot.zoomProfileAt(profile.scale + delta, wheel.x, wheel.y, wheel.x, wheel.y)
 												profile.lastScale = profile.scale
 												wheel.accepted = true
 											}
