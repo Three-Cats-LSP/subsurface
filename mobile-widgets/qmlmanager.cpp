@@ -1933,6 +1933,21 @@ bool QMLManager::importDiveLogFile(const QString &fileUrl)
 	return true;
 }
 
+bool QMLManager::replaceDiveLogFile(const QString &fileUrl)
+{
+	const QString fileName = localFileName(fileUrl);
+	struct divelog replacement;
+	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &replacement) != 0) {
+		setErrorMessage(tr("This file could not be read as a Subsurface dive log."));
+		return false;
+	}
+	replacement.process_loaded_dives();
+	::divelog = std::move(replacement);
+	emit_reset_signal();
+	changesNeedSaving();
+	return true;
+}
+
 void QMLManager::copyToClipboard(const QString &text)
 {
 	QApplication::clipboard()->setText(text, QClipboard::Clipboard);
