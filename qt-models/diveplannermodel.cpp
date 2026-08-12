@@ -1608,6 +1608,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// shows a warning that is specific to the recreational NDL case.
 	const bool exceedsNDL = planError == PLAN_ERROR_RECREATIONAL_EXCEEDS_NDL;
 	results["exceedsNDL"] = exceedsNDL;
+	results["planSaveAllowed"] = planError == PLAN_OK;
 	QVariantList schedule;
 	for (const decostop &stop : decostops) {
 		QVariantMap row;
@@ -1652,7 +1653,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// AI-generated (Claude)
 	// Keep invalid recreational plans available for preview, but do not persist
 	// them as dive plans that could be mistaken for safe plans.
-	if (shouldSave && !exceedsNDL) {
+	if (shouldSave && planError == PLAN_OK) {
 		std::unique_ptr<dive> d_to_save = std::make_unique<dive>();
 		copy_dive(d, d_to_save.get());
 		newDiveId = d_to_save->id;

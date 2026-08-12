@@ -22,6 +22,7 @@ Kirigami.ScrollablePage {
 	property var profileData: []
 	property var schedule: []
 	property bool exceedsNDL: false
+	property bool planSaveAllowed: false
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
 	ListModel { id: cylinders }
@@ -99,6 +100,7 @@ Kirigami.ScrollablePage {
 		profileData = result.profile || []
 		schedule = result.schedule || []
 		exceedsNDL = result.exceedsNDL === true
+		planSaveAllowed = result.planSaveAllowed === true
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
 			manager.selectDive(result.newDiveId)
 			showPage(diveList)
@@ -232,6 +234,7 @@ Kirigami.ScrollablePage {
 			} }
 			Connections { target: page; function onProfileDataChanged() { profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			TextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 			Repeater { model: page.schedule; delegate: GridLayout {
@@ -246,7 +249,7 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
 				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
 			} }
-			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: !page.exceedsNDL; onClicked: page.generatePlan(true) } }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
 		}
 		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
 		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
