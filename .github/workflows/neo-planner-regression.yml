@@ -1,0 +1,24 @@
+name: Neo planner regression
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-planner-regression.yml'
+      - 'core/**'
+      - 'backend-shared/**'
+      - 'qt-models/diveplannermodel.*'
+      - 'mobile-widgets/qml/modern/pages/ModernPlannerLab.qml'
+      - 'tests/testdiveplannermodel.*'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  native-planner-tests:
+    name: Native Qt 6 planner tests
+    uses: ./.github/workflows/linux-debian-generic-qt6.yml
+    with:
+      container-image: debian:trixie
+      runner: ubuntu-latest
+      arch: x86-64
