@@ -36,6 +36,8 @@ Kirigami.ScrollablePage {
 	property var gasReference: []
 	property string plannerTextExport: ""
 	property string plannerPdfExport: ""
+	property string planPackageTextExport: ""
+	property string planPackagePdfExport: ""
 	property int contingencyScenario: 0
 	property int contingencyDelta: 5
 	property int contingencyGasIndex: 0
@@ -72,6 +74,8 @@ Kirigami.ScrollablePage {
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: page.plannerTextExport = manager.exportNeoPlannerText(selectedFolder, page.decoSlate())
 	}
+	FolderDialog { id: planPackageTextFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.planPackageTextExport = manager.exportNeoPlannerText(selectedFolder, page.planPackage()) }
+	FolderDialog { id: planPackagePdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.planPackagePdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.planPackage(), page.profileData) }
 	FolderDialog {
 		id: plannerPdfFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
@@ -424,6 +428,12 @@ Kirigami.ScrollablePage {
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
 		return lines.join("\n")
 	}
+	function planPackage() {
+		var mainPlan = decoSlate()
+		if (!contingencyResult)
+			return mainPlan
+		return mainPlan + "\n\n" + "=".repeat(64) + "\n\n" + contingencySlate()
+	}
 	function finalSampleValue(name, fallback) {
 		return profileData.length > 0 && profileData[profileData.length - 1][name] !== undefined ? profileData[profileData.length - 1][name] : fallback
 	}
@@ -716,8 +726,11 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
 			} }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan(false, true) }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) } }
+			RowLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true; Text { text: qsTr("Plan package includes the main plan and this selected contingency."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { text: qsTr("Copy package"); onClicked: manager.copyToClipboard(page.planPackage()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Package TXT"); onClicked: planPackageTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Package PDF"); onClicked: planPackagePdfFolder.open() } }
 			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 			Label { visible: page.plannerPdfExport.length > 0; text: qsTr("Planner PDF saved: %1").arg(page.plannerPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+			Label { visible: page.planPackageTextExport.length > 0; text: qsTr("Plan package text saved: %1").arg(page.planPackageTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+			Label { visible: page.planPackagePdfExport.length > 0; text: qsTr("Plan package PDF saved: %1").arg(page.planPackagePdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
