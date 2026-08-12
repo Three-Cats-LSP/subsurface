@@ -1575,10 +1575,11 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// Run the planner engine
 	// AI-generated (Claude)
 	planner_error_t planError = PLAN_OK;
+	std::vector<decostop> decostops;
 	if (!diveplan.is_empty()) {
 		deco_state_cache cache;
 		struct deco_state plan_deco_state;
-		planError = plan(&plan_deco_state, diveplan, d, dcNr, 60, cache, true, shouldSave, nullptr);
+		planError = plan(&plan_deco_state, diveplan, d, dcNr, 60, cache, true, shouldSave, &decostops);
 		if (shouldComputeVariations()) {
 			QString variations = computeVariations(plan_copy, plan_deco_state, nullptr);
 			if (!variations.isEmpty()) {
@@ -1607,6 +1608,14 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// shows a warning that is specific to the recreational NDL case.
 	const bool exceedsNDL = planError == PLAN_ERROR_RECREATIONAL_EXCEEDS_NDL;
 	results["exceedsNDL"] = exceedsNDL;
+	QVariantList schedule;
+	for (const decostop &stop : decostops) {
+		QVariantMap row;
+		row.insert("depth", stop.depth);
+		row.insert("duration", stop.time);
+		schedule.append(row);
+	}
+	results["schedule"] = schedule;
 
 	QVariantList profileData;
 	if (d->dcs.size() > 0) {
