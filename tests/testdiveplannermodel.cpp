@@ -238,6 +238,12 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	segment.insert("depth", 18);
 	segment.insert("duration", 20);
 	segments[0] = segment;
+	cylinder.insert("use", NOT_USED);
+	cylinders[0] = cylinder;
+	const QVariantMap lostGasResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	QVERIFY(!lostGasResult.value("planSaveAllowed").toBool());
+	cylinder.insert("use", OC_GAS);
+	cylinders[0] = cylinder;
 	prefs.planner_deco_mode = VPMB;
 	const QVariantMap vpmbResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	QVERIFY(!vpmbResult.value("profile").toList().empty());
