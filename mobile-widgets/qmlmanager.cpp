@@ -1877,6 +1877,27 @@ QVariantList QMLManager::siteDives(const QString &siteName) const
 	return result;
 }
 
+bool QMLManager::updateSite(const QString &siteName, const QString &description, const QString &notes, const QString &gps)
+{
+	dive_site *ds = divelog.sites.get_by_name(siteName.toStdString());
+	if (!ds)
+		return false;
+	if (QString::fromStdString(ds->description) != description)
+		Command::editDiveSiteDescription(ds, description);
+	if (QString::fromStdString(ds->notes) != notes)
+		Command::editDiveSiteNotes(ds, notes);
+	if (printGPSCoords(&ds->location) != gps) {
+		double latitude, longitude;
+		if (!parseGpsText(gps, &latitude, &longitude)) {
+			setErrorMessage(tr("Unable to parse dive-site GPS coordinates."));
+			return false;
+		}
+		Command::editDiveSiteLocation(ds, create_location(latitude, longitude));
+	}
+	emit locationListChanged();
+	return true;
+}
+
 void QMLManager::setNotificationText(QString text)
 {
 	appendTextToLog(QStringLiteral("showProgress: ") + text);

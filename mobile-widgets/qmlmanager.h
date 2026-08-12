@@ -236,6 +236,7 @@ public slots:
 	Q_INVOKABLE QVariantMap siteSummary(const QString &siteName) const;
 	Q_INVOKABLE QVariant siteObject(const QString &siteName) const;
 	Q_INVOKABLE QVariantList siteDives(const QString &siteName) const;
+	Q_INVOKABLE bool updateSite(const QString &siteName, const QString &description, const QString &notes, const QString &gps);
 	QString getVersion() const;
 	void refreshDiveList();
 	void screenChanged(QScreen *screen);
