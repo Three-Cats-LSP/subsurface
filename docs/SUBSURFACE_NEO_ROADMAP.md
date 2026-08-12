@@ -230,6 +230,8 @@ Graph controls become a collapsible descriptive checkbox panel on desktop and a 
 
 **Exit:** Neo dive details fully replace the old presentation for normal reviewing/analysis workflows.
 
+**Status:** Complete on `modern-ui`. The Neo details page uses the established profile and decompression pipeline, with responsive controls, multi-computer metadata, and touch/hover sample inspection.
+
 ---
 
 ## Milestone 6 — Dive Editor + Equipment Kits
@@ -246,6 +248,8 @@ Graph controls become a collapsible descriptive checkbox panel on desktop and a 
 - Preserve canonical Subsurface dive/equipment data wherever possible.
 
 **Exit:** a user can create/edit a complete dive without repeatedly typing their normal equipment setup.
+
+**Status:** Complete on `modern-ui`. The Neo editor saves standard fields through the canonical Subsurface change path, supports primary cylinder/gas/pressures and the mature multi-cylinder editor, and provides reusable, default, and recent equipment kits.
 
 ---
 
