@@ -152,7 +152,7 @@ Kirigami.ScrollablePage {
 		for (var j = 0; j < segments.count; ++j) {
 			var segment = segments.get(j)
 			segmentData.push({ "depth": segment.depth, "duration": segment.duration, "gas": segment.gas,
-				"setpoint": segment.setpoint, "divemode": segment.divemode })
+				"setpoint": segment.setpoint, "divemode": diveMode.currentIndex === 2 ? 2 : segment.divemode })
 		}
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : 10200
 		var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData,

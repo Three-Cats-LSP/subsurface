@@ -218,6 +218,13 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("gf"));
 	QVERIFY(lastSample.contains("surfaceGf"));
 
+	segment.insert("divemode", PSCR);
+	segments[0] = segment;
+	const QVariantMap pscrResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", PSCR, 10300, 1013, false);
+	QVERIFY(!pscrResult.value("profile").toList().empty());
+	segment.insert("divemode", OC);
+	segments[0] = segment;
+
 	prefs.planner_deco_mode = RECREATIONAL;
 	segment.insert("depth", 50);
 	segment.insert("duration", 50);
