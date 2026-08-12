@@ -38,3 +38,6 @@ The Android Qt 6 and Windows MSVC jobs compile this coverage on `modern-ui`.
 5. Add the resulting fixtures to the native test suite before exposing LSP, MultiDeco, or other compatibility-profile names in Neo.
 
 This audit is a validation input, not a decompression-engine implementation or an interoperability claim.
+
+The audited preset values and their field-by-field native representability are
+recorded in [Neo planner compatibility-profile matrix](NEO_PLANNER_COMPATIBILITY_MATRIX.md).
