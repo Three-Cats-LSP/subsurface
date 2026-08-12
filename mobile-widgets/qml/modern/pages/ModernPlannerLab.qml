@@ -445,8 +445,9 @@ Kirigami.ScrollablePage {
 			Repeater { model: page.gasAnalysis; delegate: GridLayout {
 				required property var modelData
 				Layout.fillWidth: true
-				columns: page.width >= 700 ? 5 : 2
+				columns: page.width >= 700 ? 6 : 2
 				Label { text: modelData.mix; color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }
+				Label { text: qsTr("Start %1").arg(modelData.startPressure); color: tokens.textSecondary; Layout.fillWidth: true }
 				Label { text: qsTr("Used %1").arg(modelData.used); color: tokens.textSecondary; Layout.fillWidth: true }
 				Label { text: qsTr("Deco %1").arg(modelData.decoUsed); color: tokens.textSecondary; Layout.fillWidth: true }
 				Label { text: qsTr("Remain %1").arg(modelData.remaining); color: tokens.textPrimary; Layout.fillWidth: true }
