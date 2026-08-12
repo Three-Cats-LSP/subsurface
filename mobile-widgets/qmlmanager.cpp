@@ -1926,7 +1926,7 @@ bool QMLManager::updateSite(const QString &siteName, const QString &description,
 double QMLManager::plannerSurfacePressureForAltitude(double altitudeMeters) const
 {
 	if (!std::isfinite(altitudeMeters) || altitudeMeters < -500.0 || altitudeMeters > 12000.0)
-		return 1_atm.mbar / 1000.0;
+		return (1_atm).mbar / 1000.0;
 	return altitude_to_pressure(static_cast<int32_t>(std::lround(altitudeMeters * 1000.0))).mbar / 1000.0;
 }
 

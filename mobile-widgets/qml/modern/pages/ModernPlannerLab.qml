@@ -413,7 +413,8 @@ Kirigami.ScrollablePage {
 	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : contingencyScenario === 1 ? qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) : qsTr("Lost gas: %1").arg(gasNames[contingencyGasIndex] || qsTr("selected gas")) }
 	function contingencySlate() {
 		if (!contingencyResult) return ""
-		var lines = [qsTr("SUBSURFACE NEO CONTINGENCY PLAN"), qsTr("Scenario: %1").arg(contingencyName()), qsTr("This is a separately calculated contingency; it does not replace the main plan."), qsTr("Model: %1").arg(algorithmName()), "", qsTr("DECOMPRESSION SCHEDULE")]
+		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
+		var lines = [qsTr("SUBSURFACE NEO CONTINGENCY PLAN"), qsTr("Scenario: %1").arg(contingencyName()), qsTr("This is a separately calculated contingency; it does not replace the main plan."), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Surface pressure: %1 bar · Altitude: %2 m").arg(surfacePressureBar.toFixed(3)).arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)), qsTr("Mode: %1 · Water: %2").arg(diveMode.currentText).arg(waterDescription()), "", qsTr("DECOMPRESSION SCHEDULE")]
 		var stops = contingencyResult.schedule || []
 		for (var i = 0; i < stops.length; ++i) { var stop = stops[i]; lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "")) }
 		var gases = contingencyResult.gasAnalysis || []
@@ -473,6 +474,7 @@ Kirigami.ScrollablePage {
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
 		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")])
+		lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
