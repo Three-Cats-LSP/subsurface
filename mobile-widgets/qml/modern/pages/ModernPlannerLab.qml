@@ -26,6 +26,7 @@ Kirigami.ScrollablePage {
 	property string planNotes: ""
 	property var profileData: []
 	property var schedule: []
+	property var gasAnalysis: []
 	property bool exceedsNDL: false
 	property bool planSaveAllowed: false
 	property var cylinderTypes: manager.cylinderListInit
@@ -161,6 +162,7 @@ Kirigami.ScrollablePage {
 		updateGasReference()
 		profileData = result.profile || []
 		schedule = result.schedule || []
+		gasAnalysis = result.gasAnalysis || []
 		exceedsNDL = result.exceedsNDL === true
 		planSaveAllowed = result.planSaveAllowed === true
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
@@ -198,6 +200,10 @@ Kirigami.ScrollablePage {
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
 			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
+		}
+		for (var analysisIndex = 0; analysisIndex < gasAnalysis.length; ++analysisIndex) {
+			var gas = gasAnalysis[analysisIndex]
+			lines.push(qsTr("%1: used %2; remaining %3; end %4").arg(gas.mix).arg(gas.used).arg(gas.remaining).arg(gas.endPressure))
 		}
 		lines.push("", qsTr("DECOMPRESSION SCHEDULE"))
 		if (schedule.length === 0)
@@ -352,6 +358,21 @@ Kirigami.ScrollablePage {
 			} }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true) } }
 			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Gas sufficiency"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Consumption and remaining pressure are produced by Subsurface's planner for this exact profile."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Repeater { model: page.gasAnalysis; delegate: GridLayout {
+				required property var modelData
+				Layout.fillWidth: true
+				columns: page.width >= 700 ? 5 : 2
+				Label { text: modelData.mix; color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }
+				Label { text: qsTr("Used %1").arg(modelData.used); color: tokens.textSecondary; Layout.fillWidth: true }
+				Label { text: qsTr("Deco %1").arg(modelData.decoUsed); color: tokens.textSecondary; Layout.fillWidth: true }
+				Label { text: qsTr("Remain %1").arg(modelData.remaining); color: tokens.textPrimary; Layout.fillWidth: true }
+				Label { text: modelData.belowMinimum ? qsTr("Insufficient gas") : modelData.belowReserve ? qsTr("Below reserve") : qsTr("End %1").arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.success; Layout.fillWidth: true }
+			} }
 		}
 		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
 		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }

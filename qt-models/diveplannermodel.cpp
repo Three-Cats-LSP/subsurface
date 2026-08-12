@@ -1643,6 +1643,26 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	}
 	results["schedule"] = schedule;
 
+	// The planner has already calculated consumption and end pressures while
+	// constructing this dive. Expose those results rather than recalculate
+	// gas sufficiency in the QML layer.
+	QVariantList gasAnalysis;
+	for (const cylinder_t &cylinder : d->cylinders) {
+		if (cylinder.cylinder_use == NOT_USED)
+			continue;
+		QVariantMap gas;
+		gas["mix"] = QString::fromStdString(cylinder.gasmix.name());
+		gas["used"] = get_volume_string(cylinder.gas_used, true);
+		gas["decoUsed"] = get_volume_string(cylinder.deco_gas_used, true);
+		gas["startPressure"] = get_pressure_string(cylinder.start, true);
+		gas["endPressure"] = get_pressure_string(cylinder.end, true);
+		gas["remaining"] = get_volume_string(cylinder.gas_volume(cylinder.end), true);
+		gas["belowMinimum"] = cylinder.end.mbar <= 10_bar.mbar;
+		gas["belowReserve"] = cylinder.end.mbar > 10_bar.mbar && cylinder.end.mbar < qPrefDivePlanner::reserve_gas();
+		gasAnalysis.append(gas);
+	}
+	results["gasAnalysis"] = gasAnalysis;
+
 	QVariantList profileData;
 	if (d->dcs.size() > 0) {
 		// Project the planner's established tissue/GF results for display only.

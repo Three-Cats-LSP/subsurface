@@ -205,6 +205,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(result.value("planSaveAllowed").toBool());
 	QVERIFY(result.contains("schedule"));
 	QVERIFY(result.value("schedule").canConvert<QVariantList>());
+	QVERIFY(!result.value("gasAnalysis").toList().empty());
+	QVERIFY(result.value("gasAnalysis").toList().first().toMap().contains("remaining"));
 
 	const QVariantList profile = result.value("profile").toList();
 	QVERIFY(!profile.empty());
