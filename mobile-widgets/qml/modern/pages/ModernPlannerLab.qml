@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
 import "../components" as Components
 
@@ -10,36 +11,141 @@ Kirigami.ScrollablePage {
 	id: page
 	title: qsTr("Planner & decompression lab")
 	background: Rectangle { color: tokens.background }
-	signal openPlanner()
 	signal openGasTools()
-
+	signal openPlannerSettings()
 	Modern.DesignTokens { id: tokens }
+	property string depthUnit: Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
+	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
+	property string planNotes: ""
+	property var profileData: []
+	property bool exceedsNDL: false
+	property var cylinderTypes: manager.cylinderListInit
+	property var gasNames: []
+	ListModel { id: cylinders }
+	ListModel { id: segments }
+
+	function updateGasNames() {
+		var names = []
+		for (var i = 0; i < cylinders.count; ++i)
+			names.push(qsTr("Gas %1").arg(i + 1))
+		gasNames = names
+	}
+	function addCylinder() {
+		cylinders.append({ "type": PrefEquipment.default_cylinder || "AL80", "mix": "21/0",
+			"pressure": Backend.pressure === Enums.BAR ? 200 : 3000, "use": 0 })
+		updateGasNames()
+		generatePlan()
+	}
+	function addSegment() {
+		var last = segments.get(segments.count - 1)
+		segments.append({ "depth": last ? last.depth : (Backend.length === Enums.METERS ? 18 : 60),
+			"duration": 10, "gas": last ? last.gas : 0, "setpoint": last ? last.setpoint : Backend.default_setpoint,
+			"divemode": last ? last.divemode : 0 })
+		generatePlan()
+	}
+	function generatePlan(savePlan) {
+		if (cylinders.count === 0 || segments.count === 0)
+			return
+		var cylinderData = []
+		for (var i = 0; i < cylinders.count; ++i) {
+			var cylinder = cylinders.get(i)
+			cylinderData.push({ "type": cylinder.type, "mix": cylinder.mix, "pressure": cylinder.pressure,
+				"use": diveMode.currentIndex === 1 ? cylinder.use : 0 })
+		}
+		var segmentData = []
+		for (var j = 0; j < segments.count; ++j) {
+			var segment = segments.get(j)
+			segmentData.push({ "depth": segment.depth, "duration": segment.duration, "gas": segment.gas,
+				"setpoint": segment.setpoint, "divemode": segment.divemode })
+		}
+		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : 10200
+		var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData,
+			Qt.formatDate(new Date(), "yyyy-MM-dd"), Qt.formatTime(new Date(), "hh:mm:ss"),
+			diveMode.currentIndex, salinity, savePlan === true)
+		planNotes = result.notes || ""
+		profileData = result.profile || []
+		exceedsNDL = result.exceedsNDL === true
+		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
+			manager.selectDive(result.newDiveId)
+			showPage(diveList)
+		}
+	}
+	Component.onCompleted: {
+		Backend.planner_gflow = PrefTechnicalDetails.gflow
+		Backend.planner_gfhigh = PrefTechnicalDetails.gfhigh
+		addCylinder()
+		segments.append({ "depth": Backend.length === Enums.METERS ? 18 : 60, "duration": 30,
+			"gas": 0, "setpoint": Backend.default_setpoint, "divemode": 0 })
+		generatePlan()
+	}
+
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
-		Text { text: qsTr("Plan with the proven Subsurface engine"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-		Text { text: qsTr("Neo keeps the mature BÃ¼hlmann/GF, VPM-B, OC, CCR, pSCR, gas, bailout, and planner-warning calculations intact. The planner below is the canonical calculation workspace."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Text { text: qsTr("Build a validated dive plan"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; Layout.fillWidth: true }
+		Text { text: qsTr("Neo sends this profile directly to Subsurface's mature planner. No decompression or gas calculation is duplicated here."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Active planning assumptions"); color: tokens.textMuted; font.pixelSize: 10 }
+			Text { text: qsTr("Decompression model"); color: tokens.textMuted; font.pixelSize: 11 }
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 1
-				Text { text: qsTr("Gradient factors: %1 / %2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh); color: tokens.textPrimary }
+				Text { text: qsTr("Bühlmann / GF: %1 / %2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh); color: tokens.textPrimary }
 				Text { text: qsTr("Bottom SAC: %1").arg(Backend.bottomsac); color: tokens.textPrimary }
-				Text { text: qsTr("Deco SAC: %1").arg(Backend.decosac); color: tokens.textPrimary }
+				Button { text: qsTr("Advanced settings"); onClicked: page.openPlannerSettings() }
 			}
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Build a dive plan"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Set depths, times, cylinders, gases, setpoints, water type, ascent settings, and save only when the canonical planner validates the schedule."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { Layout.fillWidth: true; text: qsTr("Open planner"); onClicked: page.openPlanner() }
+			Text { text: qsTr("Plan mode & environment"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
+				ComboBox { id: diveMode; Layout.fillWidth: true; model: [qsTr("Open circuit"), qsTr("CCR"), qsTr("pSCR")]; onActivated: page.generatePlan() }
+				ComboBox { id: waterType; Layout.fillWidth: true; model: [qsTr("Sea water"), qsTr("Fresh water"), qsTr("EN13319")]; onActivated: page.generatePlan() }
+			}
+			CheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Deco on OC bailout"); checked: Backend.dobailout; onToggled: { Backend.dobailout = checked; page.generatePlan() } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Gas tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Use the same calculation primitives for MOD, best mix, END/EAD, CNS/OTU, and gas reference work."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() }
+			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Gases & cylinders"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }; Button { text: qsTr("Add gas"); onClicked: page.addCylinder() } }
+			Repeater { model: cylinders; delegate: GridLayout {
+				required property int index; required property string type; required property string mix; required property real pressure; required property int use
+				Layout.fillWidth: true; columns: page.width >= 700 ? 5 : 2
+				Label { text: qsTr("Gas %1").arg(index + 1); color: tokens.textMuted }
+				ComboBox { Layout.fillWidth: true; model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: { cylinders.setProperty(index, "type", currentText); page.generatePlan() } }
+				TextField { Layout.fillWidth: true; text: mix; placeholderText: qsTr("O₂/He e.g. 32/0"); onEditingFinished: { cylinders.setProperty(index, "mix", text); page.generatePlan() } }
+				TextField { Layout.fillWidth: true; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
+				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }; Button { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
+			} }
 		}
-		Text { text: qsTr("Planning aid only. Always review the generated schedule, gas requirements, warnings, algorithm, units, and environmental assumptions before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Components.ModernCard {
+			Layout.fillWidth: true
+			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Profile segments"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }; Button { text: qsTr("Add segment"); onClicked: page.addSegment() } }
+			Text { text: qsTr("Each row is a depth/time waypoint. Use separate rows for multilevel profiles and gas switches."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Repeater { model: segments; delegate: GridLayout {
+				required property int index; required property real depth; required property real duration; required property int gas; required property real setpoint; required property int divemode
+				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
+				Label { text: qsTr("%1").arg(index + 1); color: tokens.textMuted }
+				TextField { Layout.fillWidth: true; text: depth; placeholderText: qsTr("Depth (%1)").arg(page.depthUnit); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "depth", Number(text)); page.generatePlan() } }
+				TextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Minutes"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
+				ComboBox { Layout.fillWidth: true; model: page.gasNames; currentIndex: gas; onActivated: { segments.setProperty(index, "gas", currentIndex); page.generatePlan() } }
+				TextField { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
+				Button { text: qsTr("Remove"); enabled: segments.count > 1; onClicked: { segments.remove(index); page.generatePlan() } }
+			} }
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Calculated profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 190; onPaint: {
+				var ctx = getContext("2d"); ctx.reset(); if (page.profileData.length < 2) return
+				var maxTime = 0, maxDepth = 0; for (var i = 0; i < page.profileData.length; ++i) { maxTime = Math.max(maxTime, page.profileData[i].time); maxDepth = Math.max(maxDepth, page.profileData[i].depth) }
+				if (maxTime <= 0 || maxDepth <= 0) return; var margin = 16, w = width - margin * 2, h = height - margin * 2
+				ctx.strokeStyle = page.exceedsNDL ? "#F87171" : tokens.accent; ctx.lineWidth = 2; ctx.beginPath()
+				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = margin + p.time / maxTime * w; var y = margin + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
+			} }
+			Connections { target: page; function onProfileDataChanged() { profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
+			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			TextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: !page.exceedsNDL; onClicked: page.generatePlan(true) } }
+		}
+		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
+		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 	}
 }
