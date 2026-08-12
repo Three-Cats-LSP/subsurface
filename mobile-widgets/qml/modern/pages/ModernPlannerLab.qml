@@ -45,6 +45,13 @@ Kirigami.ScrollablePage {
 	property var inspectedProfileSample: null
 	property string activeProfileName: ""
 	property bool activeProfileModified: false
+	property string activeProfileId: ""
+	property int activeProfileVersion: 0
+	property bool activeProfileBuiltIn: false
+	property var builtInProfiles: [
+		{ "id": "subsurface-native", "name": qsTr("Subsurface native"), "version": 1,
+			"summary": qsTr("Native defaults: Buhlmann GF 30/75 · 18 m/min descent · 9 m/min ascent tiers") }
+	]
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
@@ -82,6 +89,9 @@ Kirigami.ScrollablePage {
 				saved[i] = preset
 				plannerStorage.presets = saved
 				activeProfileName = preset.name
+				activeProfileId = ""
+				activeProfileVersion = 0
+				activeProfileBuiltIn = false
 				activeProfileModified = false
 				return
 			}
@@ -89,12 +99,16 @@ Kirigami.ScrollablePage {
 		saved.push(preset)
 		plannerStorage.presets = saved
 		activeProfileName = preset.name
+		activeProfileId = ""
+		activeProfileVersion = 0
+		activeProfileBuiltIn = false
 		activeProfileModified = false
 	}
 	function profileLabel() {
 		if (activeProfileName.length === 0)
 			return qsTr("Custom")
-		return activeProfileModified ? qsTr("%1 — Modified").arg(activeProfileName) : activeProfileName
+		var name = activeProfileBuiltIn ? qsTr("%1 v%2").arg(activeProfileName).arg(activeProfileVersion) : activeProfileName
+		return activeProfileModified ? qsTr("%1 — Modified").arg(name) : name
 	}
 	function markProfileModified() {
 		if (activeProfileName.length > 0)
@@ -103,6 +117,14 @@ Kirigami.ScrollablePage {
 	function resetActiveProfile() {
 		if (activeProfileName.length === 0)
 			return
+		if (activeProfileBuiltIn) {
+			for (var builtInIndex = 0; builtInIndex < builtInProfiles.length; ++builtInIndex) {
+				if (builtInProfiles[builtInIndex].id === activeProfileId) {
+					loadBuiltInProfile(builtInIndex)
+					return
+				}
+			}
+		}
 		var saved = plannerStorage.presets || []
 		for (var i = 0; i < saved.length; ++i) {
 			if (saved[i].name === activeProfileName) {
@@ -151,20 +173,19 @@ Kirigami.ScrollablePage {
 		saved.push(copy)
 		plannerStorage.presets = saved
 	}
-	function loadPreset(index) {
-		var preset = plannerStorage.presets[index]
-		if (!preset)
-			return
-		cylinders.clear(); segments.clear()
-		for (var i = 0; i < preset.cylinders.length; ++i) cylinders.append(preset.cylinders[i])
-		for (var j = 0; j < preset.segments.length; ++j) segments.append(preset.segments[j])
-		updateGasNames()
-		diveMode.currentIndex = preset.diveMode
-		waterType.currentIndex = preset.waterType
-		if (preset.customSalinity !== undefined) customSalinity = preset.customSalinity
-		if (preset.plannedDate !== undefined) plannedDate = preset.plannedDate
-		if (preset.plannedTime !== undefined) plannedTime = preset.plannedTime
-		if (preset.surfacePressureBar !== undefined) surfacePressureBar = preset.surfacePressureBar
+	function nativePlannerSettings() {
+		return {
+			"decoMode": Enums.BUEHLMANN, "gflow": 30, "gfhigh": 75, "vpmbConservatism": 3,
+			"bottomSac": Backend.volume === Enums.LITER ? 20 : 71, "decoSac": Backend.volume === Enums.LITER ? 17 : 60,
+			"reserveGas": Backend.pressure === Enums.BAR ? 40 : 580, "bottomPo2": 1.4, "decoPo2": 1.6,
+			"descentRate": Backend.length === Enums.METERS ? 18 : 60, "deepAscentRate": Backend.length === Enums.METERS ? 9 : 30,
+			"midAscentRate": Backend.length === Enums.METERS ? 9 : 30, "decoAscentRate": Backend.length === Enums.METERS ? 9 : 30,
+			"finalAscentRate": Backend.length === Enums.METERS ? 9 : 30, "dropToFirstDepth": false, "lastStop6m": false,
+			"switchAtRequiredStop": false, "minSwitchDuration": 1, "surfaceSegment": 0, "problemSolvingTime": 4,
+			"backGasBreaks": false, "bailout": false, "defaultSetpoint": 1100, "o2Narcotic": true, "sacFactor": 40
+		}
+	}
+	function applyPlannerSettings(preset) {
 		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
 		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
 		if (preset.gfhigh !== undefined) Backend.planner_gfhigh = preset.gfhigh
@@ -190,7 +211,38 @@ Kirigami.ScrollablePage {
 		if (preset.defaultSetpoint !== undefined) Backend.default_setpoint = preset.defaultSetpoint
 		if (preset.o2Narcotic !== undefined) Backend.o2narcotic = preset.o2Narcotic
 		if (preset.sacFactor !== undefined) Backend.sacfactor = preset.sacFactor
+	}
+	function loadBuiltInProfile(index) {
+		var profile = builtInProfiles[index]
+		if (!profile || profile.id !== "subsurface-native")
+			return
+		applyPlannerSettings(nativePlannerSettings())
+		activeProfileName = profile.name
+		activeProfileId = profile.id
+		activeProfileVersion = profile.version
+		activeProfileBuiltIn = true
+		activeProfileModified = false
+		generatePlan(false, true)
+	}
+	function loadPreset(index) {
+		var preset = plannerStorage.presets[index]
+		if (!preset)
+			return
+		cylinders.clear(); segments.clear()
+		for (var i = 0; i < preset.cylinders.length; ++i) cylinders.append(preset.cylinders[i])
+		for (var j = 0; j < preset.segments.length; ++j) segments.append(preset.segments[j])
+		updateGasNames()
+		diveMode.currentIndex = preset.diveMode
+		waterType.currentIndex = preset.waterType
+		if (preset.customSalinity !== undefined) customSalinity = preset.customSalinity
+		if (preset.plannedDate !== undefined) plannedDate = preset.plannedDate
+		if (preset.plannedTime !== undefined) plannedTime = preset.plannedTime
+		if (preset.surfacePressureBar !== undefined) surfacePressureBar = preset.surfacePressureBar
+		applyPlannerSettings(preset)
 		activeProfileName = preset.name
+		activeProfileId = ""
+		activeProfileVersion = 0
+		activeProfileBuiltIn = false
 		activeProfileModified = false
 		generatePlan(false, true)
 	}
@@ -412,8 +464,17 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Text { text: qsTr("Personal presets save the exact Neo/Subsurface planner inputs shown below. Compatibility labels are unavailable until their external settings and fixtures are verified."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("App reference presets use verified native Subsurface settings. Third-party compatibility labels remain unavailable until their settings and fixtures are verified."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Button { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
+			Text { text: qsTr("App reference presets"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
+			Repeater { model: page.builtInProfiles; delegate: RowLayout {
+				required property int index
+				required property var modelData
+				Layout.fillWidth: true
+				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("%1 v%2").arg(modelData.name).arg(modelData.version); color: tokens.textPrimary; font.weight: Font.DemiBold }; Text { text: modelData.summary; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+				Button { text: qsTr("Load"); onClicked: page.loadBuiltInProfile(index) }
+			} }
+			Text { text: qsTr("My profiles"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }; Button { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
 			Repeater { model: plannerStorage.presets; delegate: RowLayout {
 				required property int index
