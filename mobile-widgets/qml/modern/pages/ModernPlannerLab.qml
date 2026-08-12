@@ -33,6 +33,7 @@ Kirigami.ScrollablePage {
 	property var gasNames: []
 	property var gasReference: []
 	property string plannerTextExport: ""
+	property var inspectedProfileSample: null
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
@@ -172,6 +173,26 @@ Kirigami.ScrollablePage {
 	}
 	function finalSampleValue(name, fallback) {
 		return profileData.length > 0 && profileData[profileData.length - 1][name] !== undefined ? profileData[profileData.length - 1][name] : fallback
+	}
+	function profileMaxTime() {
+		var maximum = 0
+		for (var i = 0; i < profileData.length; ++i)
+			maximum = Math.max(maximum, profileData[i].time)
+		return maximum
+	}
+	function inspectProfileAt(x, profileWidth) {
+		if (profileData.length === 0 || profileWidth <= 32)
+			return
+		var targetTime = Math.max(0, Math.min(profileMaxTime(), (x - 16) / (profileWidth - 32) * profileMaxTime()))
+		var nearest = profileData[0]
+		for (var i = 1; i < profileData.length; ++i) {
+			if (Math.abs(profileData[i].time - targetTime) < Math.abs(nearest.time - targetTime))
+				nearest = profileData[i]
+		}
+		inspectedProfileSample = nearest
+	}
+	function profileSampleX(sample, profileWidth) {
+		return sample && profileMaxTime() > 0 ? 16 + sample.time / profileMaxTime() * (profileWidth - 32) : 0
 	}
 	function formatDuration(seconds) {
 		if (seconds === undefined || seconds < 0)
@@ -339,8 +360,42 @@ Kirigami.ScrollablePage {
 				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = margin + p.time / maxTime * w; var y = margin + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
 				ctx.strokeStyle = "#FB923C"; ctx.lineWidth = 1.5; ctx.beginPath(); var ceilingStarted = false
 				for (var k = 0; k < page.profileData.length; ++k) { var ceilingPoint = page.profileData[k]; if (ceilingPoint.ceiling <= 0) { ceilingStarted = false; continue }; var ceilingX = margin + ceilingPoint.time / maxTime * w; var ceilingY = margin + ceilingPoint.ceiling / maxDepth * h; if (!ceilingStarted) { ctx.moveTo(ceilingX, ceilingY); ceilingStarted = true } else ctx.lineTo(ceilingX, ceilingY) }; ctx.stroke()
-			} }
-			Connections { target: page; function onProfileDataChanged() { profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
+				Rectangle {
+					visible: page.inspectedProfileSample !== null
+					x: page.profileSampleX(page.inspectedProfileSample, profileCanvas.width)
+					y: 0
+					width: 1
+					height: parent.height
+					color: tokens.textPrimary
+					opacity: 0.55
+				}
+				MouseArea {
+					anchors.fill: parent
+					hoverEnabled: true
+					onPositionChanged: function(mouse) { page.inspectProfileAt(mouse.x, width) }
+					onPressed: function(mouse) { page.inspectProfileAt(mouse.x, width) }
+					onExited: page.inspectedProfileSample = null
+				}
+			}
+			Connections { target: page; function onProfileDataChanged() { page.inspectedProfileSample = null; profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
+			Rectangle {
+				visible: page.inspectedProfileSample !== null
+				Layout.fillWidth: true
+				color: tokens.surface
+				radius: 10
+				border.color: tokens.border
+				implicitHeight: plannerSampleInfo.implicitHeight + tokens.space12 * 2
+				ColumnLayout {
+					id: plannerSampleInfo
+					anchors.fill: parent
+					anchors.margins: tokens.space12
+					spacing: 2
+					Text { text: qsTr("Profile sample at %1  ·  %2 %3").arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.time : 0)).arg(page.inspectedProfileSample ? (page.inspectedProfileSample.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) : "—").arg(page.depthUnit); color: tokens.textPrimary; font.weight: Font.DemiBold }
+					Text { text: qsTr("NDL %1   TTS %2   Ceiling %3").arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.ndl : -1)).arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.tts : -1)).arg(page.inspectedProfileSample && page.inspectedProfileSample.ceiling > 0 ? (page.inspectedProfileSample.ceiling / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit : "—"); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: qsTr("GF %1%   Surface GF %2%   pO₂ %3 bar   Tissue %4%").arg(page.inspectedProfileSample && page.inspectedProfileSample.gf !== undefined ? page.inspectedProfileSample.gf.toFixed(0) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.surfaceGf !== undefined ? page.inspectedProfileSample.surfaceGf.toFixed(0) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.po2 > 0 ? (page.inspectedProfileSample.po2 / 1000.0).toFixed(2) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.tissueLoad !== undefined ? page.inspectedProfileSample.tissueLoad.toFixed(0) : "—"); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { visible: page.inspectedProfileSample && page.inspectedProfileSample.cns > 0; text: qsTr("CNS %1%").arg(page.inspectedProfileSample ? page.inspectedProfileSample.cns : 0); color: tokens.textSecondary }
+				}
+			}
 			RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Rectangle { width: 18; height: 3; color: page.exceedsNDL ? "#F87171" : tokens.accent }; Text { text: qsTr("Profile"); color: tokens.textSecondary }; Rectangle { width: 18; height: 3; color: "#FB923C" }; Text { text: qsTr("Calculated ceiling"); color: tokens.textSecondary }; Item { Layout.fillWidth: true } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
