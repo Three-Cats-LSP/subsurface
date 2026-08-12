@@ -1866,13 +1866,13 @@ QVariantList QMLManager::siteDives(const QString &siteName) const
 	for (const dive *d : ds->dives) {
 		if (!d)
 			continue;
-		result.append({
-			{ "id", d->id },
-			{ "number", d->number },
-			{ "date", get_short_dive_date_string(d->when) },
-			{ "depth", get_depth_string(d->maxdepth, true) },
-			{ "duration", get_duration_string_short(d->duration) }
-		});
+		QVariantMap item;
+		item.insert("id", d->id);
+		item.insert("number", d->number);
+		item.insert("date", get_short_dive_date_string(d->when));
+		item.insert("depth", get_depth_string(d->maxdepth, true));
+		item.insert("duration", get_duration_string_short(d->duration));
+		result.append(item);
 	}
 	return result;
 }
