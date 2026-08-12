@@ -256,6 +256,33 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	segment.insert("divemode", OC);
 	segments[0] = segment;
 
+	cylinder.insert("mix", "18/45");
+	cylinder.insert("use", OC_GAS);
+	cylinders[0] = cylinder;
+	segment.insert("depth", 45);
+	segment.insert("duration", 25);
+	const QVariantMap trimixResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	QVERIFY(!trimixResult.value("profile").toList().empty());
+	const QVariantMap altitudeResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 850, false);
+	QVERIFY(!altitudeResult.value("profile").toList().empty());
+
+	cylinder.insert("mix", "21/35");
+	cylinder.insert("use", DILUENT);
+	cylinders[0] = cylinder;
+	segment.insert("depth", 30);
+	segment.insert("duration", 20);
+	segment.insert("setpoint", 1300);
+	segment.insert("divemode", CCR);
+	segments[0] = segment;
+	const QVariantMap ccrResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", CCR, 10300, 1013, false);
+	QVERIFY(!ccrResult.value("profile").toList().empty());
+	cylinder.insert("mix", "21/0");
+	cylinder.insert("use", OC_GAS);
+	cylinders[0] = cylinder;
+	segment.insert("setpoint", 0);
+	segment.insert("divemode", OC);
+	segments[0] = segment;
+
 	prefs.planner_deco_mode = RECREATIONAL;
 	segment.insert("depth", 50);
 	segment.insert("duration", 50);
