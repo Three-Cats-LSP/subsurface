@@ -19,6 +19,7 @@ Kirigami.ScrollablePage {
 	property bool anonymize: false
 	property bool selectedDivesOnly: false
 	property string selectedCache: ""
+	property string currentDiveReportExport: ""
 	property string selectedBackup: ""
 	property var backupInspection: ({})
 	property string bundleCreatedAt: ""
@@ -26,6 +27,11 @@ Kirigami.ScrollablePage {
 		id: exportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: manager.exportToFile(page.selectedExport, selectedFolder, page.anonymize, page.selectedDivesOnly)
+	}
+	FolderDialog {
+		id: currentDiveReportFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: page.currentDiveReportExport = manager.exportCurrentDiveReportPdf(selectedFolder)
 	}
 	FolderDialog {
 		id: bundleFolder
@@ -79,6 +85,14 @@ Kirigami.ScrollablePage {
 			CheckBox { text: qsTr("Anonymize export"); checked: page.anonymize; onToggled: page.anonymize = checked }
 			CheckBox { visible: page.selectedExport !== ExportType.EX_DIVE_SITES_XML; text: qsTr("Export selected dives only"); checked: page.selectedDivesOnly; onToggled: page.selectedDivesOnly = checked }
 			Button { Layout.fillWidth: true; text: Qt.platform.os === "android" || Qt.platform.os === "ios" ? qsTr("Share export") : qsTr("Choose folder and export"); onClicked: { if (Qt.platform.os === "android" || Qt.platform.os === "ios") manager.shareViaEmail(page.selectedExport, page.anonymize, page.selectedDivesOnly); else exportFolder.open() } }
+		}
+		Components.ModernCard {
+			visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"
+			Layout.fillWidth: true
+			Text { text: qsTr("Current dive report"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Create a printable PDF from the currently selected canonical Subsurface dive."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Button { Layout.fillWidth: true; text: qsTr("Choose folder and create PDF report"); onClicked: currentDiveReportFolder.open() }
+			Label { visible: page.currentDiveReportExport.length > 0; text: qsTr("Created: %1").arg(page.currentDiveReportExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true

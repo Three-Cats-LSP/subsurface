@@ -46,6 +46,7 @@
 #include "core/file.h"
 #include "core/divefilter.h"
 #include "core/divelog.h"
+#include "core/divesite.h"
 #include "core/filterconstraint.h"
 #include "core/filterpreset.h"
 #include "core/gettextfromc.h"
@@ -2207,6 +2208,26 @@ QString QMLManager::exportNeoDiveReportPdf(const QString &directory, const QStri
 	if (output.isEmpty())
 		setErrorMessage(tr("Could not write the dive report PDF export."));
 	return output;
+}
+
+QString QMLManager::exportCurrentDiveReportPdf(const QString &directory)
+{
+	if (!current_dive) {
+		setErrorMessage(tr("Select a dive before creating a report."));
+		return {};
+	}
+	QTextDocument notes;
+	notes.setHtml(QString::fromStdString(current_dive->notes));
+	const QString site = current_dive->dive_site ? QString::fromStdString(current_dive->dive_site->name) : tr("Unnamed dive site");
+	QStringList lines { tr("SUBSURFACE NEO DIVE REPORT"), tr("Dive: %1").arg(current_dive->number > 0 ? "#" + QString::number(current_dive->number) : tr("Unnumbered")),
+		tr("Date: %1").arg(get_dive_date_string(current_dive->when)), tr("Site: %1").arg(site),
+		tr("Maximum depth: %1").arg(get_depth_string(current_dive->maxdepth, true)), tr("Duration: %1").arg(get_duration_string_short(current_dive->duration)),
+		tr("Water temperature: %1").arg(get_temperature_string(current_dive->watertemp, true)), tr("Gases: %1").arg(formatDiveGasString(current_dive)),
+		tr("Equipment: %1").arg(QString::fromStdString(current_dive->suit)) };
+	if (!notes.toPlainText().isEmpty())
+		lines << "" << tr("NOTES") << notes.toPlainText();
+	lines << "" << tr("This report is generated from the current canonical Subsurface dive record.");
+	return exportNeoDiveReportPdf(directory, lines.join('\n'));
 }
 
 void QMLManager::copyToClipboard(const QString &text)

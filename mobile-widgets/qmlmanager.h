@@ -247,6 +247,7 @@ public slots:
 	Q_INVOKABLE QString exportNeoPlannerText(const QString &directory, const QString &contents);
 	Q_INVOKABLE QString exportNeoPlannerPdf(const QString &directory, const QString &contents);
 	Q_INVOKABLE QString exportNeoDiveReportPdf(const QString &directory, const QString &contents);
+	Q_INVOKABLE QString exportCurrentDiveReportPdf(const QString &directory);
 	Q_INVOKABLE void copyToClipboard(const QString &text);
 	QString getVersion() const;
 	void refreshDiveList();
