@@ -466,7 +466,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					text: qsTr("Export")
 					onTriggered: {
 						globalDrawer.close()
-						showPageFromDrawer(exportWindow)
+						showPageFromDrawer(neoDataPortability)
 					}
 				}
 			},
@@ -485,7 +485,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					text: mapPage.title
 					onTriggered: {
 						globalDrawer.close()
-						showPageFromDrawer(mapPage)
+						showPageFromDrawer(neoSitesHub)
 					}
 				}
 			},
@@ -498,7 +498,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				text: qsTr("Statistics")
 				onTriggered: {
 					globalDrawer.close()
-					showPageFromDrawer(statistics)
+					showPageFromDrawer(neoStatisticsHub)
 				}
 			},
 			Kirigami.Action {
@@ -947,8 +947,8 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernOperationsHub {
 		id: neoOperationsHub
 		visible: false
-		onOpenSites: showPage(mapPage)
-		onOpenStatistics: showPage(statistics)
+		onOpenSites: showPage(neoSitesHub)
+		onOpenStatistics: showPage(neoStatisticsHub)
 		onOpenEquipment: showPage(neoEquipmentLibrary)
 		onOpenExport: showPage(neoDataPortability)
 		onOpenRecovery: showPage(recoverCache)
