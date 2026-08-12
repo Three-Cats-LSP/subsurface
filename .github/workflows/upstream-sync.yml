@@ -33,6 +33,10 @@ jobs:
       - name: Check out fork master
         uses: actions/checkout@v7
         with:
+          # The default GitHub Actions token cannot update workflow files when
+          # upstream changes them. This repository-scoped secret is used only
+          # for the checkout's persisted push credential.
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           ref: master
           fetch-depth: 0
           submodules: recursive
