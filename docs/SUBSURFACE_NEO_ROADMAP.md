@@ -638,6 +638,8 @@ The XML remains the canonical dive data; Neo-specific metadata lives alongside i
 
 **Exit:** users can export useful reports/plans, move data between systems and safely restore a Neo library.
 
+**Status:** Complete for native Neo on `modern-ui`. The unified workflow reuses Subsurface XML, UDDF, CSV and dive-site exporters; supports selected-dive export and current-dive text/PDF reports; and provides planner Copy/Slate/TXT/PDF plus contingency exports. Local restore inspects a backup before a canonical deduplicating merge or an explicitly confirmed replacement. The `.subsurface-neo` package keeps canonical `divelog.xml` alongside a manifest and Neo equipment, collection, and planner-preset metadata.
+
 ---
 
 ## Milestone 13 — Cloud Sync, Accounts, Settings & Security
