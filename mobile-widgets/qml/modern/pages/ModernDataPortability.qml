@@ -73,8 +73,8 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Compatible export / local backup"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Create a portable XML copy of the complete dive log or the dive-site catalogue through Subsurface's fidelity-preserving exporter."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			ComboBox { Layout.fillWidth: true; model: [qsTr("Complete dive log (Subsurface XML)"), qsTr("Dive sites (Subsurface XML)")]; onActivated: page.selectedExport = currentIndex === 0 ? ExportType.EX_DIVES_XML : ExportType.EX_DIVE_SITES_XML }
+			Text { text: qsTr("Create a portable complete-log export or dive-site catalogue through Subsurface's established exporters."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			ComboBox { Layout.fillWidth: true; model: [qsTr("Complete dive log (Subsurface XML)"), qsTr("Dive sites (Subsurface XML)"), qsTr("Complete log (UDDF)"), qsTr("Complete log (CSV profile details)"), qsTr("Complete log (CSV summary)")]; onActivated: page.selectedExport = [ExportType.EX_DIVES_XML, ExportType.EX_DIVE_SITES_XML, ExportType.EX_DIVES_UDDF, ExportType.EX_DIVES_CSV_DETAILS, ExportType.EX_DIVES_CSV_SUMMARY][currentIndex] }
 			CheckBox { text: qsTr("Anonymize export"); checked: page.anonymize; onToggled: page.anonymize = checked }
 			Button { Layout.fillWidth: true; text: Qt.platform.os === "android" || Qt.platform.os === "ios" ? qsTr("Share export") : qsTr("Choose folder and export"); onClicked: { if (Qt.platform.os === "android" || Qt.platform.os === "ios") manager.shareViaEmail(page.selectedExport, page.anonymize); else exportFolder.open() } }
 		}

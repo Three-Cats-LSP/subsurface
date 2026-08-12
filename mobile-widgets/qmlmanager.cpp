@@ -2648,6 +2648,18 @@ void QMLManager::exportToFile(export_types type, QString dir, bool anonymize)
 					report_error("%s", result.second.c_str());
 				break;
 			}
+		case EX_DIVES_UDDF:
+		case EX_DIVES_CSV_DETAILS:
+		case EX_DIVES_CSV_SUMMARY:
+			{
+				const bool imperial = prefs.units.length == units::FEET;
+				const char *stylesheet = type == EX_DIVES_UDDF ? "uddf-export.xslt" : type == EX_DIVES_CSV_DETAILS ? "xml2detailscsv.xslt" : "xml2summarycsv.xslt";
+				const QString suffix = type == EX_DIVES_UDDF ? ".uddf" : ".csv";
+				auto result = export_dives_xslt(qPrintable(fileName + suffix), false, imperial ? 1 : 0, stylesheet, anonymize);
+				if (result.first)
+					report_error("%s", result.second.c_str());
+				break;
+			}
 		default:
 			report_info("export to unknown type %d using %s remove names %d", static_cast<int>(type), qPrintable(dir), anonymize);
 			break;
@@ -2698,6 +2710,22 @@ void QMLManager::shareViaEmail(export_types type, bool anonymize)
 				body = "Subsurface dive site data";
 			} else {
 				appendTextToLog("failure to save dive site data, aborting attempt to send via email");
+			}
+		}
+		break;
+	case EX_DIVES_UDDF:
+	case EX_DIVES_CSV_DETAILS:
+	case EX_DIVES_CSV_SUMMARY:
+		{
+			const char *stylesheet = type == EX_DIVES_UDDF ? "uddf-export.xslt" : type == EX_DIVES_CSV_DETAILS ? "xml2detailscsv.xslt" : "xml2summarycsv.xslt";
+			const QString suffix = type == EX_DIVES_UDDF ? "uddf" : "csv";
+			fileName.replace("subsurface.log", QString("subsurface_export.") + suffix);
+			const bool imperial = prefs.units.length == units::FEET;
+			if (export_dives_xslt(qPrintable(fileName), false, imperial ? 1 : 0, stylesheet, anonymize).first == 0)
+				body = type == EX_DIVES_UDDF ? "Subsurface UDDF dive log data" : "Subsurface CSV dive log data";
+			else {
+				appendTextToLog("failure to export dive log, aborting attempt to share");
+				return;
 			}
 		}
 		break;
