@@ -89,7 +89,8 @@ Kirigami.Page {
 					font.weight: Font.DemiBold
 				}
 				Text {
-					text: diveListModel ? qsTr("%1 shown").arg(diveListModel.shown) : ""
+					text: page.activeCollection.length > 0 ? qsTr("Collection: %1").arg(page.activeCollection) :
+						(diveListModel ? qsTr("%1 shown").arg(diveListModel.shown) : "")
 					color: tokens.textSecondary
 					font.pixelSize: 12
 				}
@@ -382,10 +383,11 @@ Kirigami.Page {
 		}
 
 		Text {
-			visible: listView.count === 0
+			visible: listView.count === 0 || (page.activeCollection.length > 0 && page.activeCollectionDiveIds.length === 0)
 			Layout.fillWidth: true
 			Layout.fillHeight: true
-			text: manager.diveListProcessing ? qsTr("Updating dive log…") : qsTr("No dives in dive log")
+			text: manager.diveListProcessing ? qsTr("Updating dive log…") :
+				(page.activeCollection.length > 0 ? qsTr("No dives in this collection") : qsTr("No dives in dive log"))
 			color: tokens.textSecondary
 			font.pixelSize: 14
 			horizontalAlignment: Text.AlignHCenter
