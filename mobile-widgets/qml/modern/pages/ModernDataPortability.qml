@@ -33,7 +33,7 @@ Kirigami.ScrollablePage {
 	}
 	FileDialog {
 		id: backupFile
-		nameFilters: [qsTr("Subsurface dive logs (*.xml *.ssrf *.xml.gz)"), qsTr("All files (*)")]
+		nameFilters: [qsTr("Subsurface and Neo backups (*.xml *.ssrf *.xml.gz *.subsurface-neo)"), qsTr("All files (*)")]
 		onAccepted: {
 			page.selectedBackup = selectedFile.toString()
 			page.backupInspection = manager.inspectDiveLogFile(page.selectedBackup)
@@ -45,7 +45,7 @@ Kirigami.ScrollablePage {
 		parent: page
 		modal: true
 		title: qsTr("Merge backup into current log?")
-		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: backupInspection.error ? backupInspection.error : qsTr("%1 contains %2 dives and %3 sites. Imported dives will be merged with the current log using Subsurface deduplication; nothing is replaced automatically.").arg(backupInspection.fileName).arg(backupInspection.dives).arg(backupInspection.sites) }
+		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: backupInspection.error ? backupInspection.error : (backupInspection.neoPackage ? qsTr("%1 is a Neo package with %2 dives and %3 sites. Merging imports only its canonical dives and sites using Subsurface deduplication. Replacing restores its Neo equipment, collections, and planner presets too.") : qsTr("%1 contains %2 dives and %3 sites. Imported dives will be merged with the current log using Subsurface deduplication; nothing is replaced automatically.")).arg(backupInspection.fileName).arg(backupInspection.dives).arg(backupInspection.sites) }
 		footer: DialogButtonBox { Button { text: qsTr("Merge backup"); enabled: !backupInspection.error; onClicked: { if (manager.importDiveLogFile(page.selectedBackup)) backupConfirm.close() } }; Button { text: qsTr("Replace current log"); enabled: !backupInspection.error; onClicked: replaceConfirm.open() }; Button { text: qsTr("Cancel"); onClicked: backupConfirm.close() } }
 	}
 	Dialog {
@@ -53,7 +53,7 @@ Kirigami.ScrollablePage {
 		parent: page
 		modal: true
 		title: qsTr("Replace the current log?")
-		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: qsTr("This replaces the current in-memory dive log with the inspected backup. Save or export your current log first if you may need it. This action is not the default restore choice.") }
+		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: backupInspection.neoPackage ? qsTr("This replaces the current in-memory dive log and restores the package's Neo equipment, collections, and planner presets. Save or export your current data first if you may need it.") : qsTr("This replaces the current in-memory dive log with the inspected backup. Save or export your current log first if you may need it. This action is not the default restore choice.") }
 		footer: DialogButtonBox { Button { text: qsTr("Replace current log"); onClicked: { if (manager.replaceDiveLogFile(page.selectedBackup)) { replaceConfirm.close(); backupConfirm.close() } } }; Button { text: qsTr("Cancel"); onClicked: replaceConfirm.close() } }
 	}
 	Dialog {

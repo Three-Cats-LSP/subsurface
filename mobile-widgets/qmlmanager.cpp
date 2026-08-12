@@ -14,15 +14,20 @@
 #include <QClipboard>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QTemporaryFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonParseError>
 #include <zip.h>
 #include <QLocale>
 #include <QtConcurrent>
 #include <QFuture>
 #include <QUndoStack>
+
+#include <cstdlib>
+#include <cstring>
 
 #include <QBluetoothLocalDevice>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -1910,18 +1915,108 @@ static QString localFileName(const QString &fileUrl)
 	return url.isLocalFile() ? url.toLocalFile() : fileUrl;
 }
 
+struct neo_backup_contents {
+	QByteArray divelogXml;
+	QJsonObject metadata;
+};
+
+static bool readZipEntry(zip_t *archive, const char *name, QByteArray *result)
+{
+	zip_file_t *file = zip_fopen(archive, name, 0);
+	if (!file)
+		return false;
+	char buffer[4096];
+	zip_int64_t read;
+	while ((read = zip_fread(file, buffer, sizeof(buffer))) > 0)
+		result->append(buffer, static_cast<int>(read));
+	const bool complete = read == 0 && zip_fclose(file) == 0;
+	if (read != 0)
+		zip_fclose(file);
+	return complete;
+}
+
+static bool readNeoBackupBundle(const QString &fileName, neo_backup_contents *contents, QString *error)
+{
+	int zipError = 0;
+	zip_t *archive = zip_open(fileName.toUtf8().constData(), ZIP_RDONLY, &zipError);
+	if (!archive) {
+		*error = QMLManager::tr("This Neo backup package could not be opened.");
+		return false;
+	}
+	QByteArray manifestData;
+	QByteArray metadataData;
+	const bool validEntries = readZipEntry(archive, "divelog.xml", &contents->divelogXml) &&
+		readZipEntry(archive, "manifest.json", &manifestData) &&
+		readZipEntry(archive, "neo-metadata.json", &metadataData);
+	zip_close(archive);
+	QJsonParseError manifestError;
+	QJsonParseError metadataError;
+	const QJsonDocument manifestDocument = QJsonDocument::fromJson(manifestData, &manifestError);
+	const QJsonDocument metadataDocument = QJsonDocument::fromJson(metadataData, &metadataError);
+	const QJsonObject manifest = manifestDocument.object();
+	contents->metadata = metadataDocument.object();
+	if (!validEntries || contents->divelogXml.isEmpty() || manifestError.error != QJsonParseError::NoError ||
+		metadataError.error != QJsonParseError::NoError || !manifestDocument.isObject() || !metadataDocument.isObject() || manifest.value("format").toString() != "subsurface-neo" ||
+		manifest.value("version").toInt() != 1) {
+		*error = QMLManager::tr("This file is not a valid Subsurface Neo backup package.");
+		return false;
+	}
+	return true;
+}
+
+static bool parseNeoBackupDiveLog(const neo_backup_contents &contents, struct divelog *log)
+{
+	QTemporaryFile staged(QDir::tempPath() + "/subsurface-neo-XXXXXX.xml");
+	if (!staged.open() || staged.write(contents.divelogXml) != contents.divelogXml.size())
+		return false;
+	staged.flush();
+	return parse_file(staged.fileName().toUtf8().constData(), log) == 0;
+}
+
+static bool isNeoBackupBundle(const QString &fileName)
+{
+	return QFileInfo(fileName).suffix().compare("subsurface-neo", Qt::CaseInsensitive) == 0;
+}
+
+static bool loadBackupDiveLog(const QString &fileName, struct divelog *log, neo_backup_contents *contents, QString *error)
+{
+	if (fileName.isEmpty())
+		return false;
+	if (!isNeoBackupBundle(fileName))
+		return parse_file(fileName.toUtf8().constData(), log) == 0;
+	if (!readNeoBackupBundle(fileName, contents, error))
+		return false;
+	if (!parseNeoBackupDiveLog(*contents, log)) {
+		*error = QMLManager::tr("The dive log in this Neo backup package could not be read.");
+		return false;
+	}
+	return true;
+}
+
+static void restoreNeoBackupMetadata(const neo_backup_contents &contents)
+{
+	QSettings settings;
+	settings.setValue("subsurface-neo/equipment-kits", QJsonDocument(contents.metadata.value("equipmentKits").toObject()).toJson(QJsonDocument::Compact));
+	settings.setValue("subsurface-neo/dive-collections", QJsonDocument(contents.metadata.value("collections").toArray()).toJson(QJsonDocument::Compact));
+	settings.setValue("subsurface-neo/planner/presets", contents.metadata.value("plannerPresets").toVariant());
+	settings.sync();
+}
+
 QVariantMap QMLManager::inspectDiveLogFile(const QString &fileUrl) const
 {
 	QVariantMap result;
 	const QString fileName = localFileName(fileUrl);
 	struct divelog imported;
-	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &imported) != 0) {
-		result.insert("error", tr("This file could not be read as a Subsurface dive log."));
+	neo_backup_contents contents;
+	QString error;
+	if (!loadBackupDiveLog(fileName, &imported, &contents, &error)) {
+		result.insert("error", error.isEmpty() ? tr("This file could not be read as a Subsurface dive log.") : error);
 		return result;
 	}
 	result.insert("fileName", QFileInfo(fileName).fileName());
 	result.insert("dives", static_cast<int>(imported.dives.size()));
 	result.insert("sites", static_cast<int>(imported.sites.size()));
+	result.insert("neoPackage", isNeoBackupBundle(fileName));
 	return result;
 }
 
@@ -1929,8 +2024,10 @@ bool QMLManager::importDiveLogFile(const QString &fileUrl)
 {
 	const QString fileName = localFileName(fileUrl);
 	struct divelog imported;
-	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &imported) != 0) {
-		setErrorMessage(tr("This file could not be read as a Subsurface dive log."));
+	neo_backup_contents contents;
+	QString error;
+	if (!loadBackupDiveLog(fileName, &imported, &contents, &error)) {
+		setErrorMessage(error.isEmpty() ? tr("This file could not be read as a Subsurface dive log.") : error);
 		return false;
 	}
 	divelog.add_imported_dives(imported, import_flags::merge_all_trips);
@@ -1942,12 +2039,16 @@ bool QMLManager::replaceDiveLogFile(const QString &fileUrl)
 {
 	const QString fileName = localFileName(fileUrl);
 	struct divelog replacement;
-	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &replacement) != 0) {
-		setErrorMessage(tr("This file could not be read as a Subsurface dive log."));
+	neo_backup_contents contents;
+	QString error;
+	if (!loadBackupDiveLog(fileName, &replacement, &contents, &error)) {
+		setErrorMessage(error.isEmpty() ? tr("This file could not be read as a Subsurface dive log.") : error);
 		return false;
 	}
 	replacement.process_loaded_dives();
 	::divelog = std::move(replacement);
+	if (isNeoBackupBundle(fileName))
+		restoreNeoBackupMetadata(contents);
 	emit_reset_signal();
 	changesNeedSaving();
 	return true;
