@@ -240,6 +240,7 @@ public slots:
 	Q_INVOKABLE QVariantMap inspectDiveLogFile(const QString &fileUrl) const;
 	Q_INVOKABLE bool importDiveLogFile(const QString &fileUrl);
 	Q_INVOKABLE bool replaceDiveLogFile(const QString &fileUrl);
+	Q_INVOKABLE QString createNeoBackupBundle(const QString &directory);
 	Q_INVOKABLE void copyToClipboard(const QString &text);
 	QString getVersion() const;
 	void refreshDiveList();

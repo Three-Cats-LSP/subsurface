@@ -14,6 +14,11 @@
 #include <QClipboard>
 #include <QFile>
 #include <QFileInfo>
+#include <QTemporaryFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <zip.h>
 #include <QLocale>
 #include <QtConcurrent>
 #include <QFuture>
@@ -1946,6 +1951,69 @@ bool QMLManager::replaceDiveLogFile(const QString &fileUrl)
 	emit_reset_signal();
 	changesNeedSaving();
 	return true;
+}
+
+static bool addZipData(zip_t *archive, const char *name, const QByteArray &data)
+{
+	char *copy = static_cast<char *>(malloc(data.size()));
+	if (!copy)
+		return false;
+	memcpy(copy, data.constData(), data.size());
+	zip_source_t *source = zip_source_buffer(archive, copy, data.size(), 1);
+	if (!source) {
+		free(copy);
+		return false;
+	}
+	if (zip_file_add(archive, name, source, ZIP_FL_ENC_UTF_8) < 0) {
+		zip_source_free(source);
+		return false;
+	}
+	return true;
+}
+
+QString QMLManager::createNeoBackupBundle(const QString &directory)
+{
+	QTemporaryFile xml;
+	if (!xml.open()) {
+		setErrorMessage(tr("Could not stage the Neo backup."));
+		return {};
+	}
+	const QString xmlName = xml.fileName();
+	xml.close();
+	if (save_dives(xmlName.toUtf8().constData()) != 0) {
+		setErrorMessage(tr("Could not serialize the current dive log."));
+		return {};
+	}
+	QFile xmlFile(xmlName);
+	if (!xmlFile.open(QIODevice::ReadOnly)) {
+		setErrorMessage(tr("Could not read the staged dive log."));
+		return {};
+	}
+	const QByteArray xmlData = xmlFile.readAll();
+	QSettings settings;
+	QJsonObject neoMetadata;
+	neoMetadata.insert("equipmentKits", QJsonDocument::fromJson(settings.value("subsurface-neo/equipment-kits").toByteArray()).object());
+	neoMetadata.insert("collections", QJsonDocument::fromJson(settings.value("subsurface-neo/dive-collections").toByteArray()).array());
+	neoMetadata.insert("plannerPresets", QJsonValue::fromVariant(settings.value("subsurface-neo/planner/presets")));
+	QJsonObject manifest { { "format", "subsurface-neo" }, { "version", 1 }, { "createdAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) }, { "dives", static_cast<int>(divelog.dives.size()) } };
+	QDir targetDirectory(directory);
+	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
+		setErrorMessage(tr("Could not create the selected backup folder."));
+		return {};
+	}
+	const QString output = targetDirectory.filePath(QString("subsurface-neo-%1.subsurface-neo").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	int zipError = 0;
+	zip_t *archive = zip_open(output.toUtf8().constData(), ZIP_CREATE | ZIP_TRUNCATE, &zipError);
+	if (!archive || !addZipData(archive, "divelog.xml", xmlData) ||
+	    !addZipData(archive, "manifest.json", QJsonDocument(manifest).toJson(QJsonDocument::Indented)) ||
+	    !addZipData(archive, "neo-metadata.json", QJsonDocument(neoMetadata).toJson(QJsonDocument::Indented)) ||
+	    zip_close(archive) != 0) {
+		if (archive)
+			zip_discard(archive);
+		setErrorMessage(tr("Could not create the Neo backup package."));
+		return {};
+	}
+	return output;
 }
 
 void QMLManager::copyToClipboard(const QString &text)

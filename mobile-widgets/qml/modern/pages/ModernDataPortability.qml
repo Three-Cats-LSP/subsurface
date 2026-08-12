@@ -20,10 +20,16 @@ Kirigami.ScrollablePage {
 	property string selectedCache: ""
 	property string selectedBackup: ""
 	property var backupInspection: ({})
+	property string bundleCreatedAt: ""
 	FolderDialog {
 		id: exportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: manager.exportToFile(page.selectedExport, selectedFolder, page.anonymize)
+	}
+	FolderDialog {
+		id: bundleFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: page.bundleCreatedAt = manager.createNeoBackupBundle(selectedFolder)
 	}
 	FileDialog {
 		id: backupFile
@@ -71,6 +77,13 @@ Kirigami.ScrollablePage {
 			ComboBox { Layout.fillWidth: true; model: [qsTr("Complete dive log (Subsurface XML)"), qsTr("Dive sites (Subsurface XML)")]; onActivated: page.selectedExport = currentIndex === 0 ? ExportType.EX_DIVES_XML : ExportType.EX_DIVE_SITES_XML }
 			CheckBox { text: qsTr("Anonymize export"); checked: page.anonymize; onToggled: page.anonymize = checked }
 			Button { Layout.fillWidth: true; text: Qt.platform.os === "android" || Qt.platform.os === "ios" ? qsTr("Share export") : qsTr("Choose folder and export"); onClicked: { if (Qt.platform.os === "android" || Qt.platform.os === "ios") manager.shareViaEmail(page.selectedExport, page.anonymize); else exportFolder.open() } }
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Neo portable backup package"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Create one .subsurface-neo package containing canonical divelog.xml, a manifest, and Neo equipment, collections, and planner-preset metadata."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Button { Layout.fillWidth: true; text: qsTr("Choose folder and create package"); onClicked: bundleFolder.open() }
+			Label { visible: page.bundleCreatedAt.length > 0; text: qsTr("Created: %1").arg(page.bundleCreatedAt); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
