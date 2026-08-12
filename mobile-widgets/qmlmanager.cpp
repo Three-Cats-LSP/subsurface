@@ -23,7 +23,6 @@
 #include <QPdfWriter>
 #include <QPainter>
 #include <QPageLayout>
-#include <QFontMetrics>
 #include <zip.h>
 #include <QLocale>
 #include <QtConcurrent>
@@ -2162,18 +2161,23 @@ static QString exportNeoPdfDocument(const QString &directory, const QString &con
 		return {};
 	QFont font = painter.font();
 	font.setPointSize(10);
-	painter.setFont(font);
 	const QRect pageRect = writer.pageLayout().paintRectPixels(writer.resolution());
-	const QFontMetrics metrics(font);
-	const int lineHeight = metrics.lineSpacing();
-	int y = pageRect.top() + lineHeight;
-	for (const QString &line : contents.split('\n')) {
-		if (y + lineHeight > pageRect.bottom()) {
+	QTextDocument document;
+	document.setDefaultFont(font);
+	document.setDocumentMargin(0);
+	document.setPlainText(contents);
+	document.setTextWidth(pageRect.width());
+	qreal offset = 0;
+	const qreal pageHeight = pageRect.height();
+	while (offset < document.size().height()) {
+		painter.save();
+		painter.setClipRect(pageRect);
+		painter.translate(pageRect.left(), pageRect.top() - offset);
+		document.drawContents(&painter, QRectF(0, offset, pageRect.width(), pageHeight));
+		painter.restore();
+		offset += pageHeight;
+		if (offset < document.size().height())
 			writer.newPage();
-			y = pageRect.top() + lineHeight;
-		}
-		painter.drawText(QRect(pageRect.left(), y - lineHeight, pageRect.width(), lineHeight), Qt::AlignLeft | Qt::AlignVCenter, line);
-		y += lineHeight;
 	}
 	painter.end();
 	return output;
