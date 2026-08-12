@@ -30,6 +30,7 @@
 #include <QUndoStack>
 
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 
 #include <QBluetoothLocalDevice>
@@ -58,6 +59,7 @@
 #include "core/subsurfacestartup.h" // for ignore_bt flag
 #include "core/subsurface-string.h"
 #include "core/string-format.h"
+#include "core/units.h"
 #include "core/pref.h"
 #include "core/sample.h"
 #include "core/selection.h"
@@ -1911,6 +1913,20 @@ bool QMLManager::updateSite(const QString &siteName, const QString &description,
 	}
 	emit locationListChanged();
 	return true;
+}
+
+double QMLManager::plannerSurfacePressureForAltitude(double altitudeMeters) const
+{
+	if (!std::isfinite(altitudeMeters) || altitudeMeters < -500.0 || altitudeMeters > 12000.0)
+		return 1_atm.mbar / 1000.0;
+	return altitude_to_pressure(static_cast<int32_t>(std::lround(altitudeMeters * 1000.0))).mbar / 1000.0;
+}
+
+double QMLManager::plannerAltitudeForSurfacePressure(double pressureBar) const
+{
+	if (!std::isfinite(pressureBar) || pressureBar <= 0.0)
+		return 0.0;
+	return pressure_to_altitude(pressure_t { .mbar = static_cast<int32_t>(std::lround(pressureBar * 1000.0)) }).mm / 1000.0;
 }
 
 static QString localFileName(const QString &fileUrl)

@@ -240,6 +240,10 @@ public slots:
 	Q_INVOKABLE QVariant siteObject(const QString &siteName) const;
 	Q_INVOKABLE QVariantList siteDives(const QString &siteName) const;
 	Q_INVOKABLE bool updateSite(const QString &siteName, const QString &description, const QString &notes, const QString &gps);
+	// Planner altitude is a presentation adapter around the mature core
+	// pressure conversion; the planner itself continues to consume pressure.
+	Q_INVOKABLE double plannerSurfacePressureForAltitude(double altitudeMeters) const;
+	Q_INVOKABLE double plannerAltitudeForSurfacePressure(double pressureBar) const;
 	Q_INVOKABLE QVariantMap inspectDiveLogFile(const QString &fileUrl) const;
 	Q_INVOKABLE bool importDiveLogFile(const QString &fileUrl);
 	Q_INVOKABLE bool replaceDiveLogFile(const QString &fileUrl);
