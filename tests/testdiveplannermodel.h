@@ -17,6 +17,7 @@ private slots:
 	// AI-generated (Claude)
 	void testRecreationalPlanSaveAllowed();
 	void testNeoPlanResultContract();
+	void testNeoPlannerNativeRegression();
 };
 
 #endif // TESTDIVEPLANNERMODEL_H

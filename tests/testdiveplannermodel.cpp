@@ -316,6 +316,74 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	prefs = default_prefs;
 }
 
+void TestDivePlannerModel::testNeoPlannerNativeRegression()
+{
+	// Native counterparts of the portable engine assertions in the external
+	// planner suites. These deliberately use Subsurface results as the oracle:
+	// external-engine schedules have different, non-native assumptions.
+	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
+	prefs = default_prefs;
+	prefs.unit_system = METRIC;
+	prefs.units = SI_units;
+	prefs.planner_deco_mode = BUEHLMANN;
+	prefs.planner_gflow = 30;
+	prefs.planner_gfhigh = 75;
+	prefs.drop_stone_mode = false;
+
+	auto calculate = [model](int depth, int duration, int oxygen = 21) {
+		QVariantMap cylinder;
+		cylinder.insert("type", "AL80");
+		cylinder.insert("mix", QString::number(oxygen) + "/0");
+		cylinder.insert("pressure", 200);
+		cylinder.insert("use", OC_GAS);
+		QVariantMap segment;
+		segment.insert("depth", depth);
+		segment.insert("duration", duration);
+		segment.insert("gas", 0);
+		segment.insert("setpoint", 0);
+		segment.insert("divemode", OC);
+		return model->calculatePlan(QVariantList { cylinder }, QVariantList { segment },
+			"2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	};
+	auto runtime = [](const QVariantMap &result) {
+		const QVariantList profile = result.value("profile").toList();
+		return profile.empty() ? 0 : profile.last().toMap().value("time").toInt();
+	};
+
+	// Core no-decompression and decompression scenario checks.
+	const QVariantMap noDeco = calculate(20, 20);
+	QVERIFY(noDeco.value("planSaveAllowed").toBool());
+	QVERIFY(noDeco.value("schedule").toList().empty());
+	const QVariantMap deco40 = calculate(40, 25);
+	const QVariantMap deco50 = calculate(50, 30);
+	QVERIFY(deco40.value("planSaveAllowed").toBool());
+	QVERIFY(!deco40.value("schedule").toList().empty());
+	QVERIFY(!deco50.value("schedule").toList().empty());
+	QVERIFY(runtime(deco50) > runtime(deco40));
+
+	// Monotonicity checks are stable across native implementation details.
+	const QVariantMap shallow = calculate(30, 25);
+	const QVariantMap longBottomTime = calculate(40, 30);
+	QVERIFY(runtime(deco40) >= runtime(shallow));
+	QVERIFY(runtime(longBottomTime) >= runtime(deco40));
+	prefs.planner_gfhigh = 85;
+	const QVariantMap relaxedGf = calculate(40, 25);
+	prefs.planner_gfhigh = 70;
+	const QVariantMap conservativeGf = calculate(40, 25);
+	QVERIFY(runtime(conservativeGf) >= runtime(relaxedGf));
+
+	// Gas and toxicity assertions are checked through the same QML-facing data
+	// contract that Neo uses, rather than through a duplicate calculation.
+	prefs.planner_gfhigh = 75;
+	const QVariantMap air = calculate(30, 30, 21);
+	const QVariantMap ean32 = calculate(30, 30, 32);
+	QVERIFY(runtime(ean32) <= runtime(air));
+	QVERIFY(air.value("otu").toInt() >= 0);
+	QVERIFY(deco40.value("otu").toInt() >= 0);
+	QVERIFY(!deco40.value("gasAnalysis").toList().empty());
+	prefs = default_prefs;
+}
+
 // Stubs for symbols referenced by libraries linked into TestDivePlannerModel
 // but not available without the full desktop-widgets and commands libraries.
 
