@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtCore
 import org.kde.kirigami as Kirigami
 import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
@@ -24,6 +25,36 @@ Kirigami.ScrollablePage {
 	property var gasNames: []
 	ListModel { id: cylinders }
 	ListModel { id: segments }
+	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
+	function modelData(model) {
+		var values = []
+		for (var i = 0; i < model.count; ++i)
+			values.push(model.get(i))
+		return values
+	}
+	function savePreset(name) {
+		if (name.trim().length === 0)
+			return
+		var saved = plannerStorage.presets || []
+		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex }
+		for (var i = 0; i < saved.length; ++i) {
+			if (saved[i].name === preset.name) { saved[i] = preset; plannerStorage.presets = saved; return }
+		}
+		saved.push(preset)
+		plannerStorage.presets = saved
+	}
+	function loadPreset(index) {
+		var preset = plannerStorage.presets[index]
+		if (!preset)
+			return
+		cylinders.clear(); segments.clear()
+		for (var i = 0; i < preset.cylinders.length; ++i) cylinders.append(preset.cylinders[i])
+		for (var j = 0; j < preset.segments.length; ++j) segments.append(preset.segments[j])
+		updateGasNames()
+		diveMode.currentIndex = preset.diveMode
+		waterType.currentIndex = preset.waterType
+		generatePlan()
+	}
 
 	function updateGasNames() {
 		var names = []
@@ -111,6 +142,12 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Bottom SAC: %1").arg(Backend.bottomsac); color: tokens.textPrimary }
 				Button { text: qsTr("Advanced settings"); onClicked: page.openPlannerSettings() }
 			}
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }; Button { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
+			Repeater { model: plannerStorage.presets; delegate: RowLayout { required property int index; required property var modelData; Layout.fillWidth: true; Label { text: modelData.name; color: tokens.textPrimary; Layout.fillWidth: true }; Button { text: qsTr("Load"); onClicked: page.loadPreset(index) }; Button { text: qsTr("Remove"); onClicked: { var saved = plannerStorage.presets || []; saved.splice(index, 1); plannerStorage.presets = saved } } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
