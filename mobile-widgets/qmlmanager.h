@@ -90,10 +90,10 @@ public:
 	};
 	Q_ENUM(export_types)
 #if !defined(Q_OS_ANDROID)
-	Q_INVOKABLE void exportToFile(export_types type, QString directory, bool anonymize);
+	Q_INVOKABLE void exportToFile(export_types type, QString directory, bool anonymize, bool selected);
 #endif
 	Q_INVOKABLE void exportToWEB(export_types type, QString userId, QString password, bool anonymize);
-	Q_INVOKABLE void shareViaEmail(export_types type, bool anonymize);
+	Q_INVOKABLE void shareViaEmail(export_types type, bool anonymize, bool selected);
 
 	QString DC_vendor() const;
 	void DC_setVendor(const QString& vendor);

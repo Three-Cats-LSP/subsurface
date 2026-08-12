@@ -16,7 +16,7 @@ TemplatePage {
 		id: saveAsDialog
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: {
-			manager.exportToFile(selectedExport, selectedFolder, anonymize.checked)
+			manager.exportToFile(selectedExport, selectedFolder, anonymize.checked, false)
 			pageStack.pop()
 			close()
 		}
@@ -210,7 +210,7 @@ TemplatePage {
 					saveAsDialog.open()
 				} else {
 					manager.appendTextToLog("Send export of type " + selectedExport + " via email.")
-					manager.shareViaEmail(selectedExport, anonymize.checked)
+					manager.shareViaEmail(selectedExport, anonymize.checked, false)
 					pageStack.pop()
 				}
 			}

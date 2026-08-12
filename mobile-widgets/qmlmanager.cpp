@@ -2629,7 +2629,7 @@ void QMLManager::appInitialized()
 }
 
 #if !defined(Q_OS_ANDROID)
-void QMLManager::exportToFile(export_types type, QString dir, bool anonymize)
+void QMLManager::exportToFile(export_types type, QString dir, bool anonymize, bool selected)
 {
 	// dir starts with "file://" e.g. "file:///tmp"
 	// remove prefix and add standard filenamel
@@ -2638,7 +2638,7 @@ void QMLManager::exportToFile(export_types type, QString dir, bool anonymize)
 	switch (type)
 	{
 		case EX_DIVES_XML:
-			save_dives_logic(qPrintable(fileName + ".ssrf"), false, anonymize);
+			save_dives_logic(qPrintable(fileName + ".ssrf"), selected, anonymize);
 			break;
 		case EX_DIVE_SITES_XML:
 			{
@@ -2655,7 +2655,7 @@ void QMLManager::exportToFile(export_types type, QString dir, bool anonymize)
 				const bool imperial = prefs.units.length == units::FEET;
 				const char *stylesheet = type == EX_DIVES_UDDF ? "uddf-export.xslt" : type == EX_DIVES_CSV_DETAILS ? "xml2detailscsv.xslt" : "xml2summarycsv.xslt";
 				const QString suffix = type == EX_DIVES_UDDF ? ".uddf" : ".csv";
-				auto result = export_dives_xslt(qPrintable(fileName + suffix), false, imperial ? 1 : 0, stylesheet, anonymize);
+				auto result = export_dives_xslt(qPrintable(fileName + suffix), selected, imperial ? 1 : 0, stylesheet, anonymize);
 				if (result.first)
 					report_error("%s", result.second.c_str());
 				break;
@@ -2683,7 +2683,7 @@ void QMLManager::exportToWEB(export_types type, QString userId, QString password
 	}
 }
 
-void QMLManager::shareViaEmail(export_types type, bool anonymize)
+void QMLManager::shareViaEmail(export_types type, bool anonymize, bool selected)
 {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
 	QString fileName = appLogFileName;
@@ -2694,7 +2694,7 @@ void QMLManager::shareViaEmail(export_types type, bool anonymize)
 	switch (type) {
 	case EX_DIVES_XML:
 		fileName.replace("subsurface.log", "subsurface.ssrf");
-		if (save_dives_logic(qPrintable(fileName), false, anonymize) == 0) {
+		if (save_dives_logic(qPrintable(fileName), selected, anonymize) == 0) {
 			// ok, we have a file, let's send it
 			body = "Subsurface dive log data";
 		} else {
@@ -2721,7 +2721,7 @@ void QMLManager::shareViaEmail(export_types type, bool anonymize)
 			const QString suffix = type == EX_DIVES_UDDF ? "uddf" : "csv";
 			fileName.replace("subsurface.log", QString("subsurface_export.") + suffix);
 			const bool imperial = prefs.units.length == units::FEET;
-			if (export_dives_xslt(qPrintable(fileName), false, imperial ? 1 : 0, stylesheet, anonymize).first == 0)
+			if (export_dives_xslt(qPrintable(fileName), selected, imperial ? 1 : 0, stylesheet, anonymize).first == 0)
 				body = type == EX_DIVES_UDDF ? "Subsurface UDDF dive log data" : "Subsurface CSV dive log data";
 			else {
 				appendTextToLog("failure to export dive log, aborting attempt to share");

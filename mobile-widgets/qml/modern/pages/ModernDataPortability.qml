@@ -17,6 +17,7 @@ Kirigami.ScrollablePage {
 	Modern.DesignTokens { id: tokens }
 	property int selectedExport: ExportType.EX_DIVES_XML
 	property bool anonymize: false
+	property bool selectedDivesOnly: false
 	property string selectedCache: ""
 	property string selectedBackup: ""
 	property var backupInspection: ({})
@@ -24,7 +25,7 @@ Kirigami.ScrollablePage {
 	FolderDialog {
 		id: exportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-		onAccepted: manager.exportToFile(page.selectedExport, selectedFolder, page.anonymize)
+		onAccepted: manager.exportToFile(page.selectedExport, selectedFolder, page.anonymize, page.selectedDivesOnly)
 	}
 	FolderDialog {
 		id: bundleFolder
@@ -76,7 +77,8 @@ Kirigami.ScrollablePage {
 			Text { text: qsTr("Create a portable complete-log export or dive-site catalogue through Subsurface's established exporters."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			ComboBox { Layout.fillWidth: true; model: [qsTr("Complete dive log (Subsurface XML)"), qsTr("Dive sites (Subsurface XML)"), qsTr("Complete log (UDDF)"), qsTr("Complete log (CSV profile details)"), qsTr("Complete log (CSV summary)")]; onActivated: page.selectedExport = [ExportType.EX_DIVES_XML, ExportType.EX_DIVE_SITES_XML, ExportType.EX_DIVES_UDDF, ExportType.EX_DIVES_CSV_DETAILS, ExportType.EX_DIVES_CSV_SUMMARY][currentIndex] }
 			CheckBox { text: qsTr("Anonymize export"); checked: page.anonymize; onToggled: page.anonymize = checked }
-			Button { Layout.fillWidth: true; text: Qt.platform.os === "android" || Qt.platform.os === "ios" ? qsTr("Share export") : qsTr("Choose folder and export"); onClicked: { if (Qt.platform.os === "android" || Qt.platform.os === "ios") manager.shareViaEmail(page.selectedExport, page.anonymize); else exportFolder.open() } }
+			CheckBox { visible: page.selectedExport !== ExportType.EX_DIVE_SITES_XML; text: qsTr("Export selected dives only"); checked: page.selectedDivesOnly; onToggled: page.selectedDivesOnly = checked }
+			Button { Layout.fillWidth: true; text: Qt.platform.os === "android" || Qt.platform.os === "ios" ? qsTr("Share export") : qsTr("Choose folder and export"); onClicked: { if (Qt.platform.os === "android" || Qt.platform.os === "ios") manager.shareViaEmail(page.selectedExport, page.anonymize, page.selectedDivesOnly); else exportFolder.open() } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
