@@ -34,6 +34,8 @@ Kirigami.ScrollablePage {
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
 	property var gasReference: []
+	property var ndlReference: []
+	property real conversionValue: 1
 	property string plannerTextExport: ""
 	property string plannerPdfExport: ""
 	property string planPackageTextExport: ""
@@ -336,6 +338,21 @@ Kirigami.ScrollablePage {
 			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he, "mod": reference.mod || "—", "ead": reference.ead || "—" })
 		}
 		gasReference = references
+	}
+	function calculateNdlReference() {
+		var depths = Backend.length === Enums.METERS ? [12, 18, 24, 30, 36, 42] : [40, 60, 80, 100, 120, 140]
+		var cylinderData = modelData(cylinders)
+		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
+		var table = []
+		for (var i = 0; i < depths.length; ++i) {
+			var segment = { "depth": depths[i], "duration": 1, "gas": 0, "setpoint": diveMode.currentIndex === 1 ? Backend.default_setpoint : 0, "divemode": diveMode.currentIndex }
+			var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, [segment], plannedDate, plannedTime, diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
+			var samples = result.profile || []
+			var sample = samples.length > 0 ? samples[samples.length - 1] : null
+			var ndl = sample && sample.ndl !== undefined ? sample.ndl : -1
+			table.push({ "depth": depths[i], "ndl": ndl, "available": ndl >= 0, "saveAllowed": result.planSaveAllowed === true })
+		}
+		ndlReference = table
 	}
 	function addCylinder() {
 		cylinders.append({ "type": PrefEquipment.default_cylinder || "AL80", "mix": "21/0",
@@ -748,7 +765,22 @@ Kirigami.ScrollablePage {
 				Label { text: modelData.belowMinimum ? qsTr("Insufficient gas") : modelData.belowReserve ? qsTr("Below reserve") : qsTr("End %1").arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.success; Layout.fillWidth: true }
 			} }
 		}
-		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below runs the active native planner—there is no separate table formula."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() }
+			Button { Layout.fillWidth: true; text: qsTr("Calculate NDL reference"); onClicked: page.calculateNdlReference() }
+			Repeater { model: page.ndlReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: qsTr("%1 %2").arg(modelData.depth).arg(page.depthUnit); color: tokens.textPrimary; Layout.fillWidth: true }; Label { text: modelData.available ? page.formatDuration(modelData.ndl) : qsTr("Not available"); color: modelData.available ? tokens.textSecondary : tokens.textMuted } } }
+			Text { visible: page.ndlReference.length > 0; text: qsTr("Reference only: uses the current model, gases, water, surface pressure, and one-minute level profile at each shown depth. Review the generated plan before diving."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Unit reference"); color: tokens.textPrimary; font.weight: Font.DemiBold }
+			TextField { Layout.fillWidth: true; text: page.conversionValue.toString(); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Value to convert"); onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.conversionValue = value } }
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 1
+				Label { text: qsTr("%1 m = %2 ft").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 3.28084).toFixed(2)); color: tokens.textSecondary }
+				Label { text: qsTr("%1 bar = %2 psi").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 14.5038).toFixed(2)); color: tokens.textSecondary }
+				Label { text: qsTr("%1 L = %2 US gal").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 0.264172).toFixed(2)); color: tokens.textSecondary }
+			}
+		}
 		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 	}
 }
