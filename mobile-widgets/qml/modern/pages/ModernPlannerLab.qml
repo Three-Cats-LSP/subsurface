@@ -220,6 +220,10 @@ Kirigami.ScrollablePage {
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Final ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 99; value: Backend.ascratelast6m; onValueModified: { Backend.ascratelast6m = value; page.generatePlan() } } }
 				CheckBox { text: qsTr("Last stop at 6 m / 20 ft"); checked: Backend.last_stop6m; onToggled: { Backend.last_stop6m = checked; page.generatePlan() } }
 				CheckBox { text: qsTr("Switch gas only at required stops"); checked: Backend.switch_at_req_stop; onToggled: { Backend.switch_at_req_stop = checked; page.generatePlan() } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Minimum gas-switch time (min)"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 0; to: 4; value: Backend.min_switch_duration; onValueModified: { Backend.min_switch_duration = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Surface segment (min)"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 0; to: 4; value: Backend.surface_segment; onValueModified: { Backend.surface_segment = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Problem-solving time (min)"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 9; value: Backend.problemsolvingtime; onValueModified: { Backend.problemsolvingtime = value; page.generatePlan() } } }
+				CheckBox { text: qsTr("Plan back-gas breaks"); checked: Backend.doo2breaks; onToggled: { Backend.doo2breaks = checked; page.generatePlan() } }
 			}
 		}
 		Components.ModernCard {
