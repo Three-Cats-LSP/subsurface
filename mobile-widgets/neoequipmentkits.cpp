@@ -11,6 +11,7 @@ NeoEquipmentKits::NeoEquipmentKits(QObject *parent) : QObject(parent)
 }
 
 QVariantList NeoEquipmentKits::kits() const { return m_kits; }
+QStringList NeoEquipmentKits::recentKitNames() const { return m_recentKitNames; }
 QString NeoEquipmentKits::defaultKit() const { return m_defaultKit; }
 
 QVariantMap NeoEquipmentKits::kit(const QString &name) const
@@ -21,6 +22,18 @@ QVariantMap NeoEquipmentKits::kit(const QString &name) const
 			return data;
 	}
 	return {};
+}
+
+void NeoEquipmentKits::useKit(const QString &name)
+{
+	if (kit(name).isEmpty())
+		return;
+	m_recentKitNames.removeAll(name);
+	m_recentKitNames.prepend(name);
+	while (m_recentKitNames.size() > 3)
+		m_recentKitNames.removeLast();
+	save();
+	emit recentKitNamesChanged();
 }
 
 void NeoEquipmentKits::saveKit(const QString &name, const QVariantMap &data)
@@ -47,10 +60,12 @@ void NeoEquipmentKits::removeKit(const QString &name)
 	for (int i = 0; i < m_kits.size(); ++i) {
 		if (m_kits[i].toMap().value("name").toString() == name) {
 			m_kits.removeAt(i);
+			m_recentKitNames.removeAll(name);
 			if (m_defaultKit == name)
 				setDefaultKit({});
 			save();
 			emit kitsChanged();
+			emit recentKitNamesChanged();
 			return;
 		}
 	}
@@ -72,6 +87,7 @@ void NeoEquipmentKits::load()
 	if (document.isObject()) {
 		m_kits = document.object().value("kits").toArray().toVariantList();
 		m_defaultKit = document.object().value("defaultKit").toString();
+		m_recentKitNames = document.object().value("recentKitNames").toVariant().toStringList();
 	}
 }
 
@@ -81,5 +97,6 @@ void NeoEquipmentKits::save() const
 	QJsonObject object;
 	object["kits"] = QJsonArray::fromVariantList(m_kits);
 	object["defaultKit"] = m_defaultKit;
+	object["recentKitNames"] = QJsonArray::fromStringList(m_recentKitNames);
 	settings.setValue("subsurface-neo/equipment-kits", QJsonDocument(object).toJson(QJsonDocument::Compact));
 }

@@ -27,14 +27,23 @@ Kirigami.Page {
 		manager.commitChanges(dive.id, numberField.text, dateField.text, locationField.text,
 			gpsField.text, durationField.text, depthField.text, airTempField.text,
 			waterTempField.text, suitField.text, buddyField.text, dive.diveGuide || "", tagsField.text,
-			dive.sumWeight || "", notesField.text, listValue(dive.startPressure),
-			listValue(dive.endPressure), listValue(dive.firstGas), listValue(dive.getCylinder),
+			dive.sumWeight || "", notesField.text, equipmentValues(dive.startPressure, startPressureField.text),
+			equipmentValues(dive.endPressure, endPressureField.text), equipmentValues(dive.firstGas, gasField.text), equipmentValues(dive.getCylinder, cylinderBox.currentText),
 			dive.rating || 0, dive.viz || 0, "view")
 		saved()
 	}
 
+	function equipmentValues(original, replacement) {
+		var values = listValue(original).slice()
+		if (replacement.length > 0)
+			values[0] = replacement
+		return values
+	}
+
 	function currentKitData() {
-		return { "suit": suitField.text, "buddy": buddyField.text, "tags": tagsField.text }
+		return { "suit": suitField.text, "buddy": buddyField.text, "tags": tagsField.text,
+			"cylinder": cylinderBox.currentText, "gas": gasField.text,
+			"startPressure": startPressureField.text, "endPressure": endPressureField.text }
 	}
 
 	function applyKit(name) {
@@ -44,6 +53,15 @@ Kirigami.Page {
 		suitField.text = kit.suit || ""
 		buddyField.text = kit.buddy || ""
 		tagsField.text = kit.tags || ""
+		var cylinderIndex = cylinderBox.find(kit.cylinder || "")
+		if (cylinderIndex >= 0)
+			cylinderBox.currentIndex = cylinderIndex
+		else
+			cylinderBox.editText = kit.cylinder || ""
+		gasField.text = kit.gas || ""
+		startPressureField.text = kit.startPressure || ""
+		endPressureField.text = kit.endPressure || ""
+		NeoEquipmentKits.useKit(name)
 	}
 
 	Flickable {
@@ -80,14 +98,22 @@ Kirigami.Page {
 					id: kitSelector
 					Layout.fillWidth: true
 					model: [qsTr("Choose a kit")].concat(NeoEquipmentKits.kits.map(function(kit) { return kit.name }))
-					onActivated: if (currentIndex > 0) page.applyKit(currentText)
+				onActivated: if (currentIndex > 0) page.applyKit(currentText)
 				}
 				RowLayout {
 					Layout.fillWidth: true
 					TextField { id: kitNameField; Layout.fillWidth: true; placeholderText: qsTr("Save current fields as kit") }
 					Button { text: qsTr("Save kit"); enabled: kitNameField.text.length > 0; onClicked: { NeoEquipmentKits.saveKit(kitNameField.text, page.currentKitData()); kitNameField.clear() } }
+					Button { text: qsTr("Remove"); enabled: kitSelector.currentIndex > 0; onClicked: { NeoEquipmentKits.removeKit(kitSelector.currentText); kitSelector.currentIndex = 0 } }
 				}
 				CheckBox { text: qsTr("Use selected kit by default"); checked: kitSelector.currentIndex > 0 && NeoEquipmentKits.defaultKit === kitSelector.currentText; onToggled: NeoEquipmentKits.defaultKit = checked ? kitSelector.currentText : "" }
+				Flow {
+					Layout.fillWidth: true
+					visible: NeoEquipmentKits.recentKitNames.length > 0
+					spacing: tokens.space8
+					Text { text: qsTr("Recent:"); color: tokens.textSecondary; font.pixelSize: 13 }
+					Repeater { model: NeoEquipmentKits.recentKitNames; delegate: Button { required property string modelData; text: modelData; onClicked: page.applyKit(modelData) } }
+				}
 			}
 
 			Components.ModernCard {
@@ -135,7 +161,15 @@ Kirigami.Page {
 				Layout.rightMargin: tokens.space16
 				Layout.bottomMargin: tokens.space24
 				Text { text: qsTr("Cylinders and weights"); color: tokens.textMuted; font.pixelSize: 10 }
-				Text { Layout.fillWidth: true; text: qsTr("Use the full editor for multi-cylinder gas, pressure, and weight-system changes."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap }
+				Text { Layout.fillWidth: true; text: qsTr("Choose the primary cylinder and gas here. Use the full editor for additional cylinders and weight-system changes."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap }
+				ComboBox { id: cylinderBox; Layout.fillWidth: true; editable: true; model: dive ? dive.cylinderList : []; currentIndex: find(dive && dive.getCylinder && dive.getCylinder.length ? dive.getCylinder[0] : "") }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: page.width >= 700 ? 3 : 1
+					TextField { id: gasField; Layout.fillWidth: true; placeholderText: qsTr("Gas mix"); text: dive && dive.firstGas && dive.firstGas.length ? dive.firstGas[0] : "" }
+					TextField { id: startPressureField; Layout.fillWidth: true; placeholderText: qsTr("Start pressure"); text: dive && dive.startPressure && dive.startPressure.length ? dive.startPressure[0] : "" }
+					TextField { id: endPressureField; Layout.fillWidth: true; placeholderText: qsTr("End pressure"); text: dive && dive.endPressure && dive.endPressure.length ? dive.endPressure[0] : "" }
+				}
 				Button { text: qsTr("Open full equipment editor"); onClicked: if (dive) advancedEditorRequested(dive.id) }
 			}
 		}
