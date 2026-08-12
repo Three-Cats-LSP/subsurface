@@ -942,6 +942,16 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenGasTools: showPage(divePlannerCalculatorWindow)
 	}
 
+	NeoPages.ModernOperationsHub {
+		id: neoOperationsHub
+		visible: false
+		onOpenSites: showPage(mapPage)
+		onOpenStatistics: showPage(statistics)
+		onOpenEquipment: showPage(settingsWindow)
+		onOpenExport: showPage(exportWindow)
+		onOpenRecovery: showPage(recoverCache)
+	}
+
 	NeoPages.CloudSyncPage {
 		id: cloudSyncPage
 		visible: false
