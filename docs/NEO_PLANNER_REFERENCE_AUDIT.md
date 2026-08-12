@@ -27,7 +27,31 @@ Its published `subsurface` golden is an open-reference result, not an authoritat
 - GF/surface-GF, ceiling, NDL, TTS, pO2, tissue and CNS projections;
 - gas analysis, contingency variations, and unavailable-gas rejection.
 
-The Android Qt 6 and Windows MSVC jobs compile this coverage on `modern-ui`.
+`TestDivePlannerModel::testNeoPlannerNativeRegression` adds representative
+native-engine checks for no-decompression and decompression profiles, GF
+conservatism, gas/OTU analysis and VPM-B conservatism. These deliberately test
+observable safety contracts (valid result, monotonic depth/runtime and expected
+relative conservatism) instead of importing an external engine's schedule.
+
+The dedicated `Neo planner regression` workflow runs the desktop and mobile
+native test suites on `modern-ui`; Android Qt 6 and Windows MSVC also compile
+the same planner and QML boundary.
+
+## Future Neo Web test pages
+
+The planned WebAssembly build must compile and call the same Subsurface
+`plan()` and `create_plot_info_new()` pipeline as Neo native. The browser test
+pages will be thin scenario runners over that module; JavaScript must not
+implement, approximate or silently replace decompression mathematics.
+
+The eventual public URLs under `https://threecats-lsp.com/subsurface-neo/`
+will provide the Core, Verify, Extended, Massive, Mobile Massive, pSCR
+OTU/CNS and CCR differential groups as separate pages that open in new tabs.
+Their source scenarios may be adapted from the LSP suites where the input
+assumptions are representable, but their expected results will be captured
+from the matching Subsurface revision and versioned with documented
+tolerances. Until the WebAssembly planner module exists, no static page should
+claim to execute Neo's engine.
 
 ## Required before compatibility labels or numerical parity claims
 
