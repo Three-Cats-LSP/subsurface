@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QClipboard>
 #include <QFile>
+#include <QFileInfo>
 #include <QLocale>
 #include <QtConcurrent>
 #include <QFuture>
@@ -1895,6 +1896,40 @@ bool QMLManager::updateSite(const QString &siteName, const QString &description,
 		Command::editDiveSiteLocation(ds, create_location(latitude, longitude));
 	}
 	emit locationListChanged();
+	return true;
+}
+
+static QString localFileName(const QString &fileUrl)
+{
+	const QUrl url(fileUrl);
+	return url.isLocalFile() ? url.toLocalFile() : fileUrl;
+}
+
+QVariantMap QMLManager::inspectDiveLogFile(const QString &fileUrl) const
+{
+	QVariantMap result;
+	const QString fileName = localFileName(fileUrl);
+	struct divelog imported;
+	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &imported) != 0) {
+		result.insert("error", tr("This file could not be read as a Subsurface dive log."));
+		return result;
+	}
+	result.insert("fileName", QFileInfo(fileName).fileName());
+	result.insert("dives", static_cast<int>(imported.dives.size()));
+	result.insert("sites", static_cast<int>(imported.sites.size()));
+	return result;
+}
+
+bool QMLManager::importDiveLogFile(const QString &fileUrl)
+{
+	const QString fileName = localFileName(fileUrl);
+	struct divelog imported;
+	if (fileName.isEmpty() || parse_file(fileName.toUtf8().constData(), &imported) != 0) {
+		setErrorMessage(tr("This file could not be read as a Subsurface dive log."));
+		return false;
+	}
+	divelog.add_imported_dives(imported, import_flags::merge_all_trips);
+	changesNeedSaving();
 	return true;
 }
 
