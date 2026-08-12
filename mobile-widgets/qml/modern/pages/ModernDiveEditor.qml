@@ -33,6 +33,19 @@ Kirigami.Page {
 		saved()
 	}
 
+	function currentKitData() {
+		return { "suit": suitField.text, "buddy": buddyField.text, "tags": tagsField.text }
+	}
+
+	function applyKit(name) {
+		var kit = NeoEquipmentKits.kit(name)
+		if (!kit || !kit.name)
+			return
+		suitField.text = kit.suit || ""
+		buddyField.text = kit.buddy || ""
+		tagsField.text = kit.tags || ""
+	}
+
 	Flickable {
 		anchors.fill: parent
 		contentWidth: width
@@ -56,6 +69,25 @@ Kirigami.Page {
 				font.pixelSize: 24
 				font.weight: Font.DemiBold
 				wrapMode: Text.WordWrap
+			}
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.leftMargin: tokens.space16
+				Layout.rightMargin: tokens.space16
+				Text { text: qsTr("Equipment kit"); color: tokens.textMuted; font.pixelSize: 10 }
+				ComboBox {
+					id: kitSelector
+					Layout.fillWidth: true
+					model: [qsTr("Choose a kit")].concat(NeoEquipmentKits.kits.map(function(kit) { return kit.name }))
+					onActivated: if (currentIndex > 0) page.applyKit(currentText)
+				}
+				RowLayout {
+					Layout.fillWidth: true
+					TextField { id: kitNameField; Layout.fillWidth: true; placeholderText: qsTr("Save current fields as kit") }
+					Button { text: qsTr("Save kit"); enabled: kitNameField.text.length > 0; onClicked: { NeoEquipmentKits.saveKit(kitNameField.text, page.currentKitData()); kitNameField.clear() } }
+				}
+				CheckBox { text: qsTr("Use selected kit by default"); checked: kitSelector.currentIndex > 0 && NeoEquipmentKits.defaultKit === kitSelector.currentText; onToggled: NeoEquipmentKits.defaultKit = checked ? kitSelector.currentText : "" }
 			}
 
 			Components.ModernCard {

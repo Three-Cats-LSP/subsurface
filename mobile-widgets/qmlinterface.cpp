@@ -2,6 +2,7 @@
 #include "qmlinterface.h"
 #include "qmlmanager.h"
 #include "neodashboardmodel.h"
+#include "neoequipmentkits.h"
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
 #include "core/neoupdatemanager.h"
@@ -108,6 +109,8 @@ void QMLInterface::setup(QQmlContext *ct)
 
 	static NeoDashboardModel neoDashboardModel;
 	ct->setContextProperty("NeoDashboard", &neoDashboardModel);
+	static NeoEquipmentKits neoEquipmentKits;
+	ct->setContextProperty("NeoEquipmentKits", &neoEquipmentKits);
 
 	// Neo cloud sync coordinator. It deliberately shares Subsurface's existing
 	// QNetworkAccessManager, while keeping OAuth/provider state separate from
