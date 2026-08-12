@@ -326,8 +326,8 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	prefs.unit_system = METRIC;
 	prefs.units = SI_units;
 	prefs.planner_deco_mode = BUEHLMANN;
-	prefs.planner_gflow = 30;
-	prefs.planner_gfhigh = 75;
+	prefs.gflow = 30;
+	prefs.gfhigh = 75;
 	prefs.drop_stone_mode = false;
 
 	auto calculate = [model](int depth, int duration, int oxygen = 21) {
@@ -366,15 +366,15 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	const QVariantMap longBottomTime = calculate(40, 30);
 	QVERIFY(runtime(deco40) >= runtime(shallow));
 	QVERIFY(runtime(longBottomTime) >= runtime(deco40));
-	prefs.planner_gfhigh = 85;
+	prefs.gfhigh = 85;
 	const QVariantMap relaxedGf = calculate(40, 25);
-	prefs.planner_gfhigh = 70;
+	prefs.gfhigh = 70;
 	const QVariantMap conservativeGf = calculate(40, 25);
 	QVERIFY(runtime(conservativeGf) >= runtime(relaxedGf));
 
 	// Gas and toxicity assertions are checked through the same QML-facing data
 	// contract that Neo uses, rather than through a duplicate calculation.
-	prefs.planner_gfhigh = 75;
+	prefs.gfhigh = 75;
 	const QVariantMap air = calculate(30, 30, 21);
 	const QVariantMap ean32 = calculate(30, 30, 32);
 	QVERIFY(runtime(ean32) <= runtime(air));
