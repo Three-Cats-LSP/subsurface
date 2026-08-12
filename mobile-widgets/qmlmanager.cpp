@@ -1837,6 +1837,26 @@ QString QMLManager::getGpsFromSiteName(const QString &siteName)
 	return printGPSCoords(&ds->location);
 }
 
+QVariantMap QMLManager::siteSummary(const QString &siteName) const
+{
+	const dive_site *ds = divelog.sites.get_by_name(siteName.toStdString());
+	if (!ds)
+		return {};
+	return {
+		{ "name", QString::fromStdString(ds->name) },
+		{ "description", QString::fromStdString(ds->description) },
+		{ "notes", QString::fromStdString(ds->notes) },
+		{ "gps", printGPSCoords(&ds->location) },
+		{ "diveCount", static_cast<int>(ds->dives.size()) }
+	};
+}
+
+QVariant QMLManager::siteObject(const QString &siteName) const
+{
+	struct dive_site *ds = divelog.sites.get_by_name(siteName.toStdString());
+	return ds ? QVariant::fromValue(ds) : QVariant();
+}
+
 void QMLManager::setNotificationText(QString text)
 {
 	appendTextToLog(QStringLiteral("showProgress: ") + text);

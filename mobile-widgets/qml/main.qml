@@ -970,7 +970,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernSitesHub {
 		id: neoSitesHub
 		visible: false
-		onOpenMap: showPage(mapPage)
+		onOpenMap: function(siteName) {
+			showPage(mapPage)
+			if (siteName.length > 0)
+				mapPage.centerOnDiveSite(manager.siteObject(siteName))
+		}
 	}
 
 	NeoPages.ModernStatisticsHub {

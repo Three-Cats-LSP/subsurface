@@ -10,6 +10,7 @@
 #include <QColor>
 #include <QFile>
 #include <QTimer>
+#include <QVariantMap>
 
 #include "core/btdiscovery.h"
 #include "core/downloadfromdcthread.h"
@@ -230,6 +231,10 @@ public slots:
 	QString getNumber(const QString& diveId);
 	QString getDate(const QString& diveId);
 	QString getGpsFromSiteName(const QString& siteName);
+	// A serialisable projection of canonical dive-site data for Neo views.
+	// Site editing and map selection continue to use the established models.
+	Q_INVOKABLE QVariantMap siteSummary(const QString &siteName) const;
+	Q_INVOKABLE QVariant siteObject(const QString &siteName) const;
 	QString getVersion() const;
 	void refreshDiveList();
 	void screenChanged(QScreen *screen);
