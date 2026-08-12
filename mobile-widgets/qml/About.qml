@@ -25,13 +25,13 @@ Kirigami.ScrollablePage {
 		showPage(cloudPage)
 	}
 
-	function openModernDiveDetails(row) {
+	function openModernDiveDetails(row, editOnReady) {
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
 		if (component.status !== Component.Ready) {
 			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
 			return
 		}
-		var detailsPage = component.createObject(rootItem, { "initialRow": row })
+		var detailsPage = component.createObject(rootItem, { "initialRow": row, "editOnReady": editOnReady || false })
 		if (detailsPage === null) {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
 			return
@@ -42,7 +42,7 @@ Kirigami.ScrollablePage {
 				showPassiveNotification(qsTr("Unable to load Neo dive editor: %1").arg(component.errorString()), 6000)
 				return
 			}
-			var editorPage = component.createObject(rootItem, { "dive": diveData })
+			var editorPage = component.createObject(rootItem, { "dive": diveData, "newDive": detailsPage.editOnReady })
 			if (editorPage === null) {
 				showPassiveNotification(qsTr("Unable to create Neo dive editor"), 6000)
 				return
@@ -77,7 +77,12 @@ Kirigami.ScrollablePage {
 			showPageFromDrawer(downloadFromDc)
 		})
 		divesPage.addDiveRequested.connect(function() {
-			startAddDive()
+			var diveId = manager.addDive()
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				aboutPage.openModernDiveDetails(row, true)
+			else
+				startAddDive()
 		})
 		showPage(divesPage)
 	}

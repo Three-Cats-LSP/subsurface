@@ -14,6 +14,8 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property int initialRow: -1
+	property bool editOnReady: false
+	property bool editOpened: false
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
 
@@ -26,9 +28,17 @@ Kirigami.Page {
 			page.currentItem.refreshProfile()
 	}
 
+	function openEditorWhenReady() {
+		if (editOnReady && !editOpened && currentItem && currentItem.modelData) {
+			editOpened = true
+			editRequested(currentItem.modelData)
+		}
+	}
+
 	Component.onCompleted: {
 		if (initialRow >= 0)
 			manager.selectRow(initialRow)
+		Qt.callLater(openEditorWhenReady)
 	}
 
 	Connections {
@@ -37,6 +47,7 @@ Kirigami.Page {
 			diveView.currentIndex = index.row
 			if (!diveView.swipeInProgress)
 				diveView.contentX = diveView.originX + index.row * diveView.width
+			Qt.callLater(page.openEditorWhenReady)
 		}
 	}
 

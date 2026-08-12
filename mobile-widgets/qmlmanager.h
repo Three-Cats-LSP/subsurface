@@ -203,6 +203,7 @@ public slots:
 	void openNoCloudRepo();
 	void saveChangesCloud(bool forceRemoteSync);
 	void selectDive(int id);
+	Q_INVOKABLE int swipeRowForDive(int id) const;
 	void deleteDive(int id);
 	void deleteAccount();
 	void toggleDiveInvalid(int id);

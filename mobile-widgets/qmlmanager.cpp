@@ -498,6 +498,17 @@ void QMLManager::selectSwipeRow(int row)
 	select_single_dive(d);
 }
 
+int QMLManager::swipeRowForDive(int id) const
+{
+	const QAbstractItemModel *model = MobileModels::instance()->swipeModel();
+	for (int row = 0; row < model->rowCount(); ++row) {
+		const dive *d = diveInRow(model, row);
+		if (d && d->id == id)
+			return row;
+	}
+	return -1;
+}
+
 void QMLManager::updateAllGlobalLists()
 {
 	emit buddyListChanged();

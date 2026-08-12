@@ -12,6 +12,8 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property var dive: null
+	property bool newDive: false
+	property bool defaultKitApplied: false
 	signal saved()
 	signal advancedEditorRequested(int diveId)
 
@@ -64,6 +66,13 @@ Kirigami.Page {
 		NeoEquipmentKits.useKit(name)
 	}
 
+	Component.onCompleted: {
+		if (newDive && NeoEquipmentKits.defaultKit.length > 0) {
+			applyKit(NeoEquipmentKits.defaultKit)
+			defaultKitApplied = true
+		}
+	}
+
 	Flickable {
 		anchors.fill: parent
 		contentWidth: width
@@ -82,7 +91,7 @@ Kirigami.Page {
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
 				Layout.topMargin: tokens.space12
-				text: dive && dive.location ? dive.location : qsTr("Dive details")
+				text: defaultKitApplied ? qsTr("New dive — default kit applied") : (dive && dive.location ? dive.location : qsTr("Dive details"))
 				color: tokens.textPrimary
 				font.pixelSize: 24
 				font.weight: Font.DemiBold
