@@ -471,6 +471,40 @@ Kirigami.Page {
 						}
 					}
 
+					Components.ModernCard {
+						Layout.fillWidth: true
+						Layout.leftMargin: tokens.space16
+						Layout.rightMargin: tokens.space16
+						visible: profile.computerName.length > 0 || profile.computerSerial.length > 0 || profile.computerFirmware.length > 0
+
+						Text { text: qsTr("Dive computer"); color: tokens.textMuted; font.pixelSize: 10 }
+						GridLayout {
+							Layout.fillWidth: true
+							columns: page.width >= 700 ? 3 : 1
+							columnSpacing: tokens.space16
+							rowSpacing: tokens.space4
+
+							ColumnLayout {
+								visible: profile.computerName.length > 0
+								Layout.fillWidth: true
+								Text { text: qsTr("Model"); color: tokens.textMuted; font.pixelSize: 10 }
+								Text { Layout.fillWidth: true; text: profile.computerName; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
+							}
+							ColumnLayout {
+								visible: profile.computerSerial.length > 0
+								Layout.fillWidth: true
+								Text { text: qsTr("Serial"); color: tokens.textMuted; font.pixelSize: 10 }
+								Text { Layout.fillWidth: true; text: profile.computerSerial; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
+							}
+							ColumnLayout {
+								visible: profile.computerFirmware.length > 0
+								Layout.fillWidth: true
+								Text { text: qsTr("Firmware"); color: tokens.textMuted; font.pixelSize: 10 }
+								Text { Layout.fillWidth: true; text: profile.computerFirmware; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
+							}
+						}
+					}
+
 					GridLayout {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16

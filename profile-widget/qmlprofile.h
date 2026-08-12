@@ -19,6 +19,7 @@ class QMLProfile : public QQuickPaintedItem
 	Q_PROPERTY(int currentDC READ currentDC NOTIFY currentDCChanged)
 	Q_PROPERTY(QString computerName READ computerName NOTIFY currentDCChanged)
 	Q_PROPERTY(QString computerSerial READ computerSerial NOTIFY currentDCChanged)
+	Q_PROPERTY(QString computerFirmware READ computerFirmware NOTIFY currentDCChanged)
 	Q_PROPERTY(QString diveMode READ diveMode NOTIFY currentDCChanged)
 	Q_PROPERTY(QVariantList profileMarkers READ profileMarkers NOTIFY currentDCChanged)
 	Q_PROPERTY(qreal devicePixelRatio READ devicePixelRatio WRITE setDevicePixelRatio NOTIFY devicePixelRatioChanged)
@@ -36,6 +37,7 @@ public:
 	int currentDC() const;
 	QString computerName() const;
 	QString computerSerial() const;
+	QString computerFirmware() const;
 	QString diveMode() const;
 	QVariantList profileMarkers() const;
 	qreal devicePixelRatio() const;

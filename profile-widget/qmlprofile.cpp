@@ -139,6 +139,12 @@ QString QMLProfile::computerSerial() const
 	return dc ? QString::fromStdString(dc->serial) : QString();
 }
 
+QString QMLProfile::computerFirmware() const
+{
+	const divecomputer *dc = currentDiveComputer();
+	return dc ? QString::fromStdString(dc->fw_version) : QString();
+}
+
 QString QMLProfile::diveMode() const
 {
 	const divecomputer *dc = currentDiveComputer();
