@@ -2016,7 +2016,15 @@ QVariantMap QMLManager::inspectDiveLogFile(const QString &fileUrl) const
 	result.insert("fileName", QFileInfo(fileName).fileName());
 	result.insert("dives", static_cast<int>(imported.dives.size()));
 	result.insert("sites", static_cast<int>(imported.sites.size()));
-	result.insert("neoPackage", isNeoBackupBundle(fileName));
+	const bool neoPackage = isNeoBackupBundle(fileName);
+	result.insert("neoPackage", neoPackage);
+	if (neoPackage) {
+		const QJsonObject equipment = contents.metadata.value("equipmentKits").toObject();
+		result.insert("equipmentKits", equipment.value("kits").toArray().size());
+		result.insert("equipmentItems", equipment.value("equipmentItems").toArray().size());
+		result.insert("collections", contents.metadata.value("collections").toArray().size());
+		result.insert("plannerPresets", contents.metadata.value("plannerPresets").toArray().size());
+	}
 	return result;
 }
 
