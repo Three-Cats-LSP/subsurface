@@ -1920,6 +1920,7 @@ static QString localFileName(const QString &fileUrl)
 
 struct neo_backup_contents {
 	QByteArray divelogXml;
+	QJsonObject manifest;
 	QJsonObject metadata;
 };
 
@@ -1957,6 +1958,7 @@ static bool readNeoBackupBundle(const QString &fileName, neo_backup_contents *co
 	const QJsonDocument manifestDocument = QJsonDocument::fromJson(manifestData, &manifestError);
 	const QJsonDocument metadataDocument = QJsonDocument::fromJson(metadataData, &metadataError);
 	const QJsonObject manifest = manifestDocument.object();
+	contents->manifest = manifest;
 	contents->metadata = metadataDocument.object();
 	if (!validEntries || contents->divelogXml.isEmpty() || manifestError.error != QJsonParseError::NoError ||
 		metadataError.error != QJsonParseError::NoError || !manifestDocument.isObject() || !metadataDocument.isObject() || manifest.value("format").toString() != "subsurface-neo" ||
@@ -2023,6 +2025,7 @@ QVariantMap QMLManager::inspectDiveLogFile(const QString &fileUrl) const
 	result.insert("neoPackage", neoPackage);
 	if (neoPackage) {
 		const QJsonObject equipment = contents.metadata.value("equipmentKits").toObject();
+		result.insert("createdAt", contents.manifest.value("createdAt").toString());
 		result.insert("equipmentKits", equipment.value("kits").toArray().size());
 		result.insert("equipmentItems", equipment.value("equipmentItems").toArray().size());
 		result.insert("collections", contents.metadata.value("collections").toArray().size());
@@ -2107,7 +2110,11 @@ QString QMLManager::createNeoBackupBundle(const QString &directory)
 	neoMetadata.insert("equipmentKits", QJsonDocument::fromJson(settings.value("subsurface-neo/equipment-kits").toByteArray()).object());
 	neoMetadata.insert("collections", QJsonDocument::fromJson(settings.value("subsurface-neo/dive-collections").toByteArray()).array());
 	neoMetadata.insert("plannerPresets", QJsonValue::fromVariant(settings.value("subsurface-neo/planner/presets")));
-	QJsonObject manifest { { "format", "subsurface-neo" }, { "version", 1 }, { "createdAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) }, { "dives", static_cast<int>(divelog.dives.size()) } };
+	const QJsonObject equipment = neoMetadata.value("equipmentKits").toObject();
+	QJsonObject manifest { { "format", "subsurface-neo" }, { "version", 1 }, { "createdAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+		{ "dives", static_cast<int>(divelog.dives.size()) }, { "sites", static_cast<int>(divelog.sites.size()) },
+		{ "equipmentKits", static_cast<int>(equipment.value("kits").toArray().size()) }, { "equipmentItems", static_cast<int>(equipment.value("equipmentItems").toArray().size()) },
+		{ "collections", static_cast<int>(neoMetadata.value("collections").toArray().size()) }, { "plannerPresets", static_cast<int>(neoMetadata.value("plannerPresets").toArray().size()) } };
 	// FolderDialog supplies a file URL. Use the same normalization as the
 	// planner text exporter so the portable package is created in that folder.
 	QDir targetDirectory(localFileName(directory));
