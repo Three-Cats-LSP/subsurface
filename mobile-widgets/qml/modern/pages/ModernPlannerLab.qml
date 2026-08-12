@@ -234,6 +234,9 @@ Kirigami.ScrollablePage {
 			var gas = gasAnalysis[analysisIndex]
 			lines.push(qsTr("%1: used %2; remaining %3; end %4").arg(gas.mix).arg(gas.used).arg(gas.remaining).arg(gas.endPressure))
 		}
+		lines.push("", qsTr("CALCULATED ANALYSIS"))
+		lines.push(qsTr("NDL: %1  TTS: %2  Ceiling: %3").arg(formatDuration(finalSampleValue("ndl", -1))).arg(formatDuration(finalSampleValue("tts", -1))).arg(finalSampleValue("ceiling", 0) > 0 ? (finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit : "—"))
+		lines.push(qsTr("Current GF: %1%  Surface GF: %2%  pO₂: %3 bar  Tissue: %4%").arg(finalSampleValue("gf", 0).toFixed(0)).arg(finalSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("po2", 0) > 0 ? (finalSampleValue("po2", 0) / 1000.0).toFixed(2) : "—").arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
 		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("DECOMPRESSION SCHEDULE"))
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
@@ -241,6 +244,8 @@ Kirigami.ScrollablePage {
 			var stop = schedule[i]
 			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
 		}
+		if (planNotes.length > 0)
+			lines.push("", qsTr("PLANNER NOTES AND WARNINGS"), planNotes)
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
 		return lines.join("\n")
 	}
