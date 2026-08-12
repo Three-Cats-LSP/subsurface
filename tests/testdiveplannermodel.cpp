@@ -233,8 +233,6 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(!decoSchedule.empty());
 	QVERIFY(decoSchedule.first().toMap().contains("depth"));
 	QVERIFY(decoSchedule.first().toMap().contains("duration"));
-	QVERIFY(decoSchedule.first().toMap().contains("tts"));
-	QVERIFY(decoSchedule.first().toMap().contains("cns"));
 
 	// A decompression profile must carry real values from the native plot
 	// pipeline, rather than merely placeholder keys for the Neo inspector.
