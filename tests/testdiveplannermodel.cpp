@@ -213,6 +213,14 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("tts"));
 	QVERIFY(lastSample.contains("ceiling"));
 	QVERIFY(lastSample.contains("cns"));
+
+	prefs.planner_deco_mode = RECREATIONAL;
+	segment.insert("depth", 50);
+	segment.insert("duration", 50);
+	segments[0] = segment;
+	const QVariantMap exceedsNdl = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, false);
+	QVERIFY(exceedsNdl.value("exceedsNDL").toBool());
+	QVERIFY(!exceedsNdl.value("planSaveAllowed").toBool());
 	prefs = default_prefs;
 }
 
