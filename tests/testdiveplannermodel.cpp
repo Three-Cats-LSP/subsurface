@@ -381,6 +381,20 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	QVERIFY(air.value("otu").toInt() >= 0);
 	QVERIFY(deco40.value("otu").toInt() >= 0);
 	QVERIFY(!deco40.value("gasAnalysis").toList().empty());
+
+	// VPM-B verification follows the native model's own conservatism ordering,
+	// instead of comparing schedules from a different implementation.
+	prefs.planner_deco_mode = VPMB;
+	prefs.vpmb_conservatism = 0;
+	const QVariantMap vpmb40 = calculate(40, 25);
+	const QVariantMap vpmb50 = calculate(50, 25);
+	const QVariantMap vpmbLong = calculate(40, 30);
+	QVERIFY(vpmb40.value("planSaveAllowed").toBool());
+	QVERIFY(runtime(vpmb50) > runtime(vpmb40));
+	QVERIFY(runtime(vpmbLong) > runtime(vpmb40));
+	prefs.vpmb_conservatism = 3;
+	const QVariantMap vpmbConservative = calculate(40, 25);
+	QVERIFY(runtime(vpmbConservative) >= runtime(vpmb40));
 	prefs = default_prefs;
 }
 
