@@ -36,6 +36,11 @@ Kirigami.ScrollablePage {
 	property var gasReference: []
 	property string plannerTextExport: ""
 	property string plannerPdfExport: ""
+	property int contingencyScenario: 0
+	property int contingencyDelta: 5
+	property var contingencyResult: null
+	property string contingencyTextExport: ""
+	property string contingencyPdfExport: ""
 	property var inspectedProfileSample: null
 	ListModel { id: cylinders }
 	ListModel { id: segments }
@@ -50,6 +55,8 @@ Kirigami.ScrollablePage {
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.decoSlate())
 	}
+	FolderDialog { id: contingencyTextFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyTextExport = manager.exportNeoPlannerText(selectedFolder, page.contingencySlate()) }
+	FolderDialog { id: contingencyPdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.contingencySlate()) }
 	function modelData(model) {
 		var values = []
 		for (var i = 0; i < model.count; ++i)
@@ -180,6 +187,41 @@ Kirigami.ScrollablePage {
 			manager.selectDive(result.newDiveId)
 			showPage(diveList)
 		}
+	}
+	function calculateContingency() {
+		if (cylinders.count === 0 || segments.count === 0)
+			return
+		var cylinderData = modelData(cylinders)
+		var segmentData = modelData(segments)
+		for (var i = 0; i < cylinderData.length; ++i)
+			cylinderData[i].use = diveMode.currentIndex === 1 ? cylinderData[i].use : 0
+		for (var j = 0; j < segmentData.length; ++j)
+			segmentData[j].divemode = diveMode.currentIndex === 2 ? 2 : segmentData[j].divemode
+		if (contingencyScenario === 0) {
+			segmentData[segmentData.length - 1].duration += contingencyDelta
+		} else {
+			var deepest = 0
+			for (var k = 1; k < segmentData.length; ++k)
+				if (segmentData[k].depth > segmentData[deepest].depth) deepest = k
+			segmentData[deepest].depth += contingencyDelta
+		}
+		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
+		contingencyResult = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData, plannedDate, plannedTime,
+			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
+		generatePlan(false)
+	}
+	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) }
+	function contingencySlate() {
+		if (!contingencyResult) return ""
+		var lines = [qsTr("SUBSURFACE NEO CONTINGENCY PLAN"), qsTr("Scenario: %1").arg(contingencyName()), qsTr("This is a separately calculated contingency; it does not replace the main plan."), qsTr("Model: %1").arg(algorithmName()), "", qsTr("DECOMPRESSION SCHEDULE")]
+		var stops = contingencyResult.schedule || []
+		for (var i = 0; i < stops.length; ++i) { var stop = stops[i]; lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "")) }
+		var gases = contingencyResult.gasAnalysis || []
+		lines.push("", qsTr("GAS STATUS"))
+		for (var j = 0; j < gases.length; ++j) lines.push(qsTr("%1: remaining %2; end %3").arg(gases[j].mix).arg(gases[j].remaining).arg(gases[j].endPressure))
+		if (contingencyResult.notes) lines.push("", qsTr("PLANNER NOTES AND WARNINGS"), contingencyResult.notes)
+		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
+		return lines.join("\n")
 	}
 	function finalSampleValue(name, fallback) {
 		return profileData.length > 0 && profileData[profileData.length - 1][name] !== undefined ? profileData[profileData.length - 1][name] : fallback
@@ -327,6 +369,20 @@ Kirigami.ScrollablePage {
 			CheckBox { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL; text: qsTr("Calculate contingency variations"); checked: Backend.display_variations; onToggled: { Backend.display_variations = checked; page.generatePlan() } }
 			Text { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL && Backend.display_variations; text: qsTr("Subsurface adds the calculated contingencies to the plan notes below; the main schedule remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; Label { text: qsTr("Reserve gas (%1)").arg(page.pressureUnit); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 0; to: Backend.pressure === Enums.BAR ? 400 : 6000; value: Backend.reserve_gas; onValueModified: { Backend.reserve_gas = value; page.generatePlan() } } }
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
+			Text { text: qsTr("Contingency scenario"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { text: qsTr("Calculate a separate mature-planner result; the main plan remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			RowLayout { Layout.fillWidth: true; ComboBox { Layout.fillWidth: true; model: [qsTr("Extra bottom time"), qsTr("Deeper profile")]; currentIndex: page.contingencyScenario; onActivated: page.contingencyScenario = currentIndex }; SpinBox { from: 1; to: 30; value: page.contingencyDelta; onValueModified: page.contingencyDelta = value }; Label { text: page.contingencyScenario === 0 ? qsTr("minutes") : page.depthUnit; color: tokens.textMuted } }
+			Button { Layout.fillWidth: true; text: qsTr("Calculate %1").arg(page.contingencyName()); onClicked: page.calculateContingency() }
+			ColumnLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true
+				Text { text: qsTr("Separate result: %1").arg(page.contingencyName()); color: tokens.accent; font.weight: Font.DemiBold }
+				Text { text: qsTr("Save allowed: %1 · NDL exceeded: %2 · OTU: %3").arg(page.contingencyResult && page.contingencyResult.planSaveAllowed ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult && page.contingencyResult.exceedsNDL ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult ? page.contingencyResult.otu : 0); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Repeater { model: page.contingencyResult ? page.contingencyResult.schedule || [] : []; delegate: Text { required property var modelData; text: qsTr("%1 %2 · %3%4").arg((modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1)).arg(page.depthUnit).arg(page.formatDuration(modelData.duration)).arg(modelData.gas !== undefined ? " · " + modelData.gas : ""); color: tokens.textSecondary; Layout.fillWidth: true } }
+				Repeater { model: page.contingencyResult ? page.contingencyResult.gasAnalysis || [] : []; delegate: Text { required property var modelData; text: qsTr("%1: remaining %2; end %3").arg(modelData.mix).arg(modelData.remaining).arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textSecondary; Layout.fillWidth: true } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Copy contingency"); onClicked: manager.copyToClipboard(page.contingencySlate()) }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save TXT"); onClicked: contingencyTextFolder.open() }; Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF"); onClicked: contingencyPdfFolder.open() } }
+			}
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
