@@ -39,6 +39,11 @@ Kirigami.Page {
 		applyFilters()
 	}
 
+	function saveCurrentFilter(name) {
+		manager.saveModernDiveFilter(name, searchField.text, peopleField.text, tagsField.text, locationField.text,
+			suitField.text, computerField.text, depthField.text, durationField.text, yearField.text)
+	}
+
 	Components.DiveActionSheet {
 		id: diveActions
 		onOpenDive: function(row) { page.openDive(row) }
@@ -75,6 +80,36 @@ Kirigami.Page {
 					page.filterVisible = !page.filterVisible
 					if (!page.filterVisible)
 						page.clearFilters()
+				}
+			}
+			Button { text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+		}
+
+		Dialog {
+			id: savedFiltersDialog
+			parent: Overlay.overlay
+			anchors.centerIn: parent
+			width: Math.min(page.width - tokens.space24 * 2, 460)
+			title: qsTr("Saved filters")
+			modal: true
+			standardButtons: Dialog.Close
+			ColumnLayout {
+				width: parent.width
+				spacing: tokens.space8
+				RowLayout {
+					Layout.fillWidth: true
+					TextField { id: savedFilterName; Layout.fillWidth: true; placeholderText: qsTr("Name this filter") }
+					Button { text: qsTr("Save"); enabled: savedFilterName.text.trim().length > 0; onClicked: { page.saveCurrentFilter(savedFilterName.text); savedFilterName.clear() } }
+				}
+				Text { visible: manager.savedDiveFilters.length === 0; text: qsTr("Save the current filters to reuse them here or in the desktop filter tool."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Repeater {
+					model: manager.savedDiveFilters
+					delegate: RowLayout {
+						required property string modelData
+						Layout.fillWidth: true
+						Button { text: modelData; Layout.fillWidth: true; onClicked: { manager.applySavedDiveFilter(modelData); savedFiltersDialog.close() } }
+						Button { text: qsTr("Remove"); onClicked: manager.removeSavedDiveFilter(modelData) }
+					}
 				}
 			}
 		}

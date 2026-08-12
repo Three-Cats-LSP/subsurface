@@ -33,6 +33,7 @@
 #include "core/divefilter.h"
 #include "core/divelog.h"
 #include "core/filterconstraint.h"
+#include "core/filterpreset.h"
 #include "core/gettextfromc.h"
 #include "core/qthelper.h"
 #include "core/qt-gui.h"
@@ -240,6 +241,9 @@ QMLManager::QMLManager() :
 	// Solution add a slot as landing zone.
 	connect(uploadDiveShare::instance(), &uploadDiveShare::uploadFinish,
 			this, &QMLManager::uploadFinishSlot);
+	connect(&diveListNotifier, &DiveListNotifier::filterPresetAdded, this, &QMLManager::savedDiveFiltersChanged);
+	connect(&diveListNotifier, &DiveListNotifier::filterPresetRemoved, this, &QMLManager::savedDiveFiltersChanged);
+	connect(&diveListNotifier, &DiveListNotifier::filterPresetChanged, this, &QMLManager::savedDiveFiltersChanged);
 
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
 #if defined(Q_OS_ANDROID)
@@ -2224,9 +2228,9 @@ static void add_minimum_constraint(FilterData &data, filter_constraint_type type
 	data.constraints.push_back(constraint);
 }
 
-void QMLManager::setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
-					     const QString &location, const QString &suit, const QString &computer,
-					     const QString &minimumDepth, const QString &minimumDuration, const QString &year)
+static FilterData modern_dive_filter_data(const QString &fullText, const QString &people, const QString &tags,
+						  const QString &location, const QString &suit, const QString &computer,
+						  const QString &minimumDepth, const QString &minimumDuration, const QString &year)
 {
 	FilterData data;
 	data.fullText = fullText.trimmed();
@@ -2246,7 +2250,54 @@ void QMLManager::setModernDiveFilter(const QString &fullText, const QString &peo
 		filter_constraint_set_integer_from(constraint, yearValue);
 		data.constraints.push_back(constraint);
 	}
-	DiveFilter::instance()->setFilter(data);
+	return data;
+}
+
+void QMLManager::setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
+					     const QString &location, const QString &suit, const QString &computer,
+					     const QString &minimumDepth, const QString &minimumDuration, const QString &year)
+{
+	DiveFilter::instance()->setFilter(modern_dive_filter_data(fullText, people, tags, location, suit, computer,
+									 minimumDepth, minimumDuration, year));
+}
+
+void QMLManager::saveModernDiveFilter(const QString &name, const QString &fullText, const QString &people, const QString &tags,
+						   const QString &location, const QString &suit, const QString &computer,
+						   const QString &minimumDepth, const QString &minimumDuration, const QString &year)
+{
+	const QString trimmedName = name.trimmed();
+	if (trimmedName.isEmpty())
+		return;
+	const FilterData data = modern_dive_filter_data(fullText, people, tags, location, suit, computer,
+										 minimumDepth, minimumDuration, year);
+	const int existing = divelog.filter_presets.preset_id(trimmedName.toStdString());
+	if (existing >= 0)
+		Command::editFilterPreset(existing, data);
+	else
+		Command::createFilterPreset(trimmedName, data);
+}
+
+void QMLManager::applySavedDiveFilter(const QString &name)
+{
+	const int index = divelog.filter_presets.preset_id(name.toStdString());
+	if (index >= 0)
+		DiveFilter::instance()->setFilter(divelog.filter_presets[index].data);
+}
+
+void QMLManager::removeSavedDiveFilter(const QString &name)
+{
+	const int index = divelog.filter_presets.preset_id(name.toStdString());
+	if (index >= 0)
+		Command::removeFilterPreset(index);
+}
+
+QStringList QMLManager::savedDiveFilters() const
+{
+	QStringList result;
+	result.reserve(divelog.filter_presets.size());
+	for (const filter_preset &preset : divelog.filter_presets)
+		result.append(QString::fromStdString(preset.name));
+	return result;
 }
 
 void QMLManager::setShowNonDiveComputers(bool show)

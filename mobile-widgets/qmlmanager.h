@@ -73,6 +73,7 @@ class QMLManager : public QObject {
 	Q_PROPERTY(bool initialized MEMBER m_initialized NOTIFY initializedChanged)
 	Q_PROPERTY(QString syncState READ getSyncState NOTIFY syncStateChanged)
 	Q_PROPERTY(QString passwordState READ getPasswordState NOTIFY passwordStateChanged)
+	Q_PROPERTY(QStringList savedDiveFilters READ savedDiveFilters NOTIFY savedDiveFiltersChanged)
 public:
 	QMLManager();
 	~QMLManager();
@@ -128,6 +129,12 @@ public:
 	Q_INVOKABLE void setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
 					       const QString &location, const QString &suit, const QString &computer,
 					       const QString &minimumDepth, const QString &minimumDuration, const QString &year);
+	Q_INVOKABLE void saveModernDiveFilter(const QString &name, const QString &fullText, const QString &people, const QString &tags,
+						const QString &location, const QString &suit, const QString &computer,
+						const QString &minimumDepth, const QString &minimumDuration, const QString &year);
+	Q_INVOKABLE void applySavedDiveFilter(const QString &name);
+	Q_INVOKABLE void removeSavedDiveFilter(const QString &name);
+	QStringList savedDiveFilters() const;
 	Q_INVOKABLE void selectRow(int row);
 	Q_INVOKABLE void selectSwipeRow(int row);
 	Q_INVOKABLE void importCacheRepo(QString repo);
@@ -311,6 +318,7 @@ private:
 signals:
 	void verboseEnabledChanged();
 	void diveListProcessingChanged();
+	void savedDiveFiltersChanged();
 	void initializedChanged();
 	void loadFromCloudChanged();
 	void startPageTextChanged();
