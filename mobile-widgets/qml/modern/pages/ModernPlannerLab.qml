@@ -324,8 +324,11 @@ Kirigami.ScrollablePage {
 				if (maxTime <= 0 || maxDepth <= 0) return; var margin = 16, w = width - margin * 2, h = height - margin * 2
 				ctx.strokeStyle = page.exceedsNDL ? "#F87171" : tokens.accent; ctx.lineWidth = 2; ctx.beginPath()
 				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = margin + p.time / maxTime * w; var y = margin + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
+				ctx.strokeStyle = "#FB923C"; ctx.lineWidth = 1.5; ctx.beginPath(); var ceilingStarted = false
+				for (var k = 0; k < page.profileData.length; ++k) { var ceilingPoint = page.profileData[k]; if (ceilingPoint.ceiling <= 0) { ceilingStarted = false; continue }; var ceilingX = margin + ceilingPoint.time / maxTime * w; var ceilingY = margin + ceilingPoint.ceiling / maxDepth * h; if (!ceilingStarted) { ctx.moveTo(ceilingX, ceilingY); ceilingStarted = true } else ctx.lineTo(ceilingX, ceilingY) }; ctx.stroke()
 			} }
 			Connections { target: page; function onProfileDataChanged() { profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
+			RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Rectangle { width: 18; height: 3; color: page.exceedsNDL ? "#F87171" : tokens.accent }; Text { text: qsTr("Profile"); color: tokens.textSecondary }; Rectangle { width: 18; height: 3; color: "#FB923C" }; Text { text: qsTr("Calculated ceiling"); color: tokens.textSecondary }; Item { Layout.fillWidth: true } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			TextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
