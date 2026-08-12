@@ -962,8 +962,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernDataPortability {
 		id: neoDataPortability
 		visible: false
-		onOpenExport: showPage(exportWindow)
-		onOpenRecovery: showPage(recoverCache)
 		onOpenCloudBackup: showPage(cloudSyncPage)
 	}
 
