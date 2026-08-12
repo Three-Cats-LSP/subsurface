@@ -17,6 +17,7 @@ Kirigami.ScrollablePage {
 	Modern.DesignTokens { id: tokens }
 	property string depthUnit: Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
 	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
+	property string sacUnit: Backend.volume === Enums.LITER ? qsTr("L/min") : qsTr("cu ft/min")
 	property string planNotes: ""
 	property var profileData: []
 	property var schedule: []
@@ -111,8 +112,22 @@ Kirigami.ScrollablePage {
 			return "—"
 		return Math.floor(seconds / 60) + qsTr(" min") + (seconds % 60 ? " " + (seconds % 60) + qsTr(" s") : "")
 	}
+	function algorithmName() {
+		if (Backend.planner_deco_mode === Enums.VPMB)
+			return qsTr("VPM-B")
+		if (Backend.planner_deco_mode === Enums.RECREATIONAL)
+			return qsTr("Recreational (NDL)")
+		return qsTr("Buhlmann ZHL-16C + GF")
+	}
+	function sacText(value) {
+		return Backend.volume === Enums.LITER ? String(value) : (value / 100.0).toFixed(2)
+	}
+	function sacValue(text) {
+		return Backend.volume === Enums.LITER ? Math.round(Number(text)) : Math.round(Number(text) * 100)
+	}
 	function decoSlate() {
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: Buhlmann GF %1/%2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("DECOMPRESSION SCHEDULE")]
+		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("DECOMPRESSION SCHEDULE")]
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i)
@@ -137,10 +152,16 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Decompression model"); color: tokens.textMuted; font.pixelSize: 11 }
-			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 1
-				Text { text: qsTr("Bühlmann / GF: %1 / %2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh); color: tokens.textPrimary }
-				Text { text: qsTr("Bottom SAC: %1").arg(Backend.bottomsac); color: tokens.textPrimary }
-				Button { text: qsTr("Advanced settings"); onClicked: page.openPlannerSettings() }
+			Text { text: page.algorithmName(); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
+				ComboBox { id: decoAlgorithm; Layout.fillWidth: true; model: [qsTr("Recreational (NDL)"), qsTr("Buhlmann ZHL-16C + GF"), qsTr("VPM-B")]; currentIndex: Backend.planner_deco_mode === Enums.VPMB ? 2 : Backend.planner_deco_mode === Enums.BUEHLMANN ? 1 : 0; onActivated: { Backend.planner_deco_mode = currentIndex === 2 ? Enums.VPMB : currentIndex === 1 ? Enums.BUEHLMANN : Enums.RECREATIONAL; page.generatePlan() } }
+				Text { text: qsTr("Subsurface's established planner is the calculation source."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				RowLayout { visible: Backend.planner_deco_mode === Enums.BUEHLMANN; Layout.fillWidth: true; Label { text: qsTr("GF low"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 150; value: Backend.planner_gflow; onValueModified: { Backend.planner_gflow = value; page.generatePlan() } }; Label { text: qsTr("GF high"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 1; to: 150; value: Backend.planner_gfhigh; onValueModified: { Backend.planner_gfhigh = value; page.generatePlan() } } }
+				RowLayout { visible: Backend.planner_deco_mode === Enums.VPMB; Layout.fillWidth: true; Label { text: qsTr("VPM-B conservatism"); color: tokens.textMuted; Layout.fillWidth: true }; SpinBox { from: 0; to: 4; value: Backend.vpmb_conservatism; onValueModified: { Backend.vpmb_conservatism = value; page.generatePlan() } } }
+				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Bottom SAC (%1)").arg(page.sacUnit); color: tokens.textMuted; Layout.fillWidth: true }; TextField { Layout.preferredWidth: 86; text: page.sacText(Backend.bottomsac); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { Backend.bottomsac = page.sacValue(text); page.generatePlan() } }; Label { text: qsTr("Deco SAC (%1)").arg(page.sacUnit); color: tokens.textMuted; Layout.fillWidth: true }; TextField { Layout.preferredWidth: 86; text: page.sacText(Backend.decosac); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { Backend.decosac = page.sacValue(text); page.generatePlan() } } }
+				Text { text: qsTr("Active settings: %1").arg(Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")); color: tokens.textPrimary }
+				Text { text: qsTr("Bottom/deco SAC: %1 / %2 %3").arg(page.sacText(Backend.bottomsac)).arg(page.sacText(Backend.decosac)).arg(page.sacUnit); color: tokens.textPrimary }
+				Button { text: qsTr("More planner settings"); onClicked: page.openPlannerSettings() }
 			}
 		}
 		Components.ModernCard {
