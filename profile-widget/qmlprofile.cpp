@@ -3,6 +3,7 @@
 #include "profilescene.h"
 #include "mobile-widgets/qmlmanager.h"
 #include "core/divelist.h"
+#include "core/event.h"
 #include "core/errorhelper.h"
 #include "core/subsurface-float.h"
 #include "core/metrics.h"
@@ -334,6 +335,39 @@ void QMLProfile::nextDC()
 void QMLProfile::prevDC()
 {
 	rotateDC(-1);
+}
+
+QVariantList QMLProfile::profileMarkers() const
+{
+	QVariantList result;
+	const divecomputer *dc = currentDiveComputer();
+	if (!dc || dc->samples.empty())
+		return result;
+
+	const int lastTime = std::max(1, dc->samples.back().time.seconds);
+	for (const event &event : dc->events) {
+		if (event.hidden || (!event.is_gaschange() && !event.is_divemodechange() && event.name.empty()))
+			continue;
+		QVariantMap marker;
+		marker["fraction"] = std::clamp(qreal(event.time.seconds) / qreal(lastTime), qreal(0.0), qreal(1.0));
+		marker["gasSwitch"] = event.is_gaschange();
+		marker["label"] = event.is_gaschange() ? tr("Gas switch")
+			: event.is_divemodechange() ? tr("Mode change")
+			: QString::fromStdString(event.name);
+		result.append(marker);
+	}
+	return result;
+}
+
+void QMLProfile::setCurrentDC(int index)
+{
+	struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	if (!d || index < 0 || index >= d->number_of_computers() || index == m_dc)
+		return;
+	m_dc = index;
+	rebuildInspectorPlot();
+	emit currentDCChanged();
+	triggerUpdate();
 }
 
 void QMLProfile::rotateDC(int dir)

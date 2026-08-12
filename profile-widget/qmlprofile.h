@@ -20,6 +20,7 @@ class QMLProfile : public QQuickPaintedItem
 	Q_PROPERTY(QString computerName READ computerName NOTIFY currentDCChanged)
 	Q_PROPERTY(QString computerSerial READ computerSerial NOTIFY currentDCChanged)
 	Q_PROPERTY(QString diveMode READ diveMode NOTIFY currentDCChanged)
+	Q_PROPERTY(QVariantList profileMarkers READ profileMarkers NOTIFY currentDCChanged)
 	Q_PROPERTY(qreal devicePixelRatio READ devicePixelRatio WRITE setDevicePixelRatio NOTIFY devicePixelRatioChanged)
 	Q_PROPERTY(qreal xOffset MEMBER m_xOffset WRITE setXOffset NOTIFY xOffsetChanged)
 	Q_PROPERTY(qreal yOffset MEMBER m_yOffset WRITE setYOffset NOTIFY yOffsetChanged)
@@ -36,12 +37,14 @@ public:
 	QString computerName() const;
 	QString computerSerial() const;
 	QString diveMode() const;
+	QVariantList profileMarkers() const;
 	qreal devicePixelRatio() const;
 	void setDevicePixelRatio(qreal dpr);
 	void setXOffset(qreal value);
 	void setYOffset(qreal value);
 	Q_INVOKABLE void nextDC();
 	Q_INVOKABLE void prevDC();
+	Q_INVOKABLE void setCurrentDC(int index);
 	Q_INVOKABLE QVariantMap sampleAtFraction(qreal fraction) const;
 
 public slots:

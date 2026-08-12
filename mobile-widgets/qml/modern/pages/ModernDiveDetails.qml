@@ -61,6 +61,9 @@ Kirigami.Page {
 			required property int index
 			property var modelData: model
 			property bool panningProfile: false
+			// A graph gesture owns the pointer until it ends. This keeps inspection,
+			// pan/zoom, vertical page scroll and horizontal dive swiping separate.
+			property bool profileGestureActive: false
 			width: diveView.width
 			height: diveView.height
 
@@ -184,8 +187,14 @@ Kirigami.Page {
 
 								ToolButton { text: "☷"; accessibleName: qsTr("Profile controls"); onClicked: profileControls.open() }
 								ToolButton { visible: profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
-								ToolButton { visible: profile.numDC > 1; text: "‹"; onClicked: { profile.prevDC(); profileInspector.clear() } }
-								ToolButton { visible: profile.numDC > 1; text: "›"; onClicked: { profile.nextDC(); profileInspector.clear() } }
+								ComboBox {
+									visible: profile.numDC > 1
+									model: profile.numDC
+									currentIndex: profile.currentDC
+									delegate: ItemDelegate { required property int index; required property var modelData; text: qsTr("Computer %1").arg(index + 1) }
+									displayText: qsTr("DC %1/%2").arg(profile.currentDC + 1).arg(profile.numDC)
+									onActivated: function(index) { profile.setCurrentDC(index); profileInspector.clear() }
+								}
 							}
 
 							Rectangle {
@@ -205,14 +214,14 @@ Kirigami.Page {
 									PinchArea {
 										anchors.fill: parent
 										pinch.dragAxis: Pinch.XAndYAxis
-										onPinchStarted: profileInspector.clear()
+										onPinchStarted: { delegateRoot.profileGestureActive = true; profileInspector.clear() }
 										onPinchUpdated: {
 											var nextScale = pinch.scale * profile.lastScale
 											profile.scale = Math.max(1.0, Math.min(4.0, nextScale))
 										}
-										onPinchFinished: profile.lastScale = profile.scale
+										onPinchFinished: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
 
-										MouseArea {
+									MouseArea {
 											id: profileMouseArea
 											anchors.fill: parent
 											property bool isZoomed: profile.scale > 1.02
@@ -233,6 +242,7 @@ Kirigami.Page {
 											onPressAndHold: function(mouse) {
 												dragging = true
 												delegateRoot.panningProfile = true
+												delegateRoot.profileGestureActive = true
 												oldXOffset = profile.xOffset
 												oldYOffset = profile.yOffset
 												initialX = mouse.x
@@ -249,11 +259,13 @@ Kirigami.Page {
 											onReleased: {
 												dragging = false
 												delegateRoot.panningProfile = false
+												delegateRoot.profileGestureActive = false
 												profile.opacity = 1.0
 											}
 											onCanceled: {
 												dragging = false
 												delegateRoot.panningProfile = false
+												delegateRoot.profileGestureActive = false
 												profile.opacity = 1.0
 											}
 											onWheel: function(wheel) {
@@ -272,11 +284,13 @@ Kirigami.Page {
 									anchors.fill: parent
 									enabled: profile.scale <= 1.02
 									hoverEnabled: true
-									preventStealing: true
+									preventStealing: touchInspection
 									property var sampleInfo: ({})
 									property real cursorX: 0
 									property real cursorY: 0
 									property bool activeSample: false
+									property bool touchInspection: false
+									pressAndHoldInterval: 280
 
 									function inspect(x, y) {
 										var f = Math.max(0, Math.min(1, x / Math.max(1, width)))
@@ -295,11 +309,17 @@ Kirigami.Page {
 										sampleInfo = ({})
 									}
 
-									onPressed: function(mouse) { inspect(mouse.x, mouse.y) }
+									onPressAndHold: function(mouse) {
+										touchInspection = true
+										delegateRoot.profileGestureActive = true
+										inspect(mouse.x, mouse.y)
+									}
 									onPositionChanged: function(mouse) {
-										if (pressed || containsMouse)
+										if (touchInspection || (!pressed && containsMouse))
 											inspect(mouse.x, mouse.y)
 									}
+									onReleased: { touchInspection = false; delegateRoot.profileGestureActive = false }
+									onCanceled: { touchInspection = false; delegateRoot.profileGestureActive = false; clear() }
 									onExited: if (!pressed) clear()
 
 									Rectangle {
@@ -309,6 +329,21 @@ Kirigami.Page {
 										width: 1
 										height: parent.height
 										color: tokens.accent
+									}
+
+									Repeater {
+										model: profile.profileMarkers
+										delegate: Rectangle {
+											required property var modelData
+											width: 2
+											height: parent.height
+											x: Math.max(0, Math.min(parent.width - width, modelData.fraction * parent.width - width / 2))
+											color: modelData.gasSwitch ? tokens.warning : tokens.accent
+											opacity: 0.7
+											ToolTip.visible: markerHover.containsMouse
+											ToolTip.text: modelData.label
+											HoverHandler { id: markerHover }
+										}
 									}
 									Rectangle {
 										visible: profileInspector.activeSample
@@ -441,7 +476,7 @@ Kirigami.Page {
 
 		DragHandler {
 			id: horizontalSwipeHandler
-			enabled: !diveView.currentItem || !diveView.currentItem.panningProfile
+			enabled: !diveView.currentItem || !diveView.currentItem.profileGestureActive
 			yAxis.enabled: false
 			target: null
 			property real startContentX
