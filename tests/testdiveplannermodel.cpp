@@ -7,6 +7,7 @@
 #include "core/pref.h"
 #include "core/units.h"
 #include <QSignalSpy>
+#include <QVariantMap>
 #include <memory>
 #include <vector>
 
@@ -171,6 +172,47 @@ void TestDivePlannerModel::testRecreationalPlanSaveAllowed()
 	QCOMPARE(saveAllowedSpy.last().at(0).toBool(), true);
 
 	model->resetPlanState();
+	prefs = default_prefs;
+}
+
+void TestDivePlannerModel::testNeoPlanResultContract()
+{
+	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
+	prefs = default_prefs;
+	prefs.unit_system = METRIC;
+	prefs.units = SI_units;
+	prefs.planner_deco_mode = BUEHLMANN;
+	prefs.drop_stone_mode = false;
+
+	QVariantMap cylinder;
+	cylinder.insert("type", "AL80");
+	cylinder.insert("mix", "21/0");
+	cylinder.insert("pressure", 200);
+	cylinder.insert("use", 0);
+	QVariantMap segment;
+	segment.insert("depth", 18);
+	segment.insert("duration", 20);
+	segment.insert("gas", 0);
+	segment.insert("setpoint", 0);
+	segment.insert("divemode", 0);
+
+	QVariantList cylinders;
+	cylinders.append(cylinder);
+	QVariantList segments;
+	segments.append(segment);
+	const QVariantMap result = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, false);
+	QVERIFY(result.contains("planSaveAllowed"));
+	QVERIFY(result.value("planSaveAllowed").toBool());
+	QVERIFY(result.contains("schedule"));
+	QVERIFY(result.value("schedule").canConvert<QVariantList>());
+
+	const QVariantList profile = result.value("profile").toList();
+	QVERIFY(!profile.empty());
+	const QVariantMap lastSample = profile.last().toMap();
+	QVERIFY(lastSample.contains("ndl"));
+	QVERIFY(lastSample.contains("tts"));
+	QVERIFY(lastSample.contains("ceiling"));
+	QVERIFY(lastSample.contains("cns"));
 	prefs = default_prefs;
 }
 

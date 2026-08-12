@@ -16,6 +16,7 @@ private slots:
 	void testSurfaceAirCylinderDataAccess();
 	// AI-generated (Claude)
 	void testRecreationalPlanSaveAllowed();
+	void testNeoPlanResultContract();
 };
 
 #endif // TESTDIVEPLANNERMODEL_H
