@@ -345,15 +345,15 @@ QVariantList QMLProfile::profileMarkers() const
 		return result;
 
 	const int lastTime = std::max(1, dc->samples.back().time.seconds);
-	for (const event &event : dc->events) {
-		if (event.hidden || (!event.is_gaschange() && !event.is_divemodechange() && event.name.empty()))
+	for (const struct event &profileEvent : dc->events) {
+		if (profileEvent.hidden || (!profileEvent.is_gaschange() && !profileEvent.is_divemodechange() && profileEvent.name.empty()))
 			continue;
 		QVariantMap marker;
-		marker["fraction"] = std::clamp(qreal(event.time.seconds) / qreal(lastTime), qreal(0.0), qreal(1.0));
-		marker["gasSwitch"] = event.is_gaschange();
-		marker["label"] = event.is_gaschange() ? tr("Gas switch")
-			: event.is_divemodechange() ? tr("Mode change")
-			: QString::fromStdString(event.name);
+		marker["fraction"] = std::clamp(qreal(profileEvent.time.seconds) / qreal(lastTime), qreal(0.0), qreal(1.0));
+		marker["gasSwitch"] = profileEvent.is_gaschange();
+		marker["label"] = profileEvent.is_gaschange() ? tr("Gas switch")
+			: profileEvent.is_divemodechange() ? tr("Mode change")
+			: QString::fromStdString(profileEvent.name);
 		result.append(marker);
 	}
 	return result;
