@@ -975,6 +975,10 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			if (siteName.length > 0)
 				mapPage.centerOnDiveSite(manager.siteObject(siteName))
 		}
+		onOpenDive: function(diveId) {
+			manager.selectDive(diveId)
+			showPage(detailsWindow)
+		}
 	}
 
 	NeoPages.ModernStatisticsHub {

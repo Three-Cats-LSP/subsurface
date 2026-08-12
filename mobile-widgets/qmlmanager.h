@@ -235,6 +235,7 @@ public slots:
 	// Site editing and map selection continue to use the established models.
 	Q_INVOKABLE QVariantMap siteSummary(const QString &siteName) const;
 	Q_INVOKABLE QVariant siteObject(const QString &siteName) const;
+	Q_INVOKABLE QVariantList siteDives(const QString &siteName) const;
 	QString getVersion() const;
 	void refreshDiveList();
 	void screenChanged(QScreen *screen);

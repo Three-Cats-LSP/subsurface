@@ -1857,6 +1857,26 @@ QVariant QMLManager::siteObject(const QString &siteName) const
 	return ds ? QVariant::fromValue(ds) : QVariant();
 }
 
+QVariantList QMLManager::siteDives(const QString &siteName) const
+{
+	const dive_site *ds = divelog.sites.get_by_name(siteName.toStdString());
+	if (!ds)
+		return {};
+	QVariantList result;
+	for (const dive *d : ds->dives) {
+		if (!d)
+			continue;
+		result.append({
+			{ "id", d->id },
+			{ "number", d->number },
+			{ "date", get_short_dive_date_string(d->when) },
+			{ "depth", get_depth_string(d->maxdepth, true) },
+			{ "duration", get_duration_string_short(d->duration) }
+		});
+	}
+	return result;
+}
+
 void QMLManager::setNotificationText(QString text)
 {
 	appendTextToLog(QStringLiteral("showProgress: ") + text);

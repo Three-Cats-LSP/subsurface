@@ -11,6 +11,7 @@ Kirigami.ScrollablePage {
 	title: qsTr("Dive sites")
 	background: Rectangle { color: tokens.background }
 	signal openMap(string siteName)
+	signal openDive(int diveId)
 	property string siteFilter: ""
 	Modern.DesignTokens { id: tokens }
 	ColumnLayout {
@@ -27,10 +28,12 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Text { text: modelData; color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.Medium; Layout.fillWidth: true }
 				property var summary: manager.siteSummary(modelData)
+				property bool relatedDivesVisible: false
 				Text { visible: summary.diveCount > 0; text: qsTr("%1 logged dives").arg(summary.diveCount); color: tokens.textSecondary; font.pixelSize: 13 }
 				Text { visible: summary.gps && summary.gps.length > 0; text: summary.gps; color: tokens.textMuted; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Text { visible: summary.description && summary.description.length > 0; text: summary.description; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Show on map"); onClicked: page.openMap(modelData) }; Item { Layout.fillWidth: true }; Label { visible: !summary.gps || summary.gps.length === 0; text: qsTr("No GPS"); color: tokens.textMuted; font.pixelSize: 12 } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Show on map"); onClicked: page.openMap(modelData) }; Button { visible: summary.diveCount > 0; text: relatedDivesVisible ? qsTr("Hide dives") : qsTr("Show dives"); onClicked: relatedDivesVisible = !relatedDivesVisible }; Item { Layout.fillWidth: true }; Label { visible: !summary.gps || summary.gps.length === 0; text: qsTr("No GPS"); color: tokens.textMuted; font.pixelSize: 12 } }
+				Repeater { model: relatedDivesVisible ? manager.siteDives(modelData) : []; delegate: Button { required property var modelData; Layout.fillWidth: true; text: qsTr("Dive #%1 · %2 · %3 · %4").arg(modelData.number).arg(modelData.date).arg(modelData.depth).arg(modelData.duration); onClicked: page.openDive(modelData.id) } }
 			}
 		}
 		Text { text: qsTr("Site edits remain stored in canonical Subsurface site data so they appear consistently in every compatible client."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
