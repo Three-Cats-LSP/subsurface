@@ -125,13 +125,18 @@ Kirigami.ScrollablePage {
 	function sacValue(text) {
 		return Backend.volume === Enums.LITER ? Math.round(Number(text)) : Math.round(Number(text) * 100)
 	}
+	function formatSetpoint(mbar) {
+		return mbar && mbar > 0 ? (mbar / 1000.0).toFixed(2) + " bar" : "—"
+	}
 	function decoSlate() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
 		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("DECOMPRESSION SCHEDULE")]
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
-		for (var i = 0; i < schedule.length; ++i)
-			lines.push((schedule[i].depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(schedule[i].duration))
+		for (var i = 0; i < schedule.length; ++i) {
+			var stop = schedule[i]
+			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
+		}
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
 		return lines.join("\n")
 	}
@@ -229,7 +234,18 @@ Kirigami.ScrollablePage {
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			TextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.schedule; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: qsTr("Stop"); color: tokens.textMuted; Layout.fillWidth: true }; Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary; Layout.preferredWidth: 100 }; Label { text: page.formatDuration(modelData.duration); color: tokens.textPrimary; Layout.preferredWidth: 100 } } }
+			Repeater { model: page.schedule; delegate: GridLayout {
+				required property var modelData
+				Layout.fillWidth: true
+				columns: page.width >= 700 ? 7 : 2
+				Label { text: qsTr("Deco stop"); color: tokens.textMuted; Layout.fillWidth: true }
+				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
+				Label { text: qsTr("Stop %1").arg(page.formatDuration(modelData.duration)); color: tokens.textPrimary }
+				Label { visible: modelData.runTime !== undefined; text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textSecondary }
+				Label { visible: modelData.tts !== undefined; text: qsTr("TTS %1").arg(page.formatDuration(modelData.tts)); color: tokens.textSecondary }
+				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
+				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
+			} }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: !page.exceedsNDL; onClicked: page.generatePlan(true) } }
 		}
 		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }

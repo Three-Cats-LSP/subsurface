@@ -1613,6 +1613,18 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		QVariantMap row;
 		row.insert("depth", stop.depth);
 		row.insert("duration", stop.time);
+		row.insert("phase", QStringLiteral("deco"));
+		if (!d->dcs.empty()) {
+			for (const struct sample &sample : d->dcs[0].samples) {
+				if (!sample.in_deco || sample.depth.mm != stop.depth)
+					continue;
+				row.insert("runTime", sample.time.seconds);
+				row.insert("tts", sample.tts.seconds);
+				row.insert("cns", sample.cns);
+				row.insert("setpoint", sample.setpoint.mbar);
+				break;
+			}
+		}
 		schedule.append(row);
 	}
 	results["schedule"] = schedule;
