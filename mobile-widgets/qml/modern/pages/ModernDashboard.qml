@@ -44,13 +44,18 @@ Kirigami.ScrollablePage {
 
 		GridLayout {
 			Layout.fillWidth: true
-			columns: page.width >= 700 ? 3 : 1
+			columns: page.width >= 700 ? 4 : 1
 			columnSpacing: tokens.space12
 			rowSpacing: tokens.space12
 
 			Components.MetricCard {
 				label: qsTr("Dives")
 				value: String(NeoDashboard.diveCount)
+				Layout.fillWidth: true
+			}
+			Components.MetricCard {
+				label: qsTr("Saved plans")
+				value: String(NeoDashboard.planCount)
 				Layout.fillWidth: true
 			}
 			Components.MetricCard {
@@ -64,6 +69,22 @@ Kirigami.ScrollablePage {
 				value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"
 				suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""
 				Layout.fillWidth: true
+			}
+		}
+
+		ColumnLayout {
+			visible: NeoDashboard.recentPlans.length > 0
+			Layout.fillWidth: true
+			spacing: tokens.space12
+			Text { text: qsTr("Saved plans"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
+			Repeater {
+				model: NeoDashboard.recentPlans
+				delegate: Components.ModernCard {
+					required property var modelData
+					Layout.fillWidth: true
+					RowLayout { Layout.fillWidth: true; Text { text: qsTr("Planned dive"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }; Text { text: modelData.depth; color: tokens.accent; font.weight: Font.DemiBold } }
+					RowLayout { Layout.fillWidth: true; Text { text: modelData.date; color: tokens.textSecondary; Layout.fillWidth: true }; Text { text: modelData.duration; color: tokens.textSecondary } }
+				}
 			}
 		}
 
