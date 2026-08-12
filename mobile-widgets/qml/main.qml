@@ -511,7 +511,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					text: qsTr("Dive Planner")
 					onTriggered: {
 						globalDrawer.close()
-						showPageFromDrawer(divePlannerEditWindow)
+						showPageFromDrawer(neoPlannerLab)
 					}
 				}
 				Kirigami.Action {
@@ -933,6 +933,13 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			review.finished.connect(function() { showPageFromDrawer(modernDiveList) })
 			showPage(review)
 		}
+	}
+
+	NeoPages.ModernPlannerLab {
+		id: neoPlannerLab
+		visible: false
+		onOpenPlanner: showPage(divePlannerEditWindow)
+		onOpenGasTools: showPage(divePlannerCalculatorWindow)
 	}
 
 	NeoPages.CloudSyncPage {
