@@ -228,9 +228,28 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	segment.insert("depth", 45);
 	segment.insert("duration", 30);
 	segments[0] = segment;
-	const QVariantList decoSchedule = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false).value("schedule").toList();
+	const QVariantMap deepDecoResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	const QVariantList decoSchedule = deepDecoResult.value("schedule").toList();
 	QVERIFY(!decoSchedule.empty());
 	QVERIFY(decoSchedule.first().toMap().contains("gas"));
+	QVERIFY(decoSchedule.first().toMap().contains("tts"));
+	QVERIFY(decoSchedule.first().toMap().contains("cns"));
+
+	// A decompression profile must carry real values from the native plot
+	// pipeline, rather than merely placeholder keys for the Neo inspector.
+	QVariantMap decoSample;
+	for (const QVariant &value : deepDecoResult.value("profile").toList()) {
+		const QVariantMap sample = value.toMap();
+		if (sample.value("inDeco").toBool()) {
+			decoSample = sample;
+			break;
+		}
+	}
+	QVERIFY(!decoSample.empty());
+	QVERIFY(decoSample.value("ceiling").toInt() > 0);
+	QVERIFY(decoSample.value("tts").toInt() > 0);
+	QVERIFY(decoSample.value("gf").toDouble() > 0.0);
+	QVERIFY(decoSample.value("surfaceGf").toDouble() > 0.0);
 	prefs.display_variations = true;
 	const QVariantMap variationResult = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
 	QVERIFY(!variationResult.value("notes").toString().contains("VARIATIONS"));
