@@ -2155,6 +2155,23 @@ QString QMLManager::exportNeoPlannerText(const QString &directory, const QString
 	return output;
 }
 
+QString QMLManager::exportNeoDiveReportText(const QString &directory, const QString &contents)
+{
+	QDir targetDirectory(localFileName(directory));
+	if (!targetDirectory.exists() && !targetDirectory.mkpath(".")) {
+		setErrorMessage(tr("Could not create the selected dive-report export folder."));
+		return {};
+	}
+	const QString output = targetDirectory.filePath(QString("subsurface-neo-dive-report-%1.txt").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
+	QFile exportFile(output);
+	const QByteArray data = contents.toUtf8();
+	if (!exportFile.open(QIODevice::WriteOnly | QIODevice::Text) || exportFile.write(data) != data.size()) {
+		setErrorMessage(tr("Could not write the dive-report text export."));
+		return {};
+	}
+	return output;
+}
+
 static QString exportNeoPdfDocument(const QString &directory, const QString &contents, const QString &filePrefix, const QString &title)
 {
 	QDir targetDirectory(localFileName(directory));
@@ -2210,24 +2227,38 @@ QString QMLManager::exportNeoDiveReportPdf(const QString &directory, const QStri
 	return output;
 }
 
+static QString currentDiveReportContents(const struct dive *dive)
+{
+	QTextDocument notes;
+	notes.setHtml(QString::fromStdString(dive->notes));
+	const QString site = dive->dive_site ? QString::fromStdString(dive->dive_site->name) : QMLManager::tr("Unnamed dive site");
+	QStringList lines { QMLManager::tr("SUBSURFACE NEO DIVE REPORT"), QMLManager::tr("Dive: %1").arg(dive->number > 0 ? "#" + QString::number(dive->number) : QMLManager::tr("Unnumbered")),
+		QMLManager::tr("Date: %1").arg(get_dive_date_string(dive->when)), QMLManager::tr("Site: %1").arg(site),
+		QMLManager::tr("Maximum depth: %1").arg(get_depth_string(dive->maxdepth, true)), QMLManager::tr("Duration: %1").arg(get_duration_string_short(dive->duration)),
+		QMLManager::tr("Water temperature: %1").arg(get_temperature_string(dive->watertemp, true)), QMLManager::tr("Gases: %1").arg(formatDiveGasString(dive)),
+		QMLManager::tr("Equipment: %1").arg(QString::fromStdString(dive->suit)) };
+	if (!notes.toPlainText().isEmpty())
+		lines << "" << QMLManager::tr("NOTES") << notes.toPlainText();
+	lines << "" << QMLManager::tr("This report is generated from the current canonical Subsurface dive record.");
+	return lines.join('\n');
+}
+
+QString QMLManager::exportCurrentDiveReportText(const QString &directory)
+{
+	if (!current_dive) {
+		setErrorMessage(tr("Select a dive before creating a report."));
+		return {};
+	}
+	return exportNeoDiveReportText(directory, currentDiveReportContents(current_dive));
+}
+
 QString QMLManager::exportCurrentDiveReportPdf(const QString &directory)
 {
 	if (!current_dive) {
 		setErrorMessage(tr("Select a dive before creating a report."));
 		return {};
 	}
-	QTextDocument notes;
-	notes.setHtml(QString::fromStdString(current_dive->notes));
-	const QString site = current_dive->dive_site ? QString::fromStdString(current_dive->dive_site->name) : tr("Unnamed dive site");
-	QStringList lines { tr("SUBSURFACE NEO DIVE REPORT"), tr("Dive: %1").arg(current_dive->number > 0 ? "#" + QString::number(current_dive->number) : tr("Unnumbered")),
-		tr("Date: %1").arg(get_dive_date_string(current_dive->when)), tr("Site: %1").arg(site),
-		tr("Maximum depth: %1").arg(get_depth_string(current_dive->maxdepth, true)), tr("Duration: %1").arg(get_duration_string_short(current_dive->duration)),
-		tr("Water temperature: %1").arg(get_temperature_string(current_dive->watertemp, true)), tr("Gases: %1").arg(formatDiveGasString(current_dive)),
-		tr("Equipment: %1").arg(QString::fromStdString(current_dive->suit)) };
-	if (!notes.toPlainText().isEmpty())
-		lines << "" << tr("NOTES") << notes.toPlainText();
-	lines << "" << tr("This report is generated from the current canonical Subsurface dive record.");
-	return exportNeoDiveReportPdf(directory, lines.join('\n'));
+	return exportNeoDiveReportPdf(directory, currentDiveReportContents(current_dive));
 }
 
 void QMLManager::copyToClipboard(const QString &text)

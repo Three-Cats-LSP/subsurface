@@ -21,6 +21,7 @@ Kirigami.Page {
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
 	property string diveReportPdfExport: ""
+	property string diveReportTextExport: ""
 
 	signal editRequested(var dive)
 	FolderDialog {
@@ -29,6 +30,14 @@ Kirigami.Page {
 		onAccepted: {
 			if (page.currentItem && page.currentItem.modelData)
 				page.diveReportPdfExport = manager.exportNeoDiveReportPdf(selectedFolder, page.diveReportText(page.currentItem.modelData))
+		}
+	}
+	FolderDialog {
+		id: diveReportTextFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: {
+			if (page.currentItem && page.currentItem.modelData)
+				page.diveReportTextExport = manager.exportNeoDiveReportText(selectedFolder, page.diveReportText(page.currentItem.modelData))
 		}
 	}
 	function diveReportText(dive) {
@@ -182,7 +191,9 @@ Kirigami.Page {
 							font.pixelSize: 13
 						}
 						Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onClicked: diveReportFolder.open() }
+						Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onClicked: diveReportTextFolder.open() }
 						Text { visible: page.diveReportPdfExport.length > 0; text: qsTr("PDF saved: %1").arg(page.diveReportPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+						Text { visible: page.diveReportTextExport.length > 0; text: qsTr("Text saved: %1").arg(page.diveReportTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 					}
 
 					GridLayout {

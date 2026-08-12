@@ -20,6 +20,7 @@ Kirigami.ScrollablePage {
 	property bool selectedDivesOnly: false
 	property string selectedCache: ""
 	property string currentDiveReportExport: ""
+	property string currentDiveReportTextExport: ""
 	property string selectedBackup: ""
 	property var backupInspection: ({})
 	property string bundleCreatedAt: ""
@@ -32,6 +33,11 @@ Kirigami.ScrollablePage {
 		id: currentDiveReportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
 		onAccepted: page.currentDiveReportExport = manager.exportCurrentDiveReportPdf(selectedFolder)
+	}
+	FolderDialog {
+		id: currentDiveReportTextFolder
+		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+		onAccepted: page.currentDiveReportTextExport = manager.exportCurrentDiveReportText(selectedFolder)
 	}
 	FolderDialog {
 		id: bundleFolder
@@ -90,9 +96,10 @@ Kirigami.ScrollablePage {
 			visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"
 			Layout.fillWidth: true
 			Text { text: qsTr("Current dive report"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Create a printable PDF from the currently selected canonical Subsurface dive."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { Layout.fillWidth: true; text: qsTr("Choose folder and create PDF report"); onClicked: currentDiveReportFolder.open() }
+			Text { text: qsTr("Create a printable PDF or portable plain-text report from the currently selected canonical Subsurface dive."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			RowLayout { Layout.fillWidth: true; Button { Layout.fillWidth: true; text: qsTr("Create PDF report"); onClicked: currentDiveReportFolder.open() }; Button { Layout.fillWidth: true; text: qsTr("Create text report"); onClicked: currentDiveReportTextFolder.open() } }
 			Label { visible: page.currentDiveReportExport.length > 0; text: qsTr("Created: %1").arg(page.currentDiveReportExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
+			Label { visible: page.currentDiveReportTextExport.length > 0; text: qsTr("Created: %1").arg(page.currentDiveReportTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
