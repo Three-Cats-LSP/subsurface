@@ -9,6 +9,7 @@
 
 class ProfileScene;
 struct divecomputer;
+struct plot_info;
 
 class QMLProfile : public QQuickPaintedItem
 {
@@ -55,7 +56,9 @@ private:
 	int m_margin;
 	qreal m_xOffset, m_yOffset;
 	std::unique_ptr<ProfileScene> m_profileWidget;
+	std::unique_ptr<plot_info> m_inspectorPlot;
 	void createProfileView();
+	void rebuildInspectorPlot();
 	void rotateDC(int dir);
 	int numDC() const;
 	const divecomputer *currentDiveComputer() const;
