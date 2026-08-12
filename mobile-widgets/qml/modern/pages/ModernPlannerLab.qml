@@ -80,6 +80,15 @@ Kirigami.ScrollablePage {
 			return "—"
 		return Math.floor(seconds / 60) + qsTr(" min") + (seconds % 60 ? " " + (seconds % 60) + qsTr(" s") : "")
 	}
+	function decoSlate() {
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Model: Buhlmann GF %1/%2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh), qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterType.currentText), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("DECOMPRESSION SCHEDULE")]
+		if (schedule.length === 0)
+			lines.push(qsTr("No decompression stops generated."))
+		for (var i = 0; i < schedule.length; ++i)
+			lines.push((schedule[i].depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(schedule[i].duration))
+		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
+		return lines.join("\n")
+	}
 	Component.onCompleted: {
 		Backend.planner_gflow = PrefTechnicalDetails.gflow
 		Backend.planner_gfhigh = PrefTechnicalDetails.gfhigh
@@ -163,7 +172,7 @@ Kirigami.ScrollablePage {
 			TextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 			Repeater { model: page.schedule; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: qsTr("Stop"); color: tokens.textMuted; Layout.fillWidth: true }; Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary; Layout.preferredWidth: 100 }; Label { text: page.formatDuration(modelData.duration); color: tokens.textPrimary; Layout.preferredWidth: 100 } } }
-			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: !page.exceedsNDL; onClicked: page.generatePlan(true) } }
+			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan() }; Button { text: qsTr("Copy deco slate"); onClicked: { manager.copyToClipboard(page.decoSlate()); showPassiveNotification(qsTr("Deco slate copied"), 3000) } }; Item { Layout.fillWidth: true }; Button { text: qsTr("Save plan"); enabled: !page.exceedsNDL; onClicked: page.generatePlan(true) } }
 		}
 		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }; Button { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() } }
 		Text { text: qsTr("Planning aid only. Confirm the active algorithm, units, gases, environmental assumptions, schedule and warnings before diving."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }

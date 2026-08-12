@@ -239,6 +239,7 @@ public slots:
 	Q_INVOKABLE bool updateSite(const QString &siteName, const QString &description, const QString &notes, const QString &gps);
 	Q_INVOKABLE QVariantMap inspectDiveLogFile(const QString &fileUrl) const;
 	Q_INVOKABLE bool importDiveLogFile(const QString &fileUrl);
+	Q_INVOKABLE void copyToClipboard(const QString &text);
 	QString getVersion() const;
 	void refreshDiveList();
 	void screenChanged(QScreen *screen);

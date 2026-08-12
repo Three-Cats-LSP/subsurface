@@ -1933,6 +1933,11 @@ bool QMLManager::importDiveLogFile(const QString &fileUrl)
 	return true;
 }
 
+void QMLManager::copyToClipboard(const QString &text)
+{
+	QApplication::clipboard()->setText(text, QClipboard::Clipboard);
+}
+
 void QMLManager::setNotificationText(QString text)
 {
 	appendTextToLog(QStringLiteral("showProgress: ") + text);
