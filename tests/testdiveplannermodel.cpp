@@ -221,6 +221,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("surfaceGf"));
 	QVERIFY(lastSample.contains("po2"));
 	QVERIFY(lastSample.contains("tissueLoad"));
+	const QVariantMap customWater = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10150, 1013, false);
+	QVERIFY(!customWater.value("profile").toList().empty());
 
 	segment.insert("depth", 45);
 	segment.insert("duration", 30);
