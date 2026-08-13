@@ -11,50 +11,196 @@ Kirigami.ScrollablePage {
 	id: page
 	title: qsTr("Statistics")
 	background: Rectangle { color: tokens.background }
+
+	property bool wideLayout: width >= 760
+	property bool controlsOpen: false
+	property bool chartPickerOpen: false
+
 	Modern.DesignTokens { id: tokens }
 	StatsManager { id: statsManager }
 	ChartListModel { id: chartListModel }
-	property bool controlsOpen: true
-	property bool chartPickerOpen: false
+
 	Component.onCompleted: statsManager.init(statsView, chartListModel)
 	onVisibleChanged: if (visible) statsManager.doit()
+	onWidthChanged: if (visible) redrawTimer.restart()
+
+	Timer {
+		id: redrawTimer
+		interval: 250
+		repeat: false
+		onTriggered: statsManager.doit()
+	}
 
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
-		Text { text: qsTr("Analyze your real diving"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; Layout.fillWidth: true }
-		GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 1
-			Components.MetricCard { label: qsTr("Dives"); value: String(NeoDashboard.diveCount); Layout.fillWidth: true }
-			Components.MetricCard { label: qsTr("Dive time"); value: NeoDashboard.totalTimeHours; suffix: qsTr("hours"); Layout.fillWidth: true }
-			Components.MetricCard { label: qsTr("Max depth"); value: NeoDashboard.maxDepth; suffix: NeoDashboard.maxDepthUnit; Layout.fillWidth: true }
-		}
-		Components.ModernCard {
+
+		ColumnLayout {
 			Layout.fillWidth: true
-			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Chart configuration"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
- Button { text: page.controlsOpen ? qsTr("Hide") : qsTr("Show"); onClicked: page.controlsOpen = !page.controlsOpen } }
-			GridLayout {
-				visible: page.controlsOpen; Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
-				Label { text: qsTr("Base variable"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.var1List; currentIndex: statsManager.var1Index; onActivated: statsManager.var1Changed(currentIndex) }
-				Label { text: qsTr("Base binning"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.binner1List; currentIndex: statsManager.binner1Index; onActivated: statsManager.var1BinnerChanged(currentIndex) }
-				Label { text: qsTr("Data"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.var2List; currentIndex: statsManager.var2Index; onActivated: statsManager.var2Changed(currentIndex) }
-				Label { text: qsTr("Data binning"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.binner2List; currentIndex: statsManager.binner2Index; onActivated: statsManager.var2BinnerChanged(currentIndex) }
-				Label { text: qsTr("Operation"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.operation2List; currentIndex: statsManager.operation2Index; onActivated: statsManager.var2OperationChanged(currentIndex) }
-				Label { text: qsTr("Sort"); color: tokens.textMuted }
-				ComboBox { Layout.fillWidth: true; model: statsManager.sortMode1List; currentIndex: statsManager.sortMode1Index; onActivated: statsManager.sortMode1Changed(currentIndex) }
+			spacing: 2
+			Text {
+				text: qsTr("Statistics")
+				color: tokens.textPrimary
+				font.pixelSize: page.wideLayout ? 30 : 25
+				font.weight: Font.DemiBold
 			}
-			Button { text: qsTr("Choose chart type"); onClicked: page.chartPickerOpen = !page.chartPickerOpen }
-			ListView { visible: page.chartPickerOpen; Layout.fillWidth: true; Layout.preferredHeight: Math.min(contentHeight, 260); clip: true; model: chartListModel; delegate: ItemDelegate { width: ListView.view.width; text: chartName; enabled: !isHeader; font.bold: isHeader; onClicked: { statsManager.setChart(id); page.chartPickerOpen = false } } }
+			Text {
+				text: qsTr("Explore patterns in your current dive log")
+				color: tokens.textSecondary
+				font.pixelSize: 13
+			}
 		}
+
+		GridLayout {
+			Layout.fillWidth: true
+			columns: 3
+			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
+			Components.MetricCard {
+				label: qsTr("Dives")
+				value: String(NeoDashboard.diveCount)
+				iconName: "tank"
+				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
+			Components.MetricCard {
+				label: qsTr("Dive time")
+				value: NeoDashboard.totalTimeHours
+				suffix: qsTr("h")
+				iconName: "time"
+				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
+			Components.MetricCard {
+				label: qsTr("Max depth")
+				value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"
+				suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""
+				iconName: "depth"
+				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
+		}
+
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Live chart"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			StatsView { id: statsView; Layout.fillWidth: true; Layout.preferredHeight: Math.max(320, page.width * 0.55) }
+			contentPadding: tokens.space12
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: tokens.space8
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: 1
+					Text { text: qsTr("Dive activity"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+					Text { visible: page.wideLayout; text: qsTr("Calculated from the current log and active filters"); color: tokens.textMuted; font.pixelSize: 10 }
+				}
+				Button { text: page.wideLayout ? qsTr("Chart type") : qsTr("Chart"); onClicked: page.chartPickerOpen = !page.chartPickerOpen }
+				Button {
+					text: page.wideLayout ? (page.controlsOpen ? qsTr("Hide controls") : qsTr("Configure")) : (page.controlsOpen ? qsTr("Hide") : qsTr("Options"))
+					onClicked: page.controlsOpen = !page.controlsOpen
+				}
+			}
+
+			ListView {
+				visible: page.chartPickerOpen
+				Layout.fillWidth: true
+				Layout.preferredHeight: Math.min(contentHeight, 260)
+				clip: true
+				model: chartListModel
+				delegate: ItemDelegate {
+					width: ListView.view.width
+					height: isHeader ? 34 : 44
+					enabled: !isHeader
+					contentItem: Text {
+						text: chartName
+						color: isHeader ? tokens.accent : tokens.textPrimary
+						font.pixelSize: isHeader ? 11 : 13
+						font.weight: isHeader ? Font.DemiBold : Font.Normal
+						verticalAlignment: Text.AlignVCenter
+					}
+					background: Rectangle { color: parent.down ? tokens.surfaceRaised : "transparent" }
+					onClicked: {
+						statsManager.setChart(id)
+						page.chartPickerOpen = false
+					}
+				}
+			}
+
+			Rectangle {
+				Layout.fillWidth: true
+				Layout.preferredHeight: page.wideLayout ? Math.max(420, page.width * 0.42) : 340
+				color: tokens.background
+				radius: tokens.radiusSmall
+				clip: true
+				StatsView {
+					id: statsView
+					anchors.fill: parent
+					anchors.margins: tokens.space8
+				}
+			}
 		}
-		Text { text: qsTr("All values and chart bins are calculated by Subsurface's existing statistics engine from the current log and filters."); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+
+		Components.ModernCard {
+			visible: page.controlsOpen
+			Layout.fillWidth: true
+			contentPadding: tokens.space12
+
+			RowLayout {
+				Layout.fillWidth: true
+				Text { text: qsTr("Chart configuration"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+				Text { text: qsTr("Native Subsurface statistics engine"); color: tokens.accent; font.pixelSize: 10 }
+			}
+
+			GridLayout {
+				Layout.fillWidth: true
+				columns: page.wideLayout ? 3 : 1
+				columnSpacing: tokens.space12
+				rowSpacing: tokens.space12
+
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Base variable"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.var1List; currentIndex: statsManager.var1Index; onActivated: statsManager.var1Changed(currentIndex) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Base binning"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.binner1List; currentIndex: statsManager.binner1Index; onActivated: statsManager.var1BinnerChanged(currentIndex) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Sort"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.sortMode1List; currentIndex: statsManager.sortMode1Index; onActivated: statsManager.sortMode1Changed(currentIndex) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Data"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.var2List; currentIndex: statsManager.var2Index; onActivated: statsManager.var2Changed(currentIndex) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Data binning"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.binner2List; currentIndex: statsManager.binner2Index; onActivated: statsManager.var2BinnerChanged(currentIndex) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true
+					spacing: tokens.space4
+					Text { text: qsTr("Operation"); color: tokens.textMuted; font.pixelSize: 10 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.operation2List; currentIndex: statsManager.operation2Index; onActivated: statsManager.var2OperationChanged(currentIndex) }
+				}
+			}
+		}
+
+		Text {
+			Layout.fillWidth: true
+			text: qsTr("Charts remain interactive: select chart elements to restrict the current statistics view, using the established Subsurface behavior.")
+			color: tokens.textSecondary
+			font.pixelSize: 11
+			wrapMode: Text.WordWrap
+		}
 	}
 }

@@ -90,6 +90,9 @@ Canvas {
 			ctx.beginPath(); ctx.arc(7, 14, 2, 0, Math.PI * 2); ctx.fill()
 			ctx.beginPath(); ctx.arc(14, 14, 2, 0, Math.PI * 2); ctx.fill()
 			ctx.beginPath(); ctx.arc(21, 14, 2, 0, Math.PI * 2); ctx.fill()
+		} else if (name === "search") {
+			ctx.beginPath(); ctx.arc(12, 12, 7, 0, Math.PI * 2); ctx.stroke()
+			line(ctx, [17, 17, 23, 23])
 		} else {
 			ctx.beginPath(); ctx.arc(14, 14, 8, 0, Math.PI * 2); ctx.stroke()
 		}

@@ -46,6 +46,7 @@
 		<file>modern/DesignTokens.qml</file>
 		<file>modern/components/ModernCard.qml</file>
 		<file>modern/components/MetricCard.qml</file>
+		<file>modern/components/NeoComboBox.qml</file>
 		<file>modern/components/NeoDiveIcon.qml</file>
 		<file>modern/components/DiveInfoCard.qml</file>
 		<file>modern/components/NeoBottomNavigation.qml</file>
