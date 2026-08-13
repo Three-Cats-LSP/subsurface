@@ -152,6 +152,7 @@ endif()
 #endif()
 
 TEST(TestQPrefCloudStorage testqPrefCloudStorage.cpp)
+TEST(TestCloudSyncManifest testcloudsyncmanifest.cpp)
 TEST(TestQPrefDisplay testqPrefDisplay.cpp)
 TEST(TestQPrefDiveComputer testqPrefDiveComputer.cpp)
 TEST(TestQPrefDivePlanner testqPrefDivePlanner.cpp)
