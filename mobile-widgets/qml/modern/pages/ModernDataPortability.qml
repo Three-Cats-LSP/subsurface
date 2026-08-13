@@ -59,7 +59,9 @@ Kirigami.ScrollablePage {
 		modal: true
 		title: qsTr("Merge backup into current log?")
 		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: backupInspection.error ? backupInspection.error : (backupInspection.neoPackage ? qsTr("%1 is a Neo package created %2 with %3 dives, %4 sites, %5 gear kits, %6 equipment items, %7 collections, and %8 planner presets. Merging imports only its canonical dives and sites using Subsurface deduplication. Replacing restores the listed Neo data too.") : qsTr("%1 contains %2 dives and %3 sites. Imported dives will be merged with the current log using Subsurface deduplication; nothing is replaced automatically.")).arg(backupInspection.fileName).arg(backupInspection.createdAt || qsTr("at an unknown time")).arg(backupInspection.dives).arg(backupInspection.sites).arg(backupInspection.equipmentKits).arg(backupInspection.equipmentItems).arg(backupInspection.collections).arg(backupInspection.plannerPresets) }
-		footer: DialogButtonBox { Button { text: qsTr("Merge backup"); enabled: !backupInspection.error; onClicked: { if (manager.importDiveLogFile(page.selectedBackup)) backupConfirm.close() } }; Button { text: qsTr("Replace current log"); enabled: !backupInspection.error; onClicked: replaceConfirm.open() }; Button { text: qsTr("Cancel"); onClicked: backupConfirm.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Merge backup"); enabled: !backupInspection.error; onClicked: { if (manager.importDiveLogFile(page.selectedBackup)) backupConfirm.close() } }
+ Button { text: qsTr("Replace current log"); enabled: !backupInspection.error; onClicked: replaceConfirm.open() }
+ Button { text: qsTr("Cancel"); onClicked: backupConfirm.close() } }
 	}
 	Dialog {
 		id: replaceConfirm
@@ -67,7 +69,8 @@ Kirigami.ScrollablePage {
 		modal: true
 		title: qsTr("Replace the current log?")
 		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: backupInspection.neoPackage ? qsTr("This replaces the current in-memory dive log and restores the package's Neo equipment, collections, and planner presets. Save or export your current data first if you may need it.") : qsTr("This replaces the current in-memory dive log with the inspected backup. Save or export your current log first if you may need it. This action is not the default restore choice.") }
-		footer: DialogButtonBox { Button { text: qsTr("Replace current log"); onClicked: { if (manager.replaceDiveLogFile(page.selectedBackup)) { replaceConfirm.close(); backupConfirm.close() } } }; Button { text: qsTr("Cancel"); onClicked: replaceConfirm.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Replace current log"); onClicked: { if (manager.replaceDiveLogFile(page.selectedBackup)) { replaceConfirm.close(); backupConfirm.close() } } }
+ Button { text: qsTr("Cancel"); onClicked: replaceConfirm.close() } }
 	}
 	Dialog {
 		id: cacheConfirm
@@ -76,7 +79,8 @@ Kirigami.ScrollablePage {
 		title: qsTr("Import cached log?")
 		standardButtons: Dialog.Cancel
 		contentItem: Label { width: 360; wrapMode: Text.WordWrap; text: qsTr("Import '%1' as a recovery source? Review the resulting log before saving or syncing.").arg(page.selectedCache) }
-		footer: DialogButtonBox { Button { text: qsTr("Import cache"); onClicked: { manager.importCacheRepo(page.selectedCache); cacheConfirm.close() } }; Button { text: qsTr("Cancel"); onClicked: cacheConfirm.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Import cache"); onClicked: { manager.importCacheRepo(page.selectedCache); cacheConfirm.close() } }
+ Button { text: qsTr("Cancel"); onClicked: cacheConfirm.close() } }
 	}
 	ColumnLayout {
 		width: page.availableWidth
@@ -97,7 +101,8 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Current dive report"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Create a printable PDF or portable plain-text report from the currently selected canonical Subsurface dive."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			RowLayout { Layout.fillWidth: true; Button { Layout.fillWidth: true; text: qsTr("Create PDF report"); onClicked: currentDiveReportFolder.open() }; Button { Layout.fillWidth: true; text: qsTr("Create text report"); onClicked: currentDiveReportTextFolder.open() } }
+			RowLayout { Layout.fillWidth: true; Button { Layout.fillWidth: true; text: qsTr("Create PDF report"); onClicked: currentDiveReportFolder.open() }
+ Button { Layout.fillWidth: true; text: qsTr("Create text report"); onClicked: currentDiveReportTextFolder.open() } }
 			Label { visible: page.currentDiveReportExport.length > 0; text: qsTr("Created: %1").arg(page.currentDiveReportExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 			Label { visible: page.currentDiveReportTextExport.length > 0; text: qsTr("Created: %1").arg(page.currentDiveReportTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}

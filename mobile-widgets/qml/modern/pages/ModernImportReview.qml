@@ -113,7 +113,8 @@ Kirigami.Page {
 				RowLayout {
 					Layout.fillWidth: true
 					CheckBox { checked: model.selected; onToggled: importModel.selectRow(index) }
-					ColumnLayout { Layout.fillWidth: true; Text { text: model.datetime || ""; color: tokens.textPrimary; font.weight: Font.Medium }; Text { text: (model.depth || "") + " · " + (model.duration || ""); color: tokens.textSecondary; font.pixelSize: 12 } }
+					ColumnLayout { Layout.fillWidth: true; Text { text: model.datetime || ""; color: tokens.textPrimary; font.weight: Font.Medium }
+ Text { text: (model.depth || "") + " · " + (model.duration || ""); color: tokens.textSecondary; font.pixelSize: 12 } }
 				}
 			}
 		}

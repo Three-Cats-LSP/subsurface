@@ -64,7 +64,10 @@ Kirigami.ScrollablePage {
 				Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: [modelData.suit, modelData.cylinder, modelData.gas].filter(function(value) { return value && value.length > 0 }).join(" · "); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Text { visible: NeoEquipmentKits.defaultKit === modelData.name; text: qsTr("Default kit for new dives"); color: tokens.success; font.pixelSize: 12 }
-				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editKit(modelData) }; Button { text: NeoEquipmentKits.defaultKit === modelData.name ? qsTr("Clear default") : qsTr("Set as default"); onClicked: NeoEquipmentKits.defaultKit = NeoEquipmentKits.defaultKit === modelData.name ? "" : modelData.name }; Item { Layout.fillWidth: true }; Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeKit(modelData.name) } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editKit(modelData) }
+ Button { text: NeoEquipmentKits.defaultKit === modelData.name ? qsTr("Clear default") : qsTr("Set as default"); onClicked: NeoEquipmentKits.defaultKit = NeoEquipmentKits.defaultKit === modelData.name ? "" : modelData.name }
+ Item { Layout.fillWidth: true }
+ Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeKit(modelData.name) } }
 			}
 		}
 		Text { text: qsTr("Individual equipment"); color: tokens.textPrimary; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.topMargin: tokens.space16 }
@@ -81,7 +84,9 @@ Kirigami.ScrollablePage {
 				Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1%2").arg(modelData.serviceDate).arg(modelData.serviceInterval ? qsTr(" · every %1").arg(modelData.serviceInterval) : ""); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { text: qsTr("Used on %1 dives (matching gear text)").arg(NeoEquipmentKits.usageCount(modelData.name)); color: tokens.textMuted; font.pixelSize: 13 }
 				Text { visible: modelData.retired === true; text: qsTr("Retired"); color: "#FBBF24"; font.pixelSize: 13 }
-				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editItem(modelData) }; Item { Layout.fillWidth: true }; Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeEquipmentItem(modelData.name) } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Edit"); onClicked: page.editItem(modelData) }
+ Item { Layout.fillWidth: true }
+ Button { text: qsTr("Remove"); onClicked: NeoEquipmentKits.removeEquipmentItem(modelData.name) } }
 			}
 		}
 	}
@@ -107,12 +112,14 @@ Kirigami.ScrollablePage {
 				TextField { id: suit; Layout.fillWidth: true; placeholderText: qsTr("Suit / primary gear") }
 				TextField { id: cylinder; Layout.fillWidth: true; placeholderText: qsTr("Cylinder") }
 				TextField { id: gas; Layout.fillWidth: true; placeholderText: qsTr("Gas mix") }
-				RowLayout { Layout.fillWidth: true; TextField { id: startPressure; Layout.fillWidth: true; placeholderText: qsTr("Start pressure") }; TextField { id: endPressure; Layout.fillWidth: true; placeholderText: qsTr("End pressure") } }
+				RowLayout { Layout.fillWidth: true; TextField { id: startPressure; Layout.fillWidth: true; placeholderText: qsTr("Start pressure") }
+ TextField { id: endPressure; Layout.fillWidth: true; placeholderText: qsTr("End pressure") } }
 				TextField { id: buddy; Layout.fillWidth: true; placeholderText: qsTr("Buddy") }
 				TextField { id: tags; Layout.fillWidth: true; placeholderText: qsTr("Tags") }
 			}
 		}
-		footer: DialogButtonBox { Button { text: qsTr("Save kit"); enabled: kitName.text.trim().length > 0; onClicked: page.saveEditedKit() }; Button { text: qsTr("Cancel"); onClicked: kitEditor.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Save kit"); enabled: kitName.text.trim().length > 0; onClicked: page.saveEditedKit() }
+ Button { text: qsTr("Cancel"); onClicked: kitEditor.close() } }
 	}
 	Dialog {
 		id: itemEditor
@@ -144,6 +151,7 @@ Kirigami.ScrollablePage {
 				TextArea { id: itemNotes; Layout.fillWidth: true; placeholderText: qsTr("Notes") }
 			}
 		}
-		footer: DialogButtonBox { Button { text: qsTr("Save item"); enabled: itemName.text.trim().length > 0; onClicked: page.saveEditedItem() }; Button { text: qsTr("Cancel"); onClicked: itemEditor.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Save item"); enabled: itemName.text.trim().length > 0; onClicked: page.saveEditedItem() }
+ Button { text: qsTr("Cancel"); onClicked: itemEditor.close() } }
 	}
 }

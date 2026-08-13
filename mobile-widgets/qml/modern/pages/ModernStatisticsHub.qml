@@ -30,7 +30,8 @@ Kirigami.ScrollablePage {
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
-			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Chart configuration"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }; Button { text: page.controlsOpen ? qsTr("Hide") : qsTr("Show"); onClicked: page.controlsOpen = !page.controlsOpen } }
+			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Chart configuration"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
+ Button { text: page.controlsOpen ? qsTr("Hide") : qsTr("Show"); onClicked: page.controlsOpen = !page.controlsOpen } }
 			GridLayout {
 				visible: page.controlsOpen; Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
 				Label { text: qsTr("Base variable"); color: tokens.textMuted }

@@ -20,7 +20,9 @@ Kirigami.ScrollablePage {
 		spacing: tokens.space16
 		Text { text: qsTr("Sites, locations, and maps"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; Layout.fillWidth: true }
 		Text { text: qsTr("Your log currently contains %1 saved locations.").arg(manager.locationList.length); color: tokens.textSecondary; Layout.fillWidth: true }
-		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Explore dive sites"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }; TextField { Layout.fillWidth: true; placeholderText: qsTr("Search sites"); onTextEdited: page.siteFilter = text.toLowerCase() }; Button { Layout.fillWidth: true; text: qsTr("Open map"); onClicked: page.openMap("") } }
+		Components.ModernCard { Layout.fillWidth: true; Text { text: qsTr("Explore dive sites"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+ TextField { Layout.fillWidth: true; placeholderText: qsTr("Search sites"); onTextEdited: page.siteFilter = text.toLowerCase() }
+ Button { Layout.fillWidth: true; text: qsTr("Open map"); onClicked: page.openMap("") } }
 		Repeater {
 			model: manager.locationList
 			delegate: Components.ModernCard {
@@ -33,7 +35,11 @@ Kirigami.ScrollablePage {
 				Text { visible: summary.diveCount > 0; text: qsTr("%1 logged dives").arg(summary.diveCount); color: tokens.textSecondary; font.pixelSize: 13 }
 				Text { visible: summary.gps && summary.gps.length > 0; text: summary.gps; color: tokens.textMuted; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Text { visible: summary.description && summary.description.length > 0; text: summary.description; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Show on map"); onClicked: page.openMap(modelData) }; Button { visible: summary.diveCount > 0; text: relatedDivesVisible ? qsTr("Hide dives") : qsTr("Show dives"); onClicked: relatedDivesVisible = !relatedDivesVisible }; Button { text: qsTr("Edit"); onClicked: { page.editingSite = modelData; siteDescription.text = summary.description || ""; siteNotes.text = summary.notes || ""; siteGps.text = summary.gps || ""; siteEditor.open() } }; Item { Layout.fillWidth: true }; Label { visible: !summary.gps || summary.gps.length === 0; text: qsTr("No GPS"); color: tokens.textMuted; font.pixelSize: 12 } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Show on map"); onClicked: page.openMap(modelData) }
+ Button { visible: summary.diveCount > 0; text: relatedDivesVisible ? qsTr("Hide dives") : qsTr("Show dives"); onClicked: relatedDivesVisible = !relatedDivesVisible }
+ Button { text: qsTr("Edit"); onClicked: { page.editingSite = modelData; siteDescription.text = summary.description || ""; siteNotes.text = summary.notes || ""; siteGps.text = summary.gps || ""; siteEditor.open() } }
+ Item { Layout.fillWidth: true }
+ Label { visible: !summary.gps || summary.gps.length === 0; text: qsTr("No GPS"); color: tokens.textMuted; font.pixelSize: 12 } }
 				Repeater { model: relatedDivesVisible ? manager.siteDives(modelData) : []; delegate: Button { required property var modelData; Layout.fillWidth: true; text: qsTr("Dive #%1 · %2 · %3 · %4").arg(modelData.number).arg(modelData.date).arg(modelData.depth).arg(modelData.duration); onClicked: page.openDive(modelData.id) } }
 			}
 		}
@@ -54,6 +60,7 @@ Kirigami.ScrollablePage {
 			TextArea { id: siteDescription; Layout.fillWidth: true; placeholderText: qsTr("Description") }
 			TextArea { id: siteNotes; Layout.fillWidth: true; placeholderText: qsTr("Notes") }
 		}
-		footer: DialogButtonBox { Button { text: qsTr("Save site"); onClicked: { if (manager.updateSite(page.editingSite, siteDescription.text, siteNotes.text, siteGps.text)) siteEditor.close() } }; Button { text: qsTr("Cancel"); onClicked: siteEditor.close() } }
+		footer: DialogButtonBox { Button { text: qsTr("Save site"); onClicked: { if (manager.updateSite(page.editingSite, siteDescription.text, siteNotes.text, siteGps.text)) siteEditor.close() } }
+ Button { text: qsTr("Cancel"); onClicked: siteEditor.close() } }
 	}
 }
