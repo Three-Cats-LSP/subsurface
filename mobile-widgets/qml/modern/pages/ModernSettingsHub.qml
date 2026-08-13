@@ -13,6 +13,7 @@ Kirigami.ScrollablePage {
 	background: Rectangle { color: tokens.background }
 	property bool wideLayout: width >= 760
 	signal openCloudSync()
+	signal openSubsurfaceCloud()
 	signal openImport()
 	signal openAdvancedSettings()
 	signal openAbout()
@@ -50,6 +51,11 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Cloud & Sync"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Google Drive, Dropbox, conflicts, and backups"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Button { text: qsTr("Manage cloud providers"); Layout.fillWidth: true; onClicked: page.openCloudSync() }
+				Button {
+					text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Subsurface Cloud: connected") : qsTr("Subsurface Cloud compatibility")
+					Layout.fillWidth: true
+					onClicked: page.openSubsurfaceCloud()
+				}
 			}
 
 			Components.ModernCard {

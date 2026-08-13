@@ -67,6 +67,8 @@
 		<file>modern/pages/ModernOnboarding.qml</file>
 		<file>modern/pages/ModernMorePage.qml</file>
 		<file>modern/pages/ModernSettingsHub.qml</file>
+		<file>modern/pages/ModernAboutPage.qml</file>
+		<file>modern/pages/ModernSubsurfaceCloudSetup.qml</file>
 
 		<file>SsrfSwitch.qml</file>
 		<file>SsrfTextField.qml</file>

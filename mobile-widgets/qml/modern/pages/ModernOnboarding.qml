@@ -12,7 +12,7 @@ Kirigami.ScrollablePage {
 	background: Rectangle { color: tokens.background }
 
 	signal useLocalLog()
-	signal openLegacyCloudSetup()
+	signal openSubsurfaceCloudSetup()
 
 	Modern.DesignTokens { id: tokens }
 
@@ -70,7 +70,7 @@ Kirigami.ScrollablePage {
 			Button {
 				Layout.fillWidth: true
 				text: qsTr("Use Subsurface Cloud")
-				onClicked: page.openLegacyCloudSetup()
+				onClicked: page.openSubsurfaceCloudSetup()
 			}
 		}
 

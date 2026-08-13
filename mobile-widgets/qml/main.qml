@@ -30,7 +30,7 @@ Kirigami.ApplicationWindow {
 
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
-		visible: initialized && !startPage.visible && !neoOnboarding.visible &&
+		visible: initialized && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
 			(pageStack.currentItem === neoDashboard ||
 			 pageStack.currentItem === modernDiveList ||
 			 pageStack.currentItem === neoSitesHub ||
@@ -74,7 +74,8 @@ Kirigami.ApplicationWindow {
 	property bool filterToggle: false
 	property string filterPattern: ""
 	property int colWidth: undefined
-	property bool neoLegacyCloudSetupRequested: false
+	property bool neoSubsurfaceCloudSetupRequested: false
+	property bool neoSubsurfaceCloudSetupFromSettings: false
 
 	function isBackgroundProgressMessage(message) {
 		return message === "Open local dive data file" ||
@@ -405,7 +406,7 @@ Kirigami.ApplicationWindow {
 				onTriggered: {
 					manager.appendTextToLog("requested dive list with credential status " + Backend.cloud_verification_status)
 					globalDrawer.close()
-					showPageFromDrawer(diveList)
+					showPageFromDrawer(modernDiveList)
 				}
 			},
 			Kirigami.Action {
@@ -422,8 +423,12 @@ Kirigami.ApplicationWindow {
 					text: qsTr("Add dive manually")
 					onTriggered: {
 						globalDrawer.close()
-						showPageFromDrawer(diveList)
-						startAddDive()
+						var diveId = manager.addDive()
+						var row = manager.swipeRowForDive(diveId)
+						if (row >= 0)
+							rootItem.openNeoDiveDetails(row, true)
+						else
+							startAddDive()
 					}
 				}
 				Kirigami.Action {
@@ -557,9 +562,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				text: qsTr("Settings")
 				onTriggered: {
 					globalDrawer.close()
-					settingsWindow.defaultCylinderModel = manager.defaultCylinderListInit
-					PrefEquipment.default_cylinder === "" ? defaultCylinderIndex = "-1" : defaultCylinderIndex = settingsWindow.defaultCylinderModel.indexOf(PrefEquipment.default_cylinder)
-					showPageFromDrawer(settingsWindow)
+					showPageFromDrawer(neoSettingsHub)
 				}
 			},
 			Kirigami.Action {
@@ -576,7 +579,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					text: qsTr("About")
 					onTriggered: {
 						globalDrawer.close()
-						showPageFromDrawer(aboutWindow)
+						showPageFromDrawer(neoAboutPage)
 					}
 				}
 				Kirigami.Action {
@@ -900,13 +903,13 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernOnboarding {
 		id: neoOnboarding
 		anchors.fill: parent
-		visible: initialized && !neoLegacyCloudSetupRequested &&
+		visible: initialized && !neoSubsurfaceCloudSetupRequested &&
 			Backend.cloud_verification_status !== Enums.CS_NOCLOUD &&
 			Backend.cloud_verification_status !== Enums.CS_VERIFIED
 		onVisibleChanged: {
 			if (visible)
 				pageStack.clear()
-			else if (initialized && !startPage.visible)
+			else if (initialized && !neoSubsurfaceCloudSetup.visible)
 				showNeoHome()
 		}
 		onUseLocalLog: {
@@ -917,7 +920,10 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			manager.saveCloudCredentials("", "", "")
 			manager.openNoCloudRepo()
 		}
-		onOpenLegacyCloudSetup: rootItem.neoLegacyCloudSetupRequested = true
+		onOpenSubsurfaceCloudSetup: {
+			rootItem.neoSubsurfaceCloudSetupFromSettings = false
+			rootItem.neoSubsurfaceCloudSetupRequested = true
+		}
 	}
 
 	function openNeoDiveDetails(row, editOnReady) {
@@ -953,21 +959,40 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		showPage(detailsPage)
 	}
 
-	StartPage {
-		id: startPage
+	NeoPages.ModernSubsurfaceCloudSetup {
+		id: neoSubsurfaceCloudSetup
 		anchors.fill: parent
-		visible: initialized && neoLegacyCloudSetupRequested &&
+		visible: initialized && neoSubsurfaceCloudSetupRequested &&
 			 Backend.cloud_verification_status !== Enums.CS_NOCLOUD &&
 			 Backend.cloud_verification_status !== Enums.CS_VERIFIED
+		onUseLocalLog: {
+			manager.setGitLocalOnly(true)
+			PrefCloudStorage.cloud_auto_sync = false
+			manager.oldStatus = Backend.cloud_verification_status
+			Backend.cloud_verification_status = Enums.CS_NOCLOUD
+			manager.saveCloudCredentials("", "", "")
+			manager.openNoCloudRepo()
+		}
+		onReturnRequested: {
+			rootItem.neoSubsurfaceCloudSetupRequested = false
+			manager.startPageText = ""
+			if (rootItem.neoSubsurfaceCloudSetupFromSettings) {
+				Backend.cloud_verification_status = manager.oldStatus
+				rootItem.neoSubsurfaceCloudSetupFromSettings = false
+				showPageFromDrawer(neoSettingsHub)
+			} else {
+				Backend.cloud_verification_status = Enums.CS_UNKNOWN
+			}
+		}
 		onVisibleChanged: {
-			manager.appendTextToLog("StartPage visibility changed to " + visible)
+			manager.appendTextToLog("Neo Subsurface Cloud setup visibility changed to " + visible)
 			if (!initialized) {
 				manager.appendTextToLog("not yet initialized, show busy spinner")
 				showBusy()
 			}
 			if (visible) {
 				pageStack.clear()
-			} else if (initialized) {
+			} else if (initialized && Backend.cloud_verification_status === Enums.CS_VERIFIED) {
 				showNeoHome()
 			}
 		}
@@ -1017,20 +1042,32 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenEquipment: showPageFromDrawer(neoEquipmentLibrary)
 		onOpenPortability: showPageFromDrawer(neoDataPortability)
 		onOpenSettings: showPageFromDrawer(neoSettingsHub)
-		onOpenAbout: showPageFromDrawer(aboutWindow)
+		onOpenAbout: showPageFromDrawer(neoAboutPage)
 	}
 
 	NeoPages.ModernSettingsHub {
 		id: neoSettingsHub
 		visible: false
 		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
+		onOpenSubsurfaceCloud: {
+			manager.oldStatus = Backend.cloud_verification_status
+			Backend.cloud_verification_status = Enums.CS_UNKNOWN
+			manager.startPageText = qsTr("Enter your Subsurface Cloud credentials")
+			rootItem.neoSubsurfaceCloudSetupFromSettings = true
+			rootItem.neoSubsurfaceCloudSetupRequested = true
+		}
 		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
 		onOpenAdvancedSettings: {
 			settingsWindow.defaultCylinderModel = manager.defaultCylinderListInit
 			PrefEquipment.default_cylinder === "" ? defaultCylinderIndex = "-1" : defaultCylinderIndex = settingsWindow.defaultCylinderModel.indexOf(PrefEquipment.default_cylinder)
 			showPageFromDrawer(settingsWindow)
 		}
-		onOpenAbout: showPageFromDrawer(aboutWindow)
+		onOpenAbout: showPageFromDrawer(neoAboutPage)
+	}
+
+	NeoPages.ModernAboutPage {
+		id: neoAboutPage
+		visible: false
 	}
 
 	NeoPages.ModernDiveComputerCenter {
@@ -1125,11 +1162,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 
 	CopySettings {
 		id: settingsCopyWindow
-		visible: false
-	}
-
-	About {
-		id: aboutWindow
 		visible: false
 	}
 

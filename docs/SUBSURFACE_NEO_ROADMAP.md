@@ -676,6 +676,8 @@ Also complete settings polish, release/update preferences, privacy/terms links a
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
 
+**Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration, update checks, diagnostics, licensing, and artwork attribution are implemented. Production OAuth publication, privacy/terms approval, account-deletion polish, and the full multi-device/offline security matrix remain release-hardening work.
+
 ---
 
 ## Milestone 14 — Web / WebAssembly & Deployment
