@@ -82,8 +82,32 @@ Kirigami.ScrollablePage {
 				delegate: Components.ModernCard {
 					required property var modelData
 					Layout.fillWidth: true
-					RowLayout { Layout.fillWidth: true; Text { text: qsTr("Planned dive"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }; Text { text: modelData.depth; color: tokens.accent; font.weight: Font.DemiBold } }
-					RowLayout { Layout.fillWidth: true; Text { text: modelData.date; color: tokens.textSecondary; Layout.fillWidth: true }; Text { text: modelData.duration; color: tokens.textSecondary } }
+					RowLayout {
+						Layout.fillWidth: true
+						Text {
+							text: qsTr("Planned dive")
+							color: tokens.textPrimary
+							font.weight: Font.DemiBold
+							Layout.fillWidth: true
+						}
+						Text {
+							text: modelData.depth
+							color: tokens.accent
+							font.weight: Font.DemiBold
+						}
+					}
+					RowLayout {
+						Layout.fillWidth: true
+						Text {
+							text: modelData.date
+							color: tokens.textSecondary
+							Layout.fillWidth: true
+						}
+						Text {
+							text: modelData.duration
+							color: tokens.textSecondary
+						}
+					}
 				}
 			}
 		}
