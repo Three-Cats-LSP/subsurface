@@ -9,11 +9,10 @@ import "../components" as Components
 
 Kirigami.ScrollablePage {
 	id: page
-	title: qsTr("Dive computers")
+	title: qsTr("Import dives")
 	background: Rectangle { color: tokens.background }
-
+	property bool wideLayout: width >= 760
 	signal openNativeImport(string vendor, string product, string connection)
-
 	Modern.DesignTokens { id: tokens }
 
 	function selectDevice(vendor, product, connection) {
@@ -21,7 +20,6 @@ Kirigami.ScrollablePage {
 		productBox.currentIndex = productBox.find(product)
 		connectionBox.currentIndex = manager.getConnectionIndex(connection)
 	}
-
 	Component.onCompleted: {
 		manager.rescanConnections()
 		vendorBox.currentIndex = manager.getDetectedVendorIndex()
@@ -32,59 +30,71 @@ Kirigami.ScrollablePage {
 	}
 
 	ColumnLayout {
-		width: page.availableWidth
-		spacing: tokens.space16
-
-		Text { text: qsTr("Download from your dive computer"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-		Text { text: qsTr("Neo uses Subsurface’s proven libdivecomputer import engine for Bluetooth, USB, and serial connections."); color: tokens.textSecondary; font.pixelSize: 14; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-
-		Components.ModernCard {
-			Layout.fillWidth: true
-			Text { text: qsTr("Connection status"); color: tokens.textMuted; font.pixelSize: 10 }
-			Text { text: manager.btEnabled ? qsTr("Bluetooth ready") : qsTr("Bluetooth is unavailable or disabled"); color: manager.btEnabled ? tokens.success : tokens.accent; font.pixelSize: 14; font.weight: Font.Medium }
-			Button { text: qsTr("Rescan devices"); onClicked: manager.rescanConnections() }
+		width: page.availableWidth; spacing: tokens.space16
+		ColumnLayout {
+			Layout.fillWidth: true; spacing: 2
+			Text { text: qsTr("Import dives"); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+			Text { text: qsTr("Download safely with Subsurface's proven device engine"); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		}
+		GridLayout {
+			Layout.fillWidth: true; columns: page.wideLayout ? 2 : 1; columnSpacing: tokens.space12; rowSpacing: tokens.space12
+			Components.ModernCard {
+				Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+				Text { text: qsTr("CONNECTION"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
+				Text { text: manager.btEnabled ? qsTr("Bluetooth ready") : qsTr("Bluetooth unavailable"); color: manager.btEnabled ? tokens.success : tokens.warning; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Text { text: manager.btEnabled ? qsTr("Nearby Bluetooth devices can be detected.") : qsTr("Enable Bluetooth, or choose an available USB or serial connection below."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Button { text: qsTr("Rescan devices"); Layout.fillWidth: true; onClicked: manager.rescanConnections() }
+			}
+			Components.ModernCard {
+				visible: PrefDiveComputer.vendor1 !== ""; Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+				Text { text: qsTr("RECENT COMPUTERS"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
+				Flow {
+					Layout.fillWidth: true; spacing: tokens.space8
+					Button { visible: PrefDiveComputer.vendor1 !== ""; text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
+					Button { visible: PrefDiveComputer.vendor2 !== ""; text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
+					Button { visible: PrefDiveComputer.vendor3 !== ""; text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
+					Button { visible: PrefDiveComputer.vendor4 !== ""; text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
+				}
+			}
 		}
 
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Choose a computer"); color: tokens.textMuted; font.pixelSize: 10 }
-			ComboBox {
-				id: vendorBox
-				Layout.fillWidth: true
-				model: vendorList
-				onActivated: { productBox.model = manager.getProductListFromVendor(currentText); productBox.currentIndex = manager.getDetectedProductIndex(currentText) }
+			Text { text: qsTr("Choose a dive computer"); color: tokens.textPrimary; font.pixelSize: 19; font.weight: Font.DemiBold }
+			GridLayout {
+				Layout.fillWidth: true; columns: page.wideLayout ? 3 : 1; columnSpacing: tokens.space12; rowSpacing: tokens.space8
+				ColumnLayout {
+					Layout.fillWidth: true; spacing: 4
+					Text { text: qsTr("MANUFACTURER"); color: tokens.textMuted; font.pixelSize: 9 }
+					Components.NeoComboBox { id: vendorBox; Layout.fillWidth: true; model: vendorList; onActivated: { productBox.model = manager.getProductListFromVendor(currentText); productBox.currentIndex = manager.getDetectedProductIndex(currentText) } }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true; spacing: 4
+					Text { text: qsTr("MODEL"); color: tokens.textMuted; font.pixelSize: 9 }
+					Components.NeoComboBox { id: productBox; Layout.fillWidth: true; model: vendorBox.currentIndex >= 0 ? manager.getProductListFromVendor(vendorBox.currentText) : []; onActivated: connectionBox.currentIndex = manager.getMatchingAddress(vendorBox.currentText, currentText) }
+				}
+				ColumnLayout {
+					Layout.fillWidth: true; spacing: 4
+					Text { text: qsTr("CONNECTION"); color: tokens.textMuted; font.pixelSize: 9 }
+					Components.NeoComboBox { id: connectionBox; Layout.fillWidth: true; model: connectionListModel }
+				}
 			}
-			ComboBox {
-				id: productBox
-				Layout.fillWidth: true
-				model: vendorBox.currentIndex >= 0 ? manager.getProductListFromVendor(vendorBox.currentText) : []
-				onActivated: connectionBox.currentIndex = manager.getMatchingAddress(vendorBox.currentText, currentText)
+			GridLayout {
+				Layout.fillWidth: true; columns: page.wideLayout ? 2 : 1
+				CheckBox { Layout.fillWidth: true; text: qsTr("Include previously imported dives"); checked: manager.DC_forceDownload; onToggled: manager.DC_forceDownload = checked }
+				CheckBox { Layout.fillWidth: true; text: qsTr("Synchronize dive-computer time"); checked: Backend.sync_dc_time; onToggled: Backend.sync_dc_time = checked }
 			}
-			ComboBox { id: connectionBox; Layout.fillWidth: true; model: connectionListModel }
-			CheckBox { text: qsTr("Download all dives, including previously imported ones"); checked: manager.DC_forceDownload; onToggled: manager.DC_forceDownload = checked }
-			CheckBox { text: qsTr("Sync dive computer time"); checked: Backend.sync_dc_time; onToggled: Backend.sync_dc_time = checked }
 			Button {
-				Layout.fillWidth: true
-				text: qsTr("Start secure import")
+				Layout.fillWidth: true; text: qsTr("Download dives")
 				enabled: vendorBox.currentIndex >= 0 && productBox.currentIndex >= 0 && connectionBox.currentIndex >= 0
 				onClicked: page.openNativeImport(vendorBox.currentText, productBox.currentText, connectionBox.currentText)
 			}
 		}
 
 		Components.ModernCard {
-			visible: PrefDiveComputer.vendor1 !== ""
 			Layout.fillWidth: true
-			Text { text: qsTr("Previously used computers"); color: tokens.textMuted; font.pixelSize: 10 }
-			Flow {
-				Layout.fillWidth: true
-				spacing: tokens.space8
-				Button { visible: PrefDiveComputer.vendor1 !== ""; text: PrefDiveComputer.vendor1 + " · " + PrefDiveComputer.product1; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
-				Button { visible: PrefDiveComputer.vendor2 !== ""; text: PrefDiveComputer.vendor2 + " · " + PrefDiveComputer.product2; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
-				Button { visible: PrefDiveComputer.vendor3 !== ""; text: PrefDiveComputer.vendor3 + " · " + PrefDiveComputer.product3; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
-				Button { visible: PrefDiveComputer.vendor4 !== ""; text: PrefDiveComputer.vendor4 + " · " + PrefDiveComputer.product4; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
-			}
+			Text { text: qsTr("Review before saving"); color: tokens.accent; font.pixelSize: 14; font.weight: Font.DemiBold }
+			Text { text: qsTr("Downloaded dives open in a review screen first. Nothing is added to your log until you confirm the selected entries."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		}
-
-		Text { text: qsTr("The importer will show downloaded dives for review before you record the selected entries. You can cancel and retry safely at any time."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 	}
 }

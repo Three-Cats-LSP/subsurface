@@ -738,6 +738,22 @@ Deployment target:
 
 ---
 
+## Post-1.0 / next-version candidates — Maps & Weather
+
+These integrations are deliberately deferred until after the current native UI, WebAssembly, and production-hardening roadmap is complete.
+
+- Modernize the in-app Google-backed map experience without replacing canonical Subsurface dive-site storage.
+- Keep dive-site coordinates synchronized through the normal Neo dive log on Google Drive, Dropbox, and compatible local files.
+- Add direct “Open in Google Maps” navigation and KML/KMZ export for Google My Maps / Google Earth.
+- Do not claim direct synchronization into a user’s personal Google Maps Saved Places unless Google introduces a supported write API.
+- Add a provider-independent weather service capable of capturing a timestamped conditions snapshot for a geolocated dive.
+- Present water temperature, air temperature, condition, wind, pressure, precipitation, visibility, and source/time metadata together where available.
+- Store captured conditions in Neo metadata unless an upstream-compatible canonical Subsurface field exists.
+- Treat Google Weather as one provider rather than a required dependency: its historical endpoint only covers the previous 24 hours, and current published coverage excludes Japan, Korea, and some remote/ocean locations.
+- Require explicit API-key restrictions, billing controls, attribution, privacy review, offline behavior, and provider-failure handling before release.
+
+---
+
 # Ongoing workstream — Upstream compatibility
 
 This is continuous and applies to every milestone, not only Milestone 1.

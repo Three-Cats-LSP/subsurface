@@ -1016,7 +1016,16 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
 		onOpenEquipment: showPageFromDrawer(neoEquipmentLibrary)
 		onOpenPortability: showPageFromDrawer(neoDataPortability)
-		onOpenLegacySettings: {
+		onOpenSettings: showPageFromDrawer(neoSettingsHub)
+		onOpenAbout: showPageFromDrawer(aboutWindow)
+	}
+
+	NeoPages.ModernSettingsHub {
+		id: neoSettingsHub
+		visible: false
+		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
+		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
+		onOpenAdvancedSettings: {
 			settingsWindow.defaultCylinderModel = manager.defaultCylinderListInit
 			PrefEquipment.default_cylinder === "" ? defaultCylinderIndex = "-1" : defaultCylinderIndex = settingsWindow.defaultCylinderModel.indexOf(PrefEquipment.default_cylinder)
 			showPageFromDrawer(settingsWindow)
@@ -1080,8 +1089,9 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				mapPage.centerOnDiveSite(manager.siteObject(siteName))
 		}
 		onOpenDive: function(diveId) {
-			manager.selectDive(diveId)
-			showPage(detailsWindow)
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				rootItem.openNeoDiveDetails(row)
 		}
 	}
 

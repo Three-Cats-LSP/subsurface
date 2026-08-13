@@ -6,22 +6,17 @@ import ".." as Modern
 ComboBox {
 	id: control
 	Modern.DesignTokens { id: tokens }
-
 	implicitHeight: 44
 	leftPadding: 12
 	rightPadding: 34
 	font.pixelSize: 13
-
 	contentItem: Text {
-		leftPadding: 0
-		rightPadding: 0
 		text: control.displayText
 		font: control.font
 		color: control.enabled ? tokens.textPrimary : tokens.textMuted
 		verticalAlignment: Text.AlignVCenter
 		elide: Text.ElideRight
 	}
-
 	indicator: Text {
 		x: control.width - width - 12
 		y: (control.height - height) / 2
@@ -29,14 +24,12 @@ ComboBox {
 		color: tokens.accent
 		font.pixelSize: 16
 	}
-
 	background: Rectangle {
 		color: control.down ? tokens.surfaceRaised : tokens.background
 		radius: tokens.radiusSmall
 		border.width: 1
 		border.color: control.activeFocus ? tokens.accent : tokens.border
 	}
-
 	delegate: ItemDelegate {
 		id: optionDelegate
 		required property var modelData
@@ -48,11 +41,8 @@ ComboBox {
 			verticalAlignment: Text.AlignVCenter
 			elide: Text.ElideRight
 		}
-		background: Rectangle {
-			color: optionDelegate.highlighted ? tokens.surfaceRaised : tokens.surface
-		}
+		background: Rectangle { color: optionDelegate.highlighted ? tokens.surfaceRaised : tokens.surface }
 	}
-
 	popup.background: Rectangle {
 		color: tokens.surface
 		radius: tokens.radiusSmall

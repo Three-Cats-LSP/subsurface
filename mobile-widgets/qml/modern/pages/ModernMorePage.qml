@@ -16,8 +16,9 @@ Kirigami.ScrollablePage {
 	signal openImport()
 	signal openEquipment()
 	signal openPortability()
-	signal openLegacySettings()
+	signal openSettings()
 	signal openAbout()
+	property bool wideLayout: width >= 760
 
 	Modern.DesignTokens { id: tokens }
 
@@ -28,29 +29,29 @@ Kirigami.ScrollablePage {
 		Text { text: qsTr("Tools & settings"); color: tokens.textPrimary; font.pixelSize: 28; font.weight: Font.DemiBold; Layout.fillWidth: true }
 		Text { text: qsTr("Plan dives, manage devices and equipment, protect your log, and access advanced Subsurface tools when needed."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
-		Repeater {
-			model: [
+		GridLayout {
+			Layout.fillWidth: true
+			columns: page.wideLayout ? 2 : 1
+			columnSpacing: tokens.space12
+			rowSpacing: tokens.space12
+			Repeater {
+				model: [
 				{ title: qsTr("Dive planner"), detail: qsTr("Build a plan with Subsurface’s established decompression engine."), action: page.openPlanner },
 				{ title: qsTr("Cloud & Sync"), detail: qsTr("Connect Google Drive or Dropbox, choose primary and backup providers, and sync safely."), action: page.openCloudSync },
 				{ title: qsTr("Download from dive computer"), detail: qsTr("Use the mature Subsurface import engine for Bluetooth, USB, and serial devices."), action: page.openImport },
 				{ title: qsTr("Equipment library"), detail: qsTr("Maintain reusable kits, cylinders, and recent gear configurations."), action: page.openEquipment },
-				{ title: qsTr("Export & backup"), detail: qsTr("Create compatible exports and local backup packages."), action: page.openPortability }
-			]
-			delegate: Components.ModernCard {
-				required property var modelData
-				Layout.fillWidth: true
-				Text { text: modelData.title; color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-				Text { text: modelData.detail; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Button { Layout.fillWidth: true; text: qsTr("Open"); onClicked: modelData.action() }
+				{ title: qsTr("Export & backup"), detail: qsTr("Create compatible exports and local backup packages."), action: page.openPortability },
+				{ title: qsTr("Settings"), detail: qsTr("Configure equipment defaults, devices, interface, and profile display."), action: page.openSettings }
+				]
+				delegate: Components.ModernCard {
+					required property var modelData
+					Layout.fillWidth: true
+					Layout.alignment: Qt.AlignTop
+					Text { text: modelData.title; color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+					Text { text: modelData.detail; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Button { Layout.fillWidth: true; text: qsTr("Open"); onClicked: modelData.action() }
+				}
 			}
-		}
-
-		Text { text: qsTr("Compatibility"); color: tokens.textMuted; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.topMargin: tokens.space8 }
-		Components.ModernCard {
-			Layout.fillWidth: true
-			Text { text: qsTr("Advanced Subsurface settings"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Open the established settings panel for options not yet moved into the Neo workspace."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { Layout.fillWidth: true; text: qsTr("Open advanced settings"); onClicked: page.openLegacySettings() }
 		}
 		Button { Layout.fillWidth: true; text: qsTr("About Subsurface Neo"); onClicked: page.openAbout() }
 	}
