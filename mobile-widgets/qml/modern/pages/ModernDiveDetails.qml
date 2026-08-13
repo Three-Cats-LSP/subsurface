@@ -147,6 +147,22 @@ Kirigami.Page {
 				profile.triggerUpdate()
 			}
 
+			function pressureSummary() {
+				var start = modelData.startPressure || ""
+				var end = modelData.endPressure || ""
+				var pressure = start.length > 0 && end.length > 0 ? start + " → " + end : start || end
+				var sac = modelData.sac || ""
+				return pressure.length > 0 && sac.length > 0 ? pressure + "  ·  SAC " + sac : pressure || sac
+			}
+
+			function decoModelSummary() {
+				if (PrefTechnicalDetails.display_deco_mode === Enums.VPMB)
+					return qsTr("VPM-B")
+				if (PrefTechnicalDetails.display_deco_mode === Enums.BUEHLMANN)
+					return qsTr("Bühlmann ZHL-16C  ·  GF %1/%2").arg(PrefTechnicalDetails.gflow).arg(PrefTechnicalDetails.gfhigh)
+				return qsTr("Recreational (NDL)")
+			}
+
 			ListView.onIsCurrentItemChanged: {
 				if (!ListView.isCurrentItem) {
 					resetProfileZoom()
@@ -174,24 +190,45 @@ Kirigami.Page {
 						Layout.topMargin: tokens.space12
 						spacing: tokens.space4
 
-						Text {
+						RowLayout {
 							Layout.fillWidth: true
-							text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0
-								  ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
-							color: tokens.textPrimary
-							font.pixelSize: 26
-							font.weight: Font.DemiBold
-							wrapMode: Text.WordWrap
+							spacing: tokens.space8
+
+							Rectangle {
+								visible: delegateRoot.modelData.number > 0
+								Layout.preferredWidth: 64
+								Layout.preferredHeight: 48
+								radius: tokens.radiusSmall
+								color: "transparent"
+								border.width: 1
+								border.color: tokens.accentStrong
+								Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.number; color: tokens.accent; font.pixelSize: 19; font.weight: Font.Medium }
+							}
+
+							ColumnLayout {
+								Layout.fillWidth: true
+								spacing: 2
+								Text {
+									Layout.fillWidth: true
+									text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0
+										  ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
+									color: tokens.textPrimary
+									font.pixelSize: page.width >= 760 ? 28 : 21
+									font.weight: Font.DemiBold
+									elide: Text.ElideRight
+								}
+								Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+							}
+
+							ToolButton { text: "⋯"; accessibleName: qsTr("Dive actions"); onClicked: diveActions.open() }
+							Menu {
+								id: diveActions
+								MenuItem { text: qsTr("Edit dive"); onTriggered: page.editRequested(delegateRoot.modelData) }
+								MenuSeparator {}
+								MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onTriggered: diveReportFolder.open() }
+								MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onTriggered: diveReportTextFolder.open() }
+							}
 						}
-						Text {
-							Layout.fillWidth: true
-							text: (delegateRoot.modelData.dateTime || "") +
-								  (delegateRoot.modelData.number > 0 ? qsTr("  ·  Dive #%1").arg(delegateRoot.modelData.number) : "")
-							color: tokens.textSecondary
-							font.pixelSize: 13
-						}
-						Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onClicked: diveReportFolder.open() }
-						Button { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onClicked: diveReportTextFolder.open() }
 						Text { visible: page.diveReportPdfExport.length > 0; text: qsTr("PDF saved: %1").arg(page.diveReportPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 						Text { visible: page.diveReportTextExport.length > 0; text: qsTr("Text saved: %1").arg(page.diveReportTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 					}
@@ -200,22 +237,17 @@ Kirigami.Page {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						columns: page.width >= 760 ? 5 : 2
+						columns: 3
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
-						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Max depth"); value: delegateRoot.modelData.depth || "—" }
-						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Dive time"); value: delegateRoot.modelData.duration || "—" }
+						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Max depth"); value: delegateRoot.modelData.depth || "—"; iconName: "depth" }
+						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Dive time"); value: delegateRoot.modelData.duration || "—"; iconName: "time" }
 						Components.MetricCard {
 							Layout.fillWidth: true
 							label: qsTr("Water temp")
 							value: delegateRoot.modelData.waterTemp && delegateRoot.modelData.waterTemp.length > 0 ? delegateRoot.modelData.waterTemp : "—"
-						}
-						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Mode"); value: profile.diveMode.length > 0 ? profile.diveMode : "—" }
-						Components.MetricCard {
-							Layout.fillWidth: true
-							label: qsTr("Gear")
-							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : "—"
+							iconName: "temperature"
 						}
 					}
 
@@ -234,23 +266,26 @@ Kirigami.Page {
 								Layout.margins: tokens.space12
 								spacing: tokens.space8
 
-								ColumnLayout {
+								Components.NeoDiveIcon {
+									name: "tank"
+									iconColor: tokens.accent
+									Layout.preferredWidth: 22
+									Layout.preferredHeight: 22
+								}
+								Text {
 									Layout.fillWidth: true
-									spacing: 2
-									Text { text: qsTr("Dive profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-									Text {
-										Layout.fillWidth: true
-										color: tokens.textSecondary
-										font.pixelSize: 11
-										elide: Text.ElideRight
-										text: {
-											var device = profile.computerName.length > 0 ? profile.computerName : qsTr("Dive computer")
-											if (profile.computerSerial.length > 0)
-												device += " · " + profile.computerSerial
-											if (profile.numDC > 1)
-												device += qsTr(" · %1 of %2").arg(profile.currentDC + 1).arg(profile.numDC)
-											return device
-										}
+									color: tokens.textSecondary
+									font.pixelSize: 11
+									elide: Text.ElideRight
+									text: {
+										var parts = []
+										parts.push(profile.computerName.length > 0 ? profile.computerName : qsTr("Dive computer"))
+										if (profile.diveMode.length > 0)
+											parts.push(profile.diveMode)
+										parts.push(delegateRoot.decoModelSummary())
+										if (profile.numDC > 1)
+											parts.push(qsTr("Computer %1/%2").arg(profile.currentDC + 1).arg(profile.numDC))
+										return parts.join("  ·  ")
 									}
 								}
 
@@ -513,62 +548,52 @@ Kirigami.Page {
 						}
 					}
 
-					Components.ModernCard {
-						Layout.fillWidth: true
-						Layout.leftMargin: tokens.space16
-						Layout.rightMargin: tokens.space16
-						visible: profile.computerName.length > 0 || profile.computerSerial.length > 0 || profile.computerFirmware.length > 0
-
-						Text { text: qsTr("Dive computer"); color: tokens.textMuted; font.pixelSize: 10 }
-						GridLayout {
-							Layout.fillWidth: true
-							columns: page.width >= 700 ? 3 : 1
-							columnSpacing: tokens.space16
-							rowSpacing: tokens.space4
-
-							ColumnLayout {
-								visible: profile.computerName.length > 0
-								Layout.fillWidth: true
-								Text { text: qsTr("Model"); color: tokens.textMuted; font.pixelSize: 10 }
-								Text { Layout.fillWidth: true; text: profile.computerName; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
-							}
-							ColumnLayout {
-								visible: profile.computerSerial.length > 0
-								Layout.fillWidth: true
-								Text { text: qsTr("Serial"); color: tokens.textMuted; font.pixelSize: 10 }
-								Text { Layout.fillWidth: true; text: profile.computerSerial; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
-							}
-							ColumnLayout {
-								visible: profile.computerFirmware.length > 0
-								Layout.fillWidth: true
-								Text { text: qsTr("Firmware"); color: tokens.textMuted; font.pixelSize: 10 }
-								Text { Layout.fillWidth: true; text: profile.computerFirmware; color: tokens.textPrimary; font.pixelSize: 14; wrapMode: Text.WordWrap }
-							}
-						}
-					}
-
 					GridLayout {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						columns: page.width >= 700 ? 3 : 1
+						columns: page.width >= 760 ? 5 : 6
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
-						Components.ModernCard {
+						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Text { text: qsTr("Gas"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { Layout.fillWidth: true; text: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0 ? delegateRoot.modelData.firstGas : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
+							Layout.columnSpan: page.width >= 760 ? 1 : 3
+							label: qsTr("Gas")
+							value: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0 ? delegateRoot.modelData.firstGas : qsTr("Not recorded")
+							detail: delegateRoot.pressureSummary()
+							iconName: "tank"
 						}
-						Components.ModernCard {
+						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Text { text: qsTr("Buddy"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { Layout.fillWidth: true; text: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0 ? delegateRoot.modelData.buddy : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
+							Layout.columnSpan: page.width >= 760 ? 1 : 3
+							label: qsTr("Gear")
+							value: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0 ? delegateRoot.modelData.cylinder : qsTr("Not recorded")
+							detail: delegateRoot.modelData.suit || ""
+							iconName: "tank"
 						}
-						Components.ModernCard {
+						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Text { text: qsTr("Tags / type"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { Layout.fillWidth: true; text: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded"); color: tokens.textPrimary; font.pixelSize: 15; wrapMode: Text.WordWrap }
+							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							label: qsTr("Mode")
+							value: profile.diveMode.length > 0 ? profile.diveMode : qsTr("Not recorded")
+							detail: profile.diveMode.length > 0 ? qsTr("Recorded dive mode") : ""
+							iconName: "regulator"
+						}
+						Components.DiveInfoCard {
+							Layout.fillWidth: true
+							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							label: qsTr("Type")
+							value: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded")
+							iconName: "boat"
+						}
+						Components.DiveInfoCard {
+							Layout.fillWidth: true
+							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							label: qsTr("Buddy")
+							value: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0 ? delegateRoot.modelData.buddy : qsTr("Not recorded")
+							detail: delegateRoot.modelData.diveGuide || ""
+							iconName: "buddy"
 						}
 					}
 
@@ -577,14 +602,25 @@ Kirigami.Page {
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
 						Layout.bottomMargin: tokens.space24
-						Text { text: qsTr("Notes"); color: tokens.textMuted; font.pixelSize: 10 }
-						Text {
+						RowLayout {
 							Layout.fillWidth: true
-							text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0 ? delegateRoot.modelData.notes : qsTr("No notes for this dive.")
-							color: tokens.textPrimary
-							font.pixelSize: 14
-							wrapMode: Text.WordWrap
-							textFormat: Text.PlainText
+							Layout.alignment: Qt.AlignTop
+							spacing: tokens.space8
+
+							Components.NeoDiveIcon { name: "notes"; iconColor: tokens.accent; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+							ColumnLayout {
+								Layout.fillWidth: true
+								spacing: 3
+								Text { text: qsTr("NOTES"); color: tokens.textMuted; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.7 }
+								Text {
+									Layout.fillWidth: true
+									text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0 ? delegateRoot.modelData.notes : qsTr("No notes for this dive.")
+									color: tokens.textPrimary
+									font.pixelSize: 13
+									wrapMode: Text.WordWrap
+									textFormat: Text.PlainText
+								}
+							}
 						}
 					}
 				}

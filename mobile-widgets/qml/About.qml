@@ -176,6 +176,18 @@ Kirigami.ScrollablePage {
 			anchors.horizontalCenter: parent.Center
 			horizontalAlignment: Text.AlignHCenter
 		}
+		Text {
+			Layout.alignment: Qt.AlignHCenter
+			Layout.maximumWidth: pageWidth
+			text: qsTr("Interface artwork credits: <a href=\"https://www.flaticon.com/free-icon/regulator_4864503\">Regulator icon created by Magnific — Flaticon</a>")
+			textFormat: Text.RichText
+			wrapMode: Text.WordWrap
+			horizontalAlignment: Text.AlignHCenter
+			color: subsurfaceTheme.textColor
+			linkColor: subsurfaceTheme.primaryColor
+			font.pointSize: subsurfaceTheme.smallPointSize
+			onLinkActivated: function(link) { Qt.openUrlExternally(link) }
+		}
 		TemplateButton {
 			id: updateButton
 			Layout.alignment: Qt.AlignHCenter
