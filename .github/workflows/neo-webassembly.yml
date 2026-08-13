@@ -38,11 +38,13 @@ jobs:
 
       - name: Configure WebAssembly application
         run: >-
-          qt-cmake
+          cmake
           -S web/subsurface-neo/wasm
           -B build/neo-web
           -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE="$QT_ROOT_DIR/lib/cmake/Qt6/qt.toolchain.cmake"
+          -DQT_HOST_PATH="$QT_HOST_PATH"
 
       - name: Build WebAssembly application
         run: cmake --build build/neo-web --parallel 2
