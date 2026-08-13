@@ -15,6 +15,8 @@ Kirigami.ScrollablePage {
 	property string lastSyncResult: ""
 	property string conflictProvider: ""
 	property string initialChoiceProvider: ""
+	property string pendingDisconnectProvider: ""
+	property string pendingDisconnectName: ""
 
 	Modern.DesignTokens { id: tokens }
 
@@ -183,9 +185,14 @@ Kirigami.ScrollablePage {
 						Item { Layout.fillWidth: true }
 					}
 
-					RowLayout {
+					GridLayout {
 						visible: modelData.connected
+						Layout.fillWidth: true
+						columns: page.width >= 600 ? 3 : 2
+						columnSpacing: tokens.space8
+						rowSpacing: tokens.space8
 						Button {
+							Layout.fillWidth: true
 							text: qsTr("Sync now")
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
@@ -196,6 +203,7 @@ Kirigami.ScrollablePage {
 							}
 						}
 						Button {
+							Layout.fillWidth: true
 							text: qsTr("Backup now")
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
@@ -204,9 +212,15 @@ Kirigami.ScrollablePage {
 							}
 						}
 						Button {
+							Layout.fillWidth: true
+							Layout.columnSpan: page.width >= 600 ? 1 : 2
 							text: qsTr("Disconnect")
 							enabled: !CloudSync.syncInProgress
-							onClicked: CloudSync.disconnectProvider(modelData.id)
+							onClicked: {
+								page.pendingDisconnectProvider = modelData.id
+								page.pendingDisconnectName = modelData.name
+								disconnectDialog.open()
+							}
 						}
 					}
 
@@ -238,6 +252,24 @@ Kirigami.ScrollablePage {
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
+		}
+	}
+
+	Dialog {
+		id: disconnectDialog
+		parent: Overlay.overlay
+		anchors.centerIn: parent
+		modal: true
+		width: Math.min(page.width - tokens.space32, 500)
+		title: qsTr("Disconnect %1?").arg(page.pendingDisconnectName)
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Text {
+			text: qsTr("OAuth tokens and saved synchronization state for this provider will be removed from this device. Remote files will not be deleted.")
+			color: tokens.textSecondary; wrapMode: Text.WordWrap
+		}
+		footer: DialogButtonBox {
+			Button { text: qsTr("Disconnect"); onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } }
+			Button { text: qsTr("Cancel"); onClicked: disconnectDialog.close() }
 		}
 	}
 }

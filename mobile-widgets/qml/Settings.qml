@@ -67,7 +67,7 @@ TemplatePage {
 					text: qsTr("Delete Account")
 					onClicked: {
 						manager.appendTextToLog("requesting account deletion");
-						showPage(deleteAccount)
+						showPage(neoAccountSecurityPage)
 					}
 				}
 			}

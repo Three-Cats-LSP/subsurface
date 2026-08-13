@@ -14,6 +14,7 @@ Kirigami.ScrollablePage {
 	property bool wideLayout: width >= 760
 	signal openCloudSync()
 	signal openSubsurfaceCloud()
+	signal openAccountSecurity()
 	signal openImport()
 	signal openAdvancedSettings()
 	signal openAbout()
@@ -100,6 +101,36 @@ Kirigami.ScrollablePage {
 			}
 		}
 
+		GridLayout {
+			Layout.fillWidth: true
+			columns: page.wideLayout ? 2 : 1
+			columnSpacing: tokens.space12
+			rowSpacing: tokens.space12
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.alignment: Qt.AlignTop
+				Text { text: qsTr("Units"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Text { text: qsTr("Choose the measurement system used throughout Neo"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				ButtonGroup { id: unitSystemGroup }
+				RowLayout {
+					Layout.fillWidth: true
+					RadioButton { text: qsTr("Metric"); checked: Backend.unit_system === Enums.METRIC; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.METRIC; manager.changesNeedSaving(); manager.refreshDiveList() } }
+					RadioButton { text: qsTr("Imperial"); checked: Backend.unit_system === Enums.IMPERIAL; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.IMPERIAL; manager.changesNeedSaving(); manager.refreshDiveList() } }
+				}
+				Text { visible: Backend.unit_system === Enums.PERSONALIZE; text: qsTr("A personalized unit mix is active. Use Advanced settings to change individual measurements."); color: tokens.warning; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			}
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.alignment: Qt.AlignTop
+				Text { text: qsTr("Updates"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Text { text: qsTr("Installed: %1").arg(manager.getVersion()); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+				Switch { Layout.fillWidth: true; text: qsTr("Automatically check for updates"); checked: !PrefUpdateManager.dont_check_for_updates; onToggled: PrefUpdateManager.dont_check_for_updates = !checked }
+				Button { Layout.fillWidth: true; text: qsTr("Update details"); onClicked: page.openAbout() }
+			}
+		}
+
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Profile & decompression display"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
@@ -120,6 +151,19 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("GF high"); color: tokens.textMuted; font.pixelSize: 10 }
 					SpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gfhigh; onValueModified: PrefTechnicalDetails.gfhigh = value }
 				}
+			}
+		}
+
+		Components.ModernCard {
+			Layout.fillWidth: true
+			RowLayout {
+				Layout.fillWidth: true
+				ColumnLayout {
+					Layout.fillWidth: true
+					Text { text: qsTr("Accounts, privacy & security"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
+					Text { text: qsTr("Review provider connections, credential protection, data flow, and account deletion"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				}
+				Button { text: qsTr("Open"); onClicked: page.openAccountSecurity() }
 			}
 		}
 

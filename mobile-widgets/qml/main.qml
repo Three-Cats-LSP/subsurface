@@ -1049,6 +1049,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		id: neoSettingsHub
 		visible: false
 		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
+		onOpenAccountSecurity: showPageFromDrawer(neoAccountSecurityPage)
 		onOpenSubsurfaceCloud: {
 			manager.oldStatus = Backend.cloud_verification_status
 			Backend.cloud_verification_status = Enums.CS_UNKNOWN
@@ -1068,6 +1069,19 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernAboutPage {
 		id: neoAboutPage
 		visible: false
+	}
+
+	NeoPages.ModernAccountSecurityPage {
+		id: neoAccountSecurityPage
+		visible: false
+		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
+		onOpenSubsurfaceCloud: {
+			manager.oldStatus = Backend.cloud_verification_status
+			Backend.cloud_verification_status = Enums.CS_UNKNOWN
+			manager.startPageText = qsTr("Enter your Subsurface Cloud credentials")
+			rootItem.neoSubsurfaceCloudSetupFromSettings = true
+			rootItem.neoSubsurfaceCloudSetupRequested = true
+		}
 	}
 
 	NeoPages.ModernDiveComputerCenter {
@@ -1154,10 +1168,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 
 	Settings {
 		id: settingsWindow
-	}
-
-	DeleteAccount {
-		id: deleteAccount
 	}
 
 	CopySettings {

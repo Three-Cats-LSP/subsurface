@@ -18,7 +18,6 @@
 		<!-- ********** qml ********** -->
 		<file>About.qml</file>
 		<file>CloudCredentials.qml</file>
-		<file>DeleteAccount.qml</file>
 		<file>DiveDetails.qml</file>
 		<file>DiveDetailsEdit.qml</file>
 		<file>DiveDetailsView.qml</file>
@@ -69,6 +68,7 @@
 		<file>modern/pages/ModernSettingsHub.qml</file>
 		<file>modern/pages/ModernAboutPage.qml</file>
 		<file>modern/pages/ModernSubsurfaceCloudSetup.qml</file>
+		<file>modern/pages/ModernAccountSecurityPage.qml</file>
 
 		<file>SsrfSwitch.qml</file>
 		<file>SsrfTextField.qml</file>
