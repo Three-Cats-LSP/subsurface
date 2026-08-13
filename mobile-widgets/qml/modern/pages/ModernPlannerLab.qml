@@ -617,11 +617,26 @@ Kirigami.ScrollablePage {
  SpinBox { from: 1; to: 9; value: Backend.problemsolvingtime; onValueModified: { Backend.problemsolvingtime = value; page.generatePlan() } } }
 				CheckBox { text: qsTr("Plan back-gas breaks"); checked: Backend.doo2breaks; onToggled: { Backend.doo2breaks = checked; page.generatePlan() } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Bottom pO₂ limit (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
- SpinBox { from: 50; to: 250; stepSize: 5; value: Backend.bottompo2; textFromValue: function(value) { return (value / 100).toFixed(2) }; valueFromText: function(text) { return Math.round(Number(text) * 100) }; onValueModified: { Backend.bottompo2 = value / 100; page.generatePlan() } } }
+ SpinBox {
+					from: 50; to: 250; stepSize: 5; value: Backend.bottompo2
+					textFromValue: function(value) { return (value / 100).toFixed(2) }
+					valueFromText: function(text) { return Math.round(Number(text) * 100) }
+					onValueModified: { Backend.bottompo2 = value / 100; page.generatePlan() }
+				} }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deco pO₂ limit (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
- SpinBox { from: 50; to: 250; stepSize: 5; value: Backend.decopo2; textFromValue: function(value) { return (value / 100).toFixed(2) }; valueFromText: function(text) { return Math.round(Number(text) * 100) }; onValueModified: { Backend.decopo2 = value / 100; page.generatePlan() } } }
+ SpinBox {
+					from: 50; to: 250; stepSize: 5; value: Backend.decopo2
+					textFromValue: function(value) { return (value / 100).toFixed(2) }
+					valueFromText: function(text) { return Math.round(Number(text) * 100) }
+					onValueModified: { Backend.decopo2 = value / 100; page.generatePlan() }
+				} }
 				RowLayout { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; Label { text: qsTr("CCR default setpoint (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
- SpinBox { from: 160; to: 2000; stepSize: 50; value: Backend.default_setpoint; textFromValue: function(value) { return (value / 1000).toFixed(2) }; valueFromText: function(text) { return Math.round(Number(text) * 1000) }; onValueModified: { Backend.default_setpoint = value; page.generatePlan() } } }
+ SpinBox {
+					from: 160; to: 2000; stepSize: 50; value: Backend.default_setpoint
+					textFromValue: function(value) { return (value / 1000).toFixed(2) }
+					valueFromText: function(text) { return Math.round(Number(text) * 1000) }
+					onValueModified: { Backend.default_setpoint = value; page.generatePlan() }
+				} }
 			}
 		}
 		Components.ModernCard {
@@ -739,7 +754,18 @@ Kirigami.ScrollablePage {
 					onExited: page.inspectedProfileSample = null
 				}
 			}
-			Connections { target: page; function onProfileDataChanged() { page.inspectedProfileSample = null; profileCanvas.requestPaint() }; function onExceedsNDLChanged() { profileCanvas.requestPaint() } }
+			Connections {
+				target: page
+
+				function onProfileDataChanged() {
+					page.inspectedProfileSample = null
+					profileCanvas.requestPaint()
+				}
+
+				function onExceedsNDLChanged() {
+					profileCanvas.requestPaint()
+				}
+			}
 			Rectangle {
 				visible: page.inspectedProfileSample !== null
 				Layout.fillWidth: true
