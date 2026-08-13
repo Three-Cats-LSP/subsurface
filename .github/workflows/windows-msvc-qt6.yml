@@ -44,6 +44,7 @@ jobs:
             qtlocation
             qtpositioning
             qt5compat
+            qtshadertools
             qtwebchannel
             qtwebengine
           cache: true
@@ -147,7 +148,9 @@ jobs:
           cmake -S $ecmSource -B $ecmBuild -G Ninja `
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
             -DCMAKE_INSTALL_PREFIX="$installPrefix" `
-            -DSHARE_INSTALL_DIR=..
+            -DBUILD_TESTING=OFF `
+            -DBUILD_DOC=OFF
+          cmake --build $ecmBuild --target install
           $breezeVersion = (Get-Content "scripts/get-dep-lib.sh" | Select-String 'CURRENT_BREEZE_ICONS="(.+)"').Matches.Groups[1].Value
           New-Item -ItemType Directory -Force -Path $breezeSource | Out-Null
           git -C $breezeSource init
@@ -165,7 +168,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
             -DBUILD_SHARED_LIBS=ON `
             -DCMAKE_INSTALL_PREFIX="$installPrefix" `
-            -DECM_DIR="$ecmBuild" `
+            -DECM_DIR="$installPrefix\share\ECM\cmake" `
             -DUSE_DBUS=OFF `
             -DCMAKE_PREFIX_PATH="$env:Qt6_DIR;$installPrefix"
           cmake --build $kirigamiBuild --target install
