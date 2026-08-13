@@ -19,11 +19,11 @@ Kirigami.ApplicationWindow {
 	// the documentation claims that the ApplicationWindow should pick up the font set on
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
-	background: Rectangle { color: subsurfaceTheme.backgroundColor }
+	background: Rectangle { color: "#0B1220" }
 
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
-		visible: initialized && !startPage.visible &&
+		visible: initialized && !startPage.visible && !neoOnboarding.visible &&
 			(pageStack.currentItem === neoDashboard ||
 			 pageStack.currentItem === modernDiveList ||
 			 pageStack.currentItem === neoSitesHub ||
@@ -37,16 +37,16 @@ Kirigami.ApplicationWindow {
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onStatsRequested: showPageFromDrawer(neoStatisticsHub)
-		onMoreRequested: globalDrawer.open()
+		onMoreRequested: showPageFromDrawer(neoMorePage)
 	}
 
 	// we want to use our own colors for Kirigami, so let's define our colorset
 	Kirigami.Theme.inherit: false
 	Kirigami.Theme.colorSet: Kirigami.Theme.Button
-	Kirigami.Theme.backgroundColor: subsurfaceTheme.backgroundColor
-	Kirigami.Theme.textColor: subsurfaceTheme.textColor
-	Kirigami.Theme.highlightColor: subsurfaceTheme.darkerPrimaryColor
-	Kirigami.Theme.highlightedTextColor: subsurfaceTheme.primaryTextColor
+	Kirigami.Theme.backgroundColor: "#0B1220"
+	Kirigami.Theme.textColor: "#F7FAFC"
+	Kirigami.Theme.highlightColor: "#169DD0"
+	Kirigami.Theme.highlightedTextColor: "#F7FAFC"
 
 	// next setup the tab bar on top
 	pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.ToolBar
@@ -58,8 +58,8 @@ Kirigami.ApplicationWindow {
 
 	// expose header colors so Kirigami's AbstractApplicationHeader can read them
 	// (on iOS, items with inherit:false get system palette colors instead of app theme)
-	property color headerBackgroundColor: subsurfaceTheme.primaryColor
-	property color headerTextColor: subsurfaceTheme.primaryTextColor
+	property color headerBackgroundColor: "#111B2E"
+	property color headerTextColor: "#F7FAFC"
 
 	property alias notificationText: manager.notificationText
 	property alias pluggedInDeviceName: manager.pluggedInDeviceName
@@ -67,6 +67,7 @@ Kirigami.ApplicationWindow {
 	property bool filterToggle: false
 	property string filterPattern: ""
 	property int colWidth: undefined
+	property bool neoLegacyCloudSetupRequested: false
 
 	// signal that the profile (and possibly other code) listens to so they
 	// can redraw if settings are changed
@@ -252,7 +253,10 @@ Kirigami.ApplicationWindow {
 
 	globalDrawer: Kirigami.GlobalDrawer {
 		id: globalDrawer
-		handleVisible: true
+		// Neo's primary navigation lives in the bottom bar and More page. Keep
+		// this drawer for compatibility pages, but do not present it as the app's
+		// normal navigation surface.
+		handleVisible: false
 		handleClosedIcon.name: ""
 		handleClosedIcon.source: "qrc:/icons/application-menu.svg"
 		handleOpenIcon.name: "window-close-symbolic"
@@ -874,10 +878,33 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		leftPadding: Kirigami.Units.gridUnit
 	}
 
+	NeoPages.ModernOnboarding {
+		id: neoOnboarding
+		anchors.fill: parent
+		visible: initialized && !neoLegacyCloudSetupRequested &&
+			Backend.cloud_verification_status !== Enums.CS_NOCLOUD &&
+			Backend.cloud_verification_status !== Enums.CS_VERIFIED
+		onVisibleChanged: {
+			if (visible)
+				pageStack.clear()
+			else if (initialized && !startPage.visible)
+				showNeoHome()
+		}
+		onUseLocalLog: {
+			manager.setGitLocalOnly(true)
+			PrefCloudStorage.cloud_auto_sync = false
+			manager.oldStatus = Backend.cloud_verification_status
+			Backend.cloud_verification_status = Enums.CS_NOCLOUD
+			manager.saveCloudCredentials("", "", "")
+			manager.openNoCloudRepo()
+		}
+		onOpenLegacyCloudSetup: rootItem.neoLegacyCloudSetupRequested = true
+	}
+
 	StartPage {
 		id: startPage
 		anchors.fill: parent
-		visible: initialized &&
+		visible: initialized && neoLegacyCloudSetupRequested &&
 			 Backend.cloud_verification_status !== Enums.CS_NOCLOUD &&
 			 Backend.cloud_verification_status !== Enums.CS_VERIFIED
 		onVisibleChanged: {
@@ -916,6 +943,22 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		}
 		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
 		onAddDiveRequested: startAddDive()
+	}
+
+	NeoPages.ModernMorePage {
+		id: neoMorePage
+		visible: false
+		onOpenPlanner: showPageFromDrawer(neoPlannerLab)
+		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
+		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
+		onOpenEquipment: showPageFromDrawer(neoEquipmentLibrary)
+		onOpenPortability: showPageFromDrawer(neoDataPortability)
+		onOpenLegacySettings: {
+			settingsWindow.defaultCylinderModel = manager.defaultCylinderListInit
+			PrefEquipment.default_cylinder === "" ? defaultCylinderIndex = "-1" : defaultCylinderIndex = settingsWindow.defaultCylinderModel.indexOf(PrefEquipment.default_cylinder)
+			showPageFromDrawer(settingsWindow)
+		}
+		onOpenAbout: showPageFromDrawer(aboutWindow)
 	}
 
 	NeoPages.ModernDiveComputerCenter {
