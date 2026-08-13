@@ -44,7 +44,7 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("EMAIL"); color: tokens.textMuted; font.pixelSize: 9 }
 				TextField { id: emailField; Layout.fillWidth: true; text: PrefCloudStorage.cloud_storage_email; placeholderText: qsTr("Email"); inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoAutoUppercase }
 				Text { text: qsTr("PASSWORD"); color: tokens.textMuted; font.pixelSize: 9 }
-				TextField { id: passwordField; Layout.fillWidth: true; text: PrefCloudStorage.cloud_storage_password; placeholderText: qsTr("Password"); echoMode: TextInput.PasswordEchoOnEdit; inputMethodHints: Qt.ImhSensitiveData | Qt.ImhHiddenText | Qt.ImhNoAutoUppercase }
+				TextField { id: passwordField; Layout.fillWidth: true; placeholderText: qsTr("Password"); echoMode: TextInput.Password; inputMethodHints: Qt.ImhSensitiveData | Qt.ImhHiddenText | Qt.ImhNoAutoUppercase }
 				Button { Layout.fillWidth: true; text: qsTr("Sign in or register"); enabled: emailField.text.trim().length > 0 && passwordField.text.length > 0; onClicked: page.submitCredentials() }
 			}
 			ColumnLayout {

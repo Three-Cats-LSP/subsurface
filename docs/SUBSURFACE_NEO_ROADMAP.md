@@ -676,7 +676,7 @@ Also complete settings polish, release/update preferences, privacy/terms links a
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
 
-**Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, migration of legacy Subsurface Cloud credentials to native secure storage, and the full multi-device/offline security matrix remain release-hardening work.
+**Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration (including automatic migration of legacy Subsurface Cloud passwords), personalized units and text sizing, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, and the full multi-device/offline security matrix remain release-hardening work.
 
 ---
 

@@ -62,7 +62,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Subsurface Cloud"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: page.subsurfaceStatus(); color: Backend.cloud_verification_status === Enums.CS_VERIFIED ? tokens.success : tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-				Text { text: qsTr("Compatibility service for the original Subsurface ecosystem. Its credentials use the established Subsurface preference path."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Text { text: Qt.platform.os === "android" || Qt.platform.os === "windows" ? qsTr("Compatibility service for the original Subsurface ecosystem. Its saved password uses the same secure native credential store described above.") : qsTr("Compatibility service for the original Subsurface ecosystem. Secure persistent password storage is unavailable on this platform."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Button { Layout.fillWidth: true; text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Change account") : qsTr("Connect"); onClicked: page.openSubsurfaceCloud() }
 			}
 		}

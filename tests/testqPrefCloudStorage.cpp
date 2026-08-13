@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testqPrefCloudStorage.h"
 
+#include "core/cloudcredentialstore.h"
 #include "core/pref.h"
 #include "core/qthelper.h"
 #include "core/settings/qPrefCloudStorage.h"
 
+#include <QSettings>
 #include <QTest>
 #include <QSignalSpy>
 
@@ -204,6 +206,43 @@ void TestQPrefCloudStorage::test_oldPreferences()
 	TEST(cloud->cloud_verification_status(), 0);
 	cloud->set_cloud_verification_status(1);
 	TEST(cloud->cloud_verification_status(), 1);
+}
+
+void TestQPrefCloudStorage::test_passwordStorageMigrationAndRemoval()
+{
+	const QString passwordKey = QStringLiteral("CloudStorage/password");
+	const QString credentialKey = QStringLiteral("subsurface-cloud-password");
+	const QString legacyPassword = QStringLiteral("legacy-secret");
+	QSettings settings;
+
+	CloudCredentialStore::remove(credentialKey);
+	settings.setValue(passwordKey, legacyPassword);
+	settings.setValue(QStringLiteral("CloudStorage/save_password_local"), true);
+	settings.sync();
+	prefs.cloud_storage_password.clear();
+
+	qPrefCloudStorage::load();
+	settings.sync();
+	QCOMPARE(QString::fromStdString(prefs.cloud_storage_password), legacyPassword);
+
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
+	QCOMPARE(CloudCredentialStore::load(credentialKey), legacyPassword.toUtf8());
+	QVERIFY(!settings.contains(passwordKey));
+#else
+	// Platforms without a native secure store retain the established setting
+	// rather than discarding the user's only working credential.
+	QVERIFY(CloudCredentialStore::load(credentialKey).isEmpty());
+	QCOMPARE(settings.value(passwordKey).toString(), legacyPassword);
+#endif
+
+	// Clearing a password must erase both the legacy setting and a native copy,
+	// even if an older caller already cleared the in-memory preference.
+	prefs.cloud_storage_password.clear();
+	qPrefCloudStorage::set_cloud_storage_password(QString());
+	settings.sync();
+	QVERIFY(!settings.contains(passwordKey));
+	QVERIFY(CloudCredentialStore::load(credentialKey).isEmpty());
+	qPrefCloudStorage::set_save_password_local(false);
 }
 
 void TestQPrefCloudStorage::test_signals()

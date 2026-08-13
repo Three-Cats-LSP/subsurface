@@ -29,6 +29,26 @@ Kirigami.ScrollablePage {
 		PrefDiveComputer.vendor = PrefDiveComputer.product = PrefDiveComputer.device = ""
 	}
 
+	function saveUnitChange() {
+		manager.changesNeedSaving()
+		manager.refreshDiveList()
+	}
+
+	function fontScaleIndex() {
+		var scales = [0.75, 0.85, 1.0, 1.15, 1.3]
+		var closest = 0
+		for (var i = 1; i < scales.length; ++i)
+			if (Math.abs(scales[i] - subsurfaceTheme.currentScale) < Math.abs(scales[closest] - subsurfaceTheme.currentScale))
+				closest = i
+		return closest
+	}
+
+	function setFontScale(index) {
+		var scales = [0.75, 0.85, 1.0, 1.15, 1.3]
+		subsurfaceTheme.currentScale = scales[index]
+		rootItem.setupUnits()
+	}
+
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
@@ -90,6 +110,12 @@ Kirigami.ScrollablePage {
 					Item { Layout.fillWidth: true }
 					Button { text: qsTr("Forget"); enabled: PrefDiveComputer.vendor1 !== ""; onClicked: page.forgetComputers() }
 				}
+				Switch {
+					Layout.fillWidth: true
+					text: qsTr("Show unrecognized Bluetooth devices")
+					checked: manager.showNonDiveComputers
+					onToggled: manager.showNonDiveComputers = checked
+				}
 			}
 
 			Components.ModernCard {
@@ -98,6 +124,17 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Interface"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Switch { Layout.fillWidth: true; text: qsTr("Single-column portrait layout"); checked: PrefDisplay.singleColumnPortrait; onToggled: PrefDisplay.singleColumnPortrait = checked }
 				Switch { Layout.fillWidth: true; text: qsTr("Three-metre profile grid"); checked: PrefDisplay.three_m_based_grid; onToggled: PrefDisplay.three_m_based_grid = checked }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: 2
+					Text { text: qsTr("Text size"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox {
+						Layout.fillWidth: true
+						model: [qsTr("Very small"), qsTr("Small"), qsTr("Regular"), qsTr("Large"), qsTr("Very large")]
+						currentIndex: page.fontScaleIndex()
+						onActivated: page.setFontScale(currentIndex)
+					}
+				}
 			}
 		}
 
@@ -113,12 +150,31 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Units"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Choose the measurement system used throughout Neo"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				ButtonGroup { id: unitSystemGroup }
-				RowLayout {
+				GridLayout {
 					Layout.fillWidth: true
-					RadioButton { text: qsTr("Metric"); checked: Backend.unit_system === Enums.METRIC; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.METRIC; manager.changesNeedSaving(); manager.refreshDiveList() } }
-					RadioButton { text: qsTr("Imperial"); checked: Backend.unit_system === Enums.IMPERIAL; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.IMPERIAL; manager.changesNeedSaving(); manager.refreshDiveList() } }
+					columns: 3
+					RadioButton { Layout.fillWidth: true; text: qsTr("Metric"); checked: Backend.unit_system === Enums.METRIC; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.METRIC; page.saveUnitChange() } }
+					RadioButton { Layout.fillWidth: true; text: qsTr("Imperial"); checked: Backend.unit_system === Enums.IMPERIAL; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.IMPERIAL; page.saveUnitChange() } }
+					RadioButton { Layout.fillWidth: true; text: qsTr("Personalize"); checked: Backend.unit_system === Enums.PERSONALIZE; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.PERSONALIZE; page.saveUnitChange() } }
 				}
-				Text { visible: Backend.unit_system === Enums.PERSONALIZE; text: qsTr("A personalized unit mix is active. Use Advanced settings to change individual measurements."); color: tokens.warning; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				GridLayout {
+					visible: Backend.unit_system === Enums.PERSONALIZE
+					Layout.fillWidth: true
+					columns: 2
+					columnSpacing: tokens.space12
+					rowSpacing: tokens.space8
+
+					Text { text: qsTr("Depth"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: [qsTr("Meters"), qsTr("Feet")]; currentIndex: Backend.length === Enums.METERS ? 0 : 1; onActivated: { Backend.length = currentIndex === 0 ? Enums.METERS : Enums.FEET; page.saveUnitChange() } }
+					Text { text: qsTr("Pressure"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: [qsTr("Bar"), qsTr("PSI")]; currentIndex: Backend.pressure === Enums.BAR ? 0 : 1; onActivated: { Backend.pressure = currentIndex === 0 ? Enums.BAR : Enums.PSI; page.saveUnitChange() } }
+					Text { text: qsTr("Volume"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: [qsTr("Litres"), qsTr("Cubic feet")]; currentIndex: Backend.volume === Enums.LITER ? 0 : 1; onActivated: { Backend.volume = currentIndex === 0 ? Enums.LITER : Enums.CUFT; page.saveUnitChange() } }
+					Text { text: qsTr("Temperature"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: [qsTr("Celsius"), qsTr("Fahrenheit")]; currentIndex: Backend.temperature === Enums.CELSIUS ? 0 : 1; onActivated: { Backend.temperature = currentIndex === 0 ? Enums.CELSIUS : Enums.FAHRENHEIT; page.saveUnitChange() } }
+					Text { text: qsTr("Weight"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox { Layout.fillWidth: true; model: [qsTr("Kilograms"), qsTr("Pounds")]; currentIndex: Backend.weight === Enums.KG ? 0 : 1; onActivated: { Backend.weight = currentIndex === 0 ? Enums.KG : Enums.LBS; page.saveUnitChange() } }
+				}
 			}
 
 			Components.ModernCard {
@@ -173,10 +229,10 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				ColumnLayout {
 					Layout.fillWidth: true
-					Text { text: qsTr("Advanced Subsurface settings"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
-					Text { text: qsTr("Compatibility options not yet represented in the Neo workspace"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: qsTr("Specialist compatibility settings"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
+					Text { text: qsTr("Legacy profile colors, diagnostics, and uncommon Subsurface controls"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
-				Button { text: qsTr("Open"); onClicked: page.openAdvancedSettings() }
+				Button { text: qsTr("Compatibility panel"); onClicked: page.openAdvancedSettings() }
 			}
 		}
 

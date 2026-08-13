@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "qPrefCloudStorage.h"
+#include "core/cloudcredentialstore.h"
 #include "qPrefPrivate.h"
 
 static const QString group = QStringLiteral("CloudStorage");
+static const QString subsurfaceCloudPasswordKey = QStringLiteral("subsurface-cloud-password");
 
 qPrefCloudStorage *qPrefCloudStorage::instance()
 {
@@ -16,11 +18,11 @@ void qPrefCloudStorage::loadSync(bool doSync)
 	disk_cloud_base_url(doSync);
 	disk_cloud_storage_email(doSync);
 	disk_cloud_storage_email_encoded(doSync);
+	disk_save_password_local(doSync);
 	disk_cloud_storage_password(doSync);
 	disk_cloud_storage_pin(doSync);
 	disk_cloud_timeout(doSync);
 	disk_cloud_verification_status(doSync);
-	disk_save_password_local(doSync);
 }
 
 HANDLE_PREFERENCE_BOOL(CloudStorage, "cloud_auto_sync", cloud_auto_sync);
@@ -58,21 +60,51 @@ HANDLE_PREFERENCE_TXT(CloudStorage, "email_encoded", cloud_storage_email_encoded
 
 void qPrefCloudStorage::set_cloud_storage_password(const QString &value)
 {
-	if (value.toStdString() != prefs.cloud_storage_password) {
+	const bool changed = value.toStdString() != prefs.cloud_storage_password;
+	if (changed)
 		prefs.cloud_storage_password = value.toStdString();
+	// An empty value is also an explicit request to erase any persisted copy.
+	// Do this even when the in-memory value was cleared by an older call path.
+	if (changed || value.isEmpty())
 		disk_cloud_storage_password(true);
+	if (changed)
 		emit instance()->cloud_storage_passwordChanged(value);
-	}
 }
 void qPrefCloudStorage::disk_cloud_storage_password(bool doSync)
 {
+	const QString preferenceKey = keyFromGroupAndName(group, QStringLiteral("password"));
 	if (doSync) {
-		if (prefs.save_password_local)
-			qPrefPrivate::propSetValue(keyFromGroupAndName(group, "password"), prefs.cloud_storage_password,
-					default_prefs.cloud_storage_password);
+		const QByteArray password = QByteArray::fromStdString(prefs.cloud_storage_password);
+		if (password.isEmpty() || !prefs.save_password_local) {
+			CloudCredentialStore::remove(subsurfaceCloudPasswordKey);
+			qPrefPrivate::propSetValue(preferenceKey, QString(), QString());
+		} else if (CloudCredentialStore::save(subsurfaceCloudPasswordKey, password)) {
+			// Erase the legacy plaintext preference only after secure persistence
+			// succeeds. This also completes migration for an existing account.
+			qPrefPrivate::propSetValue(preferenceKey, QString(), QString());
+		} else {
+			// Platforms without a secure store retain the established preference
+			// behavior. Never erase a user's only working credential on failure.
+			qPrefPrivate::propSetValue(preferenceKey, QString::fromUtf8(password), QString());
+		}
 	} else {
-		prefs.cloud_storage_password = qPrefPrivate::propValue(keyFromGroupAndName(group, "password"),
-				default_prefs.cloud_storage_password).toString().toStdString();
+		if (!prefs.save_password_local) {
+			prefs.cloud_storage_password.clear();
+			CloudCredentialStore::remove(subsurfaceCloudPasswordKey);
+			qPrefPrivate::propSetValue(preferenceKey, QString(), QString());
+			return;
+		}
+		const QByteArray securePassword = CloudCredentialStore::load(subsurfaceCloudPasswordKey);
+		const QString legacyPassword = qPrefPrivate::propValue(preferenceKey, QString()).toString();
+		if (!securePassword.isEmpty()) {
+			prefs.cloud_storage_password = securePassword.toStdString();
+			qPrefPrivate::propSetValue(preferenceKey, QString(), QString());
+		} else {
+			prefs.cloud_storage_password = legacyPassword.toStdString();
+			if (!legacyPassword.isEmpty() && prefs.save_password_local &&
+			    CloudCredentialStore::save(subsurfaceCloudPasswordKey, legacyPassword.toUtf8()))
+				qPrefPrivate::propSetValue(preferenceKey, QString(), QString());
+		}
 	}
 }
 
@@ -82,7 +114,21 @@ HANDLE_PREFERENCE_INT(CloudStorage, "timeout", cloud_timeout);
 
 HANDLE_PREFERENCE_INT(CloudStorage, "cloud_verification_status", cloud_verification_status);
 
-HANDLE_PREFERENCE_BOOL(CloudStorage, "save_password_local", save_password_local);
+void qPrefCloudStorage::set_save_password_local(bool value)
+{
+	const bool changed = value != prefs.save_password_local;
+	if (changed) {
+		prefs.save_password_local = value;
+		disk_save_password_local(true);
+	}
+	// Repeating "do not save" is an explicit cleanup request.
+	if (changed || !value)
+		disk_cloud_storage_password(true);
+	if (changed)
+		emit instance()->save_password_localChanged(value);
+}
+
+DISK_LOADSYNC_BOOL(CloudStorage, "save_password_local", save_password_local);
 
 QString qPrefCloudStorage::diveshare_uid()
 {

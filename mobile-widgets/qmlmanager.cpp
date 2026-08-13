@@ -928,8 +928,6 @@ void QMLManager::revertToNoCloudIfNeeded()
 			appendTextToLog(QStringLiteral("taking things back offline since sync with cloud failed"));
 			git_local_only = false;
 		}
-		prefs.cloud_storage_email.clear();
-		prefs.cloud_storage_password.clear();
 		qPrefCloudStorage::set_cloud_storage_email("");
 		qPrefCloudStorage::set_cloud_storage_password("");
 		rememberOldStatus();
