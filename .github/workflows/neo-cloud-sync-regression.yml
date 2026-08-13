@@ -8,9 +8,11 @@ on:
       - 'core/cloudcredentialstore.*'
       - 'core/cloudsync*'
       - 'core/oauth2*'
+      - 'core/settings/qPrefCloudStorage.*'
       - 'android-mobile/src/org/subsurfacedivelog/mobile/CloudCredentialStore.java'
       - 'mobile-widgets/qml/modern/pages/CloudSyncPage.qml'
       - 'tests/testcloudsyncmanifest.*'
+      - 'tests/testqPrefCloudStorage.*'
       - 'tests/CMakeLists.txt'
   workflow_dispatch:
 
