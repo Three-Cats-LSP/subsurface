@@ -25,6 +25,8 @@ Kirigami.ApplicationWindow {
 	Material.theme: Material.Dark
 	Material.primary: "#111B2E"
 	Material.accent: "#44C7F4"
+	Overlay.modal: Rectangle { color: "#99050A14" }
+	Overlay.modeless: Rectangle { color: "#66050A14" }
 
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation

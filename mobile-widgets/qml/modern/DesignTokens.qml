@@ -7,10 +7,12 @@ QtObject {
 	readonly property color surfaceRaised: "#17243A"
 	readonly property color textPrimary: "#F7FAFC"
 	readonly property color textSecondary: "#A9B6C8"
+	readonly property color textMuted: "#7F90A8"
 	readonly property color accent: "#44C7F4"
 	readonly property color accentStrong: "#169DD0"
 	readonly property color border: "#24344D"
 	readonly property color success: "#43D17A"
+	readonly property color warning: "#FFB84D"
 
 	readonly property int space4: 4
 	readonly property int space8: 8
@@ -20,6 +22,8 @@ QtObject {
 	readonly property int space32: 32
 
 	readonly property int radiusSmall: 10
+	readonly property int radius12: 12
+	readonly property int radius16: 16
 	readonly property int radiusMedium: 16
 	readonly property int radiusLarge: 24
 }
