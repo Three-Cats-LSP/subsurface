@@ -1,0 +1,71 @@
+name: Neo WebAssembly
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-webassembly.yml'
+      - 'web/subsurface-neo/wasm/**'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      QT_VERSION: '6.8.3'
+      EMSCRIPTEN_VERSION: '3.1.56'
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Install Qt for WebAssembly
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: all_os
+          target: wasm
+          arch: wasm_singlethread
+          cache: true
+          setup-python: false
+
+      - name: Configure WebAssembly application
+        run: >-
+          qt-cmake
+          -S web/subsurface-neo/wasm
+          -B build/neo-web
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build WebAssembly application
+        run: cmake --build build/neo-web --parallel 2
+
+      - name: Validate and stage browser bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s build/neo-web/subsurface-neo-web.wasm
+          test -s build/neo-web/subsurface-neo-web.js
+          test -s build/neo-web/subsurface-neo-web.html
+          test -s build/neo-web/qtloader.js
+          wasm-opt --validate build/neo-web/subsurface-neo-web.wasm
+          mkdir -p build/neo-web-dist
+          cp build/neo-web/subsurface-neo-web.wasm build/neo-web-dist/
+          cp build/neo-web/subsurface-neo-web.js build/neo-web-dist/
+          cp build/neo-web/qtloader.js build/neo-web-dist/
+          cp build/neo-web/subsurface-neo-web.html build/neo-web-dist/index.html
+
+      - name: Upload WebAssembly bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subsurface-Neo-WebAssembly
+          path: build/neo-web-dist
+          if-no-files-found: error
+          retention-days: 14
