@@ -57,7 +57,7 @@ jobs:
           test -s build/neo-web/subsurface-neo-web.js
           test -s build/neo-web/subsurface-neo-web.html
           test -s build/neo-web/qtloader.js
-          "$EMSDK/upstream/bin/wasm-opt" build/neo-web/subsurface-neo-web.wasm \
+          "$EMSDK/upstream/bin/wasm-opt" --enable-bulk-memory build/neo-web/subsurface-neo-web.wasm \
             -o build/neo-web/subsurface-neo-web.validated.wasm
           test -s build/neo-web/subsurface-neo-web.validated.wasm
           mkdir -p build/neo-web-dist
