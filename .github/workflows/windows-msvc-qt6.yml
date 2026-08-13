@@ -129,6 +129,39 @@ jobs:
         with:
           arch: x64
 
+      - name: Build Neo mobile UI dependencies
+        shell: pwsh
+        run: |
+          $installPrefix = "${{ github.workspace }}\install"
+          $thirdParty = "${{ github.workspace }}\mobile-widgets\3rdparty"
+          $ecmSource = Join-Path $thirdParty "extra-cmake-modules"
+          $ecmBuild = Join-Path $thirdParty "ECM"
+          $kirigamiSource = Join-Path $thirdParty "kirigami"
+          $kirigamiBuild = "${{ github.workspace }}\kirigami-build"
+
+          git clone --branch v6.23.0 --depth 1 https://github.com/KDE/extra-cmake-modules.git $ecmSource
+          cmake -S $ecmSource -B $ecmBuild -G Ninja `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+            -DCMAKE_INSTALL_PREFIX="$installPrefix" `
+            -DSHARE_INSTALL_DIR=..
+          git clone https://github.com/KDE/breeze-icons.git (Join-Path $thirdParty "breeze-icons")
+          Push-Location (Join-Path $thirdParty "breeze-icons")
+          git checkout -f 4daac19137d21e1053b221f0332c62c36dc8cfbf
+          Pop-Location
+
+          git clone --branch v6.23.0 --depth 1 https://github.com/KDE/kirigami.git $kirigamiSource
+          Get-ChildItem (Join-Path $thirdParty "00*.patch") | Sort-Object Name | ForEach-Object {
+            git -C $kirigamiSource am $_.FullName
+          }
+          cmake -S $kirigamiSource -B $kirigamiBuild -G Ninja `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+            -DBUILD_SHARED_LIBS=ON `
+            -DCMAKE_INSTALL_PREFIX="$installPrefix" `
+            -DECM_DIR="$ecmBuild\cmake" `
+            -DUSE_DBUS=OFF `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR;$installPrefix"
+          cmake --build $kirigamiBuild --target install
+
       - name: Build googlemaps plugin
         shell: pwsh
         run: |
