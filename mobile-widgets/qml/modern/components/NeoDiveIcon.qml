@@ -77,6 +77,19 @@ Canvas {
 		} else if (name === "notes") {
 			ctx.strokeRect(6, 5, 16, 18)
 			line(ctx, [10, 10, 18, 10]); line(ctx, [10, 14, 18, 14]); line(ctx, [10, 18, 16, 18])
+		} else if (name === "home") {
+			line(ctx, [5, 13, 14, 5, 23, 13])
+			ctx.beginPath(); ctx.moveTo(8, 12); ctx.lineTo(8, 23); ctx.lineTo(20, 23); ctx.lineTo(20, 12); ctx.stroke()
+			ctx.strokeRect(12, 17, 4, 6)
+		} else if (name === "site") {
+			ctx.beginPath(); ctx.arc(14, 11, 7, Math.PI, 0); ctx.quadraticCurveTo(21, 18, 14, 25); ctx.quadraticCurveTo(7, 18, 7, 11); ctx.stroke()
+			ctx.beginPath(); ctx.arc(14, 11, 2.5, 0, Math.PI * 2); ctx.stroke()
+		} else if (name === "stats") {
+			line(ctx, [6, 23, 6, 15]); line(ctx, [12, 23, 12, 8]); line(ctx, [18, 23, 18, 12]); line(ctx, [24, 23, 24, 5])
+		} else if (name === "more") {
+			ctx.beginPath(); ctx.arc(7, 14, 2, 0, Math.PI * 2); ctx.fill()
+			ctx.beginPath(); ctx.arc(14, 14, 2, 0, Math.PI * 2); ctx.fill()
+			ctx.beginPath(); ctx.arc(21, 14, 2, 0, Math.PI * 2); ctx.fill()
 		} else {
 			ctx.beginPath(); ctx.arc(14, 14, 8, 0, Math.PI * 2); ctx.stroke()
 		}

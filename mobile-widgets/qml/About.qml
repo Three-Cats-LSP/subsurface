@@ -103,6 +103,11 @@ Kirigami.ScrollablePage {
 		dashboard.openDiveList.connect(function() {
 			aboutPage.openModernDiveList()
 		})
+		dashboard.openDive.connect(function(diveId) {
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				aboutPage.openModernDiveDetails(row)
+		})
 		dashboard.openImport.connect(function() {
 			downloadFromDc.dcImportModel.clearTable()
 			showPageFromDrawer(downloadFromDc)

@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
 import "../components" as Components
 
@@ -11,210 +12,242 @@ Kirigami.ScrollablePage {
 	title: qsTr("Home")
 	background: Rectangle { color: tokens.background }
 
+	property bool wideLayout: width >= 760
+	signal openDive(int diveId)
 	signal openDiveList()
 	signal openImport()
 	signal openCloudSync()
 
 	Modern.DesignTokens { id: tokens }
 
+	function greeting() {
+		var hour = new Date().getHours()
+		if (hour < 12)
+			return qsTr("Good morning")
+		if (hour < 18)
+			return qsTr("Good afternoon")
+		return qsTr("Good evening")
+	}
+
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space24
 
-		ColumnLayout {
-			spacing: tokens.space4
+		RowLayout {
 			Layout.fillWidth: true
+			spacing: tokens.space12
 
-			Text {
-				text: qsTr("Your diving, at a glance")
-				color: tokens.textPrimary
-				font.pixelSize: 28
-				font.weight: Font.DemiBold
-				wrapMode: Text.WordWrap
+			ColumnLayout {
 				Layout.fillWidth: true
+				spacing: tokens.space4
+				Text {
+					text: page.greeting()
+					color: tokens.textPrimary
+					font.pixelSize: page.wideLayout ? 30 : 25
+					font.weight: Font.DemiBold
+				}
+				Text {
+					text: qsTr("Here’s your diving summary")
+					color: tokens.textSecondary
+					font.pixelSize: 13
+				}
 			}
-			Text {
-				text: qsTr("Subsurface Neo keeps the proven Subsurface dive engine underneath a faster, clearer mobile interface.")
-				color: tokens.textSecondary
-				font.pixelSize: 14
-				wrapMode: Text.WordWrap
-				Layout.fillWidth: true
+
+			ToolButton {
+				text: "☁"
+				font.pixelSize: 22
+				ToolTip.visible: hovered
+				ToolTip.text: qsTr("Cloud & Sync")
+				onClicked: page.openCloudSync()
 			}
 		}
 
 		GridLayout {
 			Layout.fillWidth: true
-			columns: page.width >= 700 ? 4 : 1
-			columnSpacing: tokens.space12
-			rowSpacing: tokens.space12
+			columns: 3
+			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
+			rowSpacing: tokens.space8
 
 			Components.MetricCard {
 				label: qsTr("Dives")
 				value: String(NeoDashboard.diveCount)
+				iconName: "tank"
 				Layout.fillWidth: true
-			}
-			Components.MetricCard {
-				label: qsTr("Saved plans")
-				value: String(NeoDashboard.planCount)
-				Layout.fillWidth: true
+				Layout.minimumWidth: 0
 			}
 			Components.MetricCard {
 				label: qsTr("Dive time")
 				value: NeoDashboard.totalTimeHours
-				suffix: qsTr("hours")
+				suffix: qsTr("h")
+				iconName: "time"
 				Layout.fillWidth: true
+				Layout.minimumWidth: 0
 			}
 			Components.MetricCard {
 				label: qsTr("Max depth")
 				value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"
 				suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""
+				iconName: "depth"
 				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
+		}
+
+		RowLayout {
+			Layout.fillWidth: true
+			Text {
+				text: qsTr("Recent dives")
+				color: tokens.textPrimary
+				font.pixelSize: 19
+				font.weight: Font.DemiBold
+				Layout.fillWidth: true
+			}
+			Button {
+				text: qsTr("See all")
+				flat: true
+				onClicked: page.openDiveList()
+			}
+		}
+
+		Text {
+			visible: NeoDashboard.recentDives.length === 0
+			text: qsTr("No dives yet. Import from a dive computer or add a dive to get started.")
+			color: tokens.textSecondary
+			font.pixelSize: 14
+			wrapMode: Text.WordWrap
+			Layout.fillWidth: true
+		}
+
+		GridLayout {
+			visible: NeoDashboard.recentDives.length > 0
+			Layout.fillWidth: true
+			columns: page.wideLayout ? 2 : 1
+			columnSpacing: tokens.space12
+			rowSpacing: tokens.space12
+
+			Repeater {
+				model: NeoDashboard.recentDives
+
+				delegate: Components.ModernCard {
+					id: recentCard
+					required property var modelData
+					Layout.fillWidth: true
+					contentPadding: tokens.space12
+
+					RowLayout {
+						Layout.fillWidth: true
+						spacing: tokens.space8
+
+						Rectangle {
+							Layout.preferredWidth: 54
+							Layout.preferredHeight: 40
+							color: "transparent"
+							radius: tokens.radiusSmall
+							border.width: 1
+							border.color: tokens.accentStrong
+							Text {
+								anchors.centerIn: parent
+								text: recentCard.modelData.number > 0 ? "#" + recentCard.modelData.number : qsTr("Dive")
+								color: tokens.accent
+								font.pixelSize: 15
+								font.weight: Font.DemiBold
+							}
+						}
+
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 2
+							Text {
+								Layout.fillWidth: true
+								text: recentCard.modelData.location && recentCard.modelData.location.length > 0 ? recentCard.modelData.location : qsTr("Unnamed dive site")
+								color: tokens.textPrimary
+								font.pixelSize: 16
+								font.weight: Font.DemiBold
+								elide: Text.ElideRight
+							}
+							Text {
+								text: recentCard.modelData.date
+								color: tokens.textSecondary
+								font.pixelSize: 11
+							}
+						}
+					}
+
+					GridLayout {
+						Layout.fillWidth: true
+						columns: 3
+						columnSpacing: tokens.space8
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 1
+							Text { text: qsTr("MAX DEPTH"); color: tokens.textMuted; font.pixelSize: 8 }
+							Text { text: recentCard.modelData.depth || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+						}
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 1
+							Text { text: qsTr("DIVE TIME"); color: tokens.textMuted; font.pixelSize: 8 }
+							Text { text: recentCard.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+						}
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 1
+							Text { text: qsTr("WATER TEMP"); color: tokens.textMuted; font.pixelSize: 8 }
+							Text { text: recentCard.modelData.waterTemp || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+						}
+					}
+
+					Rectangle {
+						Layout.fillWidth: true
+						Layout.preferredHeight: page.wideLayout ? 112 : 124
+						color: tokens.background
+						radius: tokens.radiusSmall
+						clip: true
+
+						QMLProfile {
+							id: miniProfile
+							anchors.fill: parent
+							diveId: recentCard.modelData.id
+							Component.onCompleted: setMargin(3)
+						}
+					}
+
+					TapHandler { onTapped: page.openDive(recentCard.modelData.id) }
+				}
 			}
 		}
 
 		ColumnLayout {
 			visible: NeoDashboard.recentPlans.length > 0
 			Layout.fillWidth: true
-			spacing: tokens.space12
-			Text { text: qsTr("Saved plans"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
+			spacing: tokens.space8
+			Text {
+				text: qsTr("Saved plans (%1)").arg(NeoDashboard.planCount)
+				color: tokens.textPrimary
+				font.pixelSize: 17
+				font.weight: Font.DemiBold
+			}
 			Repeater {
 				model: NeoDashboard.recentPlans
 				delegate: Components.ModernCard {
 					required property var modelData
 					Layout.fillWidth: true
+					contentPadding: tokens.space12
 					RowLayout {
 						Layout.fillWidth: true
-						Text {
-							text: qsTr("Planned dive")
-							color: tokens.textPrimary
-							font.weight: Font.DemiBold
-							Layout.fillWidth: true
-						}
-						Text {
-							text: modelData.depth
-							color: tokens.accent
-							font.weight: Font.DemiBold
-						}
-					}
-					RowLayout {
-						Layout.fillWidth: true
-						Text {
-							text: modelData.date
-							color: tokens.textSecondary
-							Layout.fillWidth: true
-						}
-						Text {
-							text: modelData.duration
-							color: tokens.textSecondary
-						}
+						Text { text: qsTr("Planned dive"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }
+						Text { text: modelData.depth; color: tokens.accent; font.weight: Font.DemiBold }
+						Text { text: modelData.duration; color: tokens.textSecondary }
 					}
 				}
 			}
 		}
 
-		ColumnLayout {
+		RowLayout {
 			Layout.fillWidth: true
 			spacing: tokens.space12
-
-			Text {
-				text: qsTr("Recent dives")
-				color: tokens.textPrimary
-				font.pixelSize: 18
-				font.weight: Font.DemiBold
-				Layout.fillWidth: true
-			}
-
-			Text {
-				visible: NeoDashboard.recentDives.length === 0
-				text: qsTr("No dives yet. Import from a dive computer or add a dive to get started.")
-				color: tokens.textSecondary
-				font.pixelSize: 14
-				wrapMode: Text.WordWrap
-				Layout.fillWidth: true
-			}
-
-			Repeater {
-				model: NeoDashboard.recentDives
-
-				delegate: Components.ModernCard {
-					required property var modelData
-					Layout.fillWidth: true
-
-					RowLayout {
-						Layout.fillWidth: true
-						spacing: tokens.space12
-
-						ColumnLayout {
-							Layout.fillWidth: true
-							spacing: tokens.space4
-
-							Text {
-								text: modelData.location && modelData.location.length > 0 ? modelData.location : qsTr("Dive %1").arg(modelData.number > 0 ? modelData.number : "")
-								color: tokens.textPrimary
-								font.pixelSize: 16
-								font.weight: Font.DemiBold
-								elide: Text.ElideRight
-								Layout.fillWidth: true
-							}
-							Text {
-								text: modelData.date
-								color: tokens.textSecondary
-								font.pixelSize: 12
-								Layout.fillWidth: true
-							}
-						}
-
-						Text {
-							text: modelData.depth
-							color: tokens.accent
-							font.pixelSize: 16
-							font.weight: Font.DemiBold
-						}
-					}
-
-					RowLayout {
-						Layout.fillWidth: true
-						spacing: tokens.space16
-
-						Text {
-							text: modelData.duration
-							color: tokens.textSecondary
-							font.pixelSize: 13
-						}
-						Text {
-							visible: modelData.waterTemp !== undefined && modelData.waterTemp.length > 0
-							text: modelData.waterTemp || ""
-							color: tokens.textSecondary
-							font.pixelSize: 13
-						}
-						Item { Layout.fillWidth: true }
-					}
-				}
-			}
-		}
-
-		GridLayout {
-			Layout.fillWidth: true
-			columns: page.width >= 700 ? 3 : 1
-			columnSpacing: tokens.space12
-			rowSpacing: tokens.space12
-
-			Button {
-				text: qsTr("Open dive list")
-				Layout.fillWidth: true
-				onClicked: page.openDiveList()
-			}
-			Button {
-				text: qsTr("Import dives")
-				Layout.fillWidth: true
-				onClicked: page.openImport()
-			}
-			Button {
-				// '&' marks a Qt button mnemonic. Double it for a literal ampersand.
-				text: qsTr("Cloud && Sync")
-				Layout.fillWidth: true
-				onClicked: page.openCloudSync()
-			}
+			Button { text: qsTr("Import dives"); Layout.fillWidth: true; onClicked: page.openImport() }
+			Button { text: qsTr("Cloud & Sync"); Layout.fillWidth: true; onClicked: page.openCloudSync() }
 		}
 	}
 }

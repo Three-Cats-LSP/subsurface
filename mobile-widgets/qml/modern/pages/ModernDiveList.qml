@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
 import "../components" as Components
 
@@ -12,6 +13,7 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property QtObject diveListModel: null
+	property bool wideLayout: width >= 760
 	property bool filterVisible: false
 	property bool advancedFiltersVisible: false
 	property string activeCollection: ""
@@ -83,7 +85,7 @@ Kirigami.Page {
 				Layout.fillWidth: true
 				spacing: 2
 				Text {
-					text: qsTr("Dive log")
+					text: qsTr("Dives")
 					color: tokens.textPrimary
 					font.pixelSize: 26
 					font.weight: Font.DemiBold
@@ -97,7 +99,7 @@ Kirigami.Page {
 			}
 
 			Button {
-				text: page.filterVisible ? qsTr("Close filters") : qsTr("Filter")
+				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
 				onClicked: {
 					page.filterVisible = !page.filterVisible
 					if (!page.filterVisible)
@@ -105,7 +107,7 @@ Kirigami.Page {
 				}
 			}
 			Button { text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
-			Button { text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+			Button { visible: page.wideLayout; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
 		}
 
 		Dialog {
@@ -286,80 +288,94 @@ Kirigami.Page {
 					border.width: delegateRoot.modelData.current ? 1 : 0
 					border.color: tokens.accent
 
-					RowLayout {
+					GridLayout {
 						Layout.fillWidth: true
-						spacing: tokens.space12
+						columns: page.wideLayout ? 2 : 1
+						columnSpacing: tokens.space16
+						rowSpacing: tokens.space12
 
 						ColumnLayout {
+							Layout.preferredWidth: page.wideLayout ? 310 : -1
 							Layout.fillWidth: true
-							spacing: tokens.space4
+							spacing: tokens.space8
 
-							Text {
+							RowLayout {
 								Layout.fillWidth: true
-								text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0 ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
-								color: tokens.textPrimary
-								font.pixelSize: 17
-								font.weight: Font.DemiBold
-								font.strikeout: delegateRoot.modelData.isInvalid === true
-								elide: Text.ElideRight
+								spacing: tokens.space8
+								Rectangle {
+									visible: delegateRoot.modelData.number > 0
+									Layout.preferredWidth: 54
+									Layout.preferredHeight: 42
+									color: "transparent"
+									radius: tokens.radiusSmall
+									border.width: 1
+									border.color: tokens.accentStrong
+									Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.number; color: tokens.accent; font.pixelSize: 15; font.weight: Font.DemiBold }
+								}
+								ColumnLayout {
+									Layout.fillWidth: true
+									spacing: 2
+									Text {
+										Layout.fillWidth: true
+										text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0 ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
+										color: tokens.textPrimary
+										font.pixelSize: 17
+										font.weight: Font.DemiBold
+										font.strikeout: delegateRoot.modelData.isInvalid === true
+										elide: Text.ElideRight
+									}
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								}
 							}
 
-							Text {
+							GridLayout {
 								Layout.fillWidth: true
-								text: delegateRoot.modelData.dateTime || ""
-								color: tokens.textSecondary
-								font.pixelSize: 12
+								columns: 3
+								columnSpacing: tokens.space8
+								ColumnLayout {
+									Layout.fillWidth: true
+									spacing: 1
+									Text { text: qsTr("MAX DEPTH"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.modelData.depth || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+								}
+								ColumnLayout {
+									Layout.fillWidth: true
+									spacing: 1
+									Text { text: qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+								}
+								ColumnLayout {
+									Layout.fillWidth: true
+									spacing: 1
+									Text { text: qsTr("WATER TEMP"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.modelData.waterTemp || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+								}
+							}
+
+							GridLayout {
+								Layout.fillWidth: true
+								columns: 2
+								columnSpacing: tokens.space8
+								rowSpacing: tokens.space4
+								Text { visible: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0; text: delegateRoot.modelData.firstGas || ""; color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+								Text { visible: miniProfile.diveMode.length > 0; text: miniProfile.diveMode; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+								Text { visible: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0; text: delegateRoot.modelData.cylinder || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+								Text { visible: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0; text: delegateRoot.modelData.buddy || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
 							}
 						}
 
-						Text {
-							text: delegateRoot.modelData.number > 0 ? "#" + delegateRoot.modelData.number : ""
-							color: tokens.textSecondary
-							font.pixelSize: 12
-						}
-					}
-
-					RowLayout {
-						Layout.fillWidth: true
-						spacing: tokens.space16
-
-						ColumnLayout {
-							spacing: 1
-							Text { text: qsTr("Depth"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { text: delegateRoot.modelData.depth || "—"; color: tokens.accent; font.pixelSize: 15; font.weight: Font.DemiBold }
-						}
-						ColumnLayout {
-							spacing: 1
-							Text { text: qsTr("Time"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.Medium }
-						}
-						ColumnLayout {
-							visible: delegateRoot.modelData.waterTemp !== undefined && delegateRoot.modelData.waterTemp.length > 0
-							spacing: 1
-							Text { text: qsTr("Water"); color: tokens.textMuted; font.pixelSize: 10 }
-							Text { text: delegateRoot.modelData.waterTemp || ""; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.Medium }
-						}
-						Item { Layout.fillWidth: true }
-					}
-
-					RowLayout {
-						Layout.fillWidth: true
-						visible: (delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0) || (delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0)
-						spacing: tokens.space12
-
-						Text {
-							visible: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0
-							text: delegateRoot.modelData.firstGas || ""
-							color: tokens.textSecondary
-							font.pixelSize: 12
-						}
-						Text {
-							visible: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0
-							text: delegateRoot.modelData.suit || ""
-							color: tokens.textSecondary
-							font.pixelSize: 12
-							elide: Text.ElideRight
+						Rectangle {
 							Layout.fillWidth: true
+							Layout.preferredHeight: page.wideLayout ? 112 : 132
+							color: tokens.background
+							radius: tokens.radiusSmall
+							clip: true
+							QMLProfile {
+								id: miniProfile
+								anchors.fill: parent
+								diveId: delegateRoot.modelData.id
+								Component.onCompleted: setMargin(3)
+							}
 						}
 					}
 

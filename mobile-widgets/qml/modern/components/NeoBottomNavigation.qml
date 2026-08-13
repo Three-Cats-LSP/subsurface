@@ -34,11 +34,11 @@ ToolBar {
 
 		Repeater {
 			model: [
-				{ key: "home", label: qsTr("Home") },
-				{ key: "dives", label: qsTr("Dives") },
-				{ key: "sites", label: qsTr("Sites") },
-				{ key: "stats", label: qsTr("Stats") },
-				{ key: "more", label: qsTr("More") }
+				{ key: "home", label: qsTr("Home"), icon: "home" },
+				{ key: "dives", label: qsTr("Dives"), icon: "tank" },
+				{ key: "sites", label: qsTr("Sites"), icon: "site" },
+				{ key: "stats", label: qsTr("Stats"), icon: "stats" },
+				{ key: "more", label: qsTr("More"), icon: "more" }
 			]
 
 			delegate: ItemDelegate {
@@ -50,7 +50,7 @@ ToolBar {
 
 				contentItem: Column {
 					anchors.centerIn: parent
-					spacing: 6
+					spacing: 2
 
 					Rectangle {
 						anchors.horizontalCenter: parent.horizontalCenter
@@ -61,11 +61,19 @@ ToolBar {
 						Behavior on width { NumberAnimation { duration: 120 } }
 					}
 
+					NeoDiveIcon {
+						anchors.horizontalCenter: parent.horizontalCenter
+						name: modelData.icon
+						iconColor: modelData.key === bar.currentSection ? tokens.accent : tokens.textMuted
+						width: 23
+						height: 23
+					}
+
 					Text {
 						anchors.horizontalCenter: parent.horizontalCenter
 						text: modelData.label
 						color: modelData.key === bar.currentSection ? tokens.textPrimary : tokens.textSecondary
-						font.pixelSize: 12
+						font.pixelSize: 10
 						font.weight: modelData.key === bar.currentSection ? Font.DemiBold : Font.Medium
 					}
 				}

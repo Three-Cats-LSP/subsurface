@@ -920,6 +920,39 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenLegacyCloudSetup: rootItem.neoLegacyCloudSetupRequested = true
 	}
 
+	function openNeoDiveDetails(row, editOnReady) {
+		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
+		if (component.status !== Component.Ready) {
+			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
+			return
+		}
+		var detailsPage = component.createObject(rootItem, { "initialRow": row, "editOnReady": editOnReady || false })
+		if (detailsPage === null) {
+			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
+			return
+		}
+		detailsPage.editRequested.connect(function(diveData) {
+			var editorComponent = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveEditor.qml")
+			if (editorComponent.status !== Component.Ready) {
+				showPassiveNotification(qsTr("Unable to load Neo dive editor: %1").arg(editorComponent.errorString()), 6000)
+				return
+			}
+			var editorPage = editorComponent.createObject(rootItem, { "dive": diveData, "newDive": detailsPage.editOnReady })
+			if (editorPage === null) {
+				showPassiveNotification(qsTr("Unable to create Neo dive editor"), 6000)
+				return
+			}
+			editorPage.saved.connect(function() { showPage(detailsPage) })
+			editorPage.advancedEditorRequested.connect(function(diveId) {
+				manager.selectDive(diveId)
+				showPage(detailsWindow)
+				detailsWindow.startEditMode()
+			})
+			showPage(editorPage)
+		})
+		showPage(detailsPage)
+	}
+
 	StartPage {
 		id: startPage
 		anchors.fill: parent
@@ -948,6 +981,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernDashboard {
 		id: neoDashboard
 		visible: false
+		onOpenDive: function(diveId) {
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				rootItem.openNeoDiveDetails(row)
+		}
 		onOpenDiveList: showPageFromDrawer(modernDiveList)
 		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
 		onOpenCloudSync: showPage(cloudSyncPage)
@@ -957,11 +995,17 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		id: modernDiveList
 		visible: false
 		onOpenDive: function(row) {
-			manager.selectRow(row)
-			showPage(detailsWindow)
+			rootItem.openNeoDiveDetails(row)
 		}
 		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
-		onAddDiveRequested: startAddDive()
+		onAddDiveRequested: {
+			var diveId = manager.addDive()
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				rootItem.openNeoDiveDetails(row, true)
+			else
+				startAddDive()
+		}
 	}
 
 	NeoPages.ModernMorePage {
