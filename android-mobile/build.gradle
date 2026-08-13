@@ -30,6 +30,7 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
     implementation 'com.github.mik3y:usb-serial-for-android:v3.10.0'
     implementation 'androidx.core:core:1.12.0'
+    implementation 'com.google.android.gms:play-services-auth:21.3.0'
 }
 
 android {

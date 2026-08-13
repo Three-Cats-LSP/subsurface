@@ -14,9 +14,15 @@ import android.hardware.usb.UsbManager;
 import android.util.Log;
 import java.io.File;
 import android.net.Uri;
+import android.content.IntentSender;
 import androidx.core.content.FileProvider;
 import androidx.core.app.ShareCompat;
+import com.google.android.gms.auth.api.identity.AuthorizationClient;
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public class SubsurfaceMobileActivity extends QtActivity
 {
@@ -69,10 +75,15 @@ public class SubsurfaceMobileActivity extends QtActivity
 	public static boolean isIntentPending;
 	public static boolean isInitialized;
 	private static String pendingOAuthUrl;
+	private static final int GOOGLE_DRIVE_AUTHORIZATION_REQUEST = 18391;
+	private static final String GOOGLE_DRIVE_APPDATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+	private static AuthorizationClient googleAuthorizationClient;
 	private static final String TAG = "subsurfacedivelog.mobile";
 	public static native void setUsbDevice(UsbDevice usbDevice);
 	public static native void restartDownload(UsbDevice usbDevice);
 	public static native void oauthCallback(String url);
+	public static native void googleDriveAccessToken(String token);
+	public static native void googleDriveAuthorizationError(String message);
 	private static Context appContext;
 	private static SubsurfaceMobileActivity currentActivity;
 
@@ -138,6 +149,59 @@ public class SubsurfaceMobileActivity extends QtActivity
 			processIntent();
 		else
 			isIntentPending = true;
+	}
+
+	public static void authorizeGoogleDrive()
+	{
+		SubsurfaceMobileActivity activity = currentActivity;
+		if (activity == null || activity.isFinishing()) {
+			googleDriveAuthorizationError("Google Drive authorization requires an active Neo window.");
+			return;
+		}
+		activity.runOnUiThread(() -> activity.startGoogleDriveAuthorization());
+	}
+
+	private void startGoogleDriveAuthorization()
+	{
+		googleAuthorizationClient = Identity.getAuthorizationClient(this);
+		AuthorizationRequest request = AuthorizationRequest.builder()
+			.setRequestedScopes(Collections.singletonList(GOOGLE_DRIVE_APPDATA_SCOPE))
+			.build();
+		googleAuthorizationClient.authorize(request)
+			.addOnSuccessListener(this::handleGoogleDriveAuthorizationResult)
+			.addOnFailureListener(error -> googleDriveAuthorizationError(error.getLocalizedMessage()));
+	}
+
+	private void handleGoogleDriveAuthorizationResult(AuthorizationResult result)
+	{
+		if (result.hasResolution()) {
+			PendingIntent pendingIntent = result.getPendingIntent();
+			try {
+				startIntentSenderForResult(pendingIntent.getIntentSender(), GOOGLE_DRIVE_AUTHORIZATION_REQUEST,
+					null, 0, 0, 0, null);
+			} catch (IntentSender.SendIntentException error) {
+				googleDriveAuthorizationError(error.getLocalizedMessage());
+			}
+			return;
+		}
+		String accessToken = result.getAccessToken();
+		if (accessToken == null || accessToken.isEmpty())
+			googleDriveAuthorizationError("Google did not return a Drive access token.");
+		else
+			googleDriveAccessToken(accessToken);
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data)
+	{
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode != GOOGLE_DRIVE_AUTHORIZATION_REQUEST)
+			return;
+		try {
+			handleGoogleDriveAuthorizationResult(googleAuthorizationClient.getAuthorizationResultFromIntent(data));
+		} catch (Exception error) {
+			googleDriveAuthorizationError(error.getLocalizedMessage());
+		}
 	}
 
 	public void checkPendingIntents()

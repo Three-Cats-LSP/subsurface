@@ -18,10 +18,15 @@
 #include <QTcpSocket>
 #include <QUrlQuery>
 
+#if defined(Q_OS_ANDROID)
+#include <QJniObject>
+#endif
+
 namespace {
 
 constexpr auto GOOGLE_DESKTOP_CLIENT_ID = "1014878739336-vpgn495hlm5lnu0kf5ipp8sm4o91bdnt.apps.googleusercontent.com";
 constexpr auto GOOGLE_WEB_CLIENT_ID = "1014878739336-pdnmro56alegmna158grah0tf4mrqjnt.apps.googleusercontent.com";
+constexpr auto GOOGLE_ANDROID_CLIENT_ID = "1014878739336-5gm47s7uv32fiqpsdt97rdh17h5lsfn6.apps.googleusercontent.com";
 constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
 constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
 constexpr auto DROPBOX_MOBILE_REDIRECT = "https://threecats-lsp.com/subsurface-neo/oauth/dropbox/callback";
@@ -253,7 +258,9 @@ QString CloudSyncManager::configuredClientId(const CloudSyncProviderDescriptor &
 
 	switch (provider.type) {
 	case CloudSyncProviderType::GoogleDrive:
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+#if defined(Q_OS_ANDROID)
+		return QString::fromLatin1(GOOGLE_ANDROID_CLIENT_ID);
+#elif defined(Q_OS_IOS)
 		return QString();
 #elif defined(__EMSCRIPTEN__)
 		return QString::fromLatin1(GOOGLE_WEB_CLIENT_ID);
@@ -266,6 +273,67 @@ QString CloudSyncManager::configuredClientId(const CloudSyncProviderDescriptor &
 		return QString();
 	}
 	return QString();
+}
+
+void CloudSyncManager::acceptNativeAccessToken(const QString &providerId, const QString &accessToken)
+{
+	OAuth2TokenSet nativeTokens;
+	nativeTokens.accessToken = accessToken;
+	nativeTokens.tokenType = QStringLiteral("Bearer");
+	nativeTokens.scope = QStringLiteral("https://www.googleapis.com/auth/drive.appdata");
+	// Google Identity Services returns an access token but no expiry. Google
+	// tokens normally last an hour, so renew before that rather than treating one
+	// as a long-lived credential.
+	nativeTokens.expiresAt = QDateTime::currentDateTimeUtc().addSecs(50 * 60);
+
+	if (pendingTokenContinuation) {
+		const auto continuation = std::move(pendingTokenContinuation);
+		pendingTokenContinuation = {};
+		refreshProviderId.clear();
+		tokens.insert(providerId, nativeTokens);
+		CloudCredentialStore::save(providerId, serializeTokens(nativeTokens));
+		emit providersChanged();
+		continuation(nativeTokens.accessToken);
+		return;
+	}
+
+	if (activeProviderId != providerId)
+		return;
+	tokens.insert(providerId, nativeTokens);
+	CloudCredentialStore::save(providerId, serializeTokens(nativeTokens));
+	clearAuthorization();
+	emit providersChanged();
+	emit providerConnected(providerId);
+}
+
+void CloudSyncManager::requestAndroidGoogleAccessToken()
+{
+#if defined(Q_OS_ANDROID)
+	QJniObject::callStaticMethod<void>("org/subsurfacedivelog/mobile/SubsurfaceMobileActivity",
+		"authorizeGoogleDrive", "()V");
+#else
+	setError(tr("Google Drive authorization is not available on this platform."));
+	clearAuthorization();
+#endif
+}
+
+void CloudSyncManager::handleAndroidGoogleAccessToken(const QString &accessToken)
+{
+	if (accessToken.isEmpty()) {
+		handleAndroidGoogleAuthorizationError(tr("Google did not return a Drive access token."));
+		return;
+	}
+	acceptNativeAccessToken(QStringLiteral("google-drive"), accessToken);
+}
+
+void CloudSyncManager::handleAndroidGoogleAuthorizationError(const QString &message)
+{
+	pendingTokenContinuation = {};
+	refreshProviderId.clear();
+	setError(message.isEmpty() ? tr("Google Drive authorization failed.") : message);
+	clearAuthorization();
+	if (syncInProgress())
+		clearSyncOperation();
 }
 
 void CloudSyncManager::setError(const QString &message)
@@ -329,6 +397,13 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 	setError(QString());
 	activeProviderId = providerId;
 	activeClientId = clientId;
+#if defined(Q_OS_ANDROID)
+	if (provider->type == CloudSyncProviderType::GoogleDrive) {
+		emit authorizationInProgressChanged();
+		requestAndroidGoogleAccessToken();
+		return;
+	}
+#endif
 	activePkce = std::make_unique<OAuth2PkceSession>();
 	activeRedirectUri = startLoopbackListener(*provider);
 	if (!activeRedirectUri.isValid() || activeRedirectUri.isEmpty()) {
@@ -475,6 +550,14 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 		return;
 	}
 	if (!current.canRefresh()) {
+#if defined(Q_OS_ANDROID)
+		if (provider.type == CloudSyncProviderType::GoogleDrive) {
+			refreshProviderId = providerId;
+			pendingTokenContinuation = continuation;
+			requestAndroidGoogleAccessToken();
+			return;
+		}
+#endif
 		setError(tr("%1 authorization expired. Please reconnect it.").arg(provider.displayName));
 		return;
 	}

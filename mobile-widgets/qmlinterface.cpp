@@ -155,4 +155,28 @@ Java_org_subsurfacedivelog_mobile_SubsurfaceMobileActivity_oauthCallback(JNIEnv 
 			neoCloudSync->handleAuthorizationRedirect(QUrl(callbackUrl));
 	}, Qt::QueuedConnection);
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_subsurfacedivelog_mobile_SubsurfaceMobileActivity_googleDriveAccessToken(JNIEnv *, jobject, jstring token)
+{
+	if (!neoCloudSync || !token)
+		return;
+	const QString accessToken = QJniObject::fromLocalRef(token).toString();
+	QMetaObject::invokeMethod(neoCloudSync, [accessToken]() {
+		if (neoCloudSync)
+			neoCloudSync->handleAndroidGoogleAccessToken(accessToken);
+	}, Qt::QueuedConnection);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_subsurfacedivelog_mobile_SubsurfaceMobileActivity_googleDriveAuthorizationError(JNIEnv *, jobject, jstring message)
+{
+	if (!neoCloudSync)
+		return;
+	const QString errorMessage = message ? QJniObject::fromLocalRef(message).toString() : QString();
+	QMetaObject::invokeMethod(neoCloudSync, [errorMessage]() {
+		if (neoCloudSync)
+			neoCloudSync->handleAndroidGoogleAuthorizationError(errorMessage);
+	}, Qt::QueuedConnection);
+}
 #endif

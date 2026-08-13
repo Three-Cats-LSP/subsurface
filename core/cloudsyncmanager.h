@@ -49,6 +49,8 @@ public:
 	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
 	Q_INVOKABLE void setPrimaryProvider(const QString &providerId);
 	Q_INVOKABLE void setBackupProvider(const QString &providerId);
+	void handleAndroidGoogleAccessToken(const QString &accessToken);
+	void handleAndroidGoogleAuthorizationError(const QString &message);
 
 signals:
 	void providersChanged();
@@ -80,6 +82,8 @@ private:
 	const CloudSyncProviderDescriptor *descriptorForId(const QString &providerId) const;
 	QString configuredClientId(const CloudSyncProviderDescriptor &provider) const;
 	void setError(const QString &message);
+	void acceptNativeAccessToken(const QString &providerId, const QString &accessToken);
+	void requestAndroidGoogleAccessToken();
 	void clearAuthorization();
 	void exchangeCode(const QString &code);
 	QUrl startLoopbackListener(const CloudSyncProviderDescriptor &provider);
