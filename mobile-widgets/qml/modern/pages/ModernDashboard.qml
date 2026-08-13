@@ -210,7 +210,8 @@ Kirigami.ScrollablePage {
 				onClicked: page.openImport()
 			}
 			Button {
-				text: qsTr("Cloud & Sync")
+				// '&' marks a Qt button mnemonic. Double it for a literal ampersand.
+				text: qsTr("Cloud && Sync")
 				Layout.fillWidth: true
 				onClicked: page.openCloudSync()
 			}

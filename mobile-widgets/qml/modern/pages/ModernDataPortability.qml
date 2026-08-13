@@ -123,7 +123,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Cloud backup"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Create an explicit provider backup through Cloud & Sync. Neo never silently replaces a diverged local log."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { Layout.fillWidth: true; text: qsTr("Open Cloud & Sync"); onClicked: page.openCloudBackup() }
+			Button { Layout.fillWidth: true; text: qsTr("Open Cloud && Sync"); onClicked: page.openCloudBackup() }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true

@@ -20,6 +20,11 @@ Kirigami.ApplicationWindow {
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
 	background: Rectangle { color: "#0B1220" }
+	// Keep Qt Quick Controls in step with the Neo shell. Several mature pages
+	// use these controls for forms and actions.
+	Material.theme: Material.Dark
+	Material.primary: "#111B2E"
+	Material.accent: "#44C7F4"
 
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
@@ -69,6 +74,14 @@ Kirigami.ApplicationWindow {
 	property int colWidth: undefined
 	property bool neoLegacyCloudSetupRequested: false
 
+	function isBackgroundProgressMessage(message) {
+		return message === "Open local dive data file" ||
+			message === "populate data model" ||
+			message === "finish populating data store" ||
+			message === "Create full text index" ||
+			/^Processing \d+ dives$/.test(message)
+	}
+
 	// signal that the profile (and possibly other code) listens to so they
 	// can redraw if settings are changed
 	signal settingsChanged()
@@ -89,6 +102,10 @@ Kirigami.ApplicationWindow {
 		// notifications to show the notification text, but during initialization
 		// we instead dump the information into the textBlock below
 		if (initialized) {
+			// Background loading remains in the diagnostic log. It must not cover
+			// the home screen with a stack of implementation progress messages.
+			if (isBackgroundProgressMessage(notificationText))
+				return
 			if (notificationText !== "") {
 				var actionEnd = notificationText.indexOf("]")
 				if (notificationText.startsWith("[") && actionEnd !== -1) {
