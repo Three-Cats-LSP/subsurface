@@ -1,4 +1,4 @@
-name: Windows MSVC
+name: Windows Neo
 
 on:
   push:
@@ -180,7 +180,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$prefixPath" `
             -DCMAKE_TOOLCHAIN_FILE="$vcpkgRoot/scripts/buildsystems/vcpkg.cmake" `
             -DSUBSURFACE_VCPKG_ROOT="$vcpkgRoot" `
-            -DSUBSURFACE_TARGET_EXECUTABLE=DesktopExecutable `
+            -DSUBSURFACE_TARGET_EXECUTABLE=MobileExecutable `
             -DBUILD_WITH_QT6=ON `
             -DLIBDIVECOMPUTER_INCLUDE_DIR="$installPrefix\include" `
             -DLIBDIVECOMPUTER_LIBRARIES="$installPrefix\lib\libdivecomputer.lib" `
@@ -198,42 +198,28 @@ jobs:
           ninja
           Pop-Location
 
-      - name: Install NSIS
-        uses: negrutiu/nsis-install@v3
-        with:
-          distro: 'official'
-
-      - name: Copy documentation to build directory
-        shell: pwsh
-        run: |
-          $srcDoc = "${{ github.workspace }}\Documentation\output"
-          $destDoc = "${{ github.workspace }}\build\Documentation"
-          New-Item -ItemType Directory -Force -Path $destDoc
-          Copy-Item "$srcDoc\user-manual*.html" -Destination $destDoc
-          Copy-Item -Recurse "$srcDoc\images" -Destination $destDoc -Force
-
-      - name: Create Windows installer
+      - name: Stage portable Neo package
         shell: pwsh
         run: |
           Push-Location "${{ github.workspace }}\build"
           ninja install
-          ninja installer
           Pop-Location
 
-      - name: Rename installer
-        id: installer-name
+      - name: Create portable Neo archive
+        id: archive-name
         shell: pwsh
         run: |
           $buildDir = "${{ github.workspace }}\build"
-          $oldInstaller = Get-ChildItem "$buildDir\subsurface-*.exe" | Select-Object -First 1
-          if (-not $oldInstaller) { throw "No installer found in $buildDir" }
-          $newName = "Subsurface-Modern-Windows-${{ steps.version_number.outputs.version }}.exe"
-          Move-Item -Path $oldInstaller.FullName -Destination (Join-Path $buildDir $newName) -Force
-          "installer=$newName" >> $env:GITHUB_OUTPUT
+          $stagingDir = Join-Path $buildDir "staging"
+          $neoExecutable = Join-Path $stagingDir "subsurface-mobile.exe"
+          if (-not (Test-Path $neoExecutable)) { throw "Neo executable was not staged: $neoExecutable" }
+          $archiveName = "Subsurface-Neo-Windows-${{ steps.version_number.outputs.version }}.zip"
+          Compress-Archive -Path (Join-Path $stagingDir '*') -DestinationPath (Join-Path $buildDir $archiveName) -Force
+          "archive=$archiveName" >> $env:GITHUB_OUTPUT
 
-      - name: publish development installer
+      - name: Publish Neo Windows package
         uses: actions/upload-artifact@v7
         with:
-          name: Subsurface-Modern-Windows-${{ steps.version_number.outputs.version }}
-          path: ${{ github.workspace }}/build/${{ steps.installer-name.outputs.installer }}
+          name: Subsurface-Neo-Windows-${{ steps.version_number.outputs.version }}
+          path: ${{ github.workspace }}/build/${{ steps.archive-name.outputs.archive }}
           compression-level: 0
