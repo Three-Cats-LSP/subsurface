@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QSettings>
 #include <QTemporaryFile>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -170,6 +171,8 @@ CloudSyncManager::~CloudSyncManager() = default;
 
 QVariantList CloudSyncManager::providers() const
 {
+	const QString primary = primaryProviderId();
+	const QString backup = backupProviderId();
 	QVariantList result;
 	for (const auto &provider : cloudSyncProviderDescriptors()) {
 		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
@@ -183,9 +186,52 @@ QVariantList CloudSyncManager::providers() const
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
 		row.insert(QStringLiteral("state"), connectionState(!clientId.isEmpty(), tokenSet.hasAccessToken() || tokenSet.canRefresh()));
 		row.insert(QStringLiteral("scope"), provider.scopes.join(QLatin1Char(' ')));
+		row.insert(QStringLiteral("primary"), provider.id == primary);
+		row.insert(QStringLiteral("backup"), provider.id == backup);
 		result.append(row);
 	}
 	return result;
+}
+
+QString CloudSyncManager::primaryProviderId() const
+{
+	QSettings settings;
+	return settings.value(QStringLiteral("subsurface-neo/cloud/primary-provider")).toString();
+}
+
+QString CloudSyncManager::backupProviderId() const
+{
+	QSettings settings;
+	return settings.value(QStringLiteral("subsurface-neo/cloud/backup-provider")).toString();
+}
+
+void CloudSyncManager::setPrimaryProvider(const QString &providerId)
+{
+	if (!providerId.isEmpty() && !descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+	QSettings settings;
+	settings.setValue(QStringLiteral("subsurface-neo/cloud/primary-provider"), providerId);
+	if (!providerId.isEmpty() && providerId == backupProviderId())
+		settings.remove(QStringLiteral("subsurface-neo/cloud/backup-provider"));
+	emit providerAssignmentsChanged();
+	emit providersChanged();
+}
+
+void CloudSyncManager::setBackupProvider(const QString &providerId)
+{
+	if (!providerId.isEmpty() && !descriptorForId(providerId)) {
+		setError(tr("Unknown cloud provider."));
+		return;
+	}
+	QSettings settings;
+	if (providerId.isEmpty() || providerId == primaryProviderId())
+		settings.remove(QStringLiteral("subsurface-neo/cloud/backup-provider"));
+	else
+		settings.setValue(QStringLiteral("subsurface-neo/cloud/backup-provider"), providerId);
+	emit providerAssignmentsChanged();
+	emit providersChanged();
 }
 
 const CloudSyncProviderDescriptor *CloudSyncManager::descriptorForId(const QString &providerId) const
@@ -393,6 +439,14 @@ void CloudSyncManager::finishLoopbackSocket(QTcpSocket *socket, bool success, co
 void CloudSyncManager::disconnectProvider(const QString &providerId)
 {
 	const bool hadToken = tokens.remove(providerId) > 0;
+	const bool wasAssigned = providerId == primaryProviderId() || providerId == backupProviderId();
+	if (wasAssigned) {
+		QSettings settings;
+		if (providerId == primaryProviderId())
+			settings.remove(QStringLiteral("subsurface-neo/cloud/primary-provider"));
+		if (providerId == backupProviderId())
+			settings.remove(QStringLiteral("subsurface-neo/cloud/backup-provider"));
+	}
 	CloudCredentialStore::remove(providerId);
 	CloudCredentialStore::remove(syncStateCredentialKey(providerId));
 	if (providerId == syncProviderId)
@@ -400,6 +454,11 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 	if (hadToken) {
 		emit providersChanged();
 		emit providerDisconnected(providerId);
+	}
+	if (wasAssigned) {
+		if (!hadToken)
+			emit providersChanged();
+		emit providerAssignmentsChanged();
 	}
 }
 

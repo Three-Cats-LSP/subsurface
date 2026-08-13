@@ -26,6 +26,8 @@ class CloudSyncManager : public QObject {
 	Q_PROPERTY(bool authorizationInProgress READ authorizationInProgress NOTIFY authorizationInProgressChanged)
 	Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+	Q_PROPERTY(QString primaryProviderId READ primaryProviderId NOTIFY providerAssignmentsChanged)
+	Q_PROPERTY(QString backupProviderId READ backupProviderId NOTIFY providerAssignmentsChanged)
 public:
 	explicit CloudSyncManager(QNetworkAccessManager *networkManager, QObject *parent = nullptr);
 	~CloudSyncManager() override;
@@ -34,6 +36,8 @@ public:
 	bool authorizationInProgress() const { return !activeProviderId.isEmpty(); }
 	bool syncInProgress() const { return !syncProviderId.isEmpty(); }
 	QString lastError() const { return errorText; }
+	QString primaryProviderId() const;
+	QString backupProviderId() const;
 
 	Q_INVOKABLE void beginAuthorization(const QString &providerId);
 	Q_INVOKABLE void handleAuthorizationRedirect(const QUrl &url);
@@ -43,9 +47,12 @@ public:
 	Q_INVOKABLE void backupDiveLog(const QString &providerId);
 	Q_INVOKABLE void syncDiveLog(const QString &providerId);
 	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
+	Q_INVOKABLE void setPrimaryProvider(const QString &providerId);
+	Q_INVOKABLE void setBackupProvider(const QString &providerId);
 
 signals:
 	void providersChanged();
+	void providerAssignmentsChanged();
 	void authorizationInProgressChanged();
 	void syncInProgressChanged();
 	void lastErrorChanged();

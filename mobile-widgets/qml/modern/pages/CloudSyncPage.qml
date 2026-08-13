@@ -100,6 +100,12 @@ Kirigami.ScrollablePage {
 								font.pixelSize: 14
 							}
 							Text {
+								visible: modelData.primary || modelData.backup
+								text: modelData.primary ? qsTr("Primary sync provider") : qsTr("Backup provider")
+								color: tokens.accent
+								font.pixelSize: 12
+							}
+							Text {
 								visible: page.lastSyncProvider === modelData.id
 								text: page.resultText(page.lastSyncResult)
 								color: tokens.success
@@ -163,6 +169,22 @@ Kirigami.ScrollablePage {
 
 					RowLayout {
 						visible: modelData.connected
+						Layout.fillWidth: true
+						Button {
+							text: modelData.primary ? qsTr("Primary") : qsTr("Set primary")
+							enabled: !CloudSync.syncInProgress
+							onClicked: CloudSync.setPrimaryProvider(modelData.primary ? "" : modelData.id)
+						}
+						Button {
+							text: modelData.backup ? qsTr("Backup") : qsTr("Set backup")
+							enabled: !CloudSync.syncInProgress && !modelData.primary
+							onClicked: CloudSync.setBackupProvider(modelData.backup ? "" : modelData.id)
+						}
+						Item { Layout.fillWidth: true }
+					}
+
+					RowLayout {
+						visible: modelData.connected
 						Button {
 							text: qsTr("Sync now")
 							enabled: !CloudSync.syncInProgress
@@ -211,7 +233,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Text {
-			text: qsTr("Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and asks which copy to keep. Every downloaded log is checksum-verified before it replaces the local copy. Backup now is an explicit one-way snapshot operation.")
+			text: qsTr("Choose at most one primary sync provider and one optional backup provider. Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and asks which copy to keep. Every downloaded log is checksum-verified before it replaces the local copy. Backup now is an explicit one-way snapshot operation.")
 			color: tokens.textSecondary
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
