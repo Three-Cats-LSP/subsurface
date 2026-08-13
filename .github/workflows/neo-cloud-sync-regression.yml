@@ -1,0 +1,26 @@
+name: Neo cloud sync regression
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-cloud-sync-regression.yml'
+      - 'core/cloudcredentialstore.*'
+      - 'core/cloudsync*'
+      - 'core/oauth2*'
+      - 'android-mobile/src/org/subsurfacedivelog/mobile/CloudCredentialStore.java'
+      - 'mobile-widgets/qml/modern/pages/CloudSyncPage.qml'
+      - 'tests/testcloudsyncmanifest.*'
+      - 'tests/CMakeLists.txt'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  native-cloud-sync-tests:
+    name: Native Qt 6 cloud sync tests
+    uses: ./.github/workflows/linux-debian-generic-qt6.yml
+    with:
+      container-image: debian:trixie
+      runner: ubuntu-latest
+      arch: x86-64
