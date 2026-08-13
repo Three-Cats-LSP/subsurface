@@ -43,6 +43,21 @@ Canvas {
 			ctx.beginPath(); ctx.arc(14, 20, 4, 0, Math.PI * 2); ctx.stroke()
 			ctx.beginPath(); ctx.moveTo(12, 17); ctx.lineTo(12, 7); ctx.arc(14, 7, 2, Math.PI, 0); ctx.lineTo(16, 17); ctx.stroke()
 			line(ctx, [14, 10, 14, 20])
+		} else if (name === "gas") {
+			ctx.beginPath(); ctx.moveTo(10, 8); ctx.lineTo(10, 23); ctx.quadraticCurveTo(10, 26, 13, 26); ctx.lineTo(17, 26); ctx.quadraticCurveTo(20, 26, 20, 23); ctx.lineTo(20, 10); ctx.quadraticCurveTo(20, 8, 17, 7); ctx.lineTo(13, 7); ctx.quadraticCurveTo(10, 8, 10, 10); ctx.stroke()
+			line(ctx, [13, 7, 13, 4, 17, 4, 17, 7]); line(ctx, [12, 4, 18, 4]); line(ctx, [15, 4, 15, 2])
+			ctx.beginPath(); ctx.arc(15, 2, 1.3, 0, Math.PI * 2); ctx.stroke()
+			ctx.beginPath(); ctx.roundedRect(6, 3, 7, 4, 2, 2); ctx.stroke()
+			line(ctx, [17, 3, 20, 3, 20, 6, 17, 6]); line(ctx, [18, 11, 19, 12, 19, 14]); line(ctx, [19, 16, 19, 20])
+		} else if (name === "gear") {
+			ctx.beginPath(); ctx.ellipse(10, 2, 8, 3); ctx.stroke()
+			ctx.beginPath(); ctx.moveTo(10, 5); ctx.quadraticCurveTo(5, 7, 5, 14); ctx.lineTo(5, 18); ctx.lineTo(23, 18); ctx.lineTo(23, 14); ctx.quadraticCurveTo(23, 7, 18, 5); ctx.stroke()
+			ctx.beginPath(); ctx.ellipse(2, 10, 5, 7); ctx.stroke(); ctx.beginPath(); ctx.ellipse(21, 10, 5, 7); ctx.stroke()
+			ctx.beginPath(); ctx.arc(14, 12, 5, 0, Math.PI * 2); ctx.stroke()
+			line(ctx, [10.5, 8.5, 17.5, 15.5]); line(ctx, [17.5, 8.5, 10.5, 15.5])
+			ctx.strokeRect(5, 18, 18, 3); line(ctx, [8, 21, 6, 25, 22, 25, 20, 21])
+			ctx.beginPath(); ctx.arc(10, 23, 1, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(18, 23, 1, 0, Math.PI * 2); ctx.stroke()
+			ctx.beginPath(); ctx.moveTo(5, 24); ctx.quadraticCurveTo(14, 30, 23, 24); ctx.stroke()
 		} else if (name === "tank") {
 			ctx.strokeRect(10, 7, 8, 16)
 			line(ctx, [12, 7, 12, 4, 16, 4, 16, 7])

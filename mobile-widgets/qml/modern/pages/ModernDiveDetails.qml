@@ -562,7 +562,7 @@ Kirigami.Page {
 							label: qsTr("Gas")
 							value: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0 ? delegateRoot.modelData.firstGas : qsTr("Not recorded")
 							detail: delegateRoot.pressureSummary()
-							iconName: "tank"
+							iconName: "gas"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
@@ -570,7 +570,7 @@ Kirigami.Page {
 							label: qsTr("Gear")
 							value: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0 ? delegateRoot.modelData.cylinder : qsTr("Not recorded")
 							detail: delegateRoot.modelData.suit || ""
-							iconName: "tank"
+							iconName: "gear"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
