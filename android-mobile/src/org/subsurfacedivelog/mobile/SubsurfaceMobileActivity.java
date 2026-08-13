@@ -21,6 +21,7 @@ import com.google.android.gms.auth.api.identity.AuthorizationClient;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
 import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.common.api.Scope;
 import java.util.ArrayList;
 import java.util.Collections;
 
@@ -165,7 +166,7 @@ public class SubsurfaceMobileActivity extends QtActivity
 	{
 		googleAuthorizationClient = Identity.getAuthorizationClient(this);
 		AuthorizationRequest request = AuthorizationRequest.builder()
-			.setRequestedScopes(Collections.singletonList(GOOGLE_DRIVE_APPDATA_SCOPE))
+			.setRequestedScopes(Collections.singletonList(new Scope(GOOGLE_DRIVE_APPDATA_SCOPE)))
 			.build();
 		googleAuthorizationClient.authorize(request)
 			.addOnSuccessListener(this::handleGoogleDriveAuthorizationResult)
