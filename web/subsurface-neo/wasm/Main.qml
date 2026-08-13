@@ -92,7 +92,12 @@ ApplicationWindow {
 					height: 45
 					radius: 10
 					color: index === 0 ? "#0c3043" : "transparent"
-					Text { anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }; text: modelData; color: index === 0 ? window.accent : window.secondaryText; font.pixelSize: 13 }
+					Text {
+						anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+						text: modelData
+						color: index === 0 ? window.accent : window.secondaryText
+						font.pixelSize: 13
+					}
 				}
 			}
 			Item { Layout.fillHeight: true }
