@@ -282,7 +282,7 @@ Kirigami.Page {
 					id: diveCard
 					visible: !delegateRoot.modelData.isTrip && delegateRoot.collectionMatch
 					width: parent.width
-					padding: tokens.space12
+					contentPadding: tokens.space12
 					border.width: delegateRoot.modelData.current ? 1 : 0
 					border.color: tokens.accent
 

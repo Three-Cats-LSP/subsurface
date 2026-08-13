@@ -223,7 +223,7 @@ Kirigami.Page {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						padding: 0
+						contentPadding: 0
 
 						ColumnLayout {
 							Layout.fillWidth: true
