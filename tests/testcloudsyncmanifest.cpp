@@ -65,3 +65,5 @@ void TestCloudSyncManifest::testStateRelation()
 	QFETCH(int, expected);
 	QCOMPARE(static_cast<int>(compareCloudSyncState(local, cloud, previous)), expected);
 }
+
+QTEST_GUILESS_MAIN(TestCloudSyncManifest)
