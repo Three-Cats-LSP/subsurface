@@ -29,7 +29,7 @@ constexpr auto GOOGLE_WEB_CLIENT_ID = "1014878739336-pdnmro56alegmna158grah0tf4m
 constexpr auto GOOGLE_ANDROID_CLIENT_ID = "1014878739336-5gm47s7uv32fiqpsdt97rdh17h5lsfn6.apps.googleusercontent.com";
 constexpr auto DROPBOX_CLIENT_ID = "ibporeggf7zjv34";
 constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
-constexpr auto DROPBOX_MOBILE_REDIRECT = "https://threecats-lsp.com/subsurface-neo/oauth/dropbox/callback";
+constexpr auto DROPBOX_MOBILE_REDIRECT = "subsurface-neo://oauth/callback";
 constexpr auto NEO_DIVELOG_FILENAME = "subsurface-neo.xml";
 constexpr auto NEO_MANIFEST_FILENAME = "subsurface-neo-sync.json";
 
