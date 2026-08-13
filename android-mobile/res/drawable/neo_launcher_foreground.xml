@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A deliberately new Neo mark: a bright dive path forming an N, with a
+     calm surface line and bubbles. The geometry stays inside Android's
+     adaptive-icon safe area so every launcher mask remains legible. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#44C7F4"
+        android:pathData="M31,78L31,30L40,30L68,64L68,30L77,30L77,78L68,78L40,44L40,78Z" />
+    <path
+        android:fillColor="#169DD0"
+        android:pathData="M24,82C34,76 43,76 54,82C65,88 75,88 84,82L84,88C74,94 64,94 54,88C43,82 34,82 24,88Z" />
+    <path
+        android:fillColor="#A9F0FF"
+        android:pathData="M75,22m-3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0M83,31m-2,0a2,2 0,1 0,4 0a2,2 0,1 0,-4 0" />
+</vector>
