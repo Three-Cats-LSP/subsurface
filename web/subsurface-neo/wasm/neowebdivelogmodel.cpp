@@ -106,8 +106,9 @@ void NeoWebDiveLogModel::chooseLocalFile()
 				if (file.size > 64 * 1024 * 1024)
 					throw new Error(file.name + ' is larger than the 64 MB browser import limit.');
 				const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_') || 'divelog.ssrf';
-				const path = '/tmp/' + Date.now() + '-' + safeName;
-				FS.mkdirTree('/tmp');
+				const directory = '/tmp/neo-import-' + Date.now();
+				const path = directory + '/' + safeName;
+				FS.mkdirTree(directory);
 				FS.writeFile(path, new Uint8Array(await file.arrayBuffer()));
 				const size = lengthBytesUTF8(path) + 1;
 				const pointer = _malloc(size);
