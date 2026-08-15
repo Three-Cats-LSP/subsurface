@@ -100,14 +100,29 @@ Kirigami.Page {
 
 			Button {
 				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
-				onClicked: {
-					page.filterVisible = !page.filterVisible
-					if (!page.filterVisible)
-						page.clearFilters()
-				}
+				onClicked: page.filterVisible = !page.filterVisible
 			}
-			Button { text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+			Button { visible: page.wideLayout; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
 			Button { visible: page.wideLayout; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+			Button { visible: page.wideLayout; text: qsTr("Import"); onClicked: page.downloadRequested() }
+			Button {
+				text: page.wideLayout ? qsTr("+ New dive") : "+"
+				accessibleName: qsTr("Add a new dive")
+				onClicked: page.addDiveRequested()
+			}
+			ToolButton {
+				visible: !page.wideLayout
+				text: "⋯"
+				accessibleName: qsTr("More dive-list actions")
+				onClicked: listActions.open()
+			}
+			Menu {
+				id: listActions
+				MenuItem { text: qsTr("Saved filters"); onTriggered: savedFiltersDialog.open() }
+				MenuItem { text: page.activeCollection.length > 0 ? qsTr("Current collection") : qsTr("Collections"); onTriggered: page.openCollections() }
+				MenuSeparator {}
+				MenuItem { text: qsTr("Import dives"); onTriggered: page.downloadRequested() }
+			}
 		}
 
 		Dialog {
@@ -357,10 +372,34 @@ Kirigami.Page {
 								columns: 2
 								columnSpacing: tokens.space8
 								rowSpacing: tokens.space4
-								Text { visible: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0; text: delegateRoot.modelData.firstGas || ""; color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-								Text { visible: miniProfile.diveMode.length > 0; text: miniProfile.diveMode; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-								Text { visible: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0; text: delegateRoot.modelData.cylinder || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-								Text { visible: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0; text: delegateRoot.modelData.buddy || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+								RowLayout {
+									visible: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0
+									Layout.fillWidth: true
+									spacing: tokens.space4
+									Components.NeoDiveIcon { name: "gas"; iconColor: tokens.accent; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.firstGas || ""; color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight }
+								}
+								RowLayout {
+									visible: miniProfile.diveMode.length > 0
+									Layout.fillWidth: true
+									spacing: tokens.space4
+									Components.NeoDiveIcon { name: "regulator"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+									Text { Layout.fillWidth: true; text: miniProfile.diveMode; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								}
+								RowLayout {
+									visible: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0
+									Layout.fillWidth: true
+									spacing: tokens.space4
+									Components.NeoDiveIcon { name: "gear"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.cylinder || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								}
+								RowLayout {
+									visible: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0
+									Layout.fillWidth: true
+									spacing: tokens.space4
+									Components.NeoDiveIcon { name: "boat"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.tags || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								}
 							}
 						}
 
@@ -410,20 +449,5 @@ Kirigami.Page {
 			verticalAlignment: Text.AlignVCenter
 		}
 
-		RowLayout {
-			Layout.fillWidth: true
-			spacing: tokens.space8
-
-			Button {
-				Layout.fillWidth: true
-				text: qsTr("Import")
-				onClicked: page.downloadRequested()
-			}
-			Button {
-				Layout.fillWidth: true
-				text: qsTr("Add dive")
-				onClicked: page.addDiveRequested()
-			}
-		}
 	}
 }
