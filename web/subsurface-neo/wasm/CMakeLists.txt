@@ -25,6 +25,7 @@ set(NEO_PROFILE_CORE_SOURCES
 	${SUBSURFACE_ROOT}/core/deco.cpp
 	${SUBSURFACE_ROOT}/core/deco.h
 	${SUBSURFACE_ROOT}/core/gas.cpp
+	${SUBSURFACE_ROOT}/core/gas-model.cpp
 	${SUBSURFACE_ROOT}/core/gaspressures.cpp
 	${SUBSURFACE_ROOT}/core/dive.cpp
 	${SUBSURFACE_ROOT}/core/divecomputer.cpp
