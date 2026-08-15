@@ -19,8 +19,6 @@
 #include "gaspressures.h"
 #include "deco.h"
 #include "errorhelper.h"
-#include "libdivecomputer/parser.h"
-#include "libdivecomputer/version.h"
 #include "membuffer.h"
 #include "pref.h"
 #include "range.h"
@@ -1236,11 +1234,12 @@ static void debug_print_profiledata(struct plot_info &pi)
  *
  * The old data will be freed.
  */
-struct plot_info create_plot_info_new(const struct dive *dive, const struct divecomputer *dc, const struct deco_state *planner_ds)
+struct plot_info create_plot_info_new(const struct dive_table &dives, const struct dive *dive,
+				     const struct divecomputer *dc, const struct deco_state *planner_ds)
 {
 	struct deco_state plot_deco_state;
 	bool in_planner = planner_ds != NULL;
-	divelog.dives.init_decompression(&plot_deco_state, dive, in_planner);
+	dives.init_decompression(&plot_deco_state, dive, in_planner);
 	plot_info pi;
 	calculate_max_limits_new(dive, dc, pi, in_planner);
 	auto [o2, he, o2max ] = dive->get_maximal_gas();
@@ -1275,6 +1274,11 @@ struct plot_info create_plot_info_new(const struct dive *dive, const struct dive
 	pi.meandepth = dive->dcs[0].meandepth.mm;
 	analyze_plot_info(pi);
 	return pi;
+}
+
+struct plot_info create_plot_info_new(const struct dive *dive, const struct divecomputer *dc, const struct deco_state *planner_ds)
+{
+	return create_plot_info_new(divelog.dives, dive, dc, planner_ds);
 }
 
 static std::vector<std::string> plot_string(const struct dive *d, const struct plot_info &pi, int idx)

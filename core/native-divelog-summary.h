@@ -29,6 +29,16 @@ struct native_sample_summary {
 	bool has_cns = false;
 	bool has_setpoint = false;
 	bool in_deco = false;
+	double current_gf_percent = 0.0;
+	double surface_gf_percent = 0.0;
+	double calculated_ceiling_m = 0.0;
+	int calculated_ndl_seconds = 0;
+	int calculated_tts_seconds = 0;
+	bool has_current_gf = false;
+	bool has_surface_gf = false;
+	bool has_calculated_ceiling = false;
+	bool has_calculated_ndl = false;
+	bool has_calculated_tts = false;
 };
 
 struct native_dive_summary {
@@ -47,6 +57,7 @@ struct native_dive_summary {
 	QString mode = QStringLiteral("OC");
 	QString gear;
 	QVector<native_sample_summary> samples;
+	bool profile_calculated = false;
 };
 
 struct native_divelog_summary {

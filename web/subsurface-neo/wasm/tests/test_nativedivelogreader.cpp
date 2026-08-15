@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "core/native-divelog-summary.h"
+#include "core/native-profile-calculator.h"
 #include "web/subsurface-neo/wasm/neowebdivelogmodel.h"
 
 #include <QBuffer>
 #include <QTemporaryFile>
 #include <QtTest>
+
+#include <cmath>
 
 class TestNativeDiveLogReader : public QObject {
 	Q_OBJECT
@@ -13,6 +16,7 @@ private slots:
 	void readsNativeSummary();
 	void rejectsForeignRoot();
 	void filtersAndSelectsDives();
+	void calculatesProfileValues();
 };
 
 void TestNativeDiveLogReader::readsNativeSummary()
@@ -128,6 +132,43 @@ void TestNativeDiveLogReader::filtersAndSelectsDives()
 	QVERIFY(model.hasSelectedDive());
 	QCOMPARE(model.selectedDive().value(QStringLiteral("number")).toInt(), 11);
 	QCOMPARE(model.profileSamples().size(), 1);
+}
+
+void TestNativeDiveLogReader::calculatesProfileValues()
+{
+	QByteArray xml(R"xml(<divelog program="subsurface" version="3"><dives>
+		<dive number="42" date="2026-08-01" time="09:00:00" duration="36:00 min">
+			<cylinder description="AL80" o2="21.0%" />
+			<divecomputer dctype="OC">
+				<sample time="0:00 min" depth="0.0 m" />
+				<sample time="3:00 min" depth="40.0 m" />
+				<sample time="28:00 min" depth="40.0 m" />
+				<sample time="31:00 min" depth="21.0 m" />
+				<sample time="34:00 min" depth="6.0 m" />
+				<sample time="36:00 min" depth="0.0 m" />
+			</divecomputer>
+		</dive>
+	</dives></divelog>)xml");
+	QBuffer buffer(&xml);
+	QVERIFY(buffer.open(QIODevice::ReadOnly));
+	native_divelog_summary summary = read_native_divelog_summary(buffer, QStringLiteral("profile.ssrf"));
+	QVERIFY2(summary.ok, qPrintable(summary.error));
+
+	QString error;
+	QVERIFY2(calculate_native_profile(summary, 0, &error), qPrintable(error));
+	QVERIFY(summary.dives[0].profile_calculated);
+	QCOMPARE(summary.dives[0].samples.size(), 6);
+	bool foundTts = false;
+	for (const native_sample_summary &sample : summary.dives[0].samples) {
+		QVERIFY(sample.has_current_gf);
+		QVERIFY(sample.has_surface_gf);
+		QVERIFY(sample.has_calculated_ceiling);
+		QVERIFY(std::isfinite(sample.current_gf_percent));
+		QVERIFY(std::isfinite(sample.surface_gf_percent));
+		QVERIFY(sample.calculated_ceiling_m >= 0.0);
+		foundTts = foundTts || sample.has_calculated_tts;
+	}
+	QVERIFY(foundTts);
 }
 
 QTEST_GUILESS_MAIN(TestNativeDiveLogReader)

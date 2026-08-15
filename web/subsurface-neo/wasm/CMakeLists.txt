@@ -15,6 +15,47 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 set(SUBSURFACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../..")
 
+set(NEO_PROFILE_CORE_SOURCES
+	${SUBSURFACE_ROOT}/core/native-profile-calculator.cpp
+	${SUBSURFACE_ROOT}/core/native-profile-calculator.h
+	${SUBSURFACE_ROOT}/core/profile.cpp
+	${SUBSURFACE_ROOT}/core/profile.h
+	${SUBSURFACE_ROOT}/core/profile-ascent.cpp
+	${SUBSURFACE_ROOT}/core/deco.cpp
+	${SUBSURFACE_ROOT}/core/deco.h
+	${SUBSURFACE_ROOT}/core/gas.cpp
+	${SUBSURFACE_ROOT}/core/gaspressures.cpp
+	${SUBSURFACE_ROOT}/core/dive.cpp
+	${SUBSURFACE_ROOT}/core/divecomputer.cpp
+	${SUBSURFACE_ROOT}/core/divelist.cpp
+	${SUBSURFACE_ROOT}/core/equipment.cpp
+	${SUBSURFACE_ROOT}/core/event.cpp
+	${SUBSURFACE_ROOT}/core/eventtype.cpp
+	${SUBSURFACE_ROOT}/core/sample.cpp
+	${SUBSURFACE_ROOT}/core/units.cpp
+	${SUBSURFACE_ROOT}/core/pref.cpp
+	${SUBSURFACE_ROOT}/core/subsurface-string.cpp
+	${SUBSURFACE_ROOT}/core/format.cpp
+	${SUBSURFACE_ROOT}/core/errorhelper.cpp
+	${SUBSURFACE_ROOT}/core/membuffer.cpp
+	${SUBSURFACE_ROOT}/core/tag.cpp
+	${SUBSURFACE_ROOT}/core/picture.cpp
+	${SUBSURFACE_ROOT}/core/trip.cpp
+	${SUBSURFACE_ROOT}/core/divesite.cpp
+	${SUBSURFACE_ROOT}/core/gettextfromc.cpp
+)
+
+add_library(neo-profile-core STATIC ${NEO_PROFILE_CORE_SOURCES})
+target_include_directories(neo-profile-core PUBLIC
+	${SUBSURFACE_ROOT}
+	${SUBSURFACE_ROOT}/libdivecomputer/include
+)
+target_link_libraries(neo-profile-core PUBLIC Qt6::Core)
+if(NOT MSVC)
+	target_compile_options(neo-profile-core PRIVATE -ffunction-sections -fdata-sections)
+	target_link_options(neo-profile-core INTERFACE -Wl,--gc-sections)
+endif()
+
 qt_add_executable(subsurface-neo-web MANUAL_FINALIZATION
 	main.cpp
 	neowebdivelogmodel.cpp
@@ -33,6 +74,7 @@ qt_add_qml_module(subsurface-neo-web
 )
 
 target_link_libraries(subsurface-neo-web PRIVATE
+	neo-profile-core
 	Qt6::Core
 	Qt6::Gui
 	Qt6::Qml
@@ -57,6 +99,6 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
 		${SUBSURFACE_ROOT}/core/native-divelog-summary.h
 	)
 	target_include_directories(neo-web-parser-tests PRIVATE ${SUBSURFACE_ROOT})
-	target_link_libraries(neo-web-parser-tests PRIVATE Qt6::Core Qt6::Test)
+	target_link_libraries(neo-web-parser-tests PRIVATE neo-profile-core Qt6::Core Qt6::Test)
 	add_test(NAME neo-web-parser-tests COMMAND neo-web-parser-tests)
 endif()

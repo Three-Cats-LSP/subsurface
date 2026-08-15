@@ -28,6 +28,7 @@ struct membuffer;
 struct deco_state;
 struct dive;
 struct divecomputer;
+struct dive_table;
 
 /*
  * sensor data for a given cylinder
@@ -109,6 +110,8 @@ struct plot_info {
 
 /* when planner_dc is non-null, this is called in planner mode. */
 extern struct plot_info create_plot_info_new(const struct dive *dive, const struct divecomputer *dc, const struct deco_state *planner_ds);
+extern struct plot_info create_plot_info_new(const struct dive_table &dives, const struct dive *dive,
+					     const struct divecomputer *dc, const struct deco_state *planner_ds);
 
 /*
  * When showing dive profiles, we scale things to the

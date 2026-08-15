@@ -165,6 +165,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	metadata.h
 	native-divelog-summary.cpp
 	native-divelog-summary.h
+	native-profile-calculator.cpp
+	native-profile-calculator.h
 	metrics.cpp
 	metrics.h
 	neoupdatemanager.cpp
@@ -183,6 +185,7 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	pref.cpp
 	profile.cpp
 	profile.h
+	profile-ascent.cpp
 	qt-gui.h
 	qthelper.cpp
 	qthelper.h

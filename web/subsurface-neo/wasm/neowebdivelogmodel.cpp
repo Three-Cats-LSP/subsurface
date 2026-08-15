@@ -2,6 +2,7 @@
 #include "neowebdivelogmodel.h"
 
 #include "core/native-divelog-summary.h"
+#include "core/native-profile-calculator.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -98,6 +99,21 @@ QVariantMap sampleMap(const native_sample_summary &sample)
 	item.insert(QStringLiteral("hasCns"), sample.has_cns);
 	item.insert(QStringLiteral("hasSetpoint"), sample.has_setpoint);
 	item.insert(QStringLiteral("inDeco"), sample.in_deco);
+	item.insert(QStringLiteral("currentGfPercent"), sample.current_gf_percent);
+	item.insert(QStringLiteral("surfaceGfPercent"), sample.surface_gf_percent);
+	item.insert(QStringLiteral("calculatedCeilingMeters"), sample.calculated_ceiling_m);
+	item.insert(QStringLiteral("calculatedNdlSeconds"), sample.calculated_ndl_seconds);
+	item.insert(QStringLiteral("calculatedNdlMinutes"), sample.calculated_ndl_seconds / 60.0);
+	item.insert(QStringLiteral("calculatedTtsSeconds"), sample.calculated_tts_seconds);
+	item.insert(QStringLiteral("calculatedTtsMinutes"), sample.calculated_tts_seconds / 60.0);
+	item.insert(QStringLiteral("displayNdlMinutes"), sample.has_calculated_ndl ?
+		sample.calculated_ndl_seconds / 60.0 : sample.ndl_seconds / 60.0);
+	item.insert(QStringLiteral("hasDisplayNdl"), sample.has_calculated_ndl || sample.has_ndl);
+	item.insert(QStringLiteral("hasCurrentGf"), sample.has_current_gf);
+	item.insert(QStringLiteral("hasSurfaceGf"), sample.has_surface_gf);
+	item.insert(QStringLiteral("hasCalculatedCeiling"), sample.has_calculated_ceiling);
+	item.insert(QStringLiteral("hasCalculatedNdl"), sample.has_calculated_ndl);
+	item.insert(QStringLiteral("hasCalculatedTts"), sample.has_calculated_tts);
 	return item;
 }
 
@@ -247,6 +263,8 @@ void NeoWebDiveLogModel::selectDive(int sourceIndex)
 {
 	if (sourceIndex < 0 || sourceIndex >= m_summary.dives.size())
 		return;
+	QString profileError;
+	calculate_native_profile(m_summary, sourceIndex, &profileError);
 	const native_dive_summary &dive = m_summary.dives.at(sourceIndex);
 	m_selectedDive = diveMap(dive, sourceIndex);
 	m_profileSamples.clear();

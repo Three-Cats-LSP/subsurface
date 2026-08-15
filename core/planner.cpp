@@ -468,27 +468,6 @@ static std::vector<depth_t> sort_stops(const std::vector<depth_t> &dstops, size_
 	return stoplevels;
 }
 
-int ascent_velocity(depth_t depth, depth_t avg_depth, int)
-{
-	/* We need to make this configurable */
-
-	/* As an example (and possibly reasonable default) this is the Tech 1 provedure according
-	 * to http://www.globalunderwaterexplorers.org/files/Standards_and_Procedures/SOP_Manual_Ver2.0.2.pdf */
-
-	if (depth.mm * 4 > avg_depth.mm * 3) {
-		return prefs.ascrate75;
-	} else {
-		if (depth.mm * 2 > avg_depth.mm) {
-			return prefs.ascrate50;
-		} else {
-			if (depth.mm > 6000)
-				return prefs.ascratestops;
-			else
-				return prefs.ascratelast6m;
-		}
-	}
-}
-
 static void track_ascent_gas(depth_t depth, struct dive *dive, int cylinder_id, depth_t avg_depth, int bottom_time, bool safety_stop, enum divemode_t divemode)
 {
 	cylinder_t *cylinder = dive->get_cylinder(cylinder_id);

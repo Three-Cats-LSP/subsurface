@@ -7,6 +7,10 @@ on:
       - '.github/workflows/neo-webassembly.yml'
       - 'web/subsurface-neo/wasm/**'
       - 'core/native-divelog-summary.*'
+      - 'core/native-profile-calculator.*'
+      - 'core/profile*'
+      - 'core/deco.*'
+      - 'core/gas*'
   workflow_dispatch:
 
 permissions: read-all
@@ -20,6 +24,8 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Emscripten
         uses: mymindstorm/setup-emsdk@v14

@@ -148,6 +148,8 @@ ApplicationWindow {
 		property bool showDepth: true
 		property bool showTemperature: true
 		property bool showNdl: true
+		property bool showGf: true
+		property bool showCeiling: true
 		property bool showPressure: false
 		property int selectedIndex: -1
 		property real markerX: 0
@@ -186,10 +188,20 @@ ApplicationWindow {
 				qsTr("Depth") + "  " + Number(sample.depthMeters).toFixed(1) + " m"]
 			if (sample.hasTemperature)
 				lines.push(qsTr("Water") + "  " + Number(sample.temperatureCelsius).toFixed(1) + " °C")
-			if (sample.hasNdl)
-				lines.push(qsTr("NDL") + "  " + Math.round(sample.ndlMinutes) + " min")
-			if (sample.hasTts)
-				lines.push(qsTr("TTS") + "  " + Math.round(sample.ttsMinutes) + " min")
+			if (sample.hasCalculatedNdl)
+				lines.push(qsTr("Calculated NDL") + "  " + Math.round(sample.calculatedNdlMinutes) + " min")
+			else if (sample.hasNdl)
+				lines.push(qsTr("Recorded NDL") + "  " + Math.round(sample.ndlMinutes) + " min")
+			if (sample.hasCalculatedTts)
+				lines.push(qsTr("Calculated TTS") + "  " + Math.round(sample.calculatedTtsMinutes) + " min")
+			else if (sample.hasTts)
+				lines.push(qsTr("Recorded TTS") + "  " + Math.round(sample.ttsMinutes) + " min")
+			if (sample.hasCalculatedCeiling)
+				lines.push(qsTr("Calculated ceiling") + "  " + Number(sample.calculatedCeilingMeters).toFixed(1) + " m")
+			if (sample.hasCurrentGf)
+				lines.push(qsTr("GF") + "  " + Math.round(sample.currentGfPercent) + "%")
+			if (sample.hasSurfaceGf)
+				lines.push(qsTr("Surface GF") + "  " + Math.round(sample.surfaceGfPercent) + "%")
 			if (sample.hasStopDepth && sample.stopDepthMeters > 0)
 				lines.push(qsTr("Deco stop") + "  " + Number(sample.stopDepthMeters).toFixed(1) + " m")
 			if (sample.hasPressure)
@@ -227,13 +239,14 @@ ApplicationWindow {
 					return
 				}
 				const lastTime = Math.max(1, chart.samples[chart.samples.length - 1].timeSeconds)
-				let maxDepth = 1, minTemp = 1000, maxTemp = -1000, maxNdl = 1, maxPressure = 1
+				let maxDepth = 1, minTemp = 1000, maxTemp = -1000, maxNdl = 1, maxPressure = 1, maxGf = 100
 				for (let i = 0; i < chart.samples.length; ++i) {
 					const sample = chart.samples[i]
 					if (sample.hasDepth) maxDepth = Math.max(maxDepth, sample.depthMeters)
 					if (sample.hasTemperature) { minTemp = Math.min(minTemp, sample.temperatureCelsius); maxTemp = Math.max(maxTemp, sample.temperatureCelsius) }
-					if (sample.hasNdl) maxNdl = Math.max(maxNdl, sample.ndlMinutes)
+					if (sample.hasDisplayNdl) maxNdl = Math.max(maxNdl, sample.displayNdlMinutes)
 					if (sample.hasPressure) maxPressure = Math.max(maxPressure, sample.pressureBar)
+					if (sample.hasCurrentGf) maxGf = Math.max(maxGf, sample.currentGfPercent)
 				}
 				if (minTemp > maxTemp) { minTemp = 0; maxTemp = 1 }
 				if (maxTemp - minTemp < 0.5) maxTemp = minTemp + 0.5
@@ -253,8 +266,10 @@ ApplicationWindow {
 				}
 				if (chart.showDepth) drawSeries("#2f9df4", "depthMeters", "hasDepth", 0, maxDepth, false)
 				if (chart.showTemperature) drawSeries("#18d5df", "temperatureCelsius", "hasTemperature", minTemp, maxTemp, true)
-				if (chart.showNdl) drawSeries("#f0c51b", "ndlMinutes", "hasNdl", 0, maxNdl, true)
-				if (chart.showPressure) drawSeries("#d35be0", "pressureBar", "hasPressure", 0, maxPressure, true)
+				if (chart.showNdl) drawSeries("#f0c51b", "displayNdlMinutes", "hasDisplayNdl", 0, maxNdl, true)
+				if (chart.showGf) drawSeries("#d35be0", "currentGfPercent", "hasCurrentGf", 0, maxGf, true)
+				if (chart.showCeiling) drawSeries("#ff7b54", "calculatedCeilingMeters", "hasCalculatedCeiling", 0, maxDepth, false)
+				if (chart.showPressure) drawSeries("#87a6bd", "pressureBar", "hasPressure", 0, maxPressure, true)
 				ctx.fillStyle = window.secondaryText
 				ctx.fillText("0", left - 4, height - 10)
 				ctx.fillText(Math.round(lastTime / 60) + " min", width - right - 34, height - 10)
@@ -271,6 +286,8 @@ ApplicationWindow {
 		onShowDepthChanged: chartCanvas.requestPaint()
 		onShowTemperatureChanged: chartCanvas.requestPaint()
 		onShowNdlChanged: chartCanvas.requestPaint()
+		onShowGfChanged: chartCanvas.requestPaint()
+		onShowCeilingChanged: chartCanvas.requestPaint()
 		onShowPressureChanged: chartCanvas.requestPaint()
 		onSelectedIndexChanged: chartCanvas.requestPaint()
 
@@ -729,12 +746,14 @@ ApplicationWindow {
 						Item { Layout.fillWidth: true }
 						Text { text: qsTr("%1 samples").arg(diveLog.selectedDive.sampleCount || 0); color: window.secondaryText; font.pixelSize: 10 }
 					}
-					Text { text: qsTr("Recorded computer data. Calculated GF and ceiling will appear when the mature profile pipeline is connected to WebAssembly."); color: window.secondaryText; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: qsTr("Recorded samples enriched by Subsurface's native profile and decompression pipeline."); color: window.secondaryText; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					RowLayout {
 						Layout.fillWidth: true; spacing: 7
 						NeoButton { Layout.fillWidth: true; text: qsTr("Depth"); onClicked: profileChart.showDepth = !profileChart.showDepth; opacity: profileChart.showDepth ? 1 : 0.45 }
 						NeoButton { Layout.fillWidth: true; text: qsTr("Temp"); onClicked: profileChart.showTemperature = !profileChart.showTemperature; opacity: profileChart.showTemperature ? 1 : 0.45 }
 						NeoButton { Layout.fillWidth: true; text: qsTr("NDL"); onClicked: profileChart.showNdl = !profileChart.showNdl; opacity: profileChart.showNdl ? 1 : 0.45 }
+						NeoButton { Layout.fillWidth: true; text: qsTr("GF"); onClicked: profileChart.showGf = !profileChart.showGf; opacity: profileChart.showGf ? 1 : 0.45 }
+						NeoButton { Layout.fillWidth: true; text: qsTr("Ceiling"); onClicked: profileChart.showCeiling = !profileChart.showCeiling; opacity: profileChart.showCeiling ? 1 : 0.45 }
 						NeoButton { Layout.fillWidth: true; text: qsTr("Pressure"); onClicked: profileChart.showPressure = !profileChart.showPressure; opacity: profileChart.showPressure ? 1 : 0.45 }
 					}
 					ProfileChart { id: profileChart; Layout.fillWidth: true; Layout.preferredHeight: window.compact ? 330 : 350; samples: diveLog.profileSamples }

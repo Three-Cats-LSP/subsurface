@@ -9,7 +9,6 @@
 #include "dive.h"
 #include "gettext.h"
 #include "subsurface-string.h"
-#include "libdivecomputer.h"
 #include "device.h"
 #include "divecomputer.h"
 #include "divelist.h"
