@@ -92,6 +92,36 @@ ApplicationWindow {
 			border.width: 1
 			border.color: combo.activeFocus ? window.accent : window.border
 		}
+		delegate: ItemDelegate {
+			width: combo.width
+			height: 40
+			contentItem: Text {
+				text: modelData
+				color: highlighted ? window.accent : window.primaryText
+				font.pixelSize: 12
+				verticalAlignment: Text.AlignVCenter
+			}
+			background: Rectangle { color: highlighted ? "#12344a" : window.surfaceRaised }
+		}
+		popup: Popup {
+			y: combo.height - 1
+			width: combo.width
+			implicitHeight: Math.min(contentItem.implicitHeight + 2, 260)
+			padding: 1
+			contentItem: ListView {
+				clip: true
+				implicitHeight: contentHeight
+				model: combo.popup.visible ? combo.delegateModel : null
+				currentIndex: combo.highlightedIndex
+				ScrollIndicator.vertical: ScrollIndicator { }
+			}
+			background: Rectangle {
+				color: window.surfaceRaised
+				radius: 8
+				border.width: 1
+				border.color: window.border
+			}
+		}
 	}
 
 	component StatusPill: Rectangle {
@@ -553,11 +583,13 @@ ApplicationWindow {
 					onTextEdited: diveLog.searchText = text
 				}
 				NeoCombo {
+					id: yearCombo
 					Layout.fillWidth: true
 					model: [qsTr("All years")].concat(diveLog.availableYears)
 					onActivated: diveLog.yearFilter = currentIndex > 0 ? currentText : ""
 				}
 				NeoCombo {
+					id: modeCombo
 					Layout.fillWidth: true
 					model: [qsTr("All modes")].concat(diveLog.availableModes)
 					onActivated: diveLog.modeFilter = currentIndex > 0 ? currentText : ""
@@ -576,6 +608,8 @@ ApplicationWindow {
 						diveLog.searchText = ""
 						diveLog.yearFilter = ""
 						diveLog.modeFilter = ""
+						yearCombo.currentIndex = 0
+						modeCombo.currentIndex = 0
 					}
 				}
 			}
@@ -779,13 +813,17 @@ ApplicationWindow {
 			anchors.fill: parent
 			Repeater {
 				model: [qsTr("Home"), qsTr("Dives"), qsTr("Sites"), qsTr("Stats"), qsTr("More")]
-				delegate: ColumnLayout {
+				delegate: Item {
 					required property string modelData
 					required property int index
 					Layout.fillWidth: true
-					spacing: 2
-					Text { Layout.alignment: Qt.AlignHCenter; text: index === window.activeNavigationIndex ? "●" : "○"; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 14 }
-					Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 9 }
+					Layout.fillHeight: true
+					ColumnLayout {
+						anchors.centerIn: parent
+						spacing: 2
+						Text { Layout.alignment: Qt.AlignHCenter; text: index === window.activeNavigationIndex ? "●" : "○"; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 14 }
+						Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 9 }
+					}
 					MouseArea { anchors.fill: parent; cursorShape: index < 2 ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.openNavigation(index) }
 				}
 			}
