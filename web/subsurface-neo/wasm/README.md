@@ -11,6 +11,7 @@ The current bootstrap provides:
 - a browser-controlled local-file picker;
 - a shared C++ core reader for native Subsurface XML logs;
 - real dashboard totals and recent-dive summaries from the selected log;
+- a complete dive list with native-summary search plus year and dive-mode filters;
 - selectable dive-detail pages with recorded profile samples;
 - an interactive depth, temperature, NDL, and cylinder-pressure chart;
 - recorded TTS, deco-stop, CNS, and CCR-setpoint values in the sample inspector;

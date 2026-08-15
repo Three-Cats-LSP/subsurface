@@ -51,6 +51,8 @@ qt_finalize_executable(subsurface-neo-web)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
 	qt_add_executable(neo-web-parser-tests
 		tests/test_nativedivelogreader.cpp
+		neowebdivelogmodel.cpp
+		neowebdivelogmodel.h
 		${SUBSURFACE_ROOT}/core/native-divelog-summary.cpp
 		${SUBSURFACE_ROOT}/core/native-divelog-summary.h
 	)

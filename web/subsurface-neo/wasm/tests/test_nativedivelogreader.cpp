@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "core/native-divelog-summary.h"
+#include "web/subsurface-neo/wasm/neowebdivelogmodel.h"
 
 #include <QBuffer>
+#include <QTemporaryFile>
 #include <QtTest>
 
 class TestNativeDiveLogReader : public QObject {
@@ -10,6 +12,7 @@ class TestNativeDiveLogReader : public QObject {
 private slots:
 	void readsNativeSummary();
 	void rejectsForeignRoot();
+	void filtersAndSelectsDives();
 };
 
 void TestNativeDiveLogReader::readsNativeSummary()
@@ -86,6 +89,45 @@ void TestNativeDiveLogReader::rejectsForeignRoot()
 	const native_divelog_summary summary = read_native_divelog_summary(buffer, QStringLiteral("foreign.uddf"));
 	QVERIFY(!summary.ok);
 	QVERIFY(summary.error.contains(QStringLiteral("not a native Subsurface XML")));
+}
+
+void TestNativeDiveLogReader::filtersAndSelectsDives()
+{
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	const QByteArray xml(R"xml(<divelog program="subsurface" version="3"><dives>
+		<dive number="10" date="2024-05-01"><buddy>Alice</buddy><divecomputer dctype="OC"><sample time="20:00 min" depth="18.0 m" /></divecomputer></dive>
+		<dive number="11" date="2025-06-02"><notes>Blue cave survey</notes><divecomputer dctype="CCR"><sample time="40:00 min" depth="30.0 m" /></divecomputer></dive>
+		<dive number="12" date="2025-07-03"><buddy>Bob</buddy><cylinder o2="32.0%" /><divecomputer dctype="OC"><sample time="30:00 min" depth="24.0 m" /></divecomputer></dive>
+	</dives></divelog>)xml");
+	QCOMPARE(file.write(xml), qint64(xml.size()));
+	file.flush();
+
+	NeoWebDiveLogModel model;
+	model.openLocalFile(QUrl::fromLocalFile(file.fileName()));
+	QVERIFY(model.loaded());
+	QCOMPARE(model.diveCount(), 3);
+	QCOMPARE(model.filteredDives().size(), 3);
+	QCOMPARE(model.availableYears(), QStringList({ QStringLiteral("2025"), QStringLiteral("2024") }));
+	QCOMPARE(model.availableModes(), QStringList({ QStringLiteral("CCR"), QStringLiteral("OC") }));
+
+	model.setYearFilter(QStringLiteral("2025"));
+	QCOMPARE(model.filteredDives().size(), 2);
+	model.setModeFilter(QStringLiteral("OC"));
+	QCOMPARE(model.filteredDives().size(), 1);
+	model.setSearchText(QStringLiteral("bob"));
+	QCOMPARE(model.filteredDives().size(), 1);
+	model.setSearchText(QStringLiteral("blue cave"));
+	QCOMPARE(model.filteredDives().size(), 0);
+
+	model.setYearFilter(QString());
+	model.setModeFilter(QString());
+	QCOMPARE(model.filteredDives().size(), 1);
+	const int sourceIndex = model.filteredDives().first().toMap().value(QStringLiteral("sourceIndex")).toInt();
+	model.selectDive(sourceIndex);
+	QVERIFY(model.hasSelectedDive());
+	QCOMPARE(model.selectedDive().value(QStringLiteral("number")).toInt(), 11);
+	QCOMPARE(model.profileSamples().size(), 1);
 }
 
 QTEST_GUILESS_MAIN(TestNativeDiveLogReader)

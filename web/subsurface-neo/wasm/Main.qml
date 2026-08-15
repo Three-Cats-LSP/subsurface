@@ -19,7 +19,22 @@ ApplicationWindow {
 	property color border: "#1b3c55"
 	property color primaryText: "#f5f9fc"
 	property color secondaryText: "#8fa7ba"
-	property bool detailMode: diveLog.hasSelectedDive
+	property int activePage: 0 // 0 dashboard, 1 dive list, 2 dive detail
+	property bool detailMode: activePage === 2 && diveLog.hasSelectedDive
+	property int activeNavigationIndex: activePage === 0 ? 0 : 1
+
+	function openDive(sourceIndex) {
+		diveLog.selectDive(sourceIndex)
+		activePage = 2
+	}
+
+	function openNavigation(index) {
+		if (index === 0 || index === 1) {
+			if (detailMode)
+				diveLog.clearSelectedDive()
+			activePage = index
+		}
+	}
 
 	component NeoButton: Button {
 		id: control
@@ -38,6 +53,44 @@ ApplicationWindow {
 			radius: 11
 			border.width: 1
 			border.color: control.enabled ? window.accent : window.border
+		}
+	}
+
+	component NeoField: TextField {
+		id: field
+		implicitHeight: 44
+		color: window.primaryText
+		placeholderTextColor: window.secondaryText
+		selectionColor: window.accent
+		selectedTextColor: "#03101d"
+		font.pixelSize: 12
+		leftPadding: 14
+		rightPadding: 14
+		background: Rectangle {
+			color: window.surfaceRaised
+			radius: 11
+			border.width: 1
+			border.color: field.activeFocus ? window.accent : window.border
+		}
+	}
+
+	component NeoCombo: ComboBox {
+		id: combo
+		implicitHeight: 44
+		font.pixelSize: 12
+		contentItem: Text {
+			leftPadding: 14
+			rightPadding: 30
+			text: combo.displayText
+			color: window.primaryText
+			verticalAlignment: Text.AlignVCenter
+			elide: Text.ElideRight
+		}
+		background: Rectangle {
+			color: window.surfaceRaised
+			radius: 11
+			border.width: 1
+			border.color: combo.activeFocus ? window.accent : window.border
 		}
 	}
 
@@ -246,13 +299,14 @@ ApplicationWindow {
 					Layout.fillWidth: true
 					height: 45
 					radius: 10
-					color: index === (window.detailMode ? 1 : 0) ? "#0c3043" : "transparent"
+					color: index === window.activeNavigationIndex ? "#0c3043" : "transparent"
 					Text {
 						anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
 						text: modelData
-						color: index === (window.detailMode ? 1 : 0) ? window.accent : window.secondaryText
+						color: index === window.activeNavigationIndex ? window.accent : window.secondaryText
 						font.pixelSize: 13
 					}
+					MouseArea { anchors.fill: parent; cursorShape: index < 2 ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.openNavigation(index) }
 				}
 			}
 			Item { Layout.fillHeight: true }
@@ -281,7 +335,7 @@ ApplicationWindow {
 
 	Flickable {
 		id: contentFlick
-		visible: !window.detailMode
+		visible: window.activePage === 0
 		anchors {
 			left: window.compact ? parent.left : sidebar.right
 			right: parent.right
@@ -410,7 +464,7 @@ ApplicationWindow {
 						anchors { right: parent.right; bottom: parent.bottom; margins: 14 }
 						text: qsTr("View profile →"); color: window.accent; font.pixelSize: 10
 					}
-					MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: diveLog.selectDive(modelData.sourceIndex) }
+					MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: window.openDive(modelData.sourceIndex) }
 
 					ColumnLayout {
 						anchors.fill: parent
@@ -456,6 +510,128 @@ ApplicationWindow {
 	}
 
 	Flickable {
+		id: diveListFlick
+		visible: window.activePage === 1
+		anchors {
+			left: window.compact ? parent.left : sidebar.right
+			right: parent.right
+			top: window.compact ? mobileHeader.bottom : parent.top
+			bottom: window.compact ? bottomNav.top : parent.bottom
+		}
+		contentWidth: width
+		contentHeight: diveListColumn.implicitHeight + 64
+		clip: true
+		ScrollBar.vertical: ScrollBar { }
+
+		ColumnLayout {
+			id: diveListColumn
+			x: window.compact ? 16 : 34
+			y: window.compact ? 22 : 34
+			width: parent.width - (window.compact ? 32 : 68)
+			spacing: 16
+
+			RowLayout {
+				Layout.fillWidth: true
+				ColumnLayout {
+					spacing: 2
+					Text { text: qsTr("Dives"); color: window.primaryText; font.pixelSize: window.compact ? 26 : 32; font.weight: Font.DemiBold }
+					Text { text: qsTr("%1 of %2 dives").arg(diveLog.filteredDives.length).arg(diveLog.diveCount); color: window.secondaryText; font.pixelSize: 12 }
+				}
+				Item { Layout.fillWidth: true }
+				NeoButton { visible: !window.compact; text: qsTr("Open another log"); Layout.preferredWidth: 170; onClicked: diveLog.chooseLocalFile() }
+			}
+
+			GridLayout {
+				Layout.fillWidth: true
+				columns: window.compact ? 1 : 3
+				columnSpacing: 10
+				rowSpacing: 10
+				NeoField {
+					Layout.fillWidth: true
+					placeholderText: qsTr("Search site, buddy, gas, gear, notes…")
+					text: diveLog.searchText
+					onTextEdited: diveLog.searchText = text
+				}
+				NeoCombo {
+					Layout.fillWidth: true
+					model: [qsTr("All years")].concat(diveLog.availableYears)
+					onActivated: diveLog.yearFilter = currentIndex > 0 ? currentText : ""
+				}
+				NeoCombo {
+					Layout.fillWidth: true
+					model: [qsTr("All modes")].concat(diveLog.availableModes)
+					onActivated: diveLog.modeFilter = currentIndex > 0 ? currentText : ""
+				}
+			}
+
+			RowLayout {
+				visible: diveLog.searchText.length > 0 || diveLog.yearFilter.length > 0 || diveLog.modeFilter.length > 0
+				Layout.fillWidth: true
+				Text { text: qsTr("Filters active"); color: window.accent; font.pixelSize: 11 }
+				Item { Layout.fillWidth: true }
+				NeoButton {
+					text: qsTr("Clear filters")
+					Layout.preferredWidth: 130
+					onClicked: {
+						diveLog.searchText = ""
+						diveLog.yearFilter = ""
+						diveLog.modeFilter = ""
+					}
+				}
+			}
+
+			Rectangle {
+				visible: diveLog.filteredDives.length === 0
+				Layout.fillWidth: true
+				Layout.preferredHeight: 120
+				radius: 16; color: window.surface; border.width: 1; border.color: window.border
+				Column {
+					anchors.centerIn: parent; spacing: 6
+					Text { anchors.horizontalCenter: parent.horizontalCenter; text: diveLog.loaded ? qsTr("No dives match these filters") : qsTr("No dive log loaded"); color: window.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+					Text { anchors.horizontalCenter: parent.horizontalCenter; text: diveLog.loaded ? qsTr("Change or clear the search filters.") : qsTr("Open a local Subsurface XML log from Dashboard."); color: window.secondaryText; font.pixelSize: 11 }
+				}
+			}
+
+			Repeater {
+				model: diveLog.filteredDives
+				delegate: Rectangle {
+					required property var modelData
+					required property int index
+					Layout.fillWidth: true
+					Layout.preferredHeight: window.compact ? 172 : 126
+					radius: 16; color: window.surface; border.width: 1; border.color: listHover.hovered ? window.accent : window.border
+					HoverHandler { id: listHover }
+					MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: window.openDive(modelData.sourceIndex) }
+					ColumnLayout {
+						anchors.fill: parent; anchors.margins: window.compact ? 16 : 20; spacing: 11
+						RowLayout {
+							Layout.fillWidth: true
+							Text { text: modelData.number > 0 ? "#" + modelData.number : qsTr("Dive"); color: window.accent; font.pixelSize: 18; font.weight: Font.DemiBold }
+							ColumnLayout {
+								Layout.fillWidth: true; spacing: 1
+								Text { text: modelData.location; color: window.primaryText; font.pixelSize: window.compact ? 16 : 18; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+								Text { text: modelData.date + (modelData.time ? "  ·  " + modelData.time : ""); color: window.secondaryText; font.pixelSize: 10 }
+							}
+							StatusPill { label: modelData.mode || qsTr("Unknown"); available: true }
+						}
+						GridLayout {
+							Layout.fillWidth: true; columns: window.compact ? 3 : 6; columnSpacing: window.compact ? 8 : 18; rowSpacing: 8
+							Repeater {
+								model: [{label: qsTr("DEPTH"), value: modelData.depth}, {label: qsTr("DURATION"), value: modelData.duration}, {label: qsTr("WATER"), value: modelData.temperature}, {label: qsTr("GAS"), value: modelData.gas || "—"}, {label: qsTr("GEAR"), value: modelData.gear || "—"}, {label: qsTr("BUDDY"), value: modelData.buddy || "—"}]
+								delegate: ColumnLayout {
+									required property var modelData; spacing: 1
+									Text { text: modelData.value; color: window.primaryText; font.pixelSize: window.compact ? 10 : 12; elide: Text.ElideRight; Layout.preferredWidth: window.compact ? 92 : 120 }
+									Text { text: modelData.label; color: window.secondaryText; font.pixelSize: 8; font.letterSpacing: 0.7 }
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	Flickable {
 		id: detailFlick
 		visible: window.detailMode
 		anchors {
@@ -476,7 +652,7 @@ ApplicationWindow {
 			width: parent.width - (window.compact ? 32 : 68)
 			spacing: 16
 
-			NeoButton { text: qsTr("← Back to dashboard"); Layout.preferredWidth: 190; onClicked: diveLog.clearSelectedDive() }
+			NeoButton { text: qsTr("← Back to dives"); Layout.preferredWidth: 170; onClicked: { diveLog.clearSelectedDive(); window.activePage = 1 } }
 			RowLayout {
 				Layout.fillWidth: true
 				Text { text: diveLog.selectedDive.number > 0 ? "#" + diveLog.selectedDive.number : qsTr("Dive"); color: window.accent; font.pixelSize: 25; font.weight: Font.DemiBold }
@@ -608,8 +784,9 @@ ApplicationWindow {
 					required property int index
 					Layout.fillWidth: true
 					spacing: 2
-					Text { Layout.alignment: Qt.AlignHCenter; text: index === (window.detailMode ? 1 : 0) ? "●" : "○"; color: index === (window.detailMode ? 1 : 0) ? window.accent : window.secondaryText; font.pixelSize: 14 }
-					Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: index === (window.detailMode ? 1 : 0) ? window.accent : window.secondaryText; font.pixelSize: 9 }
+					Text { Layout.alignment: Qt.AlignHCenter; text: index === window.activeNavigationIndex ? "●" : "○"; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 14 }
+					Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: index === window.activeNavigationIndex ? window.accent : window.secondaryText; font.pixelSize: 9 }
+					MouseArea { anchors.fill: parent; cursorShape: index < 2 ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.openNavigation(index) }
 				}
 			}
 		}

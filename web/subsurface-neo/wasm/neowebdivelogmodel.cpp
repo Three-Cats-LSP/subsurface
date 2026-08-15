@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLocale>
+#include <QSet>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -130,6 +131,36 @@ QVariantList NeoWebDiveLogModel::recentDives() const
 	return m_recentDives;
 }
 
+QVariantList NeoWebDiveLogModel::filteredDives() const
+{
+	return m_filteredDives;
+}
+
+QStringList NeoWebDiveLogModel::availableYears() const
+{
+	return m_availableYears;
+}
+
+QStringList NeoWebDiveLogModel::availableModes() const
+{
+	return m_availableModes;
+}
+
+QString NeoWebDiveLogModel::searchText() const
+{
+	return m_searchText;
+}
+
+QString NeoWebDiveLogModel::yearFilter() const
+{
+	return m_yearFilter;
+}
+
+QString NeoWebDiveLogModel::modeFilter() const
+{
+	return m_modeFilter;
+}
+
 QVariantMap NeoWebDiveLogModel::selectedDive() const
 {
 	return m_selectedDive;
@@ -234,6 +265,59 @@ void NeoWebDiveLogModel::clearSelectedDive()
 	emit changed();
 }
 
+void NeoWebDiveLogModel::setSearchText(const QString &searchText)
+{
+	const QString normalized = searchText.trimmed();
+	if (m_searchText == normalized)
+		return;
+	m_searchText = normalized;
+	rebuildDiveLists();
+	emit changed();
+}
+
+void NeoWebDiveLogModel::setYearFilter(const QString &yearFilter)
+{
+	if (m_yearFilter == yearFilter)
+		return;
+	m_yearFilter = yearFilter;
+	rebuildDiveLists();
+	emit changed();
+}
+
+void NeoWebDiveLogModel::setModeFilter(const QString &modeFilter)
+{
+	if (m_modeFilter == modeFilter)
+		return;
+	m_modeFilter = modeFilter;
+	rebuildDiveLists();
+	emit changed();
+}
+
+void NeoWebDiveLogModel::rebuildDiveLists()
+{
+	m_recentDives.clear();
+	m_filteredDives.clear();
+	for (int index = m_summary.dives.size() - 1; index >= 0; --index) {
+		const native_dive_summary &dive = m_summary.dives.at(index);
+		const QVariantMap mapped = diveMap(dive, index);
+		if (m_recentDives.size() < 5)
+			m_recentDives.push_back(mapped);
+
+		if (!m_yearFilter.isEmpty() && (!dive.when.isValid() || QString::number(dive.when.date().year()) != m_yearFilter))
+			continue;
+		if (!m_modeFilter.isEmpty() && dive.mode.compare(m_modeFilter, Qt::CaseInsensitive) != 0)
+			continue;
+		if (!m_searchText.isEmpty()) {
+			const QString searchable = QStringLiteral("%1 %2 %3 %4 %5 %6 %7 %8")
+				.arg(dive.number)
+				.arg(dive.location, dive.buddy, dive.notes, dive.gas, dive.gear, dive.suit, dive.mode);
+			if (!searchable.contains(m_searchText, Qt::CaseInsensitive))
+				continue;
+		}
+		m_filteredDives.push_back(mapped);
+	}
+}
+
 void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 {
 	const QString localPath = localPathForUrl(url);
@@ -270,13 +354,31 @@ void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 	m_totalSeconds = 0;
 	m_maxDepthMeters = 0.0;
 	m_recentDives.clear();
+	m_filteredDives.clear();
+	m_availableYears.clear();
+	m_availableModes.clear();
+	QSet<int> years;
+	QSet<QString> modes;
 	for (const native_dive_summary &dive : m_summary.dives) {
 		m_totalSeconds += dive.duration_seconds;
 		if (dive.has_max_depth)
 			m_maxDepthMeters = std::max(m_maxDepthMeters, dive.max_depth_m);
+		if (dive.when.isValid())
+			years.insert(dive.when.date().year());
+		if (!dive.mode.trimmed().isEmpty())
+			modes.insert(dive.mode.trimmed());
 	}
-	for (int index = m_summary.dives.size() - 1; index >= 0 && m_recentDives.size() < 5; --index)
-		m_recentDives.push_back(diveMap(m_summary.dives.at(index), index));
+	QList<int> sortedYears = years.values();
+	std::sort(sortedYears.begin(), sortedYears.end(), std::greater<int>());
+	for (int year : sortedYears)
+		m_availableYears.push_back(QString::number(year));
+	m_availableModes = modes.values();
+	m_availableModes.sort(Qt::CaseInsensitive);
+	if (!m_availableYears.contains(m_yearFilter))
+		m_yearFilter.clear();
+	if (!m_availableModes.contains(m_modeFilter, Qt::CaseInsensitive))
+		m_modeFilter.clear();
+	rebuildDiveLists();
 
 	m_error = false;
 	m_loaded = true;
