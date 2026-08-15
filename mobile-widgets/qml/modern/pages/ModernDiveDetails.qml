@@ -232,7 +232,25 @@ Kirigami.Page {
 								Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 							}
 
-							ToolButton { text: "⋯"; accessibleName: qsTr("Dive actions"); onClicked: diveActions.open() }
+							Rectangle {
+								visible: delegateRoot.modelData.isInvalid
+								Layout.preferredWidth: invalidLabel.implicitWidth + tokens.space16
+								Layout.preferredHeight: 28
+								radius: height / 2
+								color: Qt.rgba(1.0, 0.72, 0.30, 0.10)
+								border.width: 1
+								border.color: tokens.warning
+								Text { id: invalidLabel; anchors.centerIn: parent; text: qsTr("Invalid"); color: tokens.warning; font.pixelSize: 10; font.weight: Font.DemiBold }
+							}
+
+							Button {
+								visible: page.width >= 600
+								text: qsTr("Edit")
+								flat: true
+								accessibleName: qsTr("Edit dive")
+								onClicked: page.editRequested(delegateRoot.modelData)
+							}
+							ToolButton { text: "⋯"; accessibleName: qsTr("More dive actions"); onClicked: diveActions.open() }
 							Menu {
 								id: diveActions
 								MenuItem { text: qsTr("Edit dive"); onTriggered: page.editRequested(delegateRoot.modelData) }
@@ -301,7 +319,7 @@ Kirigami.Page {
 									}
 								}
 
-								ToolButton { text: "☷"; accessibleName: qsTr("Profile controls"); onClicked: profileControls.open() }
+								Button { text: page.width < 480 ? qsTr("More") : qsTr("Controls"); flat: true; accessibleName: qsTr("Open all profile controls"); onClicked: profileControls.open() }
 								ToolButton { visible: profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
 								ComboBox {
 									visible: profile.numDC > 1
@@ -491,6 +509,40 @@ Kirigami.Page {
 										activeSample = false
 										sampleInfo = ({})
 									}
+									function hasValue(value) {
+										return value !== undefined && value !== null && String(value).length > 0
+									}
+									function line(parts) {
+										var visibleParts = []
+										for (var i = 0; i < parts.length; ++i) {
+											if (parts[i] && parts[i].length > 0)
+												visibleParts.push(parts[i])
+										}
+										return visibleParts.join("  ·  ")
+									}
+									function recordedLine() {
+										var deco = ""
+										if (sampleInfo.inDeco)
+											deco = qsTr("Deco %1").arg(sampleInfo.decoStop || qsTr("required"))
+										else if (hasValue(sampleInfo.ndl))
+											deco = qsTr("NDL %1").arg(sampleInfo.ndl)
+										return line([hasValue(sampleInfo.temperature) ? qsTr("Water %1").arg(sampleInfo.temperature) : "", deco,
+											hasValue(sampleInfo.tts) ? qsTr("TTS %1").arg(sampleInfo.tts) : ""])
+									}
+									function analysisLine() {
+										return line([hasValue(sampleInfo.gf) ? qsTr("GF99 %1").arg(sampleInfo.gf) : "",
+											hasValue(sampleInfo.surfaceGf) ? qsTr("Surface GF %1").arg(sampleInfo.surfaceGf) : ""])
+									}
+									function calculatedLine() {
+										return line([hasValue(sampleInfo.calculatedCeiling) ? qsTr("Ceiling %1").arg(sampleInfo.calculatedCeiling) : "",
+											hasValue(sampleInfo.calculatedNdl) ? qsTr("NDL %1").arg(sampleInfo.calculatedNdl) : "",
+											hasValue(sampleInfo.calculatedTts) ? qsTr("TTS %1").arg(sampleInfo.calculatedTts) : ""])
+									}
+									function equipmentLine() {
+										return line([hasValue(sampleInfo.pressure) ? qsTr("Pressure %1").arg(sampleInfo.pressure) : "",
+											hasValue(sampleInfo.setpoint) ? qsTr("Setpoint %1").arg(sampleInfo.setpoint) : "",
+											hasValue(sampleInfo.cns) ? qsTr("CNS %1").arg(sampleInfo.cns) : ""])
+									}
 
 									onPressAndHold: function(mouse) {
 										touchInspection = true
@@ -576,38 +628,17 @@ Kirigami.Page {
 												font.pixelSize: 14
 												font.weight: Font.DemiBold
 											}
-											Text { visible: !!profileInspector.sampleInfo.temperature; text: qsTr("Water %1").arg(profileInspector.sampleInfo.temperature || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text {
-												visible: profileInspector.sampleInfo.inDeco || profileInspector.sampleInfo.ndl !== undefined
-												text: profileInspector.sampleInfo.inDeco
-													  ? qsTr("Deco %1").arg(profileInspector.sampleInfo.decoStop || qsTr("required"))
-													  : qsTr("NDL %1").arg(profileInspector.sampleInfo.ndl || "—")
+												visible: profileInspector.recordedLine().length > 0
+												text: profileInspector.recordedLine()
 												color: tokens.textSecondary
 												font.pixelSize: 11
-											}
-											Text { visible: !!profileInspector.sampleInfo.tts; text: qsTr("TTS %1").arg(profileInspector.sampleInfo.tts || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-
-											Rectangle {
-												visible: profileInspector.sampleInfo.gf !== undefined || profileInspector.sampleInfo.surfaceGf !== undefined || !!profileInspector.sampleInfo.calculatedCeiling || !!profileInspector.sampleInfo.calculatedNdl || !!profileInspector.sampleInfo.calculatedTts
+												wrapMode: Text.Wrap
 												width: parent.width
-												height: 1
-												color: tokens.border
 											}
-											Text { visible: profileInspector.sampleInfo.gf !== undefined; text: qsTr("GF99 %1").arg(profileInspector.sampleInfo.gf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: profileInspector.sampleInfo.surfaceGf !== undefined; text: qsTr("Surface GF %1").arg(profileInspector.sampleInfo.surfaceGf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: !!profileInspector.sampleInfo.calculatedCeiling; text: qsTr("Calculated ceiling %1").arg(profileInspector.sampleInfo.calculatedCeiling || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: !!profileInspector.sampleInfo.calculatedNdl; text: qsTr("Calculated NDL %1").arg(profileInspector.sampleInfo.calculatedNdl || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: !!profileInspector.sampleInfo.calculatedTts; text: qsTr("Calculated TTS %1").arg(profileInspector.sampleInfo.calculatedTts || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-
-											Rectangle {
-												visible: !!profileInspector.sampleInfo.pressure || !!profileInspector.sampleInfo.setpoint || !!profileInspector.sampleInfo.cns
-												width: parent.width
-												height: 1
-												color: tokens.border
-											}
-											Text { visible: !!profileInspector.sampleInfo.pressure; text: qsTr("Pressure %1").arg(profileInspector.sampleInfo.pressure || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: !!profileInspector.sampleInfo.setpoint; text: qsTr("Setpoint %1").arg(profileInspector.sampleInfo.setpoint || ""); color: tokens.textSecondary; font.pixelSize: 11 }
-											Text { visible: !!profileInspector.sampleInfo.cns; text: qsTr("CNS %1").arg(profileInspector.sampleInfo.cns || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: profileInspector.analysisLine().length > 0; text: profileInspector.analysisLine(); color: "#D86CF0"; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width }
+											Text { visible: profileInspector.calculatedLine().length > 0; text: qsTr("Calculated: %1").arg(profileInspector.calculatedLine()); color: tokens.accent; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width }
+											Text { visible: profileInspector.equipmentLine().length > 0; text: profileInspector.equipmentLine(); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width }
 										}
 									}
 								}
@@ -795,23 +826,4 @@ Kirigami.Page {
 		}
 	}
 
-	footer: ToolBar {
-		background: Rectangle { color: tokens.surface }
-		RowLayout {
-			anchors.fill: parent
-			anchors.leftMargin: tokens.space12
-			anchors.rightMargin: tokens.space12
-			Button {
-				text: qsTr("Edit dive")
-				enabled: page.currentItem && page.currentItem.modelData
-				onClicked: page.editRequested(page.currentItem.modelData)
-			}
-			Item { Layout.fillWidth: true }
-			Text {
-				text: page.currentItem && page.currentItem.modelData && page.currentItem.modelData.isInvalid ? qsTr("Marked invalid") : ""
-				color: tokens.warning
-				font.pixelSize: 12
-			}
-		}
-	}
 }
