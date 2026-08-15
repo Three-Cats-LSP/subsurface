@@ -5,6 +5,7 @@
 #include "interpolate.h"
 #include "pref.h"
 #include "range.h"
+#include "sample.h"
 
 #include <string>
 
