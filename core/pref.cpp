@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "pref.h"
 #include "subsurface-string.h"
-#include "git-access.h" // for CLOUD_HOST
+#include "cloud-hosts.h"
 
 struct preferences prefs, git_prefs, default_prefs;
 

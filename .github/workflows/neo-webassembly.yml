@@ -12,6 +12,8 @@ on:
       - 'core/deco.*'
       - 'core/gas*'
       - 'core/owning_table.h'
+      - 'core/cloud-hosts.h'
+      - 'core/pref.*'
   workflow_dispatch:
 
 permissions: read-all

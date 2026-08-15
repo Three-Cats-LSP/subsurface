@@ -2,6 +2,7 @@
 #ifndef GITACCESS_H
 #define GITACCESS_H
 
+#include "cloud-hosts.h"
 #include "git2.h"
 #include "filterpreset.h"
 #include <string>
@@ -10,13 +11,6 @@ struct dive_log;
 struct git_oid;
 struct git_repository;
 struct divelog;
-
-#define CLOUD_HOST_US "ssrf-cloud-us.subsurface-divelog.org"  // preferred (faster/bigger) server in the US
-#define CLOUD_HOST_U2 "ssrf-cloud-u2.subsurface-divelog.org"  // secondary (older) server in the US
-#define CLOUD_HOST_EU "ssrf-cloud-eu.subsurface-divelog.org"  // preferred (faster/bigger) server in Germany
-#define CLOUD_HOST_E2 "ssrf-cloud-e2.subsurface-divelog.org"  // secondary (older) server in Germany
-#define CLOUD_HOST_PATTERN "ssrf-cloud-..\\.subsurface-divelog\\.org"
-#define CLOUD_HOST_GENERIC "cloud.subsurface-divelog.org"
 
 enum remote_transport { RT_LOCAL, RT_HTTPS, RT_SSH, RT_OTHER };
 
