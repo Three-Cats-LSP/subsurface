@@ -406,7 +406,10 @@ ApplicationWindow {
 					color: window.surface
 					border.width: 1
 					border.color: window.border
-					Text { anchors { right: parent.right; bottom: parent.bottom; margins: 14 }; text: qsTr("View profile →"); color: window.accent; font.pixelSize: 10 }
+					Text {
+						anchors { right: parent.right; bottom: parent.bottom; margins: 14 }
+						text: qsTr("View profile →"); color: window.accent; font.pixelSize: 10
+					}
 					MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: diveLog.selectDive(modelData.sourceIndex) }
 
 					ColumnLayout {
@@ -493,7 +496,11 @@ ApplicationWindow {
 						required property var modelData
 						Layout.fillWidth: true; Layout.preferredHeight: window.compact ? 88 : 104
 						radius: 13; color: window.surface; border.width: 1; border.color: window.border
-						Column { anchors.centerIn: parent; spacing: 4; Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.value; color: window.primaryText; font.pixelSize: window.compact ? 17 : 25; font.weight: Font.DemiBold }; Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: window.compact ? 7 : 9; font.letterSpacing: 0.8 } }
+						Column {
+							anchors.centerIn: parent; spacing: 4
+							Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.value; color: window.primaryText; font.pixelSize: window.compact ? 17 : 25; font.weight: Font.DemiBold }
+							Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: window.compact ? 7 : 9; font.letterSpacing: 0.8 }
+						}
 					}
 				}
 			}
@@ -506,7 +513,12 @@ ApplicationWindow {
 					id: profileContent
 					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
 					spacing: 10
-					RowLayout { Layout.fillWidth: true; Text { text: qsTr("Recorded profile"); color: window.primaryText; font.pixelSize: 18; font.weight: Font.DemiBold }; Item { Layout.fillWidth: true }; Text { text: qsTr("%1 samples").arg(diveLog.selectedDive.sampleCount || 0); color: window.secondaryText; font.pixelSize: 10 } }
+					RowLayout {
+						Layout.fillWidth: true
+						Text { text: qsTr("Recorded profile"); color: window.primaryText; font.pixelSize: 18; font.weight: Font.DemiBold }
+						Item { Layout.fillWidth: true }
+						Text { text: qsTr("%1 samples").arg(diveLog.selectedDive.sampleCount || 0); color: window.secondaryText; font.pixelSize: 10 }
+					}
 					Text { text: qsTr("Recorded computer data. Calculated GF and ceiling will appear when the mature profile pipeline is connected to WebAssembly."); color: window.secondaryText; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					RowLayout {
 						Layout.fillWidth: true; spacing: 7
@@ -521,20 +533,61 @@ ApplicationWindow {
 
 			GridLayout {
 				visible: !window.compact; Layout.fillWidth: true; columns: 5; columnSpacing: 10
-				Repeater { model: [{label: qsTr("GAS"), value: diveLog.selectedDive.gas || "—"}, {label: qsTr("GEAR"), value: diveLog.selectedDive.gear || "—"}, {label: qsTr("MODE"), value: diveLog.selectedDive.mode || "—"}, {label: qsTr("TYPE"), value: qsTr("Not recorded")}, {label: qsTr("BUDDY"), value: diveLog.selectedDive.buddy || "—"}]; delegate: Rectangle { required property var modelData; Layout.fillWidth: true; Layout.preferredHeight: 92; radius: 13; color: window.surface; border.width: 1; border.color: window.border; Column { anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 14 }; spacing: 4; Text { text: modelData.label; color: window.accent; font.pixelSize: 8; font.letterSpacing: 0.8 }; Text { width: parent.width; text: modelData.value; color: window.primaryText; font.pixelSize: 14; elide: Text.ElideRight } } } }
+				Repeater {
+					model: [{label: qsTr("GAS"), value: diveLog.selectedDive.gas || "—"}, {label: qsTr("GEAR"), value: diveLog.selectedDive.gear || "—"}, {label: qsTr("MODE"), value: diveLog.selectedDive.mode || "—"}, {label: qsTr("TYPE"), value: qsTr("Not recorded")}, {label: qsTr("BUDDY"), value: diveLog.selectedDive.buddy || "—"}]
+					delegate: Rectangle {
+						required property var modelData
+						Layout.fillWidth: true; Layout.preferredHeight: 92; radius: 13; color: window.surface; border.width: 1; border.color: window.border
+						Column {
+							anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 14 }
+							spacing: 4
+							Text { text: modelData.label; color: window.accent; font.pixelSize: 8; font.letterSpacing: 0.8 }
+							Text { width: parent.width; text: modelData.value; color: window.primaryText; font.pixelSize: 14; elide: Text.ElideRight }
+						}
+					}
+				}
 			}
 			GridLayout {
 				visible: window.compact; Layout.fillWidth: true; columns: 2; columnSpacing: 10
-				Repeater { model: [{label: qsTr("GAS"), value: diveLog.selectedDive.gas || "—"}, {label: qsTr("GEAR"), value: diveLog.selectedDive.gear || "—"}]; delegate: Rectangle { required property var modelData; Layout.fillWidth: true; Layout.preferredHeight: 82; radius: 13; color: window.surface; border.width: 1; border.color: window.border; Column { anchors.centerIn: parent; spacing: 3; Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: 8 }; Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.value; color: window.primaryText; font.pixelSize: 13 } } } }
+				Repeater {
+					model: [{label: qsTr("GAS"), value: diveLog.selectedDive.gas || "—"}, {label: qsTr("GEAR"), value: diveLog.selectedDive.gear || "—"}]
+					delegate: Rectangle {
+						required property var modelData
+						Layout.fillWidth: true; Layout.preferredHeight: 82; radius: 13; color: window.surface; border.width: 1; border.color: window.border
+						Column {
+							anchors.centerIn: parent; spacing: 3
+							Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: 8 }
+							Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.value; color: window.primaryText; font.pixelSize: 13 }
+						}
+					}
+				}
 			}
 			GridLayout {
 				visible: window.compact; Layout.fillWidth: true; columns: 3; columnSpacing: 8
-				Repeater { model: [{label: qsTr("MODE"), value: diveLog.selectedDive.mode || "—"}, {label: qsTr("TYPE"), value: qsTr("Not recorded")}, {label: qsTr("BUDDY"), value: diveLog.selectedDive.buddy || "—"}]; delegate: Rectangle { required property var modelData; Layout.fillWidth: true; Layout.preferredHeight: 82; radius: 13; color: window.surface; border.width: 1; border.color: window.border; Column { anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }; spacing: 3; Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: 7 }; Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: modelData.value; color: window.primaryText; font.pixelSize: 10; elide: Text.ElideRight } } } }
+				Repeater {
+					model: [{label: qsTr("MODE"), value: diveLog.selectedDive.mode || "—"}, {label: qsTr("TYPE"), value: qsTr("Not recorded")}, {label: qsTr("BUDDY"), value: diveLog.selectedDive.buddy || "—"}]
+					delegate: Rectangle {
+						required property var modelData
+						Layout.fillWidth: true; Layout.preferredHeight: 82; radius: 13; color: window.surface; border.width: 1; border.color: window.border
+						Column {
+							anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
+							spacing: 3
+							Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; color: window.accent; font.pixelSize: 7 }
+							Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: modelData.value; color: window.primaryText; font.pixelSize: 10; elide: Text.ElideRight }
+						}
+					}
+				}
 			}
 
 			Rectangle {
 				Layout.fillWidth: true; implicitHeight: notesColumn.implicitHeight + 30; radius: 13; color: window.surface; border.width: 1; border.color: window.border
-				ColumnLayout { id: notesColumn; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 15 }; spacing: 5; Text { text: qsTr("NOTES"); color: window.accent; font.pixelSize: 8; font.letterSpacing: 0.8 }; Text { text: diveLog.selectedDive.notes || qsTr("No notes recorded for this dive."); color: window.primaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+				ColumnLayout {
+					id: notesColumn
+					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 15 }
+					spacing: 5
+					Text { text: qsTr("NOTES"); color: window.accent; font.pixelSize: 8; font.letterSpacing: 0.8 }
+					Text { text: diveLog.selectedDive.notes || qsTr("No notes recorded for this dive."); color: window.primaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				}
 			}
 		}
 	}
