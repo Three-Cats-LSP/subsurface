@@ -71,8 +71,8 @@ Kirigami.ScrollablePage {
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Cloud & Sync"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Google Drive, Dropbox, conflicts, and backups"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Button { text: qsTr("Manage cloud providers"); Layout.fillWidth: true; onClicked: page.openCloudSync() }
-				Button {
+				Components.NeoButton { text: qsTr("Manage cloud providers"); Layout.fillWidth: true; variant: "primary"; onClicked: page.openCloudSync() }
+				Components.NeoButton {
 					text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Subsurface Cloud: connected") : qsTr("Subsurface Cloud compatibility")
 					Layout.fillWidth: true
 					onClicked: page.openSubsurfaceCloud()
@@ -106,11 +106,11 @@ Kirigami.ScrollablePage {
 				}
 				RowLayout {
 					Layout.fillWidth: true
-					Button { text: qsTr("Manage"); onClicked: page.openImport() }
+					Components.NeoButton { text: qsTr("Manage"); compact: true; onClicked: page.openImport() }
 					Item { Layout.fillWidth: true }
-					Button { text: qsTr("Forget"); enabled: PrefDiveComputer.vendor1 !== ""; onClicked: page.forgetComputers() }
+					Components.NeoButton { text: qsTr("Forget"); variant: "danger"; compact: true; enabled: PrefDiveComputer.vendor1 !== ""; onClicked: page.forgetComputers() }
 				}
-				Switch {
+				Components.NeoSwitch {
 					Layout.fillWidth: true
 					text: qsTr("Show unrecognized Bluetooth devices")
 					checked: manager.showNonDiveComputers
@@ -122,8 +122,8 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Interface"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-				Switch { Layout.fillWidth: true; text: qsTr("Single-column portrait layout"); checked: PrefDisplay.singleColumnPortrait; onToggled: PrefDisplay.singleColumnPortrait = checked }
-				Switch { Layout.fillWidth: true; text: qsTr("Three-metre profile grid"); checked: PrefDisplay.three_m_based_grid; onToggled: PrefDisplay.three_m_based_grid = checked }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Single-column portrait layout"); checked: PrefDisplay.singleColumnPortrait; onToggled: PrefDisplay.singleColumnPortrait = checked }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Three-metre profile grid"); checked: PrefDisplay.three_m_based_grid; onToggled: PrefDisplay.three_m_based_grid = checked }
 				GridLayout {
 					Layout.fillWidth: true
 					columns: 2
@@ -153,9 +153,9 @@ Kirigami.ScrollablePage {
 				GridLayout {
 					Layout.fillWidth: true
 					columns: 3
-					RadioButton { Layout.fillWidth: true; text: qsTr("Metric"); checked: Backend.unit_system === Enums.METRIC; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.METRIC; page.saveUnitChange() } }
-					RadioButton { Layout.fillWidth: true; text: qsTr("Imperial"); checked: Backend.unit_system === Enums.IMPERIAL; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.IMPERIAL; page.saveUnitChange() } }
-					RadioButton { Layout.fillWidth: true; text: qsTr("Personalize"); checked: Backend.unit_system === Enums.PERSONALIZE; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.PERSONALIZE; page.saveUnitChange() } }
+					Components.NeoRadioButton { Layout.fillWidth: true; text: qsTr("Metric"); checked: Backend.unit_system === Enums.METRIC; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.METRIC; page.saveUnitChange() } }
+					Components.NeoRadioButton { Layout.fillWidth: true; text: qsTr("Imperial"); checked: Backend.unit_system === Enums.IMPERIAL; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.IMPERIAL; page.saveUnitChange() } }
+					Components.NeoRadioButton { Layout.fillWidth: true; text: qsTr("Personalize"); checked: Backend.unit_system === Enums.PERSONALIZE; ButtonGroup.group: unitSystemGroup; onClicked: { Backend.unit_system = Enums.PERSONALIZE; page.saveUnitChange() } }
 				}
 				GridLayout {
 					visible: Backend.unit_system === Enums.PERSONALIZE
@@ -182,8 +182,8 @@ Kirigami.ScrollablePage {
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Updates"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Installed: %1").arg(manager.getVersion()); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-				Switch { Layout.fillWidth: true; text: qsTr("Automatically check for updates"); checked: !PrefUpdateManager.dont_check_for_updates; onToggled: PrefUpdateManager.dont_check_for_updates = !checked }
-				Button { Layout.fillWidth: true; text: qsTr("Update details"); onClicked: page.openAbout() }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Automatically check for updates"); checked: !PrefUpdateManager.dont_check_for_updates; onToggled: PrefUpdateManager.dont_check_for_updates = !checked }
+				Components.NeoButton { Layout.fillWidth: true; text: qsTr("Update details"); onClicked: page.openAbout() }
 			}
 		}
 
@@ -195,17 +195,17 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				columns: page.wideLayout ? 2 : 1
 				columnSpacing: tokens.space16
-				Switch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: PrefTechnicalDetails.dcceiling; onToggled: PrefTechnicalDetails.dcceiling = checked }
-				Switch { Layout.fillWidth: true; text: qsTr("Calculated ceiling"); checked: PrefTechnicalDetails.calcceiling; onToggled: PrefTechnicalDetails.calcceiling = checked }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: PrefTechnicalDetails.dcceiling; onToggled: PrefTechnicalDetails.dcceiling = checked }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Calculated ceiling"); checked: PrefTechnicalDetails.calcceiling; onToggled: PrefTechnicalDetails.calcceiling = checked }
 				ColumnLayout {
 					Layout.fillWidth: true
 					Text { text: qsTr("GF low"); color: tokens.textMuted; font.pixelSize: 10 }
-					SpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gflow; onValueModified: PrefTechnicalDetails.gflow = value }
+					Components.NeoSpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gflow; onValueModified: PrefTechnicalDetails.gflow = value }
 				}
 				ColumnLayout {
 					Layout.fillWidth: true
 					Text { text: qsTr("GF high"); color: tokens.textMuted; font.pixelSize: 10 }
-					SpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gfhigh; onValueModified: PrefTechnicalDetails.gfhigh = value }
+					Components.NeoSpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gfhigh; onValueModified: PrefTechnicalDetails.gfhigh = value }
 				}
 			}
 		}
@@ -219,7 +219,7 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Accounts, privacy & security"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
 					Text { text: qsTr("Review provider connections, credential protection, data flow, and account deletion"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
-				Button { text: qsTr("Open"); onClicked: page.openAccountSecurity() }
+				Components.NeoButton { text: qsTr("Open"); variant: "ghost"; compact: true; onClicked: page.openAccountSecurity() }
 			}
 		}
 
@@ -232,10 +232,10 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Specialist compatibility settings"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
 					Text { text: qsTr("Legacy profile colors, diagnostics, and uncommon Subsurface controls"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
-				Button { text: qsTr("Compatibility panel"); onClicked: page.openAdvancedSettings() }
+				Components.NeoButton { text: qsTr("Compatibility panel"); variant: "ghost"; compact: true; onClicked: page.openAdvancedSettings() }
 			}
 		}
 
-		Button { Layout.fillWidth: true; text: qsTr("About Subsurface Neo"); onClicked: page.openAbout() }
+		Components.NeoButton { Layout.fillWidth: true; text: qsTr("About Subsurface Neo"); onClicked: page.openAbout() }
 	}
 }

@@ -47,6 +47,9 @@
 		<file>modern/components/MetricCard.qml</file>
 		<file>modern/components/NeoButton.qml</file>
 		<file>modern/components/NeoComboBox.qml</file>
+		<file>modern/components/NeoRadioButton.qml</file>
+		<file>modern/components/NeoSpinBox.qml</file>
+		<file>modern/components/NeoSwitch.qml</file>
 		<file>modern/components/NeoTextArea.qml</file>
 		<file>modern/components/NeoTextField.qml</file>
 		<file>modern/components/NeoDiveIcon.qml</file>

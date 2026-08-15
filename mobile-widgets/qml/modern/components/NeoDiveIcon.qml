@@ -110,6 +110,14 @@ Canvas {
 		} else if (name === "search") {
 			ctx.beginPath(); ctx.arc(12, 12, 7, 0, Math.PI * 2); ctx.stroke()
 			line(ctx, [17, 17, 23, 23])
+		} else if (name === "settings") {
+			line(ctx, [5, 8, 23, 8]); line(ctx, [5, 14, 23, 14]); line(ctx, [5, 20, 23, 20])
+			ctx.beginPath(); ctx.arc(10, 8, 2.5, 0, Math.PI * 2); ctx.fill()
+			ctx.beginPath(); ctx.arc(18, 14, 2.5, 0, Math.PI * 2); ctx.fill()
+			ctx.beginPath(); ctx.arc(12, 20, 2.5, 0, Math.PI * 2); ctx.fill()
+		} else if (name === "export") {
+			line(ctx, [6, 16, 6, 23, 22, 23, 22, 16])
+			line(ctx, [14, 19, 14, 5, 9, 10]); line(ctx, [14, 5, 19, 10])
 		} else {
 			ctx.beginPath(); ctx.arc(14, 14, 8, 0, Math.PI * 2); ctx.stroke()
 		}
