@@ -55,7 +55,7 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Google Drive & Dropbox"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("%1 of %2 providers connected").arg(page.connectedProviderCount()).arg(CloudSync.providers.length); color: page.connectedProviderCount() > 0 ? tokens.success : tokens.textSecondary; font.pixelSize: 12 }
 				Text { text: page.credentialProtection(); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Button { Layout.fillWidth: true; text: qsTr("Manage providers"); onClicked: page.openCloudSync() }
+				Components.NeoButton { Layout.fillWidth: true; text: qsTr("Manage providers"); variant: "primary"; onClicked: page.openCloudSync() }
 			}
 
 			Components.ModernCard {
@@ -63,7 +63,7 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("Subsurface Cloud"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: page.subsurfaceStatus(); color: Backend.cloud_verification_status === Enums.CS_VERIFIED ? tokens.success : tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
 				Text { text: Qt.platform.os === "android" || Qt.platform.os === "windows" ? qsTr("Compatibility service for the original Subsurface ecosystem. Its saved password uses the same secure native credential store described above.") : qsTr("Compatibility service for the original Subsurface ecosystem. Secure persistent password storage is unavailable on this platform."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Button { Layout.fillWidth: true; text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Change account") : qsTr("Connect"); onClicked: page.openSubsurfaceCloud() }
+				Components.NeoButton { Layout.fillWidth: true; text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Change account") : qsTr("Connect"); onClicked: page.openSubsurfaceCloud() }
 			}
 		}
 
@@ -84,7 +84,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Danger zone"); color: tokens.warning; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Deleting the Subsurface Cloud account permanently removes that server account. This is different from disconnecting Google Drive or Dropbox and cannot be undone."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Button { text: qsTr("Delete Subsurface Cloud account"); onClicked: { confirmationField.text = ""; deleteDialog.open() } }
+			Components.NeoButton { text: qsTr("Delete Subsurface Cloud account"); variant: "danger"; onClicked: { confirmationField.text = ""; deleteDialog.open() } }
 		}
 	}
 
@@ -100,11 +100,15 @@ Kirigami.ScrollablePage {
 			spacing: tokens.space12
 			Text { text: qsTr("Account: %1").arg(PrefCloudStorage.cloud_storage_email); color: tokens.textPrimary; font.weight: Font.DemiBold; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
 			Text { text: qsTr("Make a local backup first. Then type DELETE to confirm permanent server-side account deletion."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			TextField { id: confirmationField; Layout.fillWidth: true; placeholderText: qsTr("Type DELETE") }
+			Components.NeoTextField { id: confirmationField; Layout.fillWidth: true; placeholderText: qsTr("Type DELETE") }
 		}
-		footer: DialogButtonBox {
-			Button {
+		footer: RowLayout {
+			spacing: tokens.space8
+			Item { Layout.fillWidth: true }
+			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: deleteDialog.close() }
+			Components.NeoButton {
 				text: qsTr("Delete permanently")
+				variant: "danger"
 				enabled: confirmationField.text.trim() === "DELETE"
 				onClicked: {
 					deleteDialog.close()
@@ -116,7 +120,6 @@ Kirigami.ScrollablePage {
 						showPassiveNotification(qsTr("Account deletion did not complete: %1").arg(manager.startPageText), 7000)
 				}
 			}
-			Button { text: qsTr("Cancel"); onClicked: deleteDialog.close() }
 		}
 	}
 }

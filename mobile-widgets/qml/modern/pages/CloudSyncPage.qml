@@ -85,6 +85,11 @@ Kirigami.ScrollablePage {
 					RowLayout {
 						Layout.fillWidth: true
 						spacing: tokens.space12
+						Rectangle {
+							Layout.preferredWidth: 42; Layout.preferredHeight: 42; radius: 21
+							color: modelData.connected ? "#083449" : tokens.surfaceRaised
+							Components.NeoDiveIcon { anchors.centerIn: parent; width: 24; height: 24; name: "cloud"; iconColor: modelData.connected ? tokens.accent : tokens.textMuted }
+						}
 
 						ColumnLayout {
 							Layout.fillWidth: true
@@ -149,8 +154,10 @@ Kirigami.ScrollablePage {
 					RowLayout {
 						visible: (page.conflictProvider === modelData.id || page.initialChoiceProvider === modelData.id) && modelData.connected
 						Layout.fillWidth: true
-						Button {
+						Components.NeoButton {
+							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Keep this device")
+							variant: "primary"; compact: true
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.conflictProvider = ""
@@ -158,8 +165,10 @@ Kirigami.ScrollablePage {
 								CloudSync.backupDiveLog(modelData.id)
 							}
 						}
-						Button {
+						Components.NeoButton {
+							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Use cloud copy")
+							compact: true
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.conflictProvider = ""
@@ -172,13 +181,15 @@ Kirigami.ScrollablePage {
 					RowLayout {
 						visible: modelData.connected
 						Layout.fillWidth: true
-						Button {
+						Components.NeoButton {
 							text: modelData.primary ? qsTr("Primary") : qsTr("Set primary")
+							compact: true; variant: modelData.primary ? "primary" : "secondary"
 							enabled: !CloudSync.syncInProgress
 							onClicked: CloudSync.setPrimaryProvider(modelData.primary ? "" : modelData.id)
 						}
-						Button {
+						Components.NeoButton {
 							text: modelData.backup ? qsTr("Backup") : qsTr("Set backup")
+							compact: true; variant: modelData.backup ? "primary" : "secondary"
 							enabled: !CloudSync.syncInProgress && !modelData.primary
 							onClicked: CloudSync.setBackupProvider(modelData.backup ? "" : modelData.id)
 						}
@@ -191,9 +202,10 @@ Kirigami.ScrollablePage {
 						columns: page.width >= 600 ? 3 : 2
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
-						Button {
-							Layout.fillWidth: true
+						Components.NeoButton {
+							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Sync now")
+							variant: "primary"; compact: true
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.lastSyncProvider = ""
@@ -202,19 +214,22 @@ Kirigami.ScrollablePage {
 								CloudSync.syncDiveLog(modelData.id)
 							}
 						}
-						Button {
-							Layout.fillWidth: true
+						Components.NeoButton {
+							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Backup now")
+							compact: true
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.lastBackupProvider = ""
 								CloudSync.backupDiveLog(modelData.id)
 							}
 						}
-						Button {
+						Components.NeoButton {
 							Layout.fillWidth: true
+							Layout.minimumWidth: 0
 							Layout.columnSpan: page.width >= 600 ? 1 : 2
 							text: qsTr("Disconnect")
+							variant: "danger"; compact: true
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.pendingDisconnectProvider = modelData.id
@@ -224,9 +239,10 @@ Kirigami.ScrollablePage {
 						}
 					}
 
-					Button {
+					Components.NeoButton {
 						visible: !modelData.connected
 						text: qsTr("Connect")
+						variant: "primary"
 						enabled: modelData.configured && !CloudSync.authorizationInProgress && !CloudSync.syncInProgress
 						onClicked: CloudSync.beginAuthorization(modelData.id)
 					}
@@ -267,9 +283,6 @@ Kirigami.ScrollablePage {
 			text: qsTr("OAuth tokens and saved synchronization state for this provider will be removed from this device. Remote files will not be deleted.")
 			color: tokens.textSecondary; wrapMode: Text.WordWrap
 		}
-		footer: DialogButtonBox {
-			Button { text: qsTr("Disconnect"); onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } }
-			Button { text: qsTr("Cancel"); onClicked: disconnectDialog.close() }
-		}
+		footer: RowLayout { spacing: tokens.space8; Item { Layout.fillWidth: true }; Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: disconnectDialog.close() }; Components.NeoButton { text: qsTr("Disconnect"); variant: "danger"; onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } } }
 	}
 }
