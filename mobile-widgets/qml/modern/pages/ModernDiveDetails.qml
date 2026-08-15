@@ -147,6 +147,18 @@ Kirigami.Page {
 				profile.triggerUpdate()
 			}
 
+			function setProfileOption(option, enabled) {
+				if (option === "analysis")
+					ProfilePrefs.decoinfo = enabled
+				else if (option === "ndl")
+					ProfilePrefs.calcndltts = enabled
+				else if (option === "ceiling")
+					ProfilePrefs.calcceiling = enabled
+				else if (option === "pressure")
+					ProfilePrefs.tankbar = enabled
+				refreshProfile()
+			}
+
 			function pressureSummary() {
 				var start = modelData.startPressure || ""
 				var end = modelData.endPressure || ""
@@ -298,6 +310,61 @@ Kirigami.Page {
 									delegate: ItemDelegate { required property int index; required property var modelData; text: qsTr("Computer %1").arg(index + 1) }
 									displayText: qsTr("DC %1/%2").arg(profile.currentDC + 1).arg(profile.numDC)
 									onActivated: function(index) { profile.setCurrentDC(index); profileInspector.clear() }
+								}
+							}
+
+							GridLayout {
+								Layout.fillWidth: true
+								Layout.leftMargin: tokens.space8
+								Layout.rightMargin: tokens.space8
+								Layout.bottomMargin: tokens.space8
+								columns: 4
+								columnSpacing: tokens.space8
+								rowSpacing: tokens.space8
+
+								Button {
+									id: gf99Option
+									Layout.fillWidth: true
+									Layout.preferredHeight: 34
+									text: qsTr("GF99")
+									checkable: true
+									checked: ProfilePrefs.decoinfo
+									onClicked: delegateRoot.setProfileOption("analysis", checked)
+									contentItem: Text { text: gf99Option.text; color: gf99Option.checked ? "#D86CF0" : tokens.textSecondary; font.pixelSize: page.width < 430 ? 10 : 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+									background: Rectangle { radius: tokens.radiusSmall; color: gf99Option.checked ? Qt.rgba(0.85, 0.42, 0.94, 0.10) : "transparent"; border.width: 1; border.color: gf99Option.checked ? "#A858C0" : tokens.border }
+								}
+								Button {
+									id: ndlOption
+									Layout.fillWidth: true
+									Layout.preferredHeight: 34
+									text: qsTr("NDL / TTS")
+									checkable: true
+									checked: ProfilePrefs.calcndltts
+									onClicked: delegateRoot.setProfileOption("ndl", checked)
+									contentItem: Text { text: ndlOption.text; color: ndlOption.checked ? "#F4C430" : tokens.textSecondary; font.pixelSize: page.width < 430 ? 9 : 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+									background: Rectangle { radius: tokens.radiusSmall; color: ndlOption.checked ? Qt.rgba(0.96, 0.77, 0.19, 0.09) : "transparent"; border.width: 1; border.color: ndlOption.checked ? "#A58B2D" : tokens.border }
+								}
+								Button {
+									id: ceilingOption
+									Layout.fillWidth: true
+									Layout.preferredHeight: 34
+									text: qsTr("Ceiling")
+									checkable: true
+									checked: ProfilePrefs.calcceiling
+									onClicked: delegateRoot.setProfileOption("ceiling", checked)
+									contentItem: Text { text: ceilingOption.text; color: ceilingOption.checked ? tokens.accent : tokens.textSecondary; font.pixelSize: page.width < 430 ? 10 : 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+									background: Rectangle { radius: tokens.radiusSmall; color: ceilingOption.checked ? Qt.rgba(0.13, 0.83, 0.92, 0.09) : "transparent"; border.width: 1; border.color: ceilingOption.checked ? tokens.accentStrong : tokens.border }
+								}
+								Button {
+									id: pressureOption
+									Layout.fillWidth: true
+									Layout.preferredHeight: 34
+									text: qsTr("Pressure")
+									checkable: true
+									checked: ProfilePrefs.tankbar
+									onClicked: delegateRoot.setProfileOption("pressure", checked)
+									contentItem: Text { text: pressureOption.text; color: pressureOption.checked ? tokens.success : tokens.textSecondary; font.pixelSize: page.width < 430 ? 9 : 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+									background: Rectangle { radius: tokens.radiusSmall; color: pressureOption.checked ? Qt.rgba(0.26, 0.82, 0.48, 0.09) : "transparent"; border.width: 1; border.color: pressureOption.checked ? tokens.success : tokens.border }
 								}
 							}
 
@@ -526,7 +593,7 @@ Kirigami.Page {
 												height: 1
 												color: tokens.border
 											}
-											Text { visible: profileInspector.sampleInfo.gf !== undefined; text: qsTr("GF %1").arg(profileInspector.sampleInfo.gf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
+											Text { visible: profileInspector.sampleInfo.gf !== undefined; text: qsTr("GF99 %1").arg(profileInspector.sampleInfo.gf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text { visible: profileInspector.sampleInfo.surfaceGf !== undefined; text: qsTr("Surface GF %1").arg(profileInspector.sampleInfo.surfaceGf || "—"); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text { visible: !!profileInspector.sampleInfo.calculatedCeiling; text: qsTr("Calculated ceiling %1").arg(profileInspector.sampleInfo.calculatedCeiling || ""); color: tokens.textSecondary; font.pixelSize: 11 }
 											Text { visible: !!profileInspector.sampleInfo.calculatedNdl; text: qsTr("Calculated NDL %1").arg(profileInspector.sampleInfo.calculatedNdl || ""); color: tokens.textSecondary; font.pixelSize: 11 }
