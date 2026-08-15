@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <vector>
 
 namespace {
 
@@ -152,12 +153,19 @@ bool calculate_native_profile(native_divelog_summary &summary, int diveIndex, QS
 
 	dive_table context;
 	dive *selectedDive = nullptr;
-	for (int index = 0; index <= diveIndex; ++index) {
+	std::vector<std::unique_ptr<dive>> canonicalDives;
+	canonicalDives.reserve(summary.dives.size());
+	for (int index = 0; index < summary.dives.size(); ++index) {
 		auto item = canonicalDive(summary.dives[index]);
 		if (index == diveIndex)
 			selectedDive = item.get();
-		context.put_back(std::move(item));
+		canonicalDives.push_back(std::move(item));
 	}
+	std::sort(canonicalDives.begin(), canonicalDives.end(), [](const auto &left, const auto &right) {
+		return left->when < right->when;
+	});
+	for (auto &item : canonicalDives)
+		context.put_back(std::move(item));
 	if (!selectedDive) {
 		if (error)
 			*error = QStringLiteral("The selected dive could not be converted to Subsurface's canonical model.");
