@@ -77,6 +77,16 @@ Canvas {
 		} else if (name === "notes") {
 			ctx.strokeRect(6, 5, 16, 18)
 			line(ctx, [10, 10, 18, 10]); line(ctx, [10, 14, 18, 14]); line(ctx, [10, 18, 16, 18])
+		} else if (name === "cloud") {
+			ctx.beginPath()
+			ctx.moveTo(7, 20)
+			ctx.bezierCurveTo(3, 20, 3, 14, 8, 13)
+			ctx.bezierCurveTo(9, 7, 18, 6, 20, 12)
+			ctx.bezierCurveTo(26, 12, 27, 20, 21, 20)
+			ctx.closePath()
+			ctx.stroke()
+			line(ctx, [14, 22, 14, 13, 10, 17])
+			line(ctx, [14, 13, 18, 17])
 		} else if (name === "home") {
 			line(ctx, [5, 13, 14, 5, 23, 13])
 			ctx.beginPath(); ctx.moveTo(8, 12); ctx.lineTo(8, 23); ctx.lineTo(20, 23); ctx.lineTo(20, 12); ctx.stroke()

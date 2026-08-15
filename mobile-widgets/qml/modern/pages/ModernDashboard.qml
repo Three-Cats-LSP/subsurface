@@ -53,9 +53,14 @@ Kirigami.ScrollablePage {
 				}
 			}
 
+			Button {
+				visible: page.wideLayout
+				text: qsTr("Import")
+				onClicked: page.openImport()
+			}
 			ToolButton {
-				text: "☁"
-				font.pixelSize: 22
+				accessibleName: qsTr("Cloud & Sync")
+				contentItem: Components.NeoDiveIcon { name: "cloud"; iconColor: tokens.accent; width: 24; height: 24 }
 				ToolTip.visible: hovered
 				ToolTip.text: qsTr("Cloud & Sync")
 				onClicked: page.openCloudSync()
@@ -64,7 +69,7 @@ Kirigami.ScrollablePage {
 
 		GridLayout {
 			Layout.fillWidth: true
-			columns: 3
+			columns: page.wideLayout ? 4 : 3
 			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
 			rowSpacing: tokens.space8
 
@@ -88,6 +93,14 @@ Kirigami.ScrollablePage {
 				value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"
 				suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""
 				iconName: "depth"
+				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
+			Components.MetricCard {
+				visible: page.wideLayout
+				label: qsTr("Avg water")
+				value: NeoDashboard.averageWaterTemp.length > 0 ? NeoDashboard.averageWaterTemp : "—"
+				iconName: "temperature"
 				Layout.fillWidth: true
 				Layout.minimumWidth: 0
 			}
@@ -116,6 +129,12 @@ Kirigami.ScrollablePage {
 			font.pixelSize: 14
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
+		}
+		Button {
+			visible: NeoDashboard.recentDives.length === 0
+			text: qsTr("Import dives")
+			Layout.alignment: Qt.AlignLeft
+			onClicked: page.openImport()
 		}
 
 		GridLayout {
@@ -243,11 +262,5 @@ Kirigami.ScrollablePage {
 			}
 		}
 
-		RowLayout {
-			Layout.fillWidth: true
-			spacing: tokens.space12
-			Button { text: qsTr("Import dives"); Layout.fillWidth: true; onClicked: page.openImport() }
-			Button { text: qsTr("Cloud & Sync"); Layout.fillWidth: true; onClicked: page.openCloudSync() }
-		}
 	}
 }
