@@ -8,6 +8,29 @@
 
 class QIODevice;
 
+struct native_sample_summary {
+	int time_seconds = 0;
+	double depth_m = 0.0;
+	double temperature_c = 0.0;
+	double pressure_bar = 0.0;
+	int ndl_seconds = 0;
+	int tts_seconds = 0;
+	double stop_depth_m = 0.0;
+	int stop_time_seconds = 0;
+	double cns_percent = 0.0;
+	double setpoint_bar = 0.0;
+	bool has_depth = false;
+	bool has_temperature = false;
+	bool has_pressure = false;
+	bool has_ndl = false;
+	bool has_tts = false;
+	bool has_stop_depth = false;
+	bool has_stop_time = false;
+	bool has_cns = false;
+	bool has_setpoint = false;
+	bool in_deco = false;
+};
+
 struct native_dive_summary {
 	int number = 0;
 	QDateTime when;
@@ -23,6 +46,7 @@ struct native_dive_summary {
 	QString gas;
 	QString mode = QStringLiteral("OC");
 	QString gear;
+	QVector<native_sample_summary> samples;
 };
 
 struct native_divelog_summary {

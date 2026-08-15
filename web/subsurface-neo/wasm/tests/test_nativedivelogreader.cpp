@@ -27,7 +27,10 @@ void TestNativeDiveLogReader::readsNativeSummary()
       <divecomputer dctype="CCR">
         <depth max="27.4 m" />
         <temperature water="22.0 C" />
+        <sample time="0:30 min" depth="6.0 m" temp="22.0 C" pressure0="198.0 bar" ndl="45:00 min" cns="2%" po2="1.20 bar" />
+        <sample time="1:00 min" depth="12.0 m" pressure0="194.0 bar" ndl="40:00 min" tts="3:00 min" in_deco="1" stopdepth="3.0 m" stoptime="1:00 min" />
       </divecomputer>
+      <divecomputer model="backup"><sample time="1:00 min" depth="11.5 m" /></divecomputer>
     </dive>
     <dive number="248" date="2026-07-29" time="09:05:00">
       <divecomputer>
@@ -53,6 +56,19 @@ void TestNativeDiveLogReader::readsNativeSummary()
 	QCOMPARE(first.mode, QStringLiteral("CCR"));
 	QCOMPARE(first.gear, QStringLiteral("AL80"));
 	QCOMPARE(first.buddy, QStringLiteral("Dirk Hohndel"));
+	QCOMPARE(first.samples.size(), 2);
+	const native_sample_summary &sample = first.samples.at(1);
+	QCOMPARE(sample.time_seconds, 60);
+	QCOMPARE(sample.depth_m, 12.0);
+	QCOMPARE(sample.temperature_c, 22.0);
+	QCOMPARE(sample.pressure_bar, 194.0);
+	QCOMPARE(sample.ndl_seconds, 40 * 60);
+	QCOMPARE(sample.tts_seconds, 3 * 60);
+	QCOMPARE(sample.stop_depth_m, 3.0);
+	QCOMPARE(sample.stop_time_seconds, 60);
+	QCOMPARE(sample.cns_percent, 2.0);
+	QCOMPARE(sample.setpoint_bar, 1.2);
+	QVERIFY(sample.in_deco);
 
 	const native_dive_summary &second = summary.dives.at(1);
 	QCOMPARE(second.duration_seconds, 52 * 60);

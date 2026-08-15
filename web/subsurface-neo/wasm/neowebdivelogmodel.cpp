@@ -44,6 +44,62 @@ QString localPathForUrl(const QUrl &url)
 	return local.isEmpty() ? url.path() : local;
 }
 
+QVariantMap diveMap(const native_dive_summary &dive, int sourceIndex)
+{
+	QVariantMap item;
+	item.insert(QStringLiteral("sourceIndex"), sourceIndex);
+	item.insert(QStringLiteral("number"), dive.number);
+	item.insert(QStringLiteral("date"), dive.when.isValid() ?
+		QLocale().toString(dive.when.date(), QLocale::ShortFormat) : QObject::tr("Date unavailable"));
+	item.insert(QStringLiteral("time"), dive.when.isValid() ?
+		QLocale().toString(dive.when.time(), QLocale::ShortFormat) : QString());
+	item.insert(QStringLiteral("location"), dive.location.isEmpty() ? QObject::tr("Unnamed dive site") : dive.location);
+	item.insert(QStringLiteral("duration"), durationText(dive.duration_seconds));
+	item.insert(QStringLiteral("durationSeconds"), dive.duration_seconds);
+	item.insert(QStringLiteral("depth"), dive.has_max_depth ? depthText(dive.max_depth_m) : QStringLiteral("—"));
+	item.insert(QStringLiteral("depthMeters"), dive.has_max_depth ? dive.max_depth_m : 0.0);
+	item.insert(QStringLiteral("temperature"), dive.has_water_temperature ?
+		temperatureText(dive.water_temperature_c) : QStringLiteral("—"));
+	item.insert(QStringLiteral("temperatureCelsius"), dive.has_water_temperature ? dive.water_temperature_c : 0.0);
+	item.insert(QStringLiteral("gas"), dive.gas);
+	item.insert(QStringLiteral("mode"), dive.mode);
+	item.insert(QStringLiteral("gear"), dive.gear);
+	item.insert(QStringLiteral("buddy"), dive.buddy);
+	item.insert(QStringLiteral("notes"), dive.notes);
+	item.insert(QStringLiteral("suit"), dive.suit);
+	item.insert(QStringLiteral("sampleCount"), dive.samples.size());
+	return item;
+}
+
+QVariantMap sampleMap(const native_sample_summary &sample)
+{
+	QVariantMap item;
+	item.insert(QStringLiteral("timeSeconds"), sample.time_seconds);
+	item.insert(QStringLiteral("timeMinutes"), sample.time_seconds / 60.0);
+	item.insert(QStringLiteral("depthMeters"), sample.depth_m);
+	item.insert(QStringLiteral("temperatureCelsius"), sample.temperature_c);
+	item.insert(QStringLiteral("pressureBar"), sample.pressure_bar);
+	item.insert(QStringLiteral("ndlSeconds"), sample.ndl_seconds);
+	item.insert(QStringLiteral("ndlMinutes"), sample.ndl_seconds / 60.0);
+	item.insert(QStringLiteral("ttsSeconds"), sample.tts_seconds);
+	item.insert(QStringLiteral("ttsMinutes"), sample.tts_seconds / 60.0);
+	item.insert(QStringLiteral("stopDepthMeters"), sample.stop_depth_m);
+	item.insert(QStringLiteral("stopTimeSeconds"), sample.stop_time_seconds);
+	item.insert(QStringLiteral("cnsPercent"), sample.cns_percent);
+	item.insert(QStringLiteral("setpointBar"), sample.setpoint_bar);
+	item.insert(QStringLiteral("hasDepth"), sample.has_depth);
+	item.insert(QStringLiteral("hasTemperature"), sample.has_temperature);
+	item.insert(QStringLiteral("hasPressure"), sample.has_pressure);
+	item.insert(QStringLiteral("hasNdl"), sample.has_ndl);
+	item.insert(QStringLiteral("hasTts"), sample.has_tts);
+	item.insert(QStringLiteral("hasStopDepth"), sample.has_stop_depth);
+	item.insert(QStringLiteral("hasStopTime"), sample.has_stop_time);
+	item.insert(QStringLiteral("hasCns"), sample.has_cns);
+	item.insert(QStringLiteral("hasSetpoint"), sample.has_setpoint);
+	item.insert(QStringLiteral("inDeco"), sample.in_deco);
+	return item;
+}
+
 } // namespace
 
 NeoWebDiveLogModel::NeoWebDiveLogModel(QObject *parent) : QObject(parent)
@@ -72,6 +128,21 @@ QString NeoWebDiveLogModel::maxDepth() const
 QVariantList NeoWebDiveLogModel::recentDives() const
 {
 	return m_recentDives;
+}
+
+QVariantMap NeoWebDiveLogModel::selectedDive() const
+{
+	return m_selectedDive;
+}
+
+QVariantList NeoWebDiveLogModel::profileSamples() const
+{
+	return m_profileSamples;
+}
+
+bool NeoWebDiveLogModel::hasSelectedDive() const
+{
+	return !m_selectedDive.isEmpty();
 }
 
 QString NeoWebDiveLogModel::fileStatus() const
@@ -141,6 +212,28 @@ void NeoWebDiveLogModel::setBrowserFileError(const QString &message)
 	emit changed();
 }
 
+void NeoWebDiveLogModel::selectDive(int sourceIndex)
+{
+	if (sourceIndex < 0 || sourceIndex >= m_summary.dives.size())
+		return;
+	const native_dive_summary &dive = m_summary.dives.at(sourceIndex);
+	m_selectedDive = diveMap(dive, sourceIndex);
+	m_profileSamples.clear();
+	m_profileSamples.reserve(dive.samples.size());
+	for (const native_sample_summary &sample : dive.samples)
+		m_profileSamples.push_back(sampleMap(sample));
+	emit changed();
+}
+
+void NeoWebDiveLogModel::clearSelectedDive()
+{
+	if (m_selectedDive.isEmpty())
+		return;
+	m_selectedDive.clear();
+	m_profileSamples.clear();
+	emit changed();
+}
+
 void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 {
 	const QString localPath = localPathForUrl(url);
@@ -170,33 +263,20 @@ void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 		return;
 	}
 
-	m_diveCount = summary.dives.size();
+	m_summary = summary;
+	m_selectedDive.clear();
+	m_profileSamples.clear();
+	m_diveCount = m_summary.dives.size();
 	m_totalSeconds = 0;
 	m_maxDepthMeters = 0.0;
 	m_recentDives.clear();
-	for (const native_dive_summary &dive : summary.dives) {
+	for (const native_dive_summary &dive : m_summary.dives) {
 		m_totalSeconds += dive.duration_seconds;
 		if (dive.has_max_depth)
 			m_maxDepthMeters = std::max(m_maxDepthMeters, dive.max_depth_m);
 	}
-	for (int index = summary.dives.size() - 1; index >= 0 && m_recentDives.size() < 5; --index) {
-		const native_dive_summary &dive = summary.dives.at(index);
-		QVariantMap item;
-		item.insert(QStringLiteral("number"), dive.number);
-		item.insert(QStringLiteral("date"), dive.when.isValid() ?
-			QLocale().toString(dive.when.date(), QLocale::ShortFormat) : tr("Date unavailable"));
-		item.insert(QStringLiteral("location"), dive.location.isEmpty() ? tr("Unnamed dive site") : dive.location);
-		item.insert(QStringLiteral("duration"), durationText(dive.duration_seconds));
-		item.insert(QStringLiteral("depth"), dive.has_max_depth ? depthText(dive.max_depth_m) : QStringLiteral("—"));
-		item.insert(QStringLiteral("temperature"), dive.has_water_temperature ?
-			temperatureText(dive.water_temperature_c) : QStringLiteral("—"));
-		item.insert(QStringLiteral("gas"), dive.gas);
-		item.insert(QStringLiteral("mode"), dive.mode);
-		item.insert(QStringLiteral("gear"), dive.gear);
-		item.insert(QStringLiteral("buddy"), dive.buddy);
-		item.insert(QStringLiteral("notes"), dive.notes);
-		m_recentDives.push_back(item);
-	}
+	for (int index = m_summary.dives.size() - 1; index >= 0 && m_recentDives.size() < 5; --index)
+		m_recentDives.push_back(diveMap(m_summary.dives.at(index), index));
 
 	m_error = false;
 	m_loaded = true;

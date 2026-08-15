@@ -11,11 +11,14 @@ The current bootstrap provides:
 - a browser-controlled local-file picker;
 - a shared C++ core reader for native Subsurface XML logs;
 - real dashboard totals and recent-dive summaries from the selected log;
+- selectable dive-detail pages with recorded profile samples;
+- an interactive depth, temperature, NDL, and cylinder-pressure chart;
+- recorded TTS, deco-stop, CNS, and CCR-setpoint values in the sample inspector;
 - honest fallbacks when a browser cannot offer direct hardware access; and
 - a reproducible Qt 6.8 / Emscripten build artifact.
 
 It does **not** implement decompression mathematics in JavaScript. Foreign-format
-imports, full profile processing, editing, cloud synchronization, and the
+imports, calculated GF/ceiling profile processing, editing, cloud synchronization, and the
 planner must be connected to the corresponding shared Subsurface C++ pipelines
 before those features are presented as available. The current browser reader
 intentionally accepts only the native XML format emitted by `core/save-xml.cpp`.

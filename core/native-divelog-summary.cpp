@@ -44,6 +44,14 @@ double temperatureInCelsius(const QString &value, bool *ok)
 	return value.contains(QLatin1Char('F'), Qt::CaseInsensitive) ? (temperature - 32.0) * 5.0 / 9.0 : temperature;
 }
 
+double pressureInBar(const QString &value, bool *ok)
+{
+	const double pressure = numberPart(value, ok);
+	if (!*ok)
+		return 0.0;
+	return value.contains(QStringLiteral("psi"), Qt::CaseInsensitive) ? pressure * 0.0689475729 : pressure;
+}
+
 int durationInSeconds(QString value)
 {
 	value = value.section(QLatin1Char(' '), 0, 0).trimmed();
@@ -138,6 +146,9 @@ native_divelog_summary read_native_divelog_summary(QIODevice &device, const QStr
 	QString textValue;
 	bool nativeRoot = false;
 	bool invalidDive = false;
+	int diveComputerIndex = -1;
+	bool inPrimaryDiveComputer = false;
+	native_sample_summary carriedSample;
 
 	while (!reader.atEnd()) {
 		const auto token = reader.readNext();
@@ -156,6 +167,9 @@ native_divelog_summary read_native_divelog_summary(QIODevice &device, const QStr
 				currentDive->duration_seconds = durationInSeconds(attributes.value(QStringLiteral("duration")).toString());
 				currentSiteId = normalizedId(attributes.value(QStringLiteral("divesiteid")).toString());
 				invalidDive = attributes.value(QStringLiteral("invalid")) == QLatin1String("1");
+				diveComputerIndex = -1;
+				inPrimaryDiveComputer = false;
+				carriedSample = {};
 			} else if (currentDive) {
 				if (name == QLatin1String("depth")) {
 					updateDepth(*currentDive, attributes.value(QStringLiteral("max")).toString());
@@ -166,7 +180,67 @@ native_divelog_summary read_native_divelog_summary(QIODevice &device, const QStr
 					updateTemperature(*currentDive, attributes.value(QStringLiteral("temp")).toString());
 					currentDive->duration_seconds = std::max(currentDive->duration_seconds,
 						durationInSeconds(attributes.value(QStringLiteral("time")).toString()));
+					if (inPrimaryDiveComputer) {
+						native_sample_summary sample = carriedSample;
+						sample.time_seconds = durationInSeconds(attributes.value(QStringLiteral("time")).toString());
+						bool ok = false;
+						const QString depthValue = attributes.value(QStringLiteral("depth")).toString();
+						sample.depth_m = depthInMeters(depthValue, &ok);
+						sample.has_depth = ok;
+						const QString temperatureValue = attributes.value(QStringLiteral("temp")).toString();
+						if (!temperatureValue.isEmpty()) {
+							sample.temperature_c = temperatureInCelsius(temperatureValue, &ok);
+							sample.has_temperature = ok;
+						}
+						for (const QXmlStreamAttribute &attribute : attributes) {
+							if (!attribute.name().toString().startsWith(QStringLiteral("pressure")))
+								continue;
+							sample.pressure_bar = pressureInBar(attribute.value().toString(), &ok);
+							sample.has_pressure = ok;
+							if (ok)
+								break;
+						}
+						const QString ndlValue = attributes.value(QStringLiteral("ndl")).toString();
+						if (!ndlValue.isEmpty()) {
+							sample.ndl_seconds = durationInSeconds(ndlValue);
+							sample.has_ndl = true;
+						}
+						const QString ttsValue = attributes.value(QStringLiteral("tts")).toString();
+						if (!ttsValue.isEmpty()) {
+							sample.tts_seconds = durationInSeconds(ttsValue);
+							sample.has_tts = true;
+						}
+						const QString stopDepthValue = attributes.value(QStringLiteral("stopdepth")).toString();
+						if (!stopDepthValue.isEmpty()) {
+							sample.stop_depth_m = depthInMeters(stopDepthValue, &ok);
+							sample.has_stop_depth = ok;
+						}
+						const QString stopTimeValue = attributes.value(QStringLiteral("stoptime")).toString();
+						if (!stopTimeValue.isEmpty()) {
+							sample.stop_time_seconds = durationInSeconds(stopTimeValue);
+							sample.has_stop_time = true;
+						}
+						const QString cnsValue = attributes.value(QStringLiteral("cns")).toString();
+						if (!cnsValue.isEmpty()) {
+							sample.cns_percent = percentage(cnsValue, &ok);
+							sample.has_cns = ok;
+						}
+						const QString setpointValue = attributes.value(QStringLiteral("po2")).toString();
+						if (!setpointValue.isEmpty()) {
+							sample.setpoint_bar = pressureInBar(setpointValue, &ok);
+							sample.has_setpoint = ok;
+						}
+						const QString inDecoValue = attributes.value(QStringLiteral("in_deco")).toString();
+						if (!inDecoValue.isEmpty())
+							sample.in_deco = inDecoValue == QLatin1String("1");
+						currentDive->samples.push_back(sample);
+						carriedSample = sample;
+					}
 				} else if (name == QLatin1String("divecomputer")) {
+					++diveComputerIndex;
+					inPrimaryDiveComputer = diveComputerIndex == 0;
+					if (inPrimaryDiveComputer)
+						carriedSample = {};
 					if (currentDive->duration_seconds == 0)
 						currentDive->duration_seconds = durationInSeconds(attributes.value(QStringLiteral("duration")).toString());
 					const QString mode = attributes.value(QStringLiteral("dctype")).toString();
@@ -199,6 +273,8 @@ native_divelog_summary read_native_divelog_summary(QIODevice &device, const QStr
 				textElement.clear();
 				textValue.clear();
 			}
+			if (name == QLatin1String("divecomputer"))
+				inPrimaryDiveComputer = false;
 			if (name == QLatin1String("dive") && currentDive) {
 				if (currentDive->location.isEmpty())
 					currentDive->location = siteNames.value(currentSiteId);
