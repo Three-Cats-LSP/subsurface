@@ -28,7 +28,9 @@ public:
 	bool loaded() const;
 	bool error() const;
 
+	Q_INVOKABLE void chooseLocalFile();
 	Q_INVOKABLE void openLocalFile(const QUrl &url);
+	void setBrowserFileError(const QString &message);
 
 signals:
 	void changed();

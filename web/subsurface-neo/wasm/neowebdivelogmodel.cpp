@@ -10,7 +10,15 @@
 
 #include <algorithm>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 namespace {
+
+#ifdef __EMSCRIPTEN__
+NeoWebDiveLogModel *webDiveLogModel = nullptr;
+#endif
 
 QString durationText(int seconds)
 {
@@ -40,6 +48,9 @@ QString localPathForUrl(const QUrl &url)
 
 NeoWebDiveLogModel::NeoWebDiveLogModel(QObject *parent) : QObject(parent)
 {
+#ifdef __EMSCRIPTEN__
+	webDiveLogModel = this;
+#endif
 }
 
 int NeoWebDiveLogModel::diveCount() const
@@ -76,6 +87,57 @@ bool NeoWebDiveLogModel::loaded() const
 bool NeoWebDiveLogModel::error() const
 {
 	return m_error;
+}
+
+void NeoWebDiveLogModel::chooseLocalFile()
+{
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = '.xml,.ssrf,text/xml,application/xml';
+		input.style.display = 'none';
+		document.body.appendChild(input);
+		input.addEventListener('change', async () => {
+			try {
+				const file = input.files && input.files[0];
+				if (!file)
+					return;
+				if (file.size > 64 * 1024 * 1024)
+					throw new Error(file.name + ' is larger than the 64 MB browser import limit.');
+				const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_') || 'divelog.ssrf';
+				const path = '/tmp/' + Date.now() + '-' + safeName;
+				FS.mkdirTree('/tmp');
+				FS.writeFile(path, new Uint8Array(await file.arrayBuffer()));
+				const size = lengthBytesUTF8(path) + 1;
+				const pointer = _malloc(size);
+				stringToUTF8(path, pointer, size);
+				_neo_web_file_selected(pointer);
+				_free(pointer);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				const size = lengthBytesUTF8(message) + 1;
+				const pointer = _malloc(size);
+				stringToUTF8(message, pointer, size);
+				_neo_web_file_error(pointer);
+				_free(pointer);
+			} finally {
+				input.remove();
+			}
+		}, { once: true });
+		input.click();
+	});
+#else
+	setBrowserFileError(tr("Local browser file selection is available in the WebAssembly build."));
+#endif
+}
+
+void NeoWebDiveLogModel::setBrowserFileError(const QString &message)
+{
+	m_error = true;
+	m_loaded = false;
+	m_fileStatus = message;
+	emit changed();
 }
 
 void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
@@ -142,3 +204,20 @@ void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 		.arg(info.fileName());
 	emit changed();
 }
+
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_file_selected(const char *path)
+{
+	if (!webDiveLogModel || !path)
+		return;
+	const QString localPath = QString::fromUtf8(path);
+	webDiveLogModel->openLocalFile(QUrl::fromLocalFile(localPath));
+	QFile::remove(localPath);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_file_error(const char *message)
+{
+	if (webDiveLogModel)
+		webDiveLogModel->setBrowserFileError(QString::fromUtf8(message ? message : "Browser file import failed."));
+}
+#endif

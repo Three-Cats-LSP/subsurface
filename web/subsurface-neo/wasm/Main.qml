@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
@@ -20,13 +19,6 @@ ApplicationWindow {
 	property color border: "#1b3c55"
 	property color primaryText: "#f5f9fc"
 	property color secondaryText: "#8fa7ba"
-
-	FileDialog {
-		id: localLogDialog
-		title: qsTr("Open a Subsurface dive log")
-		nameFilters: [qsTr("Subsurface dive logs (*.xml *.ssrf)"), qsTr("All files (*)")]
-		onAccepted: diveLog.openLocalFile(selectedFile)
-	}
 
 	component NeoButton: Button {
 		id: control
@@ -217,7 +209,7 @@ ApplicationWindow {
 					spacing: 10
 					Text { text: qsTr("Start with your real dive log"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
 					Text { text: qsTr("Open a native Subsurface XML log to populate this dashboard. The file stays in your browser session and is read by shared C++ core code; it is not uploaded."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-					NeoButton { text: qsTr("Choose local dive log"); Layout.preferredWidth: window.compact ? importContent.width : 230; onClicked: localLogDialog.open() }
+					NeoButton { text: qsTr("Choose local dive log"); Layout.preferredWidth: window.compact ? importContent.width : 230; onClicked: diveLog.chooseLocalFile() }
 					Text { visible: diveLog.fileStatus.length > 0; text: diveLog.fileStatus; color: diveLog.error ? "#ff8f8f" : window.accent; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
 			}
