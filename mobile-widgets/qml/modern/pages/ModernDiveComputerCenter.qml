@@ -37,23 +37,34 @@ Kirigami.ScrollablePage {
 			Text { text: qsTr("Download safely with Subsurface's proven device engine"); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		}
 		GridLayout {
-			Layout.fillWidth: true; columns: page.wideLayout ? 2 : 1; columnSpacing: tokens.space12; rowSpacing: tokens.space12
+			Layout.fillWidth: true; columns: page.wideLayout && PrefDiveComputer.vendor1 !== "" ? 2 : 1; columnSpacing: tokens.space12; rowSpacing: tokens.space12
 			Components.ModernCard {
 				Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
-				Text { text: qsTr("CONNECTION"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
-				Text { text: manager.btEnabled ? qsTr("Bluetooth ready") : qsTr("Bluetooth unavailable"); color: manager.btEnabled ? tokens.success : tokens.warning; font.pixelSize: 18; font.weight: Font.DemiBold }
+				RowLayout {
+					Layout.fillWidth: true
+					Rectangle {
+						Layout.preferredWidth: 40; Layout.preferredHeight: 40; radius: 20
+						color: manager.btEnabled ? "#12352D" : "#382D20"
+						Components.NeoDiveIcon { anchors.centerIn: parent; width: 23; height: 23; name: "device"; iconColor: manager.btEnabled ? tokens.success : tokens.warning }
+					}
+					ColumnLayout {
+						Layout.fillWidth: true; spacing: 1
+						Text { text: qsTr("CONNECTION"); color: tokens.textMuted; font.pixelSize: 9; font.weight: Font.DemiBold }
+						Text { text: manager.btEnabled ? qsTr("Bluetooth ready") : qsTr("Bluetooth unavailable"); color: manager.btEnabled ? tokens.success : tokens.warning; font.pixelSize: 17; font.weight: Font.DemiBold }
+					}
+				}
 				Text { text: manager.btEnabled ? qsTr("Nearby Bluetooth devices can be detected.") : qsTr("Enable Bluetooth, or choose an available USB or serial connection below."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Button { text: qsTr("Rescan devices"); Layout.fillWidth: true; onClicked: manager.rescanConnections() }
+				Components.NeoButton { text: qsTr("Rescan devices"); Layout.alignment: Qt.AlignLeft; onClicked: manager.rescanConnections() }
 			}
 			Components.ModernCard {
 				visible: PrefDiveComputer.vendor1 !== ""; Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("RECENT COMPUTERS"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
 				Flow {
 					Layout.fillWidth: true; spacing: tokens.space8
-					Button { visible: PrefDiveComputer.vendor1 !== ""; text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
-					Button { visible: PrefDiveComputer.vendor2 !== ""; text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
-					Button { visible: PrefDiveComputer.vendor3 !== ""; text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
-					Button { visible: PrefDiveComputer.vendor4 !== ""; text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
+					Components.NeoButton { visible: PrefDiveComputer.vendor1 !== ""; text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
+					Components.NeoButton { visible: PrefDiveComputer.vendor2 !== ""; text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
+					Components.NeoButton { visible: PrefDiveComputer.vendor3 !== ""; text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
+					Components.NeoButton { visible: PrefDiveComputer.vendor4 !== ""; text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
 				}
 			}
 		}
@@ -84,10 +95,16 @@ Kirigami.ScrollablePage {
 				CheckBox { Layout.fillWidth: true; text: qsTr("Include previously imported dives"); checked: manager.DC_forceDownload; onToggled: manager.DC_forceDownload = checked }
 				CheckBox { Layout.fillWidth: true; text: qsTr("Synchronize dive-computer time"); checked: Backend.sync_dc_time; onToggled: Backend.sync_dc_time = checked }
 			}
-			Button {
+			Components.NeoButton {
 				Layout.fillWidth: true; text: qsTr("Download dives")
+				variant: "primary"
 				enabled: vendorBox.currentIndex >= 0 && productBox.currentIndex >= 0 && connectionBox.currentIndex >= 0
 				onClicked: page.openNativeImport(vendorBox.currentText, productBox.currentText, connectionBox.currentText)
+			}
+			Text {
+				visible: vendorBox.currentIndex < 0 || productBox.currentIndex < 0 || connectionBox.currentIndex < 0
+				text: qsTr("Choose a manufacturer, model, and connection to continue.")
+				color: tokens.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
 			}
 		}
 

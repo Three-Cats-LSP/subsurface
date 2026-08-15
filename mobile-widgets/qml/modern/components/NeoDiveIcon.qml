@@ -58,6 +58,13 @@ Canvas {
 			ctx.strokeRect(5, 18, 18, 3); line(ctx, [8, 21, 6, 25, 22, 25, 20, 21])
 			ctx.beginPath(); ctx.arc(10, 23, 1, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(18, 23, 1, 0, Math.PI * 2); ctx.stroke()
 			ctx.beginPath(); ctx.moveTo(5, 24); ctx.quadraticCurveTo(14, 30, 23, 24); ctx.stroke()
+		} else if (name === "device") {
+			ctx.beginPath(); ctx.roundedRect(6, 5, 16, 18, 4, 4); ctx.stroke()
+			ctx.beginPath(); ctx.roundedRect(9, 8, 10, 8, 1.5, 1.5); ctx.stroke()
+			line(ctx, [11, 13, 13, 11, 15, 14, 18, 10])
+			ctx.beginPath(); ctx.arc(11, 20, 1, 0, Math.PI * 2); ctx.fill()
+			ctx.beginPath(); ctx.arc(17, 20, 1, 0, Math.PI * 2); ctx.fill()
+			line(ctx, [10, 5, 10, 2, 18, 2, 18, 5]); line(ctx, [10, 23, 10, 26, 18, 26, 18, 23])
 		} else if (name === "tank") {
 			ctx.strokeRect(10, 7, 8, 16)
 			line(ctx, [12, 7, 12, 4, 16, 4, 16, 7])

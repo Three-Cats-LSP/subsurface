@@ -85,10 +85,10 @@ Kirigami.Page {
 			Text { text: downloading ? qsTr("Downloading dives…") : qsTr("Import status"); color: tokens.textPrimary; font.weight: Font.DemiBold }
 			ProgressBar { Layout.fillWidth: true; indeterminate: downloading && manager.progress <= 0; value: manager.progress }
 			Text { Layout.fillWidth: true; visible: manager.progressMessage.length > 0; text: manager.progressMessage; color: tokens.textSecondary; wrapMode: Text.WordWrap }
-			Button { text: qsTr("Cancel download"); visible: downloading; onClicked: { manager.cancelDownloadDC(); downloading = false } }
+			Components.NeoButton { text: qsTr("Cancel download"); variant: "danger"; compact: true; visible: downloading; onClicked: { manager.cancelDownloadDC(); downloading = false } }
 		}
 
-		Text { visible: !downloading && !importsReady; text: qsTr("No new dives were found. Check the connection and retry, or choose all dives in the Dive Computer Center."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Text { visible: !downloading && !importsReady && importError.length === 0; text: qsTr("No new dives were found. Check the connection and retry, or choose all dives in the Dive Computer Center."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		Components.ModernCard {
 			visible: importError.length > 0
 			Layout.fillWidth: true
@@ -119,13 +119,15 @@ Kirigami.Page {
 			}
 		}
 
-		RowLayout {
+		GridLayout {
 			Layout.fillWidth: true
-			Button { text: qsTr("Retry"); enabled: !downloading; onClicked: page.startDownload() }
-			Item { Layout.fillWidth: true }
-			Button { text: qsTr("Select none"); visible: importsReady; onClicked: importModel.selectNone() }
-			Button { text: qsTr("Select all"); visible: importsReady; onClicked: importModel.selectAll() }
-			Button { text: qsTr("Add selected dives"); enabled: importsReady; onClicked: page.acceptSelected() }
+			columns: page.width >= 760 ? 4 : 2
+			columnSpacing: tokens.space8
+			rowSpacing: tokens.space8
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Retry"); enabled: !downloading; compact: true; onClicked: page.startDownload() }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select none"); visible: importsReady; compact: true; onClicked: importModel.selectNone() }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select all"); visible: importsReady; compact: true; onClicked: importModel.selectAll() }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Add selected dives"); variant: "primary"; enabled: importsReady; compact: true; onClicked: page.acceptSelected() }
 		}
 	}
 }
