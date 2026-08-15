@@ -11,6 +11,7 @@ on:
       - 'core/profile*'
       - 'core/deco.*'
       - 'core/gas*'
+      - 'core/owning_table.h'
   workflow_dispatch:
 
 permissions: read-all

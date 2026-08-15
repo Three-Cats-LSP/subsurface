@@ -87,7 +87,7 @@ public:
 	// Returns index of added item
 	put_result put_back(std::unique_ptr<T> item) {
 		T *ptr = item.get();
-		push_back(std::move(item));
+		this->push_back(std::move(item));
 		return { ptr, this->size() - 1 };
 	}
 	std::unique_ptr<T> pull_at(size_t idx) {
