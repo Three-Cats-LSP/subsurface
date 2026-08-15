@@ -31,6 +31,18 @@ Kirigami.ScrollablePage {
 		onTriggered: statsManager.doit()
 	}
 
+	function toggleChartPicker() {
+		page.chartPickerOpen = !page.chartPickerOpen
+		if (page.chartPickerOpen)
+			page.controlsOpen = false
+	}
+
+	function toggleControls() {
+		page.controlsOpen = !page.controlsOpen
+		if (page.controlsOpen)
+			page.chartPickerOpen = false
+	}
+
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
@@ -53,8 +65,9 @@ Kirigami.ScrollablePage {
 
 		GridLayout {
 			Layout.fillWidth: true
-			columns: 3
+			columns: page.wideLayout ? 4 : 2
 			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
+			rowSpacing: tokens.space8
 			Components.MetricCard {
 				label: qsTr("Dives")
 				value: String(NeoDashboard.diveCount)
@@ -78,6 +91,13 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Layout.minimumWidth: 0
 			}
+			Components.MetricCard {
+				label: qsTr("Avg water")
+				value: NeoDashboard.averageWaterTemp.length > 0 ? NeoDashboard.averageWaterTemp : "—"
+				iconName: "temperature"
+				Layout.fillWidth: true
+				Layout.minimumWidth: 0
+			}
 		}
 
 		Components.ModernCard {
@@ -93,41 +113,58 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Dive activity"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 					Text { visible: page.wideLayout; text: qsTr("Calculated from the current log and active filters"); color: tokens.textMuted; font.pixelSize: 10 }
 				}
-				Button { text: page.wideLayout ? qsTr("Chart type") : qsTr("Chart"); onClicked: page.chartPickerOpen = !page.chartPickerOpen }
-				Button {
+				Components.NeoButton {
+					text: page.wideLayout ? qsTr("Chart type") : qsTr("Chart")
+					compact: true
+					variant: page.chartPickerOpen ? "primary" : "secondary"
+					onClicked: page.toggleChartPicker()
+				}
+				Components.NeoButton {
 					text: page.wideLayout ? (page.controlsOpen ? qsTr("Hide controls") : qsTr("Configure")) : (page.controlsOpen ? qsTr("Hide") : qsTr("Options"))
-					onClicked: page.controlsOpen = !page.controlsOpen
+					compact: true
+					variant: page.controlsOpen ? "primary" : "secondary"
+					onClicked: page.toggleControls()
 				}
 			}
 
-			ListView {
+			Rectangle {
 				visible: page.chartPickerOpen
 				Layout.fillWidth: true
-				Layout.preferredHeight: Math.min(contentHeight, 260)
+				Layout.preferredHeight: Math.min(chartPicker.contentHeight + tokens.space8, page.wideLayout ? 280 : 220)
+				color: tokens.background
+				radius: tokens.radiusSmall
+				border.width: 1
+				border.color: tokens.border
 				clip: true
-				model: chartListModel
-				delegate: ItemDelegate {
-					width: ListView.view.width
-					height: isHeader ? 34 : 44
-					enabled: !isHeader
-					contentItem: Text {
-						text: chartName
-						color: isHeader ? tokens.accent : tokens.textPrimary
-						font.pixelSize: isHeader ? 11 : 13
-						font.weight: isHeader ? Font.DemiBold : Font.Normal
-						verticalAlignment: Text.AlignVCenter
-					}
-					background: Rectangle { color: parent.down ? tokens.surfaceRaised : "transparent" }
-					onClicked: {
-						statsManager.setChart(id)
-						page.chartPickerOpen = false
+				ListView {
+					id: chartPicker
+					anchors.fill: parent
+					anchors.margins: tokens.space4
+					clip: true
+					model: chartListModel
+					delegate: ItemDelegate {
+						width: ListView.view.width
+						height: isHeader ? 34 : 42
+						enabled: !isHeader
+						contentItem: Text {
+							text: chartName
+							color: isHeader ? tokens.accent : tokens.textPrimary
+							font.pixelSize: isHeader ? 10 : 12
+							font.weight: isHeader ? Font.DemiBold : Font.Normal
+							verticalAlignment: Text.AlignVCenter
+						}
+						background: Rectangle { color: parent.down || parent.hovered ? tokens.surfaceRaised : "transparent"; radius: tokens.radiusSmall }
+						onClicked: {
+							statsManager.setChart(id)
+							page.chartPickerOpen = false
+						}
 					}
 				}
 			}
 
 			Rectangle {
 				Layout.fillWidth: true
-				Layout.preferredHeight: page.wideLayout ? Math.max(420, page.width * 0.42) : 340
+				Layout.preferredHeight: page.wideLayout ? Math.max(420, page.width * 0.42) : Math.max(280, Math.min(360, page.width * 0.78))
 				color: tokens.background
 				radius: tokens.radiusSmall
 				clip: true
@@ -147,12 +184,12 @@ Kirigami.ScrollablePage {
 			RowLayout {
 				Layout.fillWidth: true
 				Text { text: qsTr("Chart configuration"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
-				Text { text: qsTr("Native Subsurface statistics engine"); color: tokens.accent; font.pixelSize: 10 }
+				Text { visible: page.wideLayout; text: qsTr("Native Subsurface statistics engine"); color: tokens.accent; font.pixelSize: 10 }
 			}
 
 			GridLayout {
 				Layout.fillWidth: true
-				columns: page.wideLayout ? 3 : 1
+				columns: page.wideLayout ? 3 : 2
 				columnSpacing: tokens.space12
 				rowSpacing: tokens.space12
 
@@ -192,6 +229,15 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Operation"); color: tokens.textMuted; font.pixelSize: 10 }
 					Components.NeoComboBox { Layout.fillWidth: true; model: statsManager.operation2List; currentIndex: statsManager.operation2Index; onActivated: statsManager.var2OperationChanged(currentIndex) }
 				}
+			}
+
+			Components.NeoButton {
+				visible: !page.wideLayout
+				Layout.alignment: Qt.AlignRight
+				text: qsTr("Done")
+				variant: "primary"
+				compact: true
+				onClicked: page.controlsOpen = false
 			}
 		}
 
