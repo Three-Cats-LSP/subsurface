@@ -163,6 +163,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	membuffer.h
 	metadata.cpp
 	metadata.h
+	native-divelog-summary.cpp
+	native-divelog-summary.h
 	metrics.cpp
 	metrics.h
 	neoupdatemanager.cpp

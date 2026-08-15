@@ -8,11 +8,14 @@ The current bootstrap provides:
 
 - a responsive Neo dashboard shell for desktop and mobile browsers;
 - secure-context, Web Bluetooth, and Web Serial capability detection;
-- a browser-controlled local-file picker and recognized-file boundary;
+- a browser-controlled local-file picker;
+- a shared C++ core reader for native Subsurface XML logs;
+- real dashboard totals and recent-dive summaries from the selected log;
 - honest fallbacks when a browser cannot offer direct hardware access; and
 - a reproducible Qt 6.8 / Emscripten build artifact.
 
-It does **not** implement decompression mathematics in JavaScript. The planner,
-profile, XML/UDDF import, cloud synchronization, and dive-log models must be
-connected to the corresponding shared Subsurface C++ pipelines before those
-features are presented as available.
+It does **not** implement decompression mathematics in JavaScript. Foreign-format
+imports, full profile processing, editing, cloud synchronization, and the
+planner must be connected to the corresponding shared Subsurface C++ pipelines
+before those features are presented as available. The current browser reader
+intentionally accepts only the native XML format emitted by `core/save-xml.cpp`.

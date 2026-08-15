@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/neo-webassembly.yml'
       - 'web/subsurface-neo/wasm/**'
+      - 'core/native-divelog-summary.*'
   workflow_dispatch:
 
 permissions: read-all
@@ -43,8 +44,24 @@ jobs:
           -B build/neo-web
           -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=OFF
           -DCMAKE_TOOLCHAIN_FILE="$QT_ROOT_DIR/lib/cmake/Qt6/qt.toolchain.cmake"
           -DQT_HOST_PATH="$QT_HOST_PATH"
+
+      - name: Configure native-log reader tests
+        run: >-
+          cmake
+          -S web/subsurface-neo/wasm
+          -B build/neo-web-host
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+          -DCMAKE_PREFIX_PATH="$QT_HOST_PATH"
+
+      - name: Build and run native-log reader tests
+        run: |
+          cmake --build build/neo-web-host --target neo-web-parser-tests --parallel 2
+          ctest --test-dir build/neo-web-host --output-on-failure
 
       - name: Build WebAssembly application
         run: cmake --build build/neo-web --parallel 2

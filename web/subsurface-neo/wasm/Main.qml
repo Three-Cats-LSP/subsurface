@@ -24,8 +24,8 @@ ApplicationWindow {
 	FileDialog {
 		id: localLogDialog
 		title: qsTr("Open a Subsurface dive log")
-		nameFilters: [qsTr("Dive logs (*.xml *.ssrf *.uddf *.subsurface-neo)"), qsTr("All files (*)")]
-		onAccepted: webCapabilities.inspectLocalFile(selectedFile)
+		nameFilters: [qsTr("Subsurface dive logs (*.xml *.ssrf)"), qsTr("All files (*)")]
+		onAccepted: diveLog.openLocalFile(selectedFile)
 	}
 
 	component NeoButton: Button {
@@ -160,7 +160,7 @@ ApplicationWindow {
 				columns: 3
 				columnSpacing: 10
 				Repeater {
-					model: [{ label: qsTr("DIVES"), value: "0" }, { label: qsTr("DIVE TIME"), value: "0 h" }, { label: qsTr("MAX DEPTH"), value: "—" }]
+					model: [{ label: qsTr("DIVES"), value: diveLog.diveCount.toString() }, { label: qsTr("DIVE TIME"), value: diveLog.totalTime }, { label: qsTr("MAX DEPTH"), value: diveLog.maxDepth }]
 					delegate: Rectangle {
 						required property var modelData
 						required property int index
@@ -216,14 +216,15 @@ ApplicationWindow {
 					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
 					spacing: 10
 					Text { text: qsTr("Start with your real dive log"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
-					Text { text: qsTr("The browser picker keeps the file under your control. This bootstrap validates the import boundary; canonical parsing and editing will be connected to the shared Subsurface core next."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: qsTr("Open a native Subsurface XML log to populate this dashboard. The file stays in your browser session and is read by shared C++ core code; it is not uploaded."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					NeoButton { text: qsTr("Choose local dive log"); Layout.preferredWidth: window.compact ? importContent.width : 230; onClicked: localLogDialog.open() }
-					Text { visible: webCapabilities.selectedFileStatus.length > 0; text: webCapabilities.selectedFileStatus; color: window.accent; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { visible: diveLog.fileStatus.length > 0; text: diveLog.fileStatus; color: diveLog.error ? "#ff8f8f" : window.accent; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
 			}
 
 			Text { text: qsTr("Recent dives"); color: window.primaryText; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.topMargin: 4 }
 			Rectangle {
+				visible: !diveLog.loaded || diveLog.diveCount === 0
 				Layout.fillWidth: true
 				implicitHeight: 110
 				radius: 16
@@ -234,7 +235,60 @@ ApplicationWindow {
 					anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 16 }
 					spacing: 6
 					Text { anchors.horizontalCenter: parent.horizontalCenter; text: qsTr("No dives loaded"); color: window.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
-					Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: qsTr("Open a local log or connect a cloud provider when the shared engine bridge is ready."); color: window.secondaryText; font.pixelSize: 11 }
+					Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: diveLog.loaded ? qsTr("This log does not contain any valid dives.") : qsTr("Open a native Subsurface XML log to see your recent dives."); color: window.secondaryText; font.pixelSize: 11 }
+				}
+			}
+
+			Repeater {
+				model: diveLog.recentDives
+				delegate: Rectangle {
+					required property var modelData
+					required property int index
+					Layout.fillWidth: true
+					Layout.preferredHeight: window.compact ? 168 : 122
+					radius: 16
+					color: window.surface
+					border.width: 1
+					border.color: window.border
+
+					ColumnLayout {
+						anchors.fill: parent
+						anchors.margins: window.compact ? 16 : 20
+						spacing: 10
+						RowLayout {
+							Layout.fillWidth: true
+							Text { text: modelData.number > 0 ? "#" + modelData.number : qsTr("Dive"); color: window.accent; font.pixelSize: 17; font.weight: Font.DemiBold }
+							ColumnLayout {
+								Layout.fillWidth: true
+								spacing: 1
+								Text { text: modelData.location; color: window.primaryText; font.pixelSize: window.compact ? 15 : 17; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+								Text { text: modelData.date; color: window.secondaryText; font.pixelSize: 10 }
+							}
+							StatusPill { label: modelData.mode; available: true }
+						}
+						GridLayout {
+							Layout.fillWidth: true
+							columns: window.compact ? 3 : 6
+							columnSpacing: window.compact ? 8 : 18
+							rowSpacing: 8
+							Repeater {
+								model: [
+									{ label: qsTr("DEPTH"), value: modelData.depth },
+									{ label: qsTr("DURATION"), value: modelData.duration },
+									{ label: qsTr("WATER"), value: modelData.temperature },
+									{ label: qsTr("GAS"), value: modelData.gas },
+									{ label: qsTr("GEAR"), value: modelData.gear.length > 0 ? modelData.gear : "—" },
+									{ label: qsTr("BUDDY"), value: modelData.buddy.length > 0 ? modelData.buddy : "—" }
+								]
+								delegate: ColumnLayout {
+									required property var modelData
+									spacing: 1
+									Text { text: modelData.value; color: window.primaryText; font.pixelSize: window.compact ? 10 : 12; elide: Text.ElideRight; Layout.preferredWidth: window.compact ? 90 : 118 }
+									Text { text: modelData.label; color: window.secondaryText; font.pixelSize: 8; font.letterSpacing: 0.7 }
+								}
+							}
+						}
+					}
 				}
 			}
 		}
