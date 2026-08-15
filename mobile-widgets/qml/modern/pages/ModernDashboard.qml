@@ -53,9 +53,10 @@ Kirigami.ScrollablePage {
 				}
 			}
 
-			Button {
+			Components.NeoButton {
 				visible: page.wideLayout
 				text: qsTr("Import")
+				variant: "primary"
 				onClicked: page.openImport()
 			}
 			ToolButton {
@@ -115,9 +116,10 @@ Kirigami.ScrollablePage {
 				font.weight: Font.DemiBold
 				Layout.fillWidth: true
 			}
-			Button {
+			Components.NeoButton {
 				text: qsTr("See all")
-				flat: true
+				variant: "ghost"
+				compact: true
 				onClicked: page.openDiveList()
 			}
 		}
@@ -130,9 +132,10 @@ Kirigami.ScrollablePage {
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
 		}
-		Button {
+		Components.NeoButton {
 			visible: NeoDashboard.recentDives.length === 0
 			text: qsTr("Import dives")
+			variant: "primary"
 			Layout.alignment: Qt.AlignLeft
 			onClicked: page.openImport()
 		}

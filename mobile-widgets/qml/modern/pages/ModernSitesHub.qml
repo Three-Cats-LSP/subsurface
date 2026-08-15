@@ -69,7 +69,11 @@ Kirigami.ScrollablePage {
 					elide: Text.ElideRight
 				}
 			}
-			Button { text: qsTr("Open map"); onClicked: page.openMap("") }
+			Components.NeoButton {
+				text: page.wideLayout ? qsTr("Open map") : qsTr("Map")
+				variant: "primary"
+				onClicked: page.openMap("")
+			}
 		}
 
 		GridLayout {
@@ -189,10 +193,19 @@ Kirigami.ScrollablePage {
 								font.pixelSize: 11
 							}
 						}
-						Text {
-							text: siteCard.summary.gps && siteCard.summary.gps.length > 0 ? qsTr("Mapped") : qsTr("No GPS")
-							color: siteCard.summary.gps && siteCard.summary.gps.length > 0 ? tokens.success : tokens.textMuted
-							font.pixelSize: 11
+						Rectangle {
+							Layout.preferredWidth: mapStatus.implicitWidth + tokens.space16
+							Layout.preferredHeight: 26
+							radius: 13
+							color: siteCard.summary.gps && siteCard.summary.gps.length > 0 ? "#12352D" : tokens.surfaceRaised
+							Text {
+								id: mapStatus
+								anchors.centerIn: parent
+								text: siteCard.summary.gps && siteCard.summary.gps.length > 0 ? qsTr("Mapped") : qsTr("No GPS")
+								color: siteCard.summary.gps && siteCard.summary.gps.length > 0 ? tokens.success : tokens.textMuted
+								font.pixelSize: 10
+								font.weight: Font.DemiBold
+							}
 						}
 					}
 
@@ -216,19 +229,30 @@ Kirigami.ScrollablePage {
 						Layout.fillWidth: true
 					}
 
-					RowLayout {
+					GridLayout {
 						Layout.fillWidth: true
-						spacing: tokens.space8
-						Button { text: qsTr("Map"); onClicked: page.openMap(siteCard.modelData) }
-						Button {
+						columns: 3
+						columnSpacing: tokens.space8
+						rowSpacing: tokens.space8
+						Components.NeoButton {
+							Layout.fillWidth: true
+							text: qsTr("Map")
+							compact: true
+							onClicked: page.openMap(siteCard.modelData)
+						}
+						Components.NeoButton {
 							visible: siteCard.summary.diveCount > 0
+							Layout.fillWidth: true
 							text: siteCard.relatedDivesVisible ? qsTr("Hide dives") : qsTr("View dives")
+							compact: true
 							onClicked: siteCard.relatedDivesVisible = !siteCard.relatedDivesVisible
 						}
-						Item { Layout.fillWidth: true }
-						Button {
+						Item { visible: siteCard.summary.diveCount <= 0; Layout.fillWidth: true }
+						Components.NeoButton {
+							Layout.fillWidth: true
 							text: qsTr("Edit")
-							flat: true
+							variant: "ghost"
+							compact: true
 							onClicked: {
 								page.editingSite = siteCard.modelData
 								siteDescription.text = siteCard.summary.description || ""
@@ -284,9 +308,10 @@ Kirigami.ScrollablePage {
 			RowLayout {
 				Layout.fillWidth: true
 				Item { Layout.fillWidth: true }
-				Button { text: qsTr("Cancel"); onClicked: siteEditor.close() }
-				Button {
+				Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: siteEditor.close() }
+				Components.NeoButton {
 					text: qsTr("Save site")
+					variant: "primary"
 					onClicked: {
 						if (manager.updateSite(page.editingSite, siteDescription.text, siteNotes.text, siteGps.text))
 							siteEditor.close()
