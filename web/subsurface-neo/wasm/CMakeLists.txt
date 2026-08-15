@@ -21,13 +21,13 @@ set(NEO_PROFILE_CORE_SOURCES
 	${SUBSURFACE_ROOT}/core/profile.cpp
 	${SUBSURFACE_ROOT}/core/profile.h
 	${SUBSURFACE_ROOT}/core/profile-ascent.cpp
+	${SUBSURFACE_ROOT}/core/profile-deco-context.cpp
 	${SUBSURFACE_ROOT}/core/deco.cpp
 	${SUBSURFACE_ROOT}/core/deco.h
 	${SUBSURFACE_ROOT}/core/gas.cpp
 	${SUBSURFACE_ROOT}/core/gaspressures.cpp
 	${SUBSURFACE_ROOT}/core/dive.cpp
 	${SUBSURFACE_ROOT}/core/divecomputer.cpp
-	${SUBSURFACE_ROOT}/core/divelist.cpp
 	${SUBSURFACE_ROOT}/core/equipment.cpp
 	${SUBSURFACE_ROOT}/core/event.cpp
 	${SUBSURFACE_ROOT}/core/eventtype.cpp

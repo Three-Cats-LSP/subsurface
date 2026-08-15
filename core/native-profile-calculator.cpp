@@ -156,7 +156,7 @@ bool calculate_native_profile(native_divelog_summary &summary, int diveIndex, QS
 		auto item = canonicalDive(summary.dives[index]);
 		if (index == diveIndex)
 			selectedDive = item.get();
-		context.put(std::move(item));
+		context.put_back(std::move(item));
 	}
 	if (!selectedDive) {
 		if (error)

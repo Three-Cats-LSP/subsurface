@@ -186,6 +186,7 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	profile.cpp
 	profile.h
 	profile-ascent.cpp
+	profile-deco-context.cpp
 	qt-gui.h
 	qthelper.cpp
 	qthelper.h
