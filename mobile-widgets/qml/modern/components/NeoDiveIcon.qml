@@ -94,6 +94,11 @@ Canvas {
 			ctx.stroke()
 			line(ctx, [14, 22, 14, 13, 10, 17])
 			line(ctx, [14, 13, 18, 17])
+		} else if (name === "lock") {
+			ctx.beginPath(); ctx.roundedRect(7, 12, 14, 11, 2, 2); ctx.stroke()
+			ctx.beginPath(); ctx.arc(14, 12, 5, Math.PI, 0); ctx.stroke()
+			ctx.beginPath(); ctx.arc(14, 17, 1.5, 0, Math.PI * 2); ctx.fill()
+			line(ctx, [14, 18.5, 14, 21])
 		} else if (name === "home") {
 			line(ctx, [5, 13, 14, 5, 23, 13])
 			ctx.beginPath(); ctx.moveTo(8, 12); ctx.lineTo(8, 23); ctx.lineTo(20, 23); ctx.lineTo(20, 12); ctx.stroke()
