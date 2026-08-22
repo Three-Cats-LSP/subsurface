@@ -687,7 +687,7 @@ static void fixup_dc_events(struct dive &dive, struct divecomputer &dc)
 			current_divemode = get_effective_divemode(dc, *current_cylinder);
 		} else if (event.is_divemodechange()) {
 			new_divemode = static_cast<divemode_t>(event.value);
-			if (!((dc.divemode == CCR && prefs.allowOcGasAsDiluent && current_cylinder->cylinder_use == OC_GAS) || dc.divemode == PSCR)) {
+			if (!((dc.divemode == CCR && prefs.allowOcGasAsDiluent && is_oc(*current_cylinder)) || dc.divemode == PSCR)) {
 				to_delete.push_back(idx);
 				continue;
 			} else if (new_divemode != current_divemode) {
@@ -1035,7 +1035,7 @@ int check_dc_cylinder_use(struct dive &dive, struct divecomputer &dc)
 		return 1;
 
 	for (auto &cylinder: dive.cylinders)
-		if ((dc.divemode == CCR && cylinder.cylinder_use == DILUENT) || ((dc.divemode == PSCR || dc.divemode == OC) && cylinder.cylinder_use == OC_GAS))
+		if ((dc.divemode == CCR && cylinder.cylinder_use == DILUENT) || ((dc.divemode == PSCR || dc.divemode == OC) && is_oc(cylinder)))
 			return 1;
 
 	return report_error("Dive: %u, dive computer: %s: %s dive, but no %s cylinder found. Please add or select the correct cylinder use.", dive.number, dc.model.c_str(), dc.divemode == OC ? "open circuit" : dc.divemode == CCR ? "CCR" : "PSCR", dc.divemode == OC ? "open circuit" : dc.divemode == CCR ? "diluent" : "drive gas");
@@ -1697,6 +1697,7 @@ bool is_cylinder_use_appropriate(const struct divecomputer &dc, const cylinder_t
 {
 	switch (cyl.cylinder_use) {
 	case OC_GAS:
+	case TRAVEL_OC:
 		if (dc.divemode == FREEDIVE)
 			return false;
 
@@ -1725,7 +1726,7 @@ bool is_cylinder_use_appropriate(const struct divecomputer &dc, const cylinder_t
 divemode_t get_effective_divemode(const struct divecomputer &dc, const struct cylinder_t &cylinder)
 {
 	divemode_t divemode = dc.divemode;
-	if (divemode == CCR && cylinder.cylinder_use == OC_GAS)
+	if (divemode == CCR && is_oc(cylinder))
 		divemode = OC;
 
 	return divemode;
