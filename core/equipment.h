@@ -9,7 +9,7 @@
 
 struct dive;
 
-enum cylinderuse {OC_GAS, DILUENT, OXYGEN, NOT_USED, NUM_GAS_USE}; // The different uses for cylinders
+enum cylinderuse {OC_GAS, DILUENT, OXYGEN, NOT_USED, TRAVEL_OC, NUM_GAS_USE}; // The different uses for cylinders
 extern const char *cylinderuse_text[NUM_GAS_USE];
 
 struct cylinder_type_t
@@ -41,6 +41,10 @@ struct cylinder_t
 
 	volume_t gas_volume(pressure_t p) const; /* Volume of a cylinder at pressure 'p' */
 };
+
+// True for a cylinder breathed open-circuit, whether or not it is still
+// available for the rest of the dive (OC_GAS or TRAVEL_OC).
+extern bool is_oc(const struct cylinder_t &cyl);
 
 /* Table of cylinders.
  * This is a crazy class: it is basically a std::vector<>, but overrides
@@ -88,6 +92,8 @@ struct weightsystem_table : public std::vector<weightsystem_t> {
 extern enum cylinderuse cylinderuse_from_text(const char *text);
 extern void copy_cylinder_types(const struct dive *s, struct dive *d);
 extern void remove_cylinder(struct dive *dive, int idx);
+extern depth_t calculate_deco_switch_depth(const struct dive *dive, struct gasmix gasmix);
+extern void normalize_imported_cylinder_depths(struct dive *dive);
 extern void reset_cylinders(struct dive *dive, bool track_gas);
 extern int find_best_gasmix_match(struct gasmix mix, const struct cylinder_table &cylinders, const enum cylinderuse *use);
 extern void fill_default_cylinder(const struct dive *dive, cylinder_t *cyl); /* dive is needed to fill out MOD, which depends on salinity. */

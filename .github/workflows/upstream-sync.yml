@@ -110,23 +110,46 @@ jobs:
           set -e
 
           if [ "$MERGE_STATUS" -ne 0 ]; then
-            git diff --name-only --diff-filter=U > /tmp/upstream-conflicts.txt || true
-            echo "conflict=true" >> "$GITHUB_OUTPUT"
-            {
-              echo '### Upstream merge conflict'
-              echo
-              echo 'No conflict was auto-resolved and the rolling sync branch was not updated.'
-              echo
-              echo 'Conflicting files:'
-              sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
-              echo
-              echo 'Resolve these manually before integrating the upstream update.'
-            } >> "$GITHUB_STEP_SUMMARY"
-            git merge --abort || true
-            exit 0
+            mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
+
+            # Neo intentionally keeps a development-oriented Android pipeline:
+            # stable test signing, direct APK artifacts, and modern-ui triggers.
+            # Upstream regularly changes its release-oriented Android workflow,
+            # so retain Neo's version only when it is the sole conflict.
+            if [ "${#CONFLICTS[@]}" -eq 1 ] && [ "${CONFLICTS[0]}" = ".github/workflows/android.yml" ]; then
+              git checkout --ours -- .github/workflows/android.yml
+              git add -- .github/workflows/android.yml
+              git commit --no-edit
+              echo "conflict=false" >> "$GITHUB_OUTPUT"
+              echo "android_workflow_resolved=true" >> "$GITHUB_OUTPUT"
+              {
+                echo '### Neo Android workflow retained'
+                echo
+                echo 'The upstream merge conflicted only in `.github/workflows/android.yml`.'
+                echo "Neo's development APK and test-signing workflow was retained automatically."
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf '%s\n' "${CONFLICTS[@]}" > /tmp/upstream-conflicts.txt
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              echo "android_workflow_resolved=false" >> "$GITHUB_OUTPUT"
+              {
+                echo '### Upstream merge conflict'
+                echo
+                echo 'No conflict was auto-resolved and the rolling sync branch was not updated.'
+                echo
+                echo 'Conflicting files:'
+                sed 's/^/- `/' /tmp/upstream-conflicts.txt | sed 's/$/`/'
+                echo
+                echo 'Resolve these manually before integrating the upstream update.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              git merge --abort || true
+              exit 0
+            fi
+          else
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            echo "android_workflow_resolved=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "conflict=false" >> "$GITHUB_OUTPUT"
           git push --force-with-lease origin "${SYNC_BRANCH}"
 
       - name: Fail safely on source conflict
