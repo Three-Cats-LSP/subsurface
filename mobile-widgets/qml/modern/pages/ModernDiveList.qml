@@ -114,7 +114,7 @@ Kirigami.Page {
 			ToolButton {
 				visible: !page.wideLayout
 				text: "⋯"
-				accessibleName: qsTr("More dive-list actions")
+				Accessible.name: qsTr("More dive-list actions")
 				onClicked: listActions.open()
 			}
 			Menu {

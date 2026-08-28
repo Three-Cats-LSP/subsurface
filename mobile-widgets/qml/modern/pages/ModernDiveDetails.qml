@@ -251,7 +251,7 @@ Kirigami.Page {
 								accessibleName: qsTr("Edit dive")
 								onClicked: page.editRequested(delegateRoot.modelData)
 							}
-							ToolButton { text: "⋯"; accessibleName: qsTr("More dive actions"); onClicked: diveActions.open() }
+							ToolButton { text: "⋯"; Accessible.name: qsTr("More dive actions"); onClicked: diveActions.open() }
 							Menu {
 								id: diveActions
 								MenuItem { text: qsTr("Edit dive"); onTriggered: page.editRequested(delegateRoot.modelData) }

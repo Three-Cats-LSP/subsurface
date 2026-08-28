@@ -60,7 +60,7 @@ Kirigami.ScrollablePage {
 				onClicked: page.openImport()
 			}
 			ToolButton {
-				accessibleName: qsTr("Cloud & Sync")
+				Accessible.name: qsTr("Cloud & Sync")
 				contentItem: Components.NeoDiveIcon { name: "cloud"; iconColor: tokens.accent; width: 24; height: 24 }
 				ToolTip.visible: hovered
 				ToolTip.text: qsTr("Cloud & Sync")
