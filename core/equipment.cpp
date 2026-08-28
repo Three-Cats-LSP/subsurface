@@ -62,7 +62,7 @@ weightsystem_t::weightsystem_t(weight_t w, std::string desc, bool auto_filled)
 }
 
 const char *cylinderuse_text[NUM_GAS_USE] = {
-	QT_TRANSLATE_NOOP("gettextFromC", "OC-gas"), QT_TRANSLATE_NOOP("gettextFromC", "diluent"), QT_TRANSLATE_NOOP("gettextFromC", "oxygen"), QT_TRANSLATE_NOOP("gettextFromC", "not used")
+	QT_TRANSLATE_NOOP("gettextFromC", "OC-gas"), QT_TRANSLATE_NOOP("gettextFromC", "diluent"), QT_TRANSLATE_NOOP("gettextFromC", "oxygen"), QT_TRANSLATE_NOOP("gettextFromC", "not used"), QT_TRANSLATE_NOOP("gettextFromC", "Travel Gas")
 };
 
 enum cylinderuse cylinderuse_from_text(const char *text)
@@ -72,6 +72,12 @@ enum cylinderuse cylinderuse_from_text(const char *text)
 			return static_cast<enum cylinderuse>(i);
 	}
 	return static_cast<enum cylinderuse>(-1);
+}
+
+// AI-generated (Claude)
+bool is_oc(const struct cylinder_t &cyl)
+{
+	return cyl.cylinder_use == OC_GAS || cyl.cylinder_use == TRAVEL_OC;
 }
 
 /* Add a metric or an imperial tank info structure. Copies the passed-in string. */
@@ -308,15 +314,29 @@ void weightsystem_table::set(int idx, weightsystem_t ws)
 	(*this)[idx] = std::move(ws);
 }
 
+// AI-generated (Claude)
+depth_t calculate_deco_switch_depth(const struct dive *dive, struct gasmix gasmix)
+{
+	pressure_t decopo2 = { .mbar = prefs.decopo2 };
+	return dive->gas_mod(gasmix, decopo2, m_or_ft(3, 10));
+}
+
+// AI-generated (Claude)
+void normalize_imported_cylinder_depths(struct dive *dive)
+{
+	for (cylinder_t &cyl: dive->cylinders) {
+		if (cyl.depth.mm == 0)
+			cyl.depth = calculate_deco_switch_depth(dive, cyl.gasmix);
+	}
+}
+
 /* when planning a dive we need to make sure that all cylinders have a sane depth assigned
  * and if we are tracking gas consumption the pressures need to be reset to start = end = workingpressure */
 void reset_cylinders(struct dive *dive, bool track_gas)
 {
-	pressure_t decopo2 = {.mbar = prefs.decopo2};
-
 	for (cylinder_t &cyl: dive->cylinders) {
 		if (cyl.depth.mm == 0) /* if the gas doesn't give a mod, calculate based on prefs */
-			cyl.depth = dive->gas_mod(cyl.gasmix, decopo2, m_or_ft(3, 10));
+			cyl.depth = calculate_deco_switch_depth(dive, cyl.gasmix);
 		if (track_gas)
 			cyl.start.mbar = cyl.end.mbar = cyl.type.workingpressure.mbar;
 		cyl.gas_used = 0_l;

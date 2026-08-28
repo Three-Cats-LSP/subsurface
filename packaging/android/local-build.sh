@@ -111,7 +111,7 @@ else
 fi
 echo "Using container runtime: ${CONTAINER_RT}"
 
-CONTAINER_IMAGE="docker.io/subsurface/android-build:6.10.3-3"
+CONTAINER_IMAGE="docker.io/subsurface/android-build:6.10.3-5"
 CONTAINER_NAME="subsurface-android-build"
 
 # Must match the BUILDROOT value in
@@ -167,8 +167,10 @@ fi
 # Start the container (no-op if already running).
 ${CONTAINER_RT} start "${CONTAINER_NAME}" >/dev/null
 
-# Copy the keystore into the running container.
-${CONTAINER_RT} cp "${KEYSTORE_FILE}" "${CONTAINER_NAME}:/tmp/keystore"
+# AI-generated (Claude): unsigned builds do not have a keystore to copy.
+if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+	${CONTAINER_RT} cp "${KEYSTORE_FILE}" "${CONTAINER_NAME}:/tmp/keystore"
+fi
 
 # --- Run the build ---
 # All build logic (compile, strip, gradle, collect artifacts, sign, chown)
