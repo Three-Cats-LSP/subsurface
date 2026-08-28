@@ -243,10 +243,11 @@ Kirigami.Page {
 								Text { id: invalidLabel; anchors.centerIn: parent; text: qsTr("Invalid"); color: tokens.warning; font.pixelSize: 10; font.weight: Font.DemiBold }
 							}
 
-							Button {
+							Components.NeoButton {
 								visible: page.width >= 600
 								text: qsTr("Edit")
-								flat: true
+								variant: "ghost"
+								compact: true
 								accessibleName: qsTr("Edit dive")
 								onClicked: page.editRequested(delegateRoot.modelData)
 							}
@@ -319,9 +320,9 @@ Kirigami.Page {
 									}
 								}
 
-								Button { text: page.width < 480 ? qsTr("More") : qsTr("Controls"); flat: true; accessibleName: qsTr("Open all profile controls"); onClicked: profileControls.open() }
+								Components.NeoButton { text: page.width < 480 ? qsTr("More") : qsTr("Controls"); variant: "ghost"; compact: true; accessibleName: qsTr("Open all profile controls"); onClicked: profileControls.open() }
 								ToolButton { visible: profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
-								ComboBox {
+								Components.NeoComboBox {
 									visible: profile.numDC > 1
 									model: profile.numDC
 									currentIndex: profile.currentDC
@@ -806,22 +807,22 @@ Kirigami.Page {
 				}
 
 				Text { text: qsTr("Decompression"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch { Layout.fillWidth: true; text: qsTr("Analysis model and GF"); checked: ProfilePrefs.decoinfo; onToggled: { ProfilePrefs.decoinfo = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("NDL / TTS"); checked: ProfilePrefs.calcndltts; onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("Ceiling"); checked: ProfilePrefs.calcceiling; onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("Tissue ceiling"); checked: ProfilePrefs.calcalltissues; onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Analysis model and GF"); checked: ProfilePrefs.decoinfo; onToggled: { ProfilePrefs.decoinfo = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("NDL / TTS"); checked: ProfilePrefs.calcndltts; onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Ceiling"); checked: ProfilePrefs.calcceiling; onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tissue ceiling"); checked: ProfilePrefs.calcalltissues; onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Gases"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch { Layout.fillWidth: true; text: qsTr("Tissue saturation"); checked: ProfilePrefs.percentagegraph; onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("MOD"); checked: ProfilePrefs.mod; onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tissue saturation"); checked: ProfilePrefs.percentagegraph; onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("MOD"); checked: ProfilePrefs.mod; onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Cylinder"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch { Layout.fillWidth: true; text: qsTr("Tank pressure"); checked: ProfilePrefs.tankbar; onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("SAC"); checked: ProfilePrefs.show_sac; onToggled: { ProfilePrefs.show_sac = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tank pressure"); checked: ProfilePrefs.tankbar; onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("SAC"); checked: ProfilePrefs.show_sac; onToggled: { ProfilePrefs.show_sac = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Events & overlays"); color: tokens.textMuted; font.pixelSize: 11 }
-				Switch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: ProfilePrefs.dcceiling; onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() } }
-				Switch { Layout.fillWidth: true; text: qsTr("Pictures"); checked: ProfilePrefs.show_pictures_in_profile; onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: ProfilePrefs.dcceiling; onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Pictures"); checked: ProfilePrefs.show_pictures_in_profile; onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() } }
 			}
 		}
 	}

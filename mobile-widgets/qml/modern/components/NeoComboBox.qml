@@ -10,12 +10,19 @@ ComboBox {
 	leftPadding: 12
 	rightPadding: 34
 	font.pixelSize: 13
-	contentItem: Text {
-		text: control.displayText
+	contentItem: TextInput {
+		text: control.editable ? control.editText : control.displayText
 		font: control.font
 		color: control.enabled ? tokens.textPrimary : tokens.textMuted
 		verticalAlignment: Text.AlignVCenter
-		elide: Text.ElideRight
+		readOnly: !control.editable
+		selectByMouse: control.editable
+		clip: true
+		selectionColor: tokens.accentStrong
+		selectedTextColor: tokens.textPrimary
+		validator: control.validator
+		inputMethodHints: control.inputMethodHints
+		Accessible.name: control.accessibleName.length > 0 ? control.accessibleName : control.displayText
 	}
 	indicator: Text {
 		x: control.width - width - 12

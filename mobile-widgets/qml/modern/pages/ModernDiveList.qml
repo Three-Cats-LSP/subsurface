@@ -98,14 +98,15 @@ Kirigami.Page {
 				}
 			}
 
-			Button {
+			Components.NeoButton {
 				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
 				onClicked: page.filterVisible = !page.filterVisible
 			}
-			Button { visible: page.wideLayout; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
-			Button { visible: page.wideLayout; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
-			Button { visible: page.wideLayout; text: qsTr("Import"); onClicked: page.downloadRequested() }
-			Button {
+			Components.NeoButton { visible: page.wideLayout; compact: true; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+			Components.NeoButton { visible: page.wideLayout; compact: true; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+			Components.NeoButton { visible: page.wideLayout; compact: true; text: qsTr("Import"); onClicked: page.downloadRequested() }
+			Components.NeoButton {
+				variant: "primary"
 				text: page.wideLayout ? qsTr("+ New dive") : "+"
 				accessibleName: qsTr("Add a new dive")
 				onClicked: page.addDiveRequested()
@@ -139,17 +140,17 @@ Kirigami.Page {
 				spacing: tokens.space8
 				RowLayout {
 					Layout.fillWidth: true
-					TextField { id: collectionName; Layout.fillWidth: true; placeholderText: qsTr("New collection") }
-					Button { text: qsTr("Create"); enabled: collectionName.text.trim().length > 0; onClicked: { NeoDiveCollections.create(collectionName.text); collectionName.clear() } }
+					Components.NeoTextField { id: collectionName; Layout.fillWidth: true; placeholderText: qsTr("New collection") }
+					Components.NeoButton { text: qsTr("Create"); variant: "primary"; enabled: collectionName.text.trim().length > 0; onClicked: { NeoDiveCollections.create(collectionName.text); collectionName.clear() } }
 				}
-				Button { Layout.fillWidth: true; text: qsTr("Show all dives"); checkable: true; checked: page.activeCollection.length === 0; onClicked: { page.selectCollection(""); collectionsDialog.close() } }
+				Components.NeoButton { Layout.fillWidth: true; text: qsTr("Show all dives"); checkable: true; checked: page.activeCollection.length === 0; onClicked: { page.selectCollection(""); collectionsDialog.close() } }
 				Text { visible: NeoDiveCollections.names.length === 0; text: qsTr("Collections keep your chosen dive IDs in Neo metadata without changing the dive log."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Repeater {
 					model: NeoDiveCollections.names
 					delegate: RowLayout {
 						required property string modelData
 						Layout.fillWidth: true
-						Button {
+						Components.NeoButton {
 							text: collectionsDialog.collectionDiveId >= 0 ? qsTr("Add to %1").arg(modelData) : modelData
 							Layout.fillWidth: true
 							onClicked: {
@@ -160,7 +161,7 @@ Kirigami.Page {
 								collectionsDialog.close()
 							}
 						}
-						Button { text: qsTr("Remove"); onClicked: { if (page.activeCollection === modelData) page.selectCollection(""); NeoDiveCollections.remove(modelData) } }
+						Components.NeoButton { text: qsTr("Remove"); variant: "danger"; onClicked: { if (page.activeCollection === modelData) page.selectCollection(""); NeoDiveCollections.remove(modelData) } }
 					}
 				}
 			}
@@ -179,8 +180,8 @@ Kirigami.Page {
 				spacing: tokens.space8
 				RowLayout {
 					Layout.fillWidth: true
-					TextField { id: savedFilterName; Layout.fillWidth: true; placeholderText: qsTr("Name this filter") }
-					Button { text: qsTr("Save"); enabled: savedFilterName.text.trim().length > 0; onClicked: { page.saveCurrentFilter(savedFilterName.text); savedFilterName.clear() } }
+					Components.NeoTextField { id: savedFilterName; Layout.fillWidth: true; placeholderText: qsTr("Name this filter") }
+					Components.NeoButton { text: qsTr("Save"); variant: "primary"; enabled: savedFilterName.text.trim().length > 0; onClicked: { page.saveCurrentFilter(savedFilterName.text); savedFilterName.clear() } }
 				}
 				Text { visible: manager.savedDiveFilters.length === 0; text: qsTr("Save the current filters to reuse them here or in the desktop filter tool."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Repeater {
@@ -188,8 +189,8 @@ Kirigami.Page {
 					delegate: RowLayout {
 						required property string modelData
 						Layout.fillWidth: true
-						Button { text: modelData; Layout.fillWidth: true; onClicked: { manager.applySavedDiveFilter(modelData); savedFiltersDialog.close() } }
-						Button { text: qsTr("Remove"); onClicked: manager.removeSavedDiveFilter(modelData) }
+						Components.NeoButton { text: modelData; Layout.fillWidth: true; onClicked: { manager.applySavedDiveFilter(modelData); savedFiltersDialog.close() } }
+						Components.NeoButton { text: qsTr("Remove"); variant: "danger"; onClicked: manager.removeSavedDiveFilter(modelData) }
 					}
 				}
 			}
@@ -200,15 +201,15 @@ Kirigami.Page {
 			Layout.fillWidth: true
 			spacing: tokens.space8
 
-			TextField {
+			Components.NeoTextField {
 				id: searchField
 				Layout.fillWidth: true
 				placeholderText: qsTr("Search all dive data")
 				onTextEdited: filterTimer.restart()
 				onAccepted: page.applyFilters()
 			}
-			Button { text: page.advancedFiltersVisible ? qsTr("Less") : qsTr("More"); onClicked: page.advancedFiltersVisible = !page.advancedFiltersVisible }
-			Button { text: qsTr("Clear"); onClicked: page.clearFilters() }
+			Components.NeoButton { compact: true; text: page.advancedFiltersVisible ? qsTr("Less") : qsTr("More"); onClicked: page.advancedFiltersVisible = !page.advancedFiltersVisible }
+			Components.NeoButton { compact: true; variant: "ghost"; text: qsTr("Clear"); onClicked: page.clearFilters() }
 
 			Timer {
 				id: filterTimer
@@ -226,14 +227,14 @@ Kirigami.Page {
 				columns: page.width >= 700 ? 3 : 2
 				columnSpacing: tokens.space8
 				rowSpacing: tokens.space8
-				TextField { id: locationField; Layout.fillWidth: true; placeholderText: qsTr("Site or location"); onTextEdited: filterTimer.restart() }
-				TextField { id: peopleField; Layout.fillWidth: true; placeholderText: qsTr("Buddy or guide"); onTextEdited: filterTimer.restart() }
-				TextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Tag"); onTextEdited: filterTimer.restart() }
-				TextField { id: suitField; Layout.fillWidth: true; placeholderText: qsTr("Suit / gear"); onTextEdited: filterTimer.restart() }
-				TextField { id: computerField; Layout.fillWidth: true; placeholderText: qsTr("Dive computer"); onTextEdited: filterTimer.restart() }
-				TextField { id: yearField; Layout.fillWidth: true; placeholderText: qsTr("Year"); inputMethodHints: Qt.ImhDigitsOnly; onTextEdited: filterTimer.restart() }
-				TextField { id: depthField; Layout.fillWidth: true; placeholderText: qsTr("Minimum depth"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
-				TextField { id: durationField; Layout.fillWidth: true; placeholderText: qsTr("Minimum duration"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: locationField; Layout.fillWidth: true; placeholderText: qsTr("Site or location"); onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: peopleField; Layout.fillWidth: true; placeholderText: qsTr("Buddy or guide"); onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Tag"); onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: suitField; Layout.fillWidth: true; placeholderText: qsTr("Suit / gear"); onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: computerField; Layout.fillWidth: true; placeholderText: qsTr("Dive computer"); onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: yearField; Layout.fillWidth: true; placeholderText: qsTr("Year"); inputMethodHints: Qt.ImhDigitsOnly; onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: depthField; Layout.fillWidth: true; placeholderText: qsTr("Minimum depth"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
+				Components.NeoTextField { id: durationField; Layout.fillWidth: true; placeholderText: qsTr("Minimum duration"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onTextEdited: filterTimer.restart() }
 			}
 		}
 
