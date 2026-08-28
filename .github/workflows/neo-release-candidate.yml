@@ -1,0 +1,131 @@
+name: Subsurface Neo Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Candidate version, for example 0.1.0-rc1'
+        required: true
+        default: '0.1.0-rc1'
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: neo-release-candidate-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate candidate version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION='${{ inputs.version }}'
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          echo "NEO_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Checkout exact modern-ui source
+        uses: actions/checkout@v7
+        with:
+          ref: modern-ui
+          fetch-depth: 0
+
+      - name: Record candidate source
+        shell: bash
+        run: |
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Dispatch native candidate builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run android.yml --repo "$GITHUB_REPOSITORY" --ref modern-ui
+          gh workflow run windows-msvc-qt6.yml --repo "$GITHUB_REPOSITORY" --ref modern-ui
+
+      - name: Resolve candidate build runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          find_run() {
+            local workflow="$1"
+            for i in $(seq 1 40); do
+              id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=30" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${SOURCE_SHA}\") | .id" | head -1)
+              if [ -n "$id" ]; then echo "$id"; return 0; fi
+              sleep 4
+            done
+            return 1
+          }
+          echo "ANDROID_RUN=$(find_run android.yml)" >> "$GITHUB_ENV"
+          echo "WINDOWS_RUN=$(find_run windows-msvc-qt6.yml)" >> "$GITHUB_ENV"
+
+      - name: Wait for native candidate builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh run watch "$ANDROID_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run watch "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Download and normalize artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate/raw/android candidate/raw/windows candidate/dist
+          gh run download "$ANDROID_RUN" --repo "$GITHUB_REPOSITORY" --dir candidate/raw/android
+          gh run download "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --dir candidate/raw/windows
+          APK=$(find candidate/raw/android -type f -name '*.apk' | head -1)
+          WINDOWS_ZIP=$(find candidate/raw/windows -type f -name '*.zip' | head -1)
+          test -f "$APK"
+          test -f "$WINDOWS_ZIP"
+          cp "$APK" "candidate/dist/Subsurface-Neo-${NEO_VERSION}-Android-arm64.apk"
+          cp "$WINDOWS_ZIP" "candidate/dist/Subsurface-Neo-${NEO_VERSION}-Windows-x64.zip"
+          (cd candidate/dist && sha256sum Subsurface-Neo-* > SHA256SUMS.txt)
+
+      - name: Create candidate notes and update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp docs/NEO_RELEASE_NOTES_TEMPLATE.md candidate/dist/RELEASE_NOTES.md
+          sed -i "s/{{VERSION}}/${NEO_VERSION}/g; s/{{SOURCE_SHA}}/${SOURCE_SHA}/g" candidate/dist/RELEASE_NOTES.md
+          APK_SHA=$(sha256sum candidate/dist/*Android*.apk | awk '{print $1}')
+          WINDOWS_SHA=$(sha256sum candidate/dist/*Windows*.zip | awk '{print $1}')
+          cat > candidate/dist/update.json <<EOF
+          {
+            "schema": 1,
+            "channel": "candidate",
+            "version": "${NEO_VERSION}",
+            "sourceSha": "${SOURCE_SHA}",
+            "published": false,
+            "platforms": {
+              "android-arm64": { "file": "Subsurface-Neo-${NEO_VERSION}-Android-arm64.apk", "sha256": "${APK_SHA}" },
+              "windows-x64": { "file": "Subsurface-Neo-${NEO_VERSION}-Windows-x64.zip", "sha256": "${WINDOWS_SHA}" }
+            }
+          }
+          EOF
+
+      - name: Validate candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd candidate/dist && sha256sum --check SHA256SUMS.txt)
+          python3 -m json.tool candidate/dist/update.json >/dev/null
+          test -s candidate/dist/RELEASE_NOTES.md
+
+      - name: Upload unpublished candidate bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: Subsurface-Neo-${{ inputs.version }}-unpublished-candidate
+          path: candidate/dist
+          if-no-files-found: error
+          retention-days: 14

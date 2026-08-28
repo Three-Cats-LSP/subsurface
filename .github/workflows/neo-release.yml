@@ -137,18 +137,18 @@ jobs:
           gh run download "$ANDROID_RUN" --repo "$GITHUB_REPOSITORY" --dir release/android
           gh run download "$WINDOWS_RUN" --repo "$GITHUB_REPOSITORY" --dir release/windows
           APK=$(find release/android -type f -name '*.apk' | head -1)
-          EXE=$(find release/windows -type f -name '*.exe' | head -1)
+          WINDOWS_ZIP=$(find release/windows -type f -name '*.zip' | head -1)
           test -n "$APK" && test -f "$APK"
-          test -n "$EXE" && test -f "$EXE"
+          test -n "$WINDOWS_ZIP" && test -f "$WINDOWS_ZIP"
           APK_OUT="release/Subsurface-Neo-${NEO_VERSION}-Android-arm64.apk"
-          EXE_OUT="release/Subsurface-Neo-${NEO_VERSION}-Windows-x64.exe"
+          WINDOWS_OUT="release/Subsurface-Neo-${NEO_VERSION}-Windows-x64.zip"
           cp "$APK" "$APK_OUT"
-          cp "$EXE" "$EXE_OUT"
-          sha256sum "$APK_OUT" "$EXE_OUT" > release/SHA256SUMS.txt
+          cp "$WINDOWS_ZIP" "$WINDOWS_OUT"
+          sha256sum "$APK_OUT" "$WINDOWS_OUT" > release/SHA256SUMS.txt
           echo "APK_FILE=$APK_OUT" >> "$GITHUB_ENV"
-          echo "EXE_FILE=$EXE_OUT" >> "$GITHUB_ENV"
+          echo "WINDOWS_FILE=$WINDOWS_OUT" >> "$GITHUB_ENV"
           echo "APK_SHA=$(sha256sum "$APK_OUT" | awk '{print $1}')" >> "$GITHUB_ENV"
-          echo "EXE_SHA=$(sha256sum "$EXE_OUT" | awk '{print $1}')" >> "$GITHUB_ENV"
+          echo "WINDOWS_SHA=$(sha256sum "$WINDOWS_OUT" | awk '{print $1}')" >> "$GITHUB_ENV"
 
       - name: Publish GitHub release
         env:
@@ -157,9 +157,9 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "${NEO_TAG}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "${NEO_TAG}" "$APK_FILE" "$WINDOWS_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
           else
-            args=("${NEO_TAG}" "$APK_FILE" "$EXE_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Subsurface Neo ${NEO_VERSION}" --generate-notes)
+            args=("${NEO_TAG}" "$APK_FILE" "$WINDOWS_FILE" release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Subsurface Neo ${NEO_VERSION}" --generate-notes)
             if [ '${{ inputs.prerelease }}' = 'true' ]; then args+=(--prerelease); fi
             gh release create "${args[@]}"
           fi
@@ -182,8 +182,8 @@ jobs:
                 "sha256": "${APK_SHA}"
               },
               "windows-x64": {
-                "url": "${BASE}/Subsurface-Neo-${NEO_VERSION}-Windows-x64.exe",
-                "sha256": "${EXE_SHA}"
+                "url": "${BASE}/Subsurface-Neo-${NEO_VERSION}-Windows-x64.zip",
+                "sha256": "${WINDOWS_SHA}"
               }
             }
           }
