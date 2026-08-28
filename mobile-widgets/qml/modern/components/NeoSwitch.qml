@@ -5,6 +5,7 @@ import ".." as Modern
 
 Switch {
 	id: control
+	property string accessibleName: ""
 	Modern.DesignTokens { id: tokens }
 
 	implicitHeight: 40

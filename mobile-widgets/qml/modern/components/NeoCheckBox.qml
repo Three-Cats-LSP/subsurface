@@ -5,6 +5,7 @@ import ".." as Modern
 
 CheckBox {
 	id: control
+	property string accessibleName: ""
 	Modern.DesignTokens { id: tokens }
 
 	implicitHeight: 38

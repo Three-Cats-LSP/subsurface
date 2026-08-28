@@ -5,6 +5,7 @@ import ".." as Modern
 
 ComboBox {
 	id: control
+	property string accessibleName: ""
 	Modern.DesignTokens { id: tokens }
 	implicitHeight: 44
 	leftPadding: 12

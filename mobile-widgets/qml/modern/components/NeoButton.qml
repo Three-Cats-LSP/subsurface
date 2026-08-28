@@ -8,6 +8,7 @@ Button {
 
 	property string variant: "secondary"
 	property bool compact: false
+	property string accessibleName: ""
 
 	Modern.DesignTokens { id: tokens }
 

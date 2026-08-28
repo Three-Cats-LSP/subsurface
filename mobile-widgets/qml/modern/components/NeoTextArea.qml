@@ -5,6 +5,7 @@ import ".." as Modern
 
 TextArea {
 	id: control
+	property string accessibleName: ""
 	Modern.DesignTokens { id: tokens }
 
 	implicitHeight: 92
