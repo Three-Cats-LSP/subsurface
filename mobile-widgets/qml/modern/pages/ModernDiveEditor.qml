@@ -74,12 +74,14 @@ Kirigami.Page {
 	}
 
 	Flickable {
+		id: editorFlickable
 		anchors.fill: parent
 		contentWidth: width
 		contentHeight: editorColumn.implicitHeight + tokens.space24 * 2
 		flickableDirection: Flickable.VerticalFlick
 		boundsBehavior: Flickable.StopAtBounds
 		clip: true
+		ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
 		ColumnLayout {
 			id: editorColumn

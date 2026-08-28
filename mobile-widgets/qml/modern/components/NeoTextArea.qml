@@ -18,6 +18,8 @@ TextArea {
 	selectedTextColor: tokens.textPrimary
 	font.pixelSize: 13
 	wrapMode: TextEdit.Wrap
+	Accessible.name: accessibleName.length > 0 ? accessibleName : placeholderText
+	Accessible.role: Accessible.EditableText
 
 	background: Rectangle {
 		color: tokens.background

@@ -794,6 +794,8 @@ Kirigami.Page {
 			contentHeight: controlsColumn.implicitHeight
 			clip: true
 			flickableDirection: Flickable.VerticalFlick
+			boundsBehavior: Flickable.StopAtBounds
+			ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
 			ColumnLayout {
 				id: controlsColumn

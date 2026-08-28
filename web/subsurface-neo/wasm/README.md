@@ -8,6 +8,8 @@ The current bootstrap provides:
 
 - a responsive Neo dashboard shell for desktop and mobile browsers;
 - secure-context, Web Bluetooth, and Web Serial capability detection;
+- a mock-tested browser-device transport state machine that isolates selection,
+  connection, cancellation, errors, and disconnect behavior from libdivecomputer;
 - a browser-controlled local-file picker;
 - a shared C++ core reader for native Subsurface XML logs;
 - real dashboard totals and recent-dive summaries from the selected log;
@@ -23,3 +25,6 @@ imports, calculated GF/ceiling profile processing, editing, cloud synchronizatio
 planner must be connected to the corresponding shared Subsurface C++ pipelines
 before those features are presented as available. The current browser reader
 intentionally accepts only the native XML format emitted by `core/save-xml.cpp`.
+The transport controller is intentionally backed by a capability-only adapter in
+production until the JavaScript byte-stream bridge and hardware validation land;
+it never presents a simulated connection as a real dive computer.

@@ -69,7 +69,7 @@ jobs:
 
       - name: Build and run native-log reader tests
         run: |
-          cmake --build build/neo-web-host --target neo-web-parser-tests --parallel 2
+          cmake --build build/neo-web-host --target neo-web-parser-tests neo-web-transport-tests --parallel 2
           ctest --test-dir build/neo-web-host --output-on-failure
 
       - name: Build WebAssembly application

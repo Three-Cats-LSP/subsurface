@@ -133,7 +133,9 @@ Kirigami.Page {
 			width: Math.min(page.width - tokens.space24 * 2, 460)
 			title: qsTr("Collections")
 			modal: true
-			standardButtons: Dialog.Close
+			standardButtons: Dialog.NoButton
+			closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+			background: Rectangle { color: tokens.surface; radius: tokens.radius16; border.width: 1; border.color: tokens.border }
 			property int collectionDiveId: -1
 			ColumnLayout {
 				width: parent.width
@@ -164,6 +166,7 @@ Kirigami.Page {
 						Components.NeoButton { text: qsTr("Remove"); variant: "danger"; onClicked: { if (page.activeCollection === modelData) page.selectCollection(""); NeoDiveCollections.remove(modelData) } }
 					}
 				}
+				Components.NeoButton { Layout.alignment: Qt.AlignRight; text: qsTr("Close"); variant: "ghost"; onClicked: collectionsDialog.close() }
 			}
 		}
 
@@ -174,7 +177,9 @@ Kirigami.Page {
 			width: Math.min(page.width - tokens.space24 * 2, 460)
 			title: qsTr("Saved filters")
 			modal: true
-			standardButtons: Dialog.Close
+			standardButtons: Dialog.NoButton
+			closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+			background: Rectangle { color: tokens.surface; radius: tokens.radius16; border.width: 1; border.color: tokens.border }
 			ColumnLayout {
 				width: parent.width
 				spacing: tokens.space8
@@ -193,6 +198,7 @@ Kirigami.Page {
 						Components.NeoButton { text: qsTr("Remove"); variant: "danger"; onClicked: manager.removeSavedDiveFilter(modelData) }
 					}
 				}
+				Components.NeoButton { Layout.alignment: Qt.AlignRight; text: qsTr("Close"); variant: "ghost"; onClicked: savedFiltersDialog.close() }
 			}
 		}
 

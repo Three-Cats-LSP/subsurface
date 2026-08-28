@@ -9,6 +9,8 @@ CheckBox {
 
 	implicitHeight: 38
 	spacing: 9
+	Accessible.name: accessibleName.length > 0 ? accessibleName : text
+	Accessible.role: Accessible.CheckBox
 
 	indicator: Rectangle {
 		implicitWidth: 21

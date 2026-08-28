@@ -9,6 +9,8 @@ SpinBox {
 
 	implicitHeight: 44
 	editable: false
+	Accessible.name: accessibleName
+	Accessible.role: Accessible.SpinBox
 
 	contentItem: TextInput {
 		z: 2

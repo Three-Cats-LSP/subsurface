@@ -15,6 +15,8 @@ TextField {
 	selectionColor: tokens.accentStrong
 	selectedTextColor: tokens.textPrimary
 	font.pixelSize: 13
+	Accessible.name: accessibleName.length > 0 ? accessibleName : placeholderText
+	Accessible.role: Accessible.EditableText
 
 	background: Rectangle {
 		color: tokens.background

@@ -63,6 +63,8 @@ qt_add_executable(subsurface-neo-web MANUAL_FINALIZATION
 	neowebdivelogmodel.h
 	webcapabilities.cpp
 	webcapabilities.h
+	webdevicetransport.cpp
+	webdevicetransport.h
 	${SUBSURFACE_ROOT}/core/native-divelog-summary.cpp
 	${SUBSURFACE_ROOT}/core/native-divelog-summary.h
 )
@@ -102,4 +104,13 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
 	target_include_directories(neo-web-parser-tests PRIVATE ${SUBSURFACE_ROOT})
 	target_link_libraries(neo-web-parser-tests PRIVATE neo-profile-core Qt6::Core Qt6::Test)
 	add_test(NAME neo-web-parser-tests COMMAND neo-web-parser-tests)
+
+	qt_add_executable(neo-web-transport-tests
+		tests/test_webdevicetransport.cpp
+		webdevicetransport.cpp
+		webdevicetransport.h
+	)
+	target_include_directories(neo-web-transport-tests PRIVATE ${SUBSURFACE_ROOT})
+	target_link_libraries(neo-web-transport-tests PRIVATE Qt6::Core Qt6::Test)
+	add_test(NAME neo-web-transport-tests COMMAND neo-web-transport-tests)
 endif()

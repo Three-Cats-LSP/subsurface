@@ -17,6 +17,7 @@ private slots:
 	void rejectsForeignRoot();
 	void filtersAndSelectsDives();
 	void calculatesProfileValues();
+	void handlesLargeNativeLog();
 };
 
 void TestNativeDiveLogReader::readsNativeSummary()
@@ -169,6 +170,38 @@ void TestNativeDiveLogReader::calculatesProfileValues()
 		foundTts = foundTts || sample.has_calculated_tts;
 	}
 	QVERIFY(foundTts);
+}
+
+void TestNativeDiveLogReader::handlesLargeNativeLog()
+{
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	QByteArray xml("<divelog program=\"subsurface\" version=\"3\"><dives>");
+	constexpr int diveCount = 2000;
+	for (int index = 0; index < diveCount; ++index) {
+		xml += QByteArray("<dive number=\"") + QByteArray::number(index + 1) +
+			"\" date=\"2026-07-28\"><buddy>Scale Tester</buddy><notes>Generated large-log fixture " +
+			QByteArray::number(index) + "</notes><divecomputer dctype=\"OC\">";
+		for (int sample = 0; sample < 12; ++sample)
+			xml += QByteArray("<sample time=\"") + QByteArray::number(sample) + ":00 min\" depth=\"" +
+				QByteArray::number(sample * 2) + ".0 m\"/>";
+		xml += "</divecomputer></dive>";
+	}
+	xml += "</dives></divelog>";
+	QCOMPARE(file.write(xml), qint64(xml.size()));
+	file.flush();
+
+	NeoWebDiveLogModel model;
+	model.openLocalFile(QUrl::fromLocalFile(file.fileName()));
+	QVERIFY2(model.loaded(), qPrintable(model.fileStatus()));
+	QCOMPARE(model.diveCount(), diveCount);
+	QCOMPARE(model.filteredDives().size(), diveCount);
+	model.setSearchText(QStringLiteral("fixture 1999"));
+	QCOMPARE(model.filteredDives().size(), 1);
+	const int sourceIndex = model.filteredDives().first().toMap().value(QStringLiteral("sourceIndex")).toInt();
+	model.selectDive(sourceIndex);
+	QCOMPARE(model.selectedDive().value(QStringLiteral("number")).toInt(), diveCount);
+	QCOMPARE(model.profileSamples().size(), 12);
 }
 
 QTEST_GUILESS_MAIN(TestNativeDiveLogReader)

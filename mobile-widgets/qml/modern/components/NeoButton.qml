@@ -17,6 +17,8 @@ Button {
 	rightPadding: leftPadding
 	topPadding: 0
 	bottomPadding: 0
+	Accessible.name: accessibleName.length > 0 ? accessibleName : text
+	Accessible.role: Accessible.Button
 
 	contentItem: Text {
 		text: control.text

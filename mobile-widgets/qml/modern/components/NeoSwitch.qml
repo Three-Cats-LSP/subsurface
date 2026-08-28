@@ -9,6 +9,8 @@ Switch {
 
 	implicitHeight: 40
 	spacing: 10
+	Accessible.name: accessibleName.length > 0 ? accessibleName : text
+	Accessible.role: Accessible.CheckBox
 
 	indicator: Rectangle {
 		implicitWidth: 42
