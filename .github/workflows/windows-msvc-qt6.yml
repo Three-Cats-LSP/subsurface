@@ -255,9 +255,14 @@ jobs:
           # windeployqt copies Kirigami's runtime DLLs, but it cannot discover
           # the separately installed KDE QML module. Keep its URI-relative
           # layout so `import org.kde.kirigami` resolves from <app>/qml.
-          $kirigamiQml = Join-Path $installPrefix "qml"
-          if (-not (Test-Path (Join-Path $kirigamiQml "org\kde\kirigami\qmldir"))) {
-            throw "Kirigami QML module was not installed at $kirigamiQml"
+          $kirigamiQml = @(
+            (Join-Path $installPrefix "qml"),
+            (Join-Path $installPrefix "lib\qml")
+          ) | Where-Object {
+            Test-Path (Join-Path $_ "org\kde\kirigami\qmldir")
+          } | Select-Object -First 1
+          if (-not $kirigamiQml) {
+            throw "Kirigami QML module was not found below $installPrefix"
           }
           New-Item -ItemType Directory -Force -Path (Join-Path $stagingDir "qml") | Out-Null
           Copy-Item (Join-Path $kirigamiQml '*') -Destination (Join-Path $stagingDir "qml") -Recurse -Force
