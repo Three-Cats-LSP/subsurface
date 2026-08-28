@@ -283,6 +283,6 @@ Kirigami.ScrollablePage {
 			text: qsTr("OAuth tokens and saved synchronization state for this provider will be removed from this device. Remote files will not be deleted.")
 			color: tokens.textSecondary; wrapMode: Text.WordWrap
 		}
-		footer: RowLayout { spacing: tokens.space8; Item { Layout.fillWidth: true }; Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: disconnectDialog.close() }; Components.NeoButton { text: qsTr("Disconnect"); variant: "danger"; onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } } }
+		footer: RowLayout { spacing: tokens.space8; Item { Layout.fillWidth: true } Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: disconnectDialog.close() } Components.NeoButton { text: qsTr("Disconnect"); variant: "danger"; onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } } }
 	}
 }

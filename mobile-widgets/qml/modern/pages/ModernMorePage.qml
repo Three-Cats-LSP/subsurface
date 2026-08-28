@@ -50,7 +50,25 @@ Kirigami.ScrollablePage {
 					RowLayout {
 						Layout.fillWidth: true; spacing: tokens.space12
 						Rectangle { Layout.preferredWidth: 42; Layout.preferredHeight: 42; radius: 21; color: tokens.surfaceRaised; Components.NeoDiveIcon { anchors.centerIn: parent; width: 24; height: 24; name: modelData.icon; iconColor: tokens.accent } }
-						ColumnLayout { Layout.fillWidth: true; spacing: 2; Text { text: modelData.title; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }; Text { text: modelData.detail; color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 2
+							Text {
+								text: modelData.title
+								color: tokens.textPrimary
+								font.pixelSize: 17
+								font.weight: Font.DemiBold
+								Layout.fillWidth: true
+								elide: Text.ElideRight
+							}
+							Text {
+								text: modelData.detail
+								color: tokens.textSecondary
+								font.pixelSize: 12
+								wrapMode: Text.WordWrap
+								Layout.fillWidth: true
+							}
+						}
 					}
 					Components.NeoButton { Layout.alignment: Qt.AlignRight; text: qsTr("Open"); variant: "ghost"; compact: true; onClicked: modelData.action() }
 				}
