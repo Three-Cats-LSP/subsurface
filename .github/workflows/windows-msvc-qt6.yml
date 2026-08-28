@@ -274,21 +274,24 @@ jobs:
           $stagingDir = "${{ github.workspace }}\build\staging"
           $neoExecutable = Join-Path $stagingDir "subsurface-mobile.exe"
           $nativeRoaming = $env:APPDATA
+          $nativeLogDir = Join-Path $nativeRoaming "Subsurface"
           $smokeProfile = Join-Path "${{ runner.temp }}" "subsurface-neo-smoke"
           $roaming = Join-Path $smokeProfile "Roaming"
           $local = Join-Path $smokeProfile "Local"
-          New-Item -ItemType Directory -Force -Path (Join-Path $roaming "Subsurface"),$local | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $roaming "Subsurface"),$local,$nativeLogDir | Out-Null
           $env:APPDATA = $roaming
           $env:LOCALAPPDATA = $local
           $env:SUBSURFACE_MOBILE_WIDTH = "1100"
           $env:SUBSURFACE_MOBILE_HEIGHT = "760"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QUICK_BACKEND = "software"
 
           $process = Start-Process -FilePath $neoExecutable -WorkingDirectory $stagingDir -PassThru
           Start-Sleep -Seconds 15
           if ($process.HasExited) {
             # Subsurface uses SHGetFolderPath, which may retain the process'
             # original roaming directory even after APPDATA is overridden.
-            $errorLog = Join-Path $nativeRoaming "Subsurface\subsurface_err.log"
+            $errorLog = Join-Path $nativeLogDir "subsurface_err.log"
             if (Test-Path $errorLog) { Get-Content $errorLog }
             throw "Staged Neo application exited during launch smoke test with code $($process.ExitCode)"
           }
