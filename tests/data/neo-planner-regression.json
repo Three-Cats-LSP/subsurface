@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "engine": "Subsurface native planner",
+  "purpose": "Portable safety-contract fixtures; not third-party schedule compatibility claims.",
+  "scenarios": [
+    {
+      "id": "oc-air-no-decompression",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "mix": "21/0",
+      "depthMeters": 15,
+      "durationMinutes": 20,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2
+    },
+    {
+      "id": "oc-air-decompression",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "mix": "21/0",
+      "depthMeters": 40,
+      "durationMinutes": 25,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2
+    },
+    {
+      "id": "oc-trimix-altitude",
+      "algorithm": "buehlmann",
+      "gfLow": 25,
+      "gfHigh": 70,
+      "mix": "18/45",
+      "depthMeters": 50,
+      "durationMinutes": 25,
+      "surfacePressureMbar": 850,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2
+    },
+    {
+      "id": "oc-vpmb-conservative",
+      "algorithm": "vpmb",
+      "vpmbConservatism": 3,
+      "mix": "21/0",
+      "depthMeters": 40,
+      "durationMinutes": 25,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2
+    }
+  ]
+}

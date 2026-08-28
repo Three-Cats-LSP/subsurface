@@ -8,6 +8,11 @@
 #include "core/string-format.h"
 #include "core/units.h"
 #include <QSignalSpy>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QScopedValueRollback>
 #include <QVariantMap>
 #include <memory>
 #include <vector>
@@ -470,6 +475,56 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	prefs.vpmb_conservatism = 3;
 	const QVariantMap vpmbConservative = calculate(40, 25);
 	QVERIFY(runtime(vpmbConservative) >= runtime(vpmb40));
+	prefs = default_prefs;
+}
+
+void TestDivePlannerModel::testNeoPlannerFixtureManifest()
+{
+	QFile fixtureFile(QStringLiteral(SUBSURFACE_TEST_DATA) + QStringLiteral("/tests/data/neo-planner-regression.json"));
+	QVERIFY2(fixtureFile.open(QIODevice::ReadOnly), qPrintable(fixtureFile.errorString()));
+	QJsonParseError parseError;
+	const QJsonDocument fixtureDocument = QJsonDocument::fromJson(fixtureFile.readAll(), &parseError);
+	QCOMPARE(parseError.error, QJsonParseError::NoError);
+	QVERIFY(fixtureDocument.isObject());
+	QCOMPARE(fixtureDocument.object().value(QStringLiteral("schema")).toInt(), 1);
+
+	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
+	for (const QJsonValue &fixtureValue : fixtureDocument.object().value(QStringLiteral("scenarios")).toArray()) {
+		const QJsonObject fixture = fixtureValue.toObject();
+		const QByteArray fixtureName = fixture.value(QStringLiteral("id")).toString().toUtf8();
+		QScopedValueRollback<decltype(prefs)> restorePrefs(prefs, default_prefs);
+		prefs.unit_system = METRIC;
+		prefs.units = SI_units;
+		prefs.drop_stone_mode = false;
+		const QString algorithm = fixture.value(QStringLiteral("algorithm")).toString();
+		prefs.planner_deco_mode = algorithm == QStringLiteral("vpmb") ? VPMB : BUEHLMANN;
+		prefs.gflow = fixture.value(QStringLiteral("gfLow")).toInt(30);
+		prefs.gfhigh = fixture.value(QStringLiteral("gfHigh")).toInt(75);
+		prefs.vpmb_conservatism = fixture.value(QStringLiteral("vpmbConservatism")).toInt(0);
+
+		QVariantMap cylinder;
+		cylinder.insert(QStringLiteral("type"), QStringLiteral("AL80"));
+		cylinder.insert(QStringLiteral("mix"), fixture.value(QStringLiteral("mix")).toString(QStringLiteral("21/0")));
+		cylinder.insert(QStringLiteral("pressure"), 200);
+		cylinder.insert(QStringLiteral("use"), OC_GAS);
+		QVariantMap segment;
+		segment.insert(QStringLiteral("depth"), fixture.value(QStringLiteral("depthMeters")).toInt());
+		segment.insert(QStringLiteral("duration"), fixture.value(QStringLiteral("durationMinutes")).toInt());
+		segment.insert(QStringLiteral("gas"), 0);
+		segment.insert(QStringLiteral("setpoint"), 0);
+		segment.insert(QStringLiteral("divemode"), OC);
+
+		const QVariantMap result = model->calculatePlan(QVariantList { cylinder }, QVariantList { segment },
+			QStringLiteral("2026-01-01"), QStringLiteral("12:00:00"), OC, 10300,
+			fixture.value(QStringLiteral("surfacePressureMbar")).toInt(1013), false);
+		QVERIFY2(result.value(QStringLiteral("planSaveAllowed")).toBool() == fixture.value(QStringLiteral("planSaveAllowed")).toBool(), fixtureName.constData());
+		QVERIFY2(result.value(QStringLiteral("profile")).toList().size() >= fixture.value(QStringLiteral("minimumProfileSamples")).toInt(2), fixtureName.constData());
+		const bool hasSchedule = !result.value(QStringLiteral("schedule")).toList().empty();
+		if (fixture.value(QStringLiteral("requiresSchedule")).toBool())
+			QVERIFY2(hasSchedule, fixtureName.constData());
+		QVERIFY2(result.value(QStringLiteral("otu")).toInt() >= 0, fixtureName.constData());
+		QVERIFY2(!result.value(QStringLiteral("gasAnalysis")).toList().empty(), fixtureName.constData());
+	}
 	prefs = default_prefs;
 }
 
