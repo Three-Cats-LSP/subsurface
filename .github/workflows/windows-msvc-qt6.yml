@@ -245,9 +245,49 @@ jobs:
       - name: Stage portable Neo package
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          $installPrefix = "${{ github.workspace }}\install"
+          $stagingDir = "${{ github.workspace }}\build\staging"
           Push-Location "${{ github.workspace }}\build"
           ninja install
           Pop-Location
+
+          # windeployqt copies Kirigami's runtime DLLs, but it cannot discover
+          # the separately installed KDE QML module. Keep its URI-relative
+          # layout so `import org.kde.kirigami` resolves from <app>/qml.
+          $kirigamiQml = Join-Path $installPrefix "qml"
+          if (-not (Test-Path (Join-Path $kirigamiQml "org\kde\kirigami\qmldir"))) {
+            throw "Kirigami QML module was not installed at $kirigamiQml"
+          }
+          New-Item -ItemType Directory -Force -Path (Join-Path $stagingDir "qml") | Out-Null
+          Copy-Item (Join-Path $kirigamiQml '*') -Destination (Join-Path $stagingDir "qml") -Recurse -Force
+
+      - name: Smoke-test staged Neo application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stagingDir = "${{ github.workspace }}\build\staging"
+          $neoExecutable = Join-Path $stagingDir "subsurface-mobile.exe"
+          $nativeRoaming = $env:APPDATA
+          $smokeProfile = Join-Path "${{ runner.temp }}" "subsurface-neo-smoke"
+          $roaming = Join-Path $smokeProfile "Roaming"
+          $local = Join-Path $smokeProfile "Local"
+          New-Item -ItemType Directory -Force -Path (Join-Path $roaming "Subsurface"),$local | Out-Null
+          $env:APPDATA = $roaming
+          $env:LOCALAPPDATA = $local
+          $env:SUBSURFACE_MOBILE_WIDTH = "1100"
+          $env:SUBSURFACE_MOBILE_HEIGHT = "760"
+
+          $process = Start-Process -FilePath $neoExecutable -WorkingDirectory $stagingDir -PassThru
+          Start-Sleep -Seconds 15
+          if ($process.HasExited) {
+            # Subsurface uses SHGetFolderPath, which may retain the process'
+            # original roaming directory even after APPDATA is overridden.
+            $errorLog = Join-Path $nativeRoaming "Subsurface\subsurface_err.log"
+            if (Test-Path $errorLog) { Get-Content $errorLog }
+            throw "Staged Neo application exited during launch smoke test with code $($process.ExitCode)"
+          }
+          Stop-Process -Id $process.Id
 
       - name: Create portable Neo archive
         id: archive-name
