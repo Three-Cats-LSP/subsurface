@@ -1897,26 +1897,28 @@ bool QMLManager::updateSite(const QString &siteName, const QString &description,
 	dive_site *ds = divelog.sites.get_by_name(siteName.toStdString());
 	if (!ds)
 		return false;
+
+	// Validate the complete request before applying any undoable edits.  In
+	// particular, an invalid GPS string must not leave description or notes
+	// changed even though the dialog reports that saving failed.
+	const QString trimmedGps = gps.trimmed();
+	location_t newLocation {};
+	const bool gpsChanged = printGPSCoords(&ds->location) != gps;
+	if (gpsChanged && !trimmedGps.isEmpty()) {
+		double latitude, longitude;
+		if (!parseGpsText(trimmedGps, &latitude, &longitude)) {
+			setErrorMessage(tr("Unable to parse dive-site GPS coordinates."));
+			return false;
+		}
+		newLocation = create_location(latitude, longitude);
+	}
+
 	if (QString::fromStdString(ds->description) != description)
 		Command::editDiveSiteDescription(ds, description);
 	if (QString::fromStdString(ds->notes) != notes)
 		Command::editDiveSiteNotes(ds, notes);
-	if (printGPSCoords(&ds->location) != gps) {
-		if (gps.trimmed().isEmpty()) {
-			// A blank field means remove the site's coordinates. Keep this as a
-			// normal undoable Subsurface site edit rather than rejecting it as an
-			// unparsable coordinate string.
-			Command::editDiveSiteLocation(ds, location_t {});
-			emit locationListChanged();
-			return true;
-		}
-		double latitude, longitude;
-		if (!parseGpsText(gps, &latitude, &longitude)) {
-			setErrorMessage(tr("Unable to parse dive-site GPS coordinates."));
-			return false;
-		}
-		Command::editDiveSiteLocation(ds, create_location(latitude, longitude));
-	}
+	if (gpsChanged)
+		Command::editDiveSiteLocation(ds, newLocation);
 	emit locationListChanged();
 	return true;
 }

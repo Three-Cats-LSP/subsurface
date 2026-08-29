@@ -141,6 +141,24 @@ void TestParse::testParse()
 		     SUBSURFACE_TEST_DATA "/dives/test40-42.xml");
 }
 
+void TestParse::testNeoUiRegressionLog()
+{
+	QCOMPARE(parse_file(SUBSURFACE_TEST_DATA "/dives/neo-ui-regression.ssrf", &divelog), 0);
+	QCOMPARE(divelog.dives.size(), static_cast<size_t>(12));
+	QCOMPARE(divelog.sites.size(), static_cast<size_t>(4));
+
+	const dive_site *izu = divelog.sites.get_by_name("Izu Oceanic Park");
+	QVERIFY(izu);
+	QVERIFY(izu->has_gps_location());
+	QCOMPARE(izu->nr_of_dives(), static_cast<size_t>(4));
+	QCOMPARE(QString::fromStdString(izu->description), QStringLiteral("Rocky shore entry on the Izu Peninsula."));
+
+	const dive_site *training = divelog.sites.get_by_name("Neo Training Pool");
+	QVERIFY(training);
+	QVERIFY(!training->has_gps_location());
+	QCOMPARE(training->nr_of_dives(), static_cast<size_t>(2));
+}
+
 void TestParse::testParseTsv()
 {
 	// On some platforms (Windows) size_t has a different format string.

@@ -1,0 +1,68 @@
+<divelog program='subsurface' version='3'>
+<settings><autogroup state='1' /></settings>
+<divesites>
+<site uuid='4e454f01' name='Izu Oceanic Park' gps='34.886200 139.134600'>
+  <description>Rocky shore entry on the Izu Peninsula.</description>
+  <notes>Primary Neo map and site-editor regression location.</notes>
+</site>
+<site uuid='4e454f02' name='Mikomoto Island' gps='34.574800 138.944200'>
+  <description>Offshore boat diving with seasonal currents.</description>
+</site>
+<site uuid='4e454f03' name='Blue Corner, Palau' gps='7.132557 134.224213'>
+  <description>Wall and current-diving regression location.</description>
+</site>
+<site uuid='4e454f04' name='Neo Training Pool'>
+  <description>Intentionally unmapped site for no-GPS UI states.</description>
+</site>
+</divesites>
+<dives>
+<dive number='247' divesiteid='4e454f01' rating='5' tags='shore, reef' date='2026-07-28' time='10:42:00' duration='48:00 min'>
+  <buddy>Dirk Hohndel</buddy><notes>Clear water with a mild current near the end of the dive.</notes>
+  <cylinder size='12.0 l' workpressure='200.0 bar' description='AL80' />
+  <divecomputer model='Shearwater Perdix'><depth max='27.4 m' mean='18.2 m' /><temperature water='22.0 C' />
+    <sample time='0:00 min' depth='0.0 m' /><sample time='8:00 min' depth='27.4 m' /><sample time='24:00 min' depth='21.0 m' /><sample time='40:00 min' depth='16.0 m' /><sample time='48:00 min' depth='0.0 m' />
+  </divecomputer>
+</dive>
+<dive number='246' divesiteid='4e454f02' rating='4' tags='boat, nitrox' date='2026-07-27' time='08:12:00' duration='52:00 min'>
+  <buddy>Alex Diver</buddy><notes>Good visibility; surface swell increased after lunch.</notes>
+  <cylinder size='12.0 l' workpressure='200.0 bar' description='Single tank' o2='32.0%' />
+  <divecomputer model='Shearwater Perdix'><depth max='36.8 m' mean='24.1 m' /><temperature water='21.0 C' />
+    <sample time='0:00 min' depth='0.0 m' /><sample time='10:00 min' depth='36.8 m' /><sample time='30:00 min' depth='29.0 m' /><sample time='45:00 min' depth='15.0 m' /><sample time='52:00 min' depth='0.0 m' />
+  </divecomputer>
+</dive>
+<dive number='245' divesiteid='4e454f03' rating='5' tags='boat, wall' date='2026-05-16' time='09:05:00' duration='44:00 min'>
+  <buddy>Roman</buddy><notes>Drift dive with sharks below the ledge.</notes>
+  <cylinder size='11.1 l' workpressure='207.0 bar' description='AL80' o2='32.0%' />
+  <divecomputer model='Suunto Ocean'><depth max='29.1 m' mean='20.5 m' /><temperature water='29.0 C' />
+    <sample time='0:00 min' depth='0.0 m' /><sample time='7:00 min' depth='29.1 m' /><sample time='35:00 min' depth='24.0 m' /><sample time='44:00 min' depth='0.0 m' />
+  </divecomputer>
+</dive>
+<dive number='244' divesiteid='4e454f01' rating='4' tags='shore' date='2026-03-09' time='11:18:00' duration='57:00 min'>
+  <divecomputer model='Shearwater Perdix'><depth max='24.6 m' mean='17.0 m' /><temperature water='18.0 C' /><sample time='0:00 min' depth='0.0 m' /><sample time='12:00 min' depth='24.6 m' /><sample time='45:00 min' depth='18.0 m' /><sample time='57:00 min' depth='0.0 m' /></divecomputer>
+</dive>
+<dive number='243' divesiteid='4e454f04' date='2025-12-12' time='19:00:00' duration='35:00 min'>
+  <notes>Confined-water skills session.</notes><divecomputer model='manually added dive'><depth max='5.0 m' mean='3.5 m' /><temperature water='27.0 C' /></divecomputer>
+</dive>
+<dive number='242' divesiteid='4e454f02' rating='3' tags='boat' date='2025-10-02' time='07:30:00' duration='46:00 min'>
+  <divecomputer model='Suunto Ocean'><depth max='31.2 m' mean='22.0 m' /><temperature water='24.0 C' /></divecomputer>
+</dive>
+<dive number='241' divesiteid='4e454f01' rating='4' tags='shore, night' date='2025-08-18' time='20:10:00' duration='51:00 min'>
+  <divecomputer model='Shearwater Perdix'><depth max='19.8 m' mean='13.4 m' /><temperature water='25.0 C' /></divecomputer>
+</dive>
+<dive number='240' divesiteid='4e454f03' rating='5' tags='boat, wall' date='2025-04-22' time='09:25:00' duration='61:00 min'>
+  <divecomputer model='Suunto Ocean'><depth max='34.5 m' mean='23.7 m' /><temperature water='28.0 C' /></divecomputer>
+</dive>
+<dive number='239' divesiteid='4e454f04' date='2024-11-14' time='18:30:00' duration='42:00 min'>
+  <notes>Equipment checkout and buoyancy practice.</notes><divecomputer model='manually added dive'><depth max='4.5 m' mean='3.1 m' /><temperature water='26.0 C' /></divecomputer>
+</dive>
+<dive number='238' divesiteid='4e454f02' rating='4' tags='boat, nitrox' date='2024-09-03' time='08:40:00' duration='49:00 min'>
+  <divecomputer model='Shearwater Perdix'><depth max='33.0 m' mean='22.9 m' /><temperature water='26.0 C' /></divecomputer>
+</dive>
+<dive number='237' divesiteid='4e454f01' rating='3' tags='shore' date='2024-06-21' time='10:15:00' duration='39:00 min'>
+  <divecomputer model='Shearwater Perdix'><depth max='21.3 m' mean='14.8 m' /><temperature water='23.0 C' /></divecomputer>
+</dive>
+<dive number='236' divesiteid='4e454f03' rating='5' tags='boat, drift' date='2024-02-10' time='09:00:00' duration='54:00 min'>
+  <divecomputer model='Suunto Ocean'><depth max='30.7 m' mean='21.6 m' /><temperature water='28.0 C' /></divecomputer>
+</dive>
+</dives>
+</divelog>

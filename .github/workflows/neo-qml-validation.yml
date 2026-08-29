@@ -11,6 +11,9 @@ on:
       - 'mobile-widgets/qml/MapPage.qml'
       - 'mobile-widgets/qml/modern/**'
       - 'scripts/test-neo-qml-contracts.py'
+      - 'scripts/test-neo-data-contracts.py'
+      - 'dives/neo-ui-regression.ssrf'
+      - 'mobile-widgets/qmlmanager.cpp'
       - 'web/subsurface-neo/wasm/**.qml'
 
 permissions: read-all
@@ -47,6 +50,9 @@ jobs:
 
       - name: Verify responsive Neo UI contracts
         run: python3 scripts/test-neo-qml-contracts.py
+
+      - name: Verify populated-log and site-edit contracts
+        run: python3 scripts/test-neo-data-contracts.py
 
       - name: Verify Neo translation extraction coverage
         shell: bash

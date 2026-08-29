@@ -29,6 +29,7 @@ private slots:
 	void testParseDLD();
 	void testParseMerge();
 	void testParseMergeTankSensors();
+	void testNeoUiRegressionLog();
 
 	int parseCSVmanual(int, std::string);
 	void exportSubsurfaceCSV();
