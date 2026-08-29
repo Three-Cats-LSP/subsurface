@@ -15,14 +15,18 @@ The current bootstrap provides:
 - real dashboard totals and recent-dive summaries from the selected log;
 - a complete dive list with native-summary search plus year and dive-mode filters;
 - selectable dive-detail pages with recorded profile samples;
+- browser-session editing for location, buddy, notes, mode, gas, and gear;
+- selected-dive JSON, dive-list CSV, and native XML session-backup downloads;
+- a responsive draft-planner workspace with explicit native-planner safety warnings;
+- a revision/checksum cloud-manifest conflict preview that never overwrites silently;
 - an interactive depth, temperature, NDL, and cylinder-pressure chart;
 - recorded TTS, deco-stop, CNS, and CCR-setpoint values in the sample inspector;
 - honest fallbacks when a browser cannot offer direct hardware access; and
 - a reproducible Qt 6.8 / Emscripten build artifact.
 
 It does **not** implement decompression mathematics in JavaScript. Foreign-format
-imports, calculated GF/ceiling profile processing, editing, cloud synchronization, and the
-planner must be connected to the corresponding shared Subsurface C++ pipelines
+imports, authenticated cloud transfer, calculated planner decompression, and durable
+editing of the original source file must be connected to the corresponding shared Subsurface C++ pipelines
 before those features are presented as available. The current browser reader
 intentionally accepts only the native XML format emitted by `core/save-xml.cpp`.
 The transport controller is intentionally backed by a capability-only adapter in

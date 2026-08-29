@@ -1,0 +1,70 @@
+name: Neo QML validation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-qml-validation.yml'
+      - 'mobile-widgets/qml/modern/**'
+      - 'web/subsurface-neo/wasm/**.qml'
+
+permissions: read-all
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Qt QML parser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools qt6-l10n-tools
+
+      - name: Parse every Neo QML file
+        shell: bash
+        run: |
+          set -euo pipefail
+          QMLFORMAT="$(command -v qmlformat || true)"
+          if [[ -z "$QMLFORMAT" && -x /usr/lib/qt6/bin/qmlformat ]]; then
+            QMLFORMAT=/usr/lib/qt6/bin/qmlformat
+          fi
+          test -x "$QMLFORMAT"
+          mapfile -d '' files < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f -name '*.qml' -print0)
+          test "${#files[@]}" -gt 0
+          for file in "${files[@]}"; do
+            echo "Parsing $file"
+            "$QMLFORMAT" "$file" >/dev/null
+          done
+
+      - name: Verify Neo translation extraction coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          LUPDATE="$(command -v lupdate || true)"
+          if [[ -z "$LUPDATE" && -x /usr/lib/qt6/bin/lupdate ]]; then
+            LUPDATE=/usr/lib/qt6/bin/lupdate
+          fi
+          test -x "$LUPDATE"
+          mapfile -d '' sources < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f \( -name '*.qml' -o -name '*.cpp' -o -name '*.h' \) -print0)
+          "$LUPDATE" "${sources[@]}" -no-obsolete -ts /tmp/subsurface-neo-source.ts
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('/tmp/subsurface-neo-source.ts').getroot()
+          messages = {node.text or '' for node in root.findall('.//message/source')}
+          required = {
+              'Planner workspace',
+              'Edit browser-session dive details',
+              'Download browser-session XML backup',
+              'Cloud manifest safety preview',
+          }
+          missing = sorted(required - messages)
+          if missing:
+              raise SystemExit(f'Missing Neo translation sources: {missing}')
+          if len(messages) < 150:
+              raise SystemExit(f'Unexpectedly low Neo translation coverage: {len(messages)} messages')
+          print(f'Validated {len(messages)} distinct Neo translation messages')
+          PY

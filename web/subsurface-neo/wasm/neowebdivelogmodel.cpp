@@ -6,9 +6,12 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QSet>
 #include <QVariantMap>
+#include <QXmlStreamWriter>
 
 #include <algorithm>
 
@@ -45,6 +48,34 @@ QString localPathForUrl(const QUrl &url)
 	const QString local = url.toLocalFile();
 	return local.isEmpty() ? url.path() : local;
 }
+
+QString csvField(QString value)
+{
+	value.replace(QLatin1Char('"'), QStringLiteral("\"\""));
+	return QStringLiteral("\"") + value + QStringLiteral("\"");
+}
+
+#ifdef __EMSCRIPTEN__
+void downloadBrowserText(const QString &name, const QString &mimeType, const QString &content)
+{
+	const QByteArray fileName = name.toUtf8();
+	const QByteArray mime = mimeType.toUtf8();
+	const QByteArray bytes = content.toUtf8();
+	EM_ASM({
+		const name = UTF8ToString($0);
+		const mime = UTF8ToString($1);
+		const content = UTF8ToString($2, $3);
+		const url = URL.createObjectURL(new Blob([content], { type: mime }));
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = name;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 0);
+	}, fileName.constData(), mime.constData(), bytes.constData(), bytes.size());
+}
+#endif
 
 QVariantMap diveMap(const native_dive_summary &dive, int sourceIndex)
 {
@@ -207,6 +238,11 @@ bool NeoWebDiveLogModel::error() const
 	return m_error;
 }
 
+bool NeoWebDiveLogModel::selectedDiveDirty() const
+{
+	return m_selectedDiveDirty;
+}
+
 void NeoWebDiveLogModel::chooseLocalFile()
 {
 #ifdef __EMSCRIPTEN__
@@ -281,6 +317,120 @@ void NeoWebDiveLogModel::clearSelectedDive()
 	m_selectedDive.clear();
 	m_profileSamples.clear();
 	emit changed();
+}
+
+bool NeoWebDiveLogModel::updateSelectedDive(const QString &location, const QString &buddy, const QString &notes,
+	const QString &mode, const QString &gas, const QString &gear)
+{
+	const int sourceIndex = m_selectedDive.value(QStringLiteral("sourceIndex"), -1).toInt();
+	if (sourceIndex < 0 || sourceIndex >= m_summary.dives.size())
+		return false;
+	native_dive_summary &dive = m_summary.dives[sourceIndex];
+	dive.location = location.trimmed();
+	dive.buddy = buddy.trimmed();
+	dive.notes = notes.trimmed();
+	dive.mode = mode.trimmed().isEmpty() ? QStringLiteral("OC") : mode.trimmed();
+	dive.gas = gas.trimmed();
+	dive.gear = gear.trimmed();
+	m_selectedDive = diveMap(dive, sourceIndex);
+	m_selectedDiveDirty = true;
+	rebuildDiveLists();
+	emit changed();
+	return true;
+}
+
+QString NeoWebDiveLogModel::selectedDiveJson() const
+{
+	return m_selectedDive.isEmpty() ? QString() : QString::fromUtf8(QJsonDocument::fromVariant(m_selectedDive).toJson(QJsonDocument::Indented));
+}
+
+QString NeoWebDiveLogModel::diveListCsv() const
+{
+	QStringList rows{QStringLiteral("number,date,time,location,duration,max_depth,water_temperature,gas,mode,gear,buddy,notes")};
+	for (const native_dive_summary &dive : m_summary.dives) {
+		const QVariantMap item = diveMap(dive, 0);
+		rows.push_back(QStringList{
+			QString::number(dive.number), csvField(item.value(QStringLiteral("date")).toString()),
+			csvField(item.value(QStringLiteral("time")).toString()), csvField(dive.location),
+			csvField(item.value(QStringLiteral("duration")).toString()), csvField(item.value(QStringLiteral("depth")).toString()),
+			csvField(item.value(QStringLiteral("temperature")).toString()), csvField(dive.gas), csvField(dive.mode),
+			csvField(dive.gear), csvField(dive.buddy), csvField(dive.notes)
+		}.join(QLatin1Char(',')));
+	}
+	return rows.join(QLatin1Char('\n')) + QLatin1Char('\n');
+}
+
+QString NeoWebDiveLogModel::nativeXmlBackup() const
+{
+	QString output;
+	QXmlStreamWriter writer(&output);
+	writer.setAutoFormatting(true);
+	writer.writeStartDocument();
+	writer.writeStartElement(QStringLiteral("divelog"));
+	writer.writeAttribute(QStringLiteral("program"), QStringLiteral("subsurface"));
+	writer.writeAttribute(QStringLiteral("version"), QStringLiteral("3"));
+	writer.writeStartElement(QStringLiteral("dives"));
+	for (const native_dive_summary &dive : m_summary.dives) {
+		writer.writeStartElement(QStringLiteral("dive"));
+		writer.writeAttribute(QStringLiteral("number"), QString::number(dive.number));
+		if (dive.when.isValid()) {
+			writer.writeAttribute(QStringLiteral("date"), dive.when.date().toString(Qt::ISODate));
+			writer.writeAttribute(QStringLiteral("time"), dive.when.time().toString(QStringLiteral("HH:mm:ss")));
+		}
+		writer.writeAttribute(QStringLiteral("duration"), QStringLiteral("%1:%2 min").arg(dive.duration_seconds / 60).arg(dive.duration_seconds % 60, 2, 10, QLatin1Char('0')));
+		if (!dive.location.isEmpty()) writer.writeTextElement(QStringLiteral("location"), dive.location);
+		if (!dive.buddy.isEmpty()) writer.writeTextElement(QStringLiteral("buddy"), dive.buddy);
+		if (!dive.notes.isEmpty()) writer.writeTextElement(QStringLiteral("notes"), dive.notes);
+		if (!dive.suit.isEmpty()) writer.writeTextElement(QStringLiteral("suit"), dive.suit);
+		writer.writeStartElement(QStringLiteral("cylinder"));
+		writer.writeAttribute(QStringLiteral("description"), dive.gear);
+		if (dive.gas.startsWith(QStringLiteral("EAN")))
+			writer.writeAttribute(QStringLiteral("o2"), dive.gas.mid(3) + QLatin1Char('%'));
+		else
+			writer.writeAttribute(QStringLiteral("o2"), QStringLiteral("21%"));
+		writer.writeEndElement();
+		writer.writeStartElement(QStringLiteral("divecomputer"));
+		writer.writeAttribute(QStringLiteral("dctype"), dive.mode);
+		for (const native_sample_summary &sample : dive.samples) {
+			writer.writeStartElement(QStringLiteral("sample"));
+			writer.writeAttribute(QStringLiteral("time"), QStringLiteral("%1:%2 min").arg(sample.time_seconds / 60).arg(sample.time_seconds % 60, 2, 10, QLatin1Char('0')));
+			if (sample.has_depth) writer.writeAttribute(QStringLiteral("depth"), QString::number(sample.depth_m, 'f', 2) + QStringLiteral(" m"));
+			if (sample.has_temperature) writer.writeAttribute(QStringLiteral("temp"), QString::number(sample.temperature_c, 'f', 1) + QStringLiteral(" C"));
+			if (sample.has_pressure) writer.writeAttribute(QStringLiteral("pressure0"), QString::number(sample.pressure_bar, 'f', 1) + QStringLiteral(" bar"));
+			if (sample.has_ndl) writer.writeAttribute(QStringLiteral("ndl"), QStringLiteral("%1:%2 min").arg(sample.ndl_seconds / 60).arg(sample.ndl_seconds % 60, 2, 10, QLatin1Char('0')));
+			writer.writeEndElement();
+		}
+		writer.writeEndElement();
+		writer.writeEndElement();
+	}
+	writer.writeEndElement();
+	writer.writeEndElement();
+	writer.writeEndDocument();
+	return output;
+}
+
+void NeoWebDiveLogModel::exportSelectedDiveJson()
+{
+#ifdef __EMSCRIPTEN__
+	if (!m_selectedDive.isEmpty())
+		downloadBrowserText(QStringLiteral("subsurface-neo-dive.json"), QStringLiteral("application/json"), selectedDiveJson());
+#endif
+}
+
+void NeoWebDiveLogModel::exportDiveListCsv()
+{
+#ifdef __EMSCRIPTEN__
+	if (m_loaded)
+		downloadBrowserText(QStringLiteral("subsurface-neo-dives.csv"), QStringLiteral("text/csv;charset=utf-8"), diveListCsv());
+#endif
+}
+
+void NeoWebDiveLogModel::exportNativeXmlBackup()
+{
+#ifdef __EMSCRIPTEN__
+	if (m_loaded)
+		downloadBrowserText(QStringLiteral("subsurface-neo-browser-backup.xml"), QStringLiteral("application/xml"), nativeXmlBackup());
+#endif
 }
 
 void NeoWebDiveLogModel::setSearchText(const QString &searchText)
@@ -367,6 +517,7 @@ void NeoWebDiveLogModel::openLocalFile(const QUrl &url)
 
 	m_summary = summary;
 	m_selectedDive.clear();
+	m_selectedDiveDirty = false;
 	m_profileSamples.clear();
 	m_diveCount = m_summary.dives.size();
 	m_totalSeconds = 0;

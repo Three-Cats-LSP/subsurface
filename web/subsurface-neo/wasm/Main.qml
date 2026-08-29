@@ -5,6 +5,7 @@ import QtQuick.Layouts
 
 ApplicationWindow {
 	id: window
+	objectName: "neoWindow"
 	visible: true
 	width: 1180
 	height: 760
@@ -19,9 +20,10 @@ ApplicationWindow {
 	property color border: "#1b3c55"
 	property color primaryText: "#f5f9fc"
 	property color secondaryText: "#8fa7ba"
-	property int activePage: 0 // 0 dashboard, 1 dive list, 2 dive detail
+	property int activePage: 0 // 0 dashboard, 1 dive list, 2 dive detail, 3 planner
 	property bool detailMode: activePage === 2 && diveLog.hasSelectedDive
-	property int activeNavigationIndex: activePage === 0 ? 0 : 1
+	property int activeNavigationIndex: activePage === 0 ? 0 : activePage === 3 ? (compact ? 4 : 5) : 1
+	property bool editingDive: false
 
 	function openDive(sourceIndex) {
 		diveLog.selectDive(sourceIndex)
@@ -33,6 +35,10 @@ ApplicationWindow {
 			if (detailMode)
 				diveLog.clearSelectedDive()
 			activePage = index
+		} else if (index === 5 || (compact && index === 4)) {
+			if (detailMode)
+				diveLog.clearSelectedDive()
+			activePage = 3
 		}
 	}
 
@@ -71,6 +77,24 @@ ApplicationWindow {
 			radius: 11
 			border.width: 1
 			border.color: field.activeFocus ? window.accent : window.border
+		}
+	}
+
+	component NeoTextArea: TextArea {
+		id: area
+		implicitHeight: 96
+		color: window.primaryText
+		placeholderTextColor: window.secondaryText
+		selectionColor: window.accent
+		selectedTextColor: "#03101d"
+		font.pixelSize: 12
+		wrapMode: TextEdit.Wrap
+		padding: 14
+		background: Rectangle {
+			color: window.surfaceRaised
+			radius: 11
+			border.width: 1
+			border.color: area.activeFocus ? window.accent : window.border
 		}
 	}
 
@@ -323,6 +347,7 @@ ApplicationWindow {
 
 	Rectangle {
 		id: sidebar
+		objectName: "sidebar"
 		visible: !window.compact
 		width: 220
 		anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
@@ -364,6 +389,7 @@ ApplicationWindow {
 
 	Rectangle {
 		id: mobileHeader
+		objectName: "mobileHeader"
 		visible: window.compact
 		height: 62
 		anchors { left: parent.left; right: parent.right; top: parent.top }
@@ -382,6 +408,7 @@ ApplicationWindow {
 
 	Flickable {
 		id: contentFlick
+		objectName: "dashboardPage"
 		visible: window.activePage === 0
 		anchors {
 			left: window.compact ? parent.left : sidebar.right
@@ -475,6 +502,13 @@ ApplicationWindow {
 					Text { text: qsTr("Start with your real dive log"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
 					Text { text: qsTr("Open a native Subsurface XML log to populate this dashboard. The file stays in your browser session and is read by shared C++ core code; it is not uploaded."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					NeoButton { text: qsTr("Choose local dive log"); Layout.preferredWidth: window.compact ? importContent.width : 230; onClicked: diveLog.chooseLocalFile() }
+					GridLayout {
+						visible: diveLog.loaded
+						Layout.fillWidth: true
+						columns: window.compact ? 1 : 2
+						NeoButton { Layout.fillWidth: true; text: qsTr("Download browser-session XML backup"); onClicked: diveLog.exportNativeXmlBackup() }
+						NeoButton { Layout.fillWidth: true; text: qsTr("Export dive list CSV"); onClicked: diveLog.exportDiveListCsv() }
+					}
 					Text { visible: diveLog.fileStatus.length > 0; text: diveLog.fileStatus; color: diveLog.error ? "#ff8f8f" : window.accent; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
 			}
@@ -558,6 +592,7 @@ ApplicationWindow {
 
 	Flickable {
 		id: diveListFlick
+		objectName: "diveListPage"
 		visible: window.activePage === 1
 		anchors {
 			left: window.compact ? parent.left : sidebar.right
@@ -684,6 +719,7 @@ ApplicationWindow {
 
 	Flickable {
 		id: detailFlick
+		objectName: "diveDetailPage"
 		visible: window.detailMode
 		anchors {
 			left: window.compact ? parent.left : sidebar.right
@@ -713,6 +749,63 @@ ApplicationWindow {
 					Text { text: (diveLog.selectedDive.date || "") + (diveLog.selectedDive.time ? "  ·  " + diveLog.selectedDive.time : ""); color: window.secondaryText; font.pixelSize: 11 }
 				}
 				StatusPill { label: diveLog.selectedDive.mode || "OC"; available: true }
+			}
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 8
+				NeoButton {
+					text: window.editingDive ? qsTr("Cancel editing") : qsTr("Edit dive")
+					onClicked: {
+						if (!window.editingDive) {
+							editLocation.text = diveLog.selectedDive.location || ""
+							editBuddy.text = diveLog.selectedDive.buddy || ""
+							editMode.text = diveLog.selectedDive.mode || "OC"
+							editGas.text = diveLog.selectedDive.gas || ""
+							editGear.text = diveLog.selectedDive.gear || ""
+							editNotes.text = diveLog.selectedDive.notes || ""
+						}
+						window.editingDive = !window.editingDive
+					}
+				}
+				NeoButton { text: qsTr("Export JSON"); onClicked: diveLog.exportSelectedDiveJson() }
+				NeoButton { visible: !window.compact; text: qsTr("Export dive list CSV"); onClicked: diveLog.exportDiveListCsv() }
+				Item { Layout.fillWidth: true }
+				Text { visible: diveLog.selectedDiveDirty; text: qsTr("Browser edits not written to the source XML"); color: "#f1ae45"; font.pixelSize: 10 }
+			}
+
+			Rectangle {
+				visible: window.editingDive
+				Layout.fillWidth: true
+				implicitHeight: editLayout.implicitHeight + 32
+				radius: 16
+				color: window.surface
+				border.width: 1
+				border.color: window.accent
+				ColumnLayout {
+					id: editLayout
+					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+					spacing: 10
+					Text { text: qsTr("Edit browser-session dive details"); color: window.primaryText; font.pixelSize: 18; font.weight: Font.DemiBold }
+					GridLayout {
+						Layout.fillWidth: true
+						columns: window.compact ? 1 : 2
+						columnSpacing: 10
+						rowSpacing: 10
+						NeoField { id: editLocation; Layout.fillWidth: true; placeholderText: qsTr("Dive site") }
+						NeoField { id: editBuddy; Layout.fillWidth: true; placeholderText: qsTr("Buddy") }
+						NeoField { id: editMode; Layout.fillWidth: true; placeholderText: qsTr("Mode") }
+						NeoField { id: editGas; Layout.fillWidth: true; placeholderText: qsTr("Gas") }
+						NeoField { id: editGear; Layout.fillWidth: true; placeholderText: qsTr("Gear") }
+					}
+					NeoTextArea { id: editNotes; Layout.fillWidth: true; placeholderText: qsTr("Notes") }
+					NeoButton {
+						text: qsTr("Apply browser edit")
+						onClicked: {
+							if (diveLog.updateSelectedDive(editLocation.text, editBuddy.text, editNotes.text, editMode.text, editGas.text, editGear.text))
+								window.editingDive = false
+						}
+					}
+				}
 			}
 
 			GridLayout {
@@ -821,8 +914,91 @@ ApplicationWindow {
 		}
 	}
 
+	Flickable {
+		id: plannerFlick
+		objectName: "plannerPage"
+		visible: window.activePage === 3
+		anchors {
+			left: window.compact ? parent.left : sidebar.right
+			right: parent.right
+			top: window.compact ? mobileHeader.bottom : parent.top
+			bottom: window.compact ? bottomNav.top : parent.bottom
+		}
+		contentWidth: width
+		contentHeight: plannerColumn.implicitHeight + 64
+		clip: true
+		ScrollBar.vertical: ScrollBar { }
+		ColumnLayout {
+			id: plannerColumn
+			x: window.compact ? 16 : 34
+			y: window.compact ? 22 : 34
+			width: parent.width - (window.compact ? 32 : 68)
+			spacing: 16
+			Text { text: qsTr("Planner workspace"); color: window.primaryText; font.pixelSize: window.compact ? 26 : 32; font.weight: Font.DemiBold }
+			Text { text: qsTr("Build a portable draft and then validate decompression, gas use, and contingencies in Subsurface's native planner."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Rectangle {
+				Layout.fillWidth: true
+				implicitHeight: plannerForm.implicitHeight + 34
+				radius: 16; color: window.surface; border.width: 1; border.color: window.border
+				ColumnLayout {
+					id: plannerForm
+					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 17 }
+					spacing: 10
+					Text { text: qsTr("Dive draft"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
+					GridLayout {
+						Layout.fillWidth: true; columns: window.compact ? 1 : 4; columnSpacing: 10; rowSpacing: 10
+						NeoField { Layout.fillWidth: true; text: webPlanner.depthMeters.toFixed(1); placeholderText: qsTr("Depth (m)"); validator: DoubleValidator { bottom: 1; top: 150 }; onEditingFinished: webPlanner.depthMeters = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.bottomTimeMinutes.toString(); placeholderText: qsTr("Bottom time (min)"); validator: IntValidator { bottom: 1; top: 600 }; onEditingFinished: webPlanner.bottomTimeMinutes = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.ascentRate.toFixed(1); placeholderText: qsTr("Ascent rate (m/min)"); validator: DoubleValidator { bottom: 1; top: 30 }; onEditingFinished: webPlanner.ascentRate = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.gas; placeholderText: qsTr("Gas"); onEditingFinished: webPlanner.gas = text }
+					}
+					Text { text: webPlanner.summary; color: webPlanner.valid ? window.accent : "#ff8f8f"; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: webPlanner.warning; color: "#f1ae45"; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Repeater {
+						model: webPlanner.waypoints
+						delegate: RowLayout {
+							required property var modelData
+							Layout.fillWidth: true
+							Text { text: Number(modelData.timeMinutes).toFixed(1) + qsTr(" min"); color: window.accent; font.pixelSize: 11; Layout.preferredWidth: 72 }
+							Text { text: Number(modelData.depthMeters).toFixed(1) + qsTr(" m"); color: window.primaryText; font.pixelSize: 12; Layout.preferredWidth: 72 }
+							Text { text: modelData.label; color: window.secondaryText; font.pixelSize: 11 }
+						}
+					}
+					NeoButton { text: qsTr("Reset draft"); onClicked: webPlanner.reset() }
+				}
+			}
+			Rectangle {
+				Layout.fillWidth: true
+				implicitHeight: syncForm.implicitHeight + 34
+				radius: 16; color: window.surface; border.width: 1; border.color: window.border
+				ColumnLayout {
+					id: syncForm
+					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 17 }
+					spacing: 10
+					Text { text: qsTr("Cloud manifest safety preview"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
+					Text { text: qsTr("Exercise the same revision/checksum decisions used before OAuth provider transfer. No file is uploaded from this preview."); color: window.secondaryText; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					GridLayout {
+						Layout.fillWidth: true; columns: window.compact ? 2 : 4; columnSpacing: 10; rowSpacing: 10
+						NeoField { id: localRevision; Layout.fillWidth: true; text: "2"; placeholderText: qsTr("Local revision"); validator: IntValidator { bottom: 0 } }
+						NeoField { id: localChecksum; Layout.fillWidth: true; text: "local-a"; placeholderText: qsTr("Local checksum") }
+						NeoField { id: remoteRevision; Layout.fillWidth: true; text: "2"; placeholderText: qsTr("Remote revision"); validator: IntValidator { bottom: 0 } }
+						NeoField { id: remoteChecksum; Layout.fillWidth: true; text: "remote-b"; placeholderText: qsTr("Remote checksum") }
+					}
+					NeoButton { text: qsTr("Compare manifests"); onClicked: webSync.evaluate(Number(localRevision.text), localChecksum.text, Number(remoteRevision.text), remoteChecksum.text) }
+					Text { text: webSync.status; color: webSync.conflict ? "#f1ae45" : window.accent; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					RowLayout {
+						visible: webSync.conflict
+						NeoButton { text: qsTr("Keep local"); onClicked: webSync.keepLocal() }
+						NeoButton { text: qsTr("Keep remote"); onClicked: webSync.keepRemote() }
+					}
+				}
+			}
+		}
+	}
+
 	Rectangle {
 		id: bottomNav
+		objectName: "bottomNav"
 		visible: window.compact
 		height: 66
 		anchors { left: parent.left; right: parent.right; bottom: parent.bottom }

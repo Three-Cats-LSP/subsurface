@@ -15,9 +15,14 @@ class TestNativeDiveLogReader : public QObject {
 private slots:
 	void readsNativeSummary();
 	void rejectsForeignRoot();
+	void rejectsMalformedNativeLog();
+	void readsHistoricImperialLog();
 	void filtersAndSelectsDives();
 	void calculatesProfileValues();
 	void handlesLargeNativeLog();
+	void handlesVeryLargeNativeLog();
+	void editsAndExportsSelectedDive();
+	void roundTripsBrowserBackup();
 };
 
 void TestNativeDiveLogReader::readsNativeSummary()
@@ -94,6 +99,35 @@ void TestNativeDiveLogReader::rejectsForeignRoot()
 	const native_divelog_summary summary = read_native_divelog_summary(buffer, QStringLiteral("foreign.uddf"));
 	QVERIFY(!summary.ok);
 	QVERIFY(summary.error.contains(QStringLiteral("not a native Subsurface XML")));
+}
+
+void TestNativeDiveLogReader::rejectsMalformedNativeLog()
+{
+	QByteArray xml("<divelog program='subsurface'><dives><dive number='1'><divecomputer>");
+	QBuffer buffer(&xml);
+	QVERIFY(buffer.open(QIODevice::ReadOnly));
+	const native_divelog_summary summary = read_native_divelog_summary(buffer, QStringLiteral("truncated.xml"));
+	QVERIFY(!summary.ok);
+	QVERIFY(summary.error.contains(QStringLiteral("truncated.xml")));
+}
+
+void TestNativeDiveLogReader::readsHistoricImperialLog()
+{
+	QByteArray xml(R"xml(<divelog program="subsurface" version="2"><dives>
+		<dive number="3" date="2001-04-15" time="07:05:00"><location>Old Quarry</location>
+		<cylinder description="80 cu ft" o2="21%"/><divecomputer dctype="Gauge">
+		<sample time="1:30 min" depth="99 ft" temp="68 F" pressure0="3000 psi"/>
+		</divecomputer></dive></dives></divelog>)xml");
+	QBuffer buffer(&xml);
+	QVERIFY(buffer.open(QIODevice::ReadOnly));
+	const native_divelog_summary summary = read_native_divelog_summary(buffer, QStringLiteral("historic.xml"));
+	QVERIFY2(summary.ok, qPrintable(summary.error));
+	QCOMPARE(summary.dives.size(), 1);
+	QCOMPARE(summary.dives.first().when.date(), QDate(2001, 4, 15));
+	QCOMPARE(summary.dives.first().mode, QStringLiteral("Gauge"));
+	QVERIFY(qAbs(summary.dives.first().max_depth_m - 30.1752) < 0.001);
+	QVERIFY(qAbs(summary.dives.first().water_temperature_c - 20.0) < 0.001);
+	QVERIFY(qAbs(summary.dives.first().samples.first().pressure_bar - 206.8427) < 0.01);
 }
 
 void TestNativeDiveLogReader::filtersAndSelectsDives()
@@ -202,6 +236,88 @@ void TestNativeDiveLogReader::handlesLargeNativeLog()
 	model.selectDive(sourceIndex);
 	QCOMPARE(model.selectedDive().value(QStringLiteral("number")).toInt(), diveCount);
 	QCOMPARE(model.profileSamples().size(), 12);
+}
+
+void TestNativeDiveLogReader::editsAndExportsSelectedDive()
+{
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	const QByteArray xml(R"xml(<divelog program="subsurface" version="3"><dives>
+		<dive number="7" date="1999-12-31" duration="42:00 min"><buddy>Original Buddy</buddy>
+		<notes>Original notes</notes><cylinder description="Steel 12L" o2="21%"/>
+		<divecomputer dctype="OC"><sample time="1:00 min" depth="10 m"/></divecomputer></dive>
+	</dives></divelog>)xml");
+	QCOMPARE(file.write(xml), qint64(xml.size()));
+	file.flush();
+
+	NeoWebDiveLogModel model;
+	model.openLocalFile(QUrl::fromLocalFile(file.fileName()));
+	QVERIFY(model.loaded());
+	model.selectDive(0);
+	QVERIFY(model.updateSelectedDive(QStringLiteral("Historic Reef"), QStringLiteral("New Buddy"),
+		QStringLiteral("Edited safely in browser"), QStringLiteral("CCR"), QStringLiteral("EAN32"),
+		QStringLiteral("Twinset")));
+	QVERIFY(model.selectedDiveDirty());
+	QCOMPARE(model.selectedDive().value(QStringLiteral("location")).toString(), QStringLiteral("Historic Reef"));
+	QVERIFY(model.selectedDiveJson().contains(QStringLiteral("Edited safely in browser")));
+	const QString csv = model.diveListCsv();
+	QVERIFY(csv.startsWith(QStringLiteral("number,date,time,location")));
+	QVERIFY(csv.contains(QStringLiteral("\"Historic Reef\"")));
+	QVERIFY(csv.contains(QStringLiteral("\"New Buddy\"")));
+}
+
+void TestNativeDiveLogReader::handlesVeryLargeNativeLog()
+{
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	QByteArray xml("<divelog program=\"subsurface\" version=\"3\"><dives>");
+	constexpr int diveCount = 10000;
+	for (int index = 0; index < diveCount; ++index) {
+		xml += QByteArray("<dive number=\"") + QByteArray::number(index + 1) +
+			"\" date=\"1985-01-01\"><location>Archive Site</location><divecomputer dctype=\"OC\">";
+		for (int sample = 0; sample < 6; ++sample)
+			xml += QByteArray("<sample time=\"") + QByteArray::number(sample * 5) +
+				":00 min\" depth=\"" + QByteArray::number(sample * 3) + ".0 m\"/>";
+		xml += "</divecomputer></dive>";
+	}
+	xml += "</dives></divelog>";
+	QCOMPARE(file.write(xml), qint64(xml.size()));
+	file.flush();
+	NeoWebDiveLogModel model;
+	model.openLocalFile(QUrl::fromLocalFile(file.fileName()));
+	QVERIFY2(model.loaded(), qPrintable(model.fileStatus()));
+	QCOMPARE(model.diveCount(), diveCount);
+	QCOMPARE(model.availableYears(), QStringList{QStringLiteral("1985")});
+}
+
+void TestNativeDiveLogReader::roundTripsBrowserBackup()
+{
+	QTemporaryFile source;
+	QVERIFY(source.open());
+	const QByteArray xml(R"xml(<divelog program="subsurface" version="3"><dives>
+		<dive number="21" date="2020-02-29" time="12:30:00" duration="44:00 min">
+		<location>Round Trip Reef</location><buddy>A &amp; B</buddy><notes>Backup &lt;verified&gt;</notes>
+		<cylinder description="AL80" o2="32%"/><divecomputer dctype="OC">
+		<sample time="10:00 min" depth="18.5 m" temp="24 C" pressure0="150 bar" ndl="30:00 min"/>
+		</divecomputer></dive></dives></divelog>)xml");
+	QCOMPARE(source.write(xml), qint64(xml.size()));
+	source.flush();
+	NeoWebDiveLogModel first;
+	first.openLocalFile(QUrl::fromLocalFile(source.fileName()));
+	QVERIFY(first.loaded());
+	const QByteArray backup = first.nativeXmlBackup().toUtf8();
+	QBuffer buffer;
+	buffer.setData(backup);
+	QVERIFY(buffer.open(QIODevice::ReadOnly));
+	const native_divelog_summary restored = read_native_divelog_summary(buffer, QStringLiteral("roundtrip.xml"));
+	QVERIFY2(restored.ok, qPrintable(restored.error));
+	QCOMPARE(restored.dives.size(), 1);
+	QCOMPARE(restored.dives.first().number, 21);
+	QCOMPARE(restored.dives.first().location, QStringLiteral("Round Trip Reef"));
+	QCOMPARE(restored.dives.first().buddy, QStringLiteral("A & B"));
+	QCOMPARE(restored.dives.first().notes, QStringLiteral("Backup <verified>"));
+	QCOMPARE(restored.dives.first().samples.size(), 1);
+	QVERIFY(qAbs(restored.dives.first().samples.first().depth_m - 18.5) < 0.001);
 }
 
 QTEST_GUILESS_MAIN(TestNativeDiveLogReader)

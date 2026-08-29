@@ -2,6 +2,8 @@
 #include "webcapabilities.h"
 #include "webdevicetransport.h"
 #include "neowebdivelogmodel.h"
+#include "neowebplannermodel.h"
+#include "neowebsyncmodel.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -16,6 +18,8 @@ std::unique_ptr<QQmlApplicationEngine> engine;
 std::unique_ptr<WebCapabilities> capabilities;
 std::unique_ptr<WebDeviceTransport> deviceTransport;
 std::unique_ptr<NeoWebDiveLogModel> diveLogModel;
+std::unique_ptr<NeoWebPlannerModel> plannerModel;
+std::unique_ptr<NeoWebSyncModel> syncModel;
 
 } // namespace
 
@@ -29,9 +33,13 @@ int main(int argc, char *argv[])
 	capabilities = std::make_unique<WebCapabilities>();
 	deviceTransport = std::make_unique<WebDeviceTransport>(capabilities->webBluetoothAvailable(), capabilities->webSerialAvailable());
 	diveLogModel = std::make_unique<NeoWebDiveLogModel>();
+	plannerModel = std::make_unique<NeoWebPlannerModel>();
+	syncModel = std::make_unique<NeoWebSyncModel>();
 	engine->rootContext()->setContextProperty(QStringLiteral("webCapabilities"), capabilities.get());
 	engine->rootContext()->setContextProperty(QStringLiteral("webDeviceTransport"), deviceTransport.get());
 	engine->rootContext()->setContextProperty(QStringLiteral("diveLog"), diveLogModel.get());
+	engine->rootContext()->setContextProperty(QStringLiteral("webPlanner"), plannerModel.get());
+	engine->rootContext()->setContextProperty(QStringLiteral("webSync"), syncModel.get());
 	engine->loadFromModule(QStringLiteral("SubsurfaceNeo.Web"), QStringLiteral("Main"));
 
 	if (engine->rootObjects().isEmpty())

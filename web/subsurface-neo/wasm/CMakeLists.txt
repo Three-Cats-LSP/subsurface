@@ -61,6 +61,10 @@ qt_add_executable(subsurface-neo-web MANUAL_FINALIZATION
 	main.cpp
 	neowebdivelogmodel.cpp
 	neowebdivelogmodel.h
+	neowebplannermodel.cpp
+	neowebplannermodel.h
+	neowebsyncmodel.cpp
+	neowebsyncmodel.h
 	webcapabilities.cpp
 	webcapabilities.h
 	webdevicetransport.cpp
@@ -113,4 +117,43 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
 	target_include_directories(neo-web-transport-tests PRIVATE ${SUBSURFACE_ROOT})
 	target_link_libraries(neo-web-transport-tests PRIVATE Qt6::Core Qt6::Test)
 	add_test(NAME neo-web-transport-tests COMMAND neo-web-transport-tests)
+
+	qt_add_executable(neo-web-planner-tests
+		tests/test_neowebplannermodel.cpp
+		neowebplannermodel.cpp
+		neowebplannermodel.h
+	)
+	target_include_directories(neo-web-planner-tests PRIVATE ${SUBSURFACE_ROOT})
+	target_link_libraries(neo-web-planner-tests PRIVATE Qt6::Core Qt6::Test)
+	add_test(NAME neo-web-planner-tests COMMAND neo-web-planner-tests)
+
+	qt_add_executable(neo-web-sync-tests
+		tests/test_neowebsyncmodel.cpp
+		neowebsyncmodel.cpp
+		neowebsyncmodel.h
+	)
+	target_include_directories(neo-web-sync-tests PRIVATE ${SUBSURFACE_ROOT})
+	target_link_libraries(neo-web-sync-tests PRIVATE Qt6::Core Qt6::Test)
+	add_test(NAME neo-web-sync-tests COMMAND neo-web-sync-tests)
+
+	qt_add_executable(neo-web-responsive-tests
+		tests/test_responsiveqml.cpp
+		neowebdivelogmodel.cpp
+		neowebdivelogmodel.h
+		neowebplannermodel.cpp
+		neowebplannermodel.h
+		neowebsyncmodel.cpp
+		neowebsyncmodel.h
+		webcapabilities.cpp
+		webcapabilities.h
+		webdevicetransport.cpp
+		webdevicetransport.h
+		${SUBSURFACE_ROOT}/core/native-divelog-summary.cpp
+		${SUBSURFACE_ROOT}/core/native-divelog-summary.h
+	)
+	target_include_directories(neo-web-responsive-tests PRIVATE ${SUBSURFACE_ROOT})
+	target_compile_definitions(neo-web-responsive-tests PRIVATE NEO_WEB_QML_PATH="${CMAKE_CURRENT_SOURCE_DIR}/Main.qml")
+	target_link_libraries(neo-web-responsive-tests PRIVATE neo-profile-core Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+	add_test(NAME neo-web-responsive-tests COMMAND neo-web-responsive-tests)
+	set_tests_properties(neo-web-responsive-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()

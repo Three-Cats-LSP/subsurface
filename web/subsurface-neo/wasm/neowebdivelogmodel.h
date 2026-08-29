@@ -29,6 +29,7 @@ class NeoWebDiveLogModel : public QObject {
 	Q_PROPERTY(QString fileStatus READ fileStatus NOTIFY changed)
 	Q_PROPERTY(bool loaded READ loaded NOTIFY changed)
 	Q_PROPERTY(bool error READ error NOTIFY changed)
+	Q_PROPERTY(bool selectedDiveDirty READ selectedDiveDirty NOTIFY changed)
 
 public:
 	explicit NeoWebDiveLogModel(QObject *parent = nullptr);
@@ -49,11 +50,20 @@ public:
 	QString fileStatus() const;
 	bool loaded() const;
 	bool error() const;
+	bool selectedDiveDirty() const;
 
 	Q_INVOKABLE void chooseLocalFile();
 	Q_INVOKABLE void openLocalFile(const QUrl &url);
 	Q_INVOKABLE void selectDive(int sourceIndex);
 	Q_INVOKABLE void clearSelectedDive();
+	Q_INVOKABLE bool updateSelectedDive(const QString &location, const QString &buddy, const QString &notes,
+		const QString &mode, const QString &gas, const QString &gear);
+	Q_INVOKABLE QString selectedDiveJson() const;
+	Q_INVOKABLE QString diveListCsv() const;
+	Q_INVOKABLE QString nativeXmlBackup() const;
+	Q_INVOKABLE void exportSelectedDiveJson();
+	Q_INVOKABLE void exportDiveListCsv();
+	Q_INVOKABLE void exportNativeXmlBackup();
 	void setSearchText(const QString &searchText);
 	void setYearFilter(const QString &yearFilter);
 	void setModeFilter(const QString &modeFilter);
@@ -79,6 +89,7 @@ private:
 	QString m_fileStatus;
 	bool m_loaded = false;
 	bool m_error = false;
+	bool m_selectedDiveDirty = false;
 
 	void rebuildDiveLists();
 };

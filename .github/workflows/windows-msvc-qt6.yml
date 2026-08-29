@@ -20,11 +20,14 @@ env:
 permissions: read-all
 
 jobs:
+  qml-syntax:
+    uses: ./.github/workflows/neo-qml-validation.yml
+
   build-documentation:
     uses: ./.github/workflows/documentation-build.yml
 
   build:
-    needs: build-documentation
+    needs: [qml-syntax, build-documentation]
     runs-on: windows-2022
 
     steps:
