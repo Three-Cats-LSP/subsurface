@@ -36,7 +36,7 @@ Kirigami.ApplicationWindow {
 
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
-		visible: initialized && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
+		visible: initialized && !neoDesktopShellActive && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
 			(pageStack.currentItem === neoDashboard ||
 			 pageStack.currentItem === modernDiveList ||
 			 pageStack.currentItem === neoSitesHub ||
@@ -51,6 +51,27 @@ Kirigami.ApplicationWindow {
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onStatsRequested: showPageFromDrawer(neoStatisticsHub)
 		onMoreRequested: showPageFromDrawer(neoMorePage)
+	}
+
+	NeoComponents.NeoDesktopSidebar {
+		id: neoDesktopSidebar
+		visible: rootItem.neoDesktopShellActive
+		width: rootItem.neoSidebarWidth
+		anchors.left: parent.left
+		anchors.top: parent.top
+		anchors.bottom: parent.bottom
+		z: 100
+		currentSection: rootItem.neoSectionForPage(pageStack.currentItem)
+		accountText: PrefCloudStorage.cloud_storage_email
+		statusText: manager.syncState
+		onDashboardRequested: showNeoHome()
+		onDivesRequested: showPageFromDrawer(modernDiveList)
+		onSitesRequested: showPageFromDrawer(neoSitesHub)
+		onMapRequested: showPageFromDrawer(mapPage)
+		onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)
+		onEquipmentRequested: showPageFromDrawer(neoEquipmentLibrary)
+		onImportRequested: showPageFromDrawer(neoDiveComputerCenter)
+		onSettingsRequested: showPageFromDrawer(neoSettingsHub)
 	}
 
 	// we want to use our own colors for Kirigami, so let's define our colorset
@@ -68,6 +89,7 @@ Kirigami.ApplicationWindow {
 	pageStack.globalToolBar.minimumHeight: Kirigami.Units.gridUnit * 1.6
 	pageStack.globalToolBar.preferredHeight: Math.round(Kirigami.Units.gridUnit * (Qt.platform.os == "ios" ? 2.5 : 2))
 	pageStack.globalToolBar.maximumHeight: pageStack.globalToolBar.preferredHeight
+	pageStack.anchors.leftMargin: neoDesktopShellActive ? neoSidebarWidth : 0
 
 	// expose header colors so Kirigami's AbstractApplicationHeader can read them
 	// (on iOS, items with inherit:false get system palette colors instead of app theme)
@@ -82,6 +104,32 @@ Kirigami.ApplicationWindow {
 	property int colWidth: undefined
 	property bool neoSubsurfaceCloudSetupRequested: false
 	property bool neoSubsurfaceCloudSetupFromSettings: false
+	readonly property int neoDesktopBreakpoint: 820
+	readonly property int neoSidebarWidth: 232
+	readonly property bool neoDesktopShellActive: initialized &&
+		Qt.platform.os !== "android" && Qt.platform.os !== "ios" &&
+		width >= neoDesktopBreakpoint && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible
+	readonly property int neoContentWidth: Math.max(1, width - (neoDesktopShellActive ? neoSidebarWidth : 0))
+
+	function neoSectionForPage(page) {
+		if (page === neoDashboard)
+			return "dashboard"
+		if (page === modernDiveList || page?.objectName === "ModernDiveDetails" || page?.objectName === "ModernDiveEditor")
+			return "dives"
+		if (page === neoSitesHub)
+			return "sites"
+		if (page === mapPage)
+			return "map"
+		if (page === neoStatisticsHub || page === statistics)
+			return "statistics"
+		if (page === neoEquipmentLibrary)
+			return "equipment"
+		if (page === neoDiveComputerCenter)
+			return "import"
+		if (page === neoSettingsHub || page === settingsWindow || page === neoAboutPage || page === neoAccountSecurityPage)
+			return "settings"
+		return ""
+	}
 
 	function isBackgroundProgressMessage(message) {
 		return message === "Open local dive data file" ||
@@ -735,7 +783,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		// some screens are too narrow for Subsurface-mobile to render well;
 		// pages like Settings and DiveDetailsEdit need at least ~24 gridUnits
 		// to avoid clipping content in two-column mode
-		var numColumns = Math.max(Math.floor(rootItem.width / (24 * kirigamiGridUnit)), 1)
+		var numColumns = Math.max(Math.floor(rootItem.neoContentWidth / (24 * kirigamiGridUnit)), 1)
 		// Neo's Windows shell is a single-workspace application. Let each page use
 		// the full content area instead of pinning the dashboard beside every
 		// destination as an unrelated narrow column.
@@ -745,7 +793,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			manager.appendTextToLog("show only one column in portrait mode");
 			numColumns = 1;
 		}
-		rootItem.colWidth = numColumns > 1 ? Math.floor(rootItem.width / numColumns) : rootItem.width;
+		rootItem.colWidth = numColumns > 1 ? Math.floor(rootItem.neoContentWidth / numColumns) : rootItem.neoContentWidth;
 
 		// If we can't fit 21 gridUnits into a line, let the user know and suggest using a smaller font
 		var widthInGridUnits = Math.floor(rootItem.colWidth / kirigamiGridUnit)
@@ -819,6 +867,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			screenSizeObject.lastOrientation = Screen.orientation
 			setupUnits()
 		}
+	}
+
+	onNeoDesktopShellActiveChanged: {
+		if (initialized)
+			Qt.callLater(setupUnits)
 	}
 
 	property int hackToOpenMap: 0 /* Otherpage */

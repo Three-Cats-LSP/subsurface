@@ -8,6 +8,7 @@ import "../components" as Components
 
 Kirigami.Page {
 	id: page
+	objectName: "ModernDiveEditor"
 	title: qsTr("Edit dive")
 	background: Rectangle { color: tokens.background }
 

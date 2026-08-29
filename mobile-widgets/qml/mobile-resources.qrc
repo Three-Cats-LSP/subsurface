@@ -56,6 +56,7 @@
 		<file>modern/components/NeoDiveIcon.qml</file>
 		<file>modern/components/DiveInfoCard.qml</file>
 		<file>modern/components/NeoBottomNavigation.qml</file>
+		<file>modern/components/NeoDesktopSidebar.qml</file>
 		<file>modern/components/DiveActionSheet.qml</file>
 		<file>modern/pages/ModernDashboard.qml</file>
 		<file>modern/pages/ModernDiveList.qml</file>

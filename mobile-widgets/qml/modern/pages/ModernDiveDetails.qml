@@ -11,6 +11,7 @@ import "../components" as Components
 
 Kirigami.Page {
 	id: page
+	objectName: "ModernDiveDetails"
 	title: currentItem && currentItem.modelData && currentItem.modelData.location && currentItem.modelData.location.length > 0
 		   ? currentItem.modelData.location : qsTr("Dive details")
 	background: Rectangle { color: tokens.background }

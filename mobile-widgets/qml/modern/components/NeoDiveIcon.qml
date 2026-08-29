@@ -106,6 +106,9 @@ Canvas {
 		} else if (name === "site") {
 			ctx.beginPath(); ctx.arc(14, 11, 7, Math.PI, 0); ctx.quadraticCurveTo(21, 18, 14, 25); ctx.quadraticCurveTo(7, 18, 7, 11); ctx.stroke()
 			ctx.beginPath(); ctx.arc(14, 11, 2.5, 0, Math.PI * 2); ctx.stroke()
+		} else if (name === "map") {
+			line(ctx, [4, 7, 10, 4, 18, 7, 24, 4, 24, 21, 18, 24, 10, 21, 4, 24, 4, 7])
+			line(ctx, [10, 4, 10, 21]); line(ctx, [18, 7, 18, 24])
 		} else if (name === "stats") {
 			line(ctx, [6, 23, 6, 15]); line(ctx, [12, 23, 12, 8]); line(ctx, [18, 23, 18, 12]); line(ctx, [24, 23, 24, 5])
 		} else if (name === "more") {
@@ -123,6 +126,9 @@ Canvas {
 		} else if (name === "export") {
 			line(ctx, [6, 16, 6, 23, 22, 23, 22, 16])
 			line(ctx, [14, 19, 14, 5, 9, 10]); line(ctx, [14, 5, 19, 10])
+		} else if (name === "import") {
+			line(ctx, [6, 16, 6, 23, 22, 23, 22, 16])
+			line(ctx, [14, 5, 14, 19, 9, 14]); line(ctx, [14, 19, 19, 14])
 		} else {
 			ctx.beginPath(); ctx.arc(14, 14, 8, 0, Math.PI * 2); ctx.stroke()
 		}
