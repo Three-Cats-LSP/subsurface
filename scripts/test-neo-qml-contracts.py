@@ -17,6 +17,12 @@ def require(text: str, fragments: tuple[str, ...], label: str) -> None:
 		raise SystemExit(f"{label} is missing responsive contract fragments: {missing}")
 
 
+def forbid(text: str, fragments: tuple[str, ...], label: str) -> None:
+	present = [fragment for fragment in fragments if fragment in text]
+	if present:
+		raise SystemExit(f"{label} contains incompatible contract fragments: {present}")
+
+
 map_qml = source("mobile-widgets/qml/MapPage.qml")
 require(
 	map_qml,
@@ -91,6 +97,11 @@ require(
 	),
 	"Neo populated dive list",
 )
+forbid(
+	dive_list,
+	('\t\t\tdelegate: Item {\n\t\t\t\tid: delegateRoot\n\t\t\t\trequired property int index',),
+	"Neo populated dive list",
+)
 
 dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
 require(
@@ -101,6 +112,11 @@ require(
 		'"cylinderList": model.cylinderList',
 		'Accessible.name: qsTr("Dive details for %1")',
 	),
+	"Neo populated dive details",
+)
+forbid(
+	dive_details,
+	('\t\tdelegate: Item {\n\t\t\tid: delegateRoot\n\t\t\trequired property int index',),
 	"Neo populated dive details",
 )
 

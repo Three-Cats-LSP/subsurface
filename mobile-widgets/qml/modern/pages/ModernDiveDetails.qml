@@ -97,10 +97,11 @@ Kirigami.Page {
 
 		delegate: Item {
 			id: delegateRoot
-			required property int index
 			// Keep a reactive value object rather than retaining Qt 6's transient
 			// QAbstractItemModel wrapper. The latter produces blank detail/editor
-			// pages on compact Windows layouts after importing a log.
+			// pages on compact Windows layouts after importing a log. Declaring even
+			// one required delegate property disables the `model.<role>` context
+			// object, so this delegate intentionally uses context-property injection.
 			property var modelData: ({
 				"id": model.id,
 				"number": model.number,

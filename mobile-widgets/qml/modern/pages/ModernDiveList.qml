@@ -256,10 +256,12 @@ Kirigami.Page {
 
 			delegate: Item {
 				id: delegateRoot
-				required property int index
 				// QAbstractItemModel's transient `model` wrapper is not a stable value to
 				// retain in a var property on Qt 6. Bind the roles explicitly so compact
 				// delegates receive updates instead of rendering empty, overlapping cards.
+				// Do not declare any required delegate properties here: Qt switches to
+				// required-property role injection when one is present, which suppresses
+				// the `model.<role>` context object used below.
 				property var modelData: ({
 					"row": model.row,
 					"id": model.id,
