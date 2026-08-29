@@ -947,9 +947,9 @@ ApplicationWindow {
 					Text { text: qsTr("Dive draft"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
 					GridLayout {
 						Layout.fillWidth: true; columns: window.compact ? 1 : 4; columnSpacing: 10; rowSpacing: 10
-						NeoField { Layout.fillWidth: true; text: webPlanner.depthMeters.toFixed(1); placeholderText: qsTr("Depth (m)"); validator: DoubleValidator { bottom: 1; top: 150 }; onEditingFinished: webPlanner.depthMeters = Number(text) }
-						NeoField { Layout.fillWidth: true; text: webPlanner.bottomTimeMinutes.toString(); placeholderText: qsTr("Bottom time (min)"); validator: IntValidator { bottom: 1; top: 600 }; onEditingFinished: webPlanner.bottomTimeMinutes = Number(text) }
-						NeoField { Layout.fillWidth: true; text: webPlanner.ascentRate.toFixed(1); placeholderText: qsTr("Ascent rate (m/min)"); validator: DoubleValidator { bottom: 1; top: 30 }; onEditingFinished: webPlanner.ascentRate = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.depthMeters.toFixed(1); placeholderText: qsTr("Depth (m)"); validator: DoubleValidator { bottom: 1; top: 150 } onEditingFinished: webPlanner.depthMeters = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.bottomTimeMinutes.toString(); placeholderText: qsTr("Bottom time (min)"); validator: IntValidator { bottom: 1; top: 600 } onEditingFinished: webPlanner.bottomTimeMinutes = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.ascentRate.toFixed(1); placeholderText: qsTr("Ascent rate (m/min)"); validator: DoubleValidator { bottom: 1; top: 30 } onEditingFinished: webPlanner.ascentRate = Number(text) }
 						NeoField { Layout.fillWidth: true; text: webPlanner.gas; placeholderText: qsTr("Gas"); onEditingFinished: webPlanner.gas = text }
 					}
 					Text { text: webPlanner.summary; color: webPlanner.valid ? window.accent : "#ff8f8f"; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }

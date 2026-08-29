@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QtTest>
 
