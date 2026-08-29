@@ -14,10 +14,17 @@ Kirigami.ScrollablePage {
 	property bool wideLayout: width >= 760
 	property bool manualUpdateCheck: false
 	Modern.DesignTokens { id: tokens }
+
+	function focusPrimaryAction() {
+		Qt.callLater(function() { updateButton.forceActiveFocus(Qt.TabFocusReason) })
+	}
+
 	onVisibleChanged: {
 		if (visible)
-			Qt.callLater(function() { updateButton.forceActiveFocus(Qt.TabFocusReason) })
+			focusPrimaryAction()
 	}
+	StackView.onActivated: focusPrimaryAction()
+	Component.onCompleted: if (visible) focusPrimaryAction()
 
 	function openLink(url) { Qt.openUrlExternally(url) }
 
@@ -77,6 +84,7 @@ Kirigami.ScrollablePage {
 				Button {
 					id: updateButton
 					Layout.fillWidth: true
+					activeFocusOnTab: true
 					enabled: !NeoUpdate.checking
 					text: NeoUpdate.checking ? qsTr("Checking…") : (NeoUpdate.updateAvailable ? qsTr("Download %1").arg(NeoUpdate.latestVersion) : qsTr("Check for updates"))
 					onClicked: {
