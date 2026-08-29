@@ -14,6 +14,7 @@ on:
       - 'scripts/test-neo-data-contracts.py'
       - 'dives/neo-ui-regression.ssrf'
       - 'mobile-widgets/qmlmanager.cpp'
+      - 'core/windows.cpp'
       - 'web/subsurface-neo/wasm/**.qml'
 
 permissions: read-all

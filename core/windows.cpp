@@ -61,6 +61,7 @@ int _wclosedir(_WDIR *dir)
 #endif
 #include <zip.h>
 #include <lmcons.h>
+#include <cctype>
 #include <string>
 
 /* this function converts a win32's utf-16 2 byte string to utf-8.
@@ -125,7 +126,17 @@ static std::wstring system_default_path()
 		report_info("%s: cannot obtain path!", fname);
 		path = L'.';
 	}
-	return path + L"\\Subsurface";
+	std::wstring applicationDirectory = L"Subsurface";
+	if (!settings_suffix.empty()) {
+		std::string safeSuffix = settings_suffix;
+		for (char &character: safeSuffix) {
+			const unsigned char value = static_cast<unsigned char>(character);
+			if (!std::isalnum(value) && character != '-' && character != '_')
+				character = '_';
+		}
+		applicationDirectory += L"-" + utf8_to_utf16_fl(safeSuffix.c_str(), __FILE__, __LINE__);
+	}
+	return path + L"\\" + applicationDirectory;
 }
 
 /* obtain the Roaming path and append "\\<USERNAME>.xml" to it.

@@ -40,4 +40,13 @@ first_edit = min(
 if validation > first_edit:
 	raise SystemExit("Dive-site edits must not be applied before GPS validation")
 
+windows = (ROOT / "core" / "windows.cpp").read_text(encoding="utf-8")
+for fragment in (
+	'if (!settings_suffix.empty())',
+	'applicationDirectory += L"-"',
+	'!std::isalnum(value)',
+):
+	if fragment not in windows:
+		raise SystemExit(f"Windows --user data isolation is missing: {fragment}")
+
 print("Neo populated-log and transactional site-edit contracts validated")
