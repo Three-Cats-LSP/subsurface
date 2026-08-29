@@ -281,9 +281,20 @@ Kirigami.Page {
 				})
 				property bool longPressTriggered: false
 				property bool collectionMatch: page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0
+				function activateDelegate() {
+					if (modelData.isTrip)
+						page.diveListModel.toggle(modelData.row)
+					else
+						page.openDive(modelData.row)
+				}
+				activeFocusOnTab: height > 0
+				Keys.onReturnPressed: activateDelegate()
+				Keys.onEnterPressed: activateDelegate()
+				Keys.onSpacePressed: activateDelegate()
 				Accessible.role: Accessible.ListItem
 				Accessible.name: modelData.isTrip ? qsTr("Dive trip: %1, %2 dives").arg(modelData.tripTitle || qsTr("Unnamed trip")).arg(modelData.tripNrDives || 0)
 					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.number > 0 ? "#" + modelData.number : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
+				Accessible.onPressAction: activateDelegate()
 				width: listView.width
 				height: modelData.isTrip ? 64 : (collectionMatch ? diveCard.implicitHeight : 0)
 
@@ -322,7 +333,7 @@ Kirigami.Page {
 					}
 
 					TapHandler {
-						onTapped: page.diveListModel.toggle(delegateRoot.modelData.row)
+						onTapped: delegateRoot.activateDelegate()
 					}
 				}
 
@@ -331,7 +342,7 @@ Kirigami.Page {
 					visible: !delegateRoot.modelData.isTrip && delegateRoot.collectionMatch
 					width: parent.width
 					contentPadding: tokens.space12
-					border.width: delegateRoot.modelData.current ? 1 : 0
+					border.width: delegateRoot.modelData.current || delegateRoot.activeFocus ? 1 : 0
 					border.color: tokens.accent
 
 					GridLayout {
@@ -459,7 +470,7 @@ Kirigami.Page {
 								delegateRoot.longPressTriggered = false
 								return
 							}
-							page.openDive(delegateRoot.modelData.row)
+							delegateRoot.activateDelegate()
 						}
 					}
 				}

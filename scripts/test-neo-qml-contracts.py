@@ -85,6 +85,9 @@ require(
 		'"location": model.location',
 		'"tripTitle": model.tripTitle',
 		'Accessible.role: Accessible.ListItem',
+		'activeFocusOnTab: height > 0',
+		'Keys.onReturnPressed: activateDelegate()',
+		'Accessible.onPressAction: activateDelegate()',
 	),
 	"Neo populated dive list",
 )
