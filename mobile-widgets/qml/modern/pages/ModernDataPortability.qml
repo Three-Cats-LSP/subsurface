@@ -24,6 +24,20 @@ Kirigami.ScrollablePage {
 	property string selectedBackup: ""
 	property var backupInspection: ({})
 	property string bundleCreatedAt: ""
+	function backupSummary() {
+		if (backupInspection.error)
+			return backupInspection.error
+		if (backupInspection.neoPackage) {
+			return qsTr("%1 is a Neo package created %2 with %3 dives, %4 sites, %5 gear kits, %6 equipment items, %7 collections, and %8 planner presets. Merging imports only its canonical dives and sites using Subsurface deduplication. Replacing restores the listed Neo data too.")
+				.arg(backupInspection.fileName)
+				.arg(backupInspection.createdAt || qsTr("at an unknown time"))
+				.arg(backupInspection.dives).arg(backupInspection.sites)
+				.arg(backupInspection.equipmentKits).arg(backupInspection.equipmentItems)
+				.arg(backupInspection.collections).arg(backupInspection.plannerPresets)
+		}
+		return qsTr("%1 contains %2 dives and %3 sites. Imported dives will be merged with the current log using Subsurface deduplication; nothing is replaced automatically.")
+			.arg(backupInspection.fileName).arg(backupInspection.dives).arg(backupInspection.sites)
+	}
 	FolderDialog {
 		id: exportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
@@ -64,7 +78,7 @@ Kirigami.ScrollablePage {
 		contentItem: Text {
 			color: backupInspection.error ? tokens.warning : tokens.textSecondary
 			wrapMode: Text.WordWrap
-			text: backupInspection.error ? backupInspection.error : (backupInspection.neoPackage ? qsTr("%1 is a Neo package created %2 with %3 dives, %4 sites, %5 gear kits, %6 equipment items, %7 collections, and %8 planner presets. Merging imports only its canonical dives and sites using Subsurface deduplication. Replacing restores the listed Neo data too.") : qsTr("%1 contains %2 dives and %3 sites. Imported dives will be merged with the current log using Subsurface deduplication; nothing is replaced automatically.")).arg(backupInspection.fileName).arg(backupInspection.createdAt || qsTr("at an unknown time")).arg(backupInspection.dives).arg(backupInspection.sites).arg(backupInspection.equipmentKits).arg(backupInspection.equipmentItems).arg(backupInspection.collections).arg(backupInspection.plannerPresets)
+			text: page.backupSummary()
 		}
 		footer: GridLayout {
 			columns: backupConfirm.width >= 560 ? 3 : 1

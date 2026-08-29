@@ -77,6 +77,42 @@ require(
 	"Neo desktop data navigation",
 )
 
+dive_list = source("mobile-widgets/qml/modern/pages/ModernDiveList.qml")
+require(
+	dive_list,
+	(
+		'property var modelData: ({',
+		'"location": model.location',
+		'"tripTitle": model.tripTitle',
+		'Accessible.role: Accessible.ListItem',
+	),
+	"Neo populated dive list",
+)
+
+dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
+require(
+	dive_details,
+	(
+		'property var modelData: ({',
+		'"getCylinder": model.getCylinder',
+		'"cylinderList": model.cylinderList',
+		'Accessible.name: qsTr("Dive details for %1")',
+	),
+	"Neo populated dive details",
+)
+
+portability = source("mobile-widgets/qml/modern/pages/ModernDataPortability.qml")
+require(
+	portability,
+	(
+		'function backupSummary()',
+		'if (backupInspection.neoPackage)',
+		'.arg(backupInspection.fileName).arg(backupInspection.dives).arg(backupInspection.sites)',
+		'text: page.backupSummary()',
+	),
+	"Neo backup inspection summary",
+)
+
 stats_manager = source("mobile-widgets/statsmanager.cpp")
 require(
 	stats_manager,

@@ -257,9 +257,33 @@ Kirigami.Page {
 			delegate: Item {
 				id: delegateRoot
 				required property int index
-				property var modelData: model
+				// QAbstractItemModel's transient `model` wrapper is not a stable value to
+				// retain in a var property on Qt 6. Bind the roles explicitly so compact
+				// delegates receive updates instead of rendering empty, overlapping cards.
+				property var modelData: ({
+					"row": model.row,
+					"id": model.id,
+					"isTrip": model.isTrip,
+					"current": model.current,
+					"number": model.number,
+					"location": model.location,
+					"dateTime": model.dateTime,
+					"depth": model.depth,
+					"duration": model.duration,
+					"waterTemp": model.waterTemp,
+					"firstGas": model.firstGas,
+					"cylinder": model.cylinder,
+					"tags": model.tags,
+					"isInvalid": model.isInvalid,
+					"tripShortDate": model.tripShortDate,
+					"tripTitle": model.tripTitle,
+					"tripNrDives": model.tripNrDives
+				})
 				property bool longPressTriggered: false
 				property bool collectionMatch: page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0
+				Accessible.role: Accessible.ListItem
+				Accessible.name: modelData.isTrip ? qsTr("Dive trip: %1, %2 dives").arg(modelData.tripTitle || qsTr("Unnamed trip")).arg(modelData.tripNrDives || 0)
+					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.number > 0 ? "#" + modelData.number : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
 				width: listView.width
 				height: modelData.isTrip ? 64 : (collectionMatch ? diveCard.implicitHeight : 0)
 

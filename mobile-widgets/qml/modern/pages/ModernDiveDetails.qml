@@ -98,7 +98,38 @@ Kirigami.Page {
 		delegate: Item {
 			id: delegateRoot
 			required property int index
-			property var modelData: model
+			// Keep a reactive value object rather than retaining Qt 6's transient
+			// QAbstractItemModel wrapper. The latter produces blank detail/editor
+			// pages on compact Windows layouts after importing a log.
+			property var modelData: ({
+				"id": model.id,
+				"number": model.number,
+				"location": model.location,
+				"dateTime": model.dateTime,
+				"isInvalid": model.isInvalid,
+				"depth": model.depth,
+				"duration": model.duration,
+				"waterTemp": model.waterTemp,
+				"firstGas": model.firstGas,
+				"cylinder": model.cylinder,
+				"suit": model.suit,
+				"tags": model.tags,
+				"buddy": model.buddy,
+				"diveGuide": model.diveGuide,
+				"notes": model.notes,
+				"startPressure": model.startPressure,
+				"endPressure": model.endPressure,
+				"sac": model.sac,
+				"getCylinder": model.getCylinder,
+				"cylinderList": model.cylinderList,
+				"airTemp": model.airTemp,
+				"gps": model.gps,
+				"sumWeight": model.sumWeight,
+				"rating": model.rating,
+				"viz": model.viz
+			})
+			Accessible.role: Accessible.Pane
+			Accessible.name: qsTr("Dive details for %1").arg(modelData.location || qsTr("Unnamed dive site"))
 			property bool panningProfile: false
 			// A graph gesture owns the pointer until it ends. This keeps inspection,
 			// pan/zoom, vertical page scroll and horizontal dive swiping separate.
