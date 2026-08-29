@@ -4,6 +4,7 @@
 #include "web/subsurface-neo/wasm/neowebdivelogmodel.h"
 
 #include <QBuffer>
+#include <QFile>
 #include <QTemporaryFile>
 #include <QtTest>
 
@@ -23,6 +24,7 @@ private slots:
 	void handlesVeryLargeNativeLog();
 	void editsAndExportsSelectedDive();
 	void roundTripsBrowserBackup();
+	void restoresDurableBrowserWorkspace();
 };
 
 void TestNativeDiveLogReader::readsNativeSummary()
@@ -318,6 +320,33 @@ void TestNativeDiveLogReader::roundTripsBrowserBackup()
 	QCOMPARE(restored.dives.first().notes, QStringLiteral("Backup <verified>"));
 	QCOMPARE(restored.dives.first().samples.size(), 1);
 	QVERIFY(qAbs(restored.dives.first().samples.first().depth_m - 18.5) < 0.001);
+}
+
+void TestNativeDiveLogReader::restoresDurableBrowserWorkspace()
+{
+	QTemporaryFile savedWorkspace;
+	savedWorkspace.setAutoRemove(false);
+	QVERIFY(savedWorkspace.open());
+	const QByteArray xml(R"xml(<divelog program="subsurface" version="3"><dives>
+		<dive number="99" date="2026-08-29"><location>Durable Reef</location>
+		<divecomputer dctype="OC"><sample time="1:00 min" depth="12 m"/></divecomputer>
+		</dive></dives></divelog>)xml");
+	QCOMPARE(savedWorkspace.write(xml), qint64(xml.size()));
+	const QString path = savedWorkspace.fileName();
+	savedWorkspace.close();
+
+	NeoWebDiveLogModel model;
+	QVERIFY(!model.browserStorageAvailable());
+	model.setBrowserSessionState(true, true);
+	QVERIFY(model.browserStorageAvailable());
+	QVERIFY(model.durableSessionStored());
+	model.openRestoredBrowserSession(path, QStringLiteral("2026-08-29T12:00:00Z"));
+	QVERIFY(model.loaded());
+	QCOMPARE(model.diveCount(), 1);
+	QVERIFY(model.fileStatus().contains(QStringLiteral("2026-08-29")));
+	QVERIFY(!QFile::exists(path));
+	model.browserSessionCleared(true);
+	QVERIFY(!model.durableSessionStored());
 }
 
 QTEST_GUILESS_MAIN(TestNativeDiveLogReader)

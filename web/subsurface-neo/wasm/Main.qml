@@ -500,8 +500,17 @@ ApplicationWindow {
 					anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
 					spacing: 10
 					Text { text: qsTr("Start with your real dive log"); color: window.primaryText; font.pixelSize: 19; font.weight: Font.DemiBold }
-					Text { text: qsTr("Open a native Subsurface XML log to populate this dashboard. The file stays in your browser session and is read by shared C++ core code; it is not uploaded."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { text: qsTr("Open a native Subsurface XML log to populate this dashboard. The file is read by shared C++ core code and is never uploaded; you can keep an origin-isolated browser workspace on this device."); color: window.secondaryText; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					NeoButton { text: qsTr("Choose local dive log"); Layout.preferredWidth: window.compact ? importContent.width : 230; onClicked: diveLog.chooseLocalFile() }
+					GridLayout {
+						visible: diveLog.browserStorageAvailable && (diveLog.loaded || diveLog.durableSessionStored)
+						Layout.fillWidth: true
+						columns: window.compact ? 1 : 3
+						NeoButton { visible: diveLog.loaded; Layout.fillWidth: true; text: qsTr("Save browser workspace"); onClicked: diveLog.saveBrowserSession() }
+						NeoButton { visible: diveLog.durableSessionStored; Layout.fillWidth: true; text: qsTr("Restore saved workspace"); onClicked: diveLog.restoreBrowserSession() }
+						NeoButton { visible: diveLog.durableSessionStored; Layout.fillWidth: true; text: qsTr("Forget saved workspace"); onClicked: diveLog.clearBrowserSession() }
+					}
+					Text { visible: diveLog.durableSessionStatus.length > 0; text: diveLog.durableSessionStatus; color: diveLog.browserStorageAvailable ? window.secondaryText : "#f1ae45"; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					GridLayout {
 						visible: diveLog.loaded
 						Layout.fillWidth: true
@@ -770,7 +779,14 @@ ApplicationWindow {
 				NeoButton { text: qsTr("Export JSON"); onClicked: diveLog.exportSelectedDiveJson() }
 				NeoButton { visible: !window.compact; text: qsTr("Export dive list CSV"); onClicked: diveLog.exportDiveListCsv() }
 				Item { Layout.fillWidth: true }
-				Text { visible: diveLog.selectedDiveDirty; text: qsTr("Browser edits not written to the source XML"); color: "#f1ae45"; font.pixelSize: 10 }
+				Text {
+					visible: diveLog.selectedDiveDirty
+					text: diveLog.durableSessionStored ?
+						qsTr("Edits saved in this browser; download a backup to replace the source file") :
+						qsTr("Browser edits not written to the source XML")
+					color: diveLog.durableSessionStored ? window.accent : "#f1ae45"
+					font.pixelSize: 10
+				}
 			}
 
 			Rectangle {

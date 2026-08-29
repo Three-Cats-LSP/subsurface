@@ -30,6 +30,9 @@ class NeoWebDiveLogModel : public QObject {
 	Q_PROPERTY(bool loaded READ loaded NOTIFY changed)
 	Q_PROPERTY(bool error READ error NOTIFY changed)
 	Q_PROPERTY(bool selectedDiveDirty READ selectedDiveDirty NOTIFY changed)
+	Q_PROPERTY(bool browserStorageAvailable READ browserStorageAvailable NOTIFY changed)
+	Q_PROPERTY(bool durableSessionStored READ durableSessionStored NOTIFY changed)
+	Q_PROPERTY(QString durableSessionStatus READ durableSessionStatus NOTIFY changed)
 
 public:
 	explicit NeoWebDiveLogModel(QObject *parent = nullptr);
@@ -51,6 +54,9 @@ public:
 	bool loaded() const;
 	bool error() const;
 	bool selectedDiveDirty() const;
+	bool browserStorageAvailable() const;
+	bool durableSessionStored() const;
+	QString durableSessionStatus() const;
 
 	Q_INVOKABLE void chooseLocalFile();
 	Q_INVOKABLE void openLocalFile(const QUrl &url);
@@ -64,10 +70,17 @@ public:
 	Q_INVOKABLE void exportSelectedDiveJson();
 	Q_INVOKABLE void exportDiveListCsv();
 	Q_INVOKABLE void exportNativeXmlBackup();
+	Q_INVOKABLE void saveBrowserSession();
+	Q_INVOKABLE void restoreBrowserSession();
+	Q_INVOKABLE void clearBrowserSession();
 	void setSearchText(const QString &searchText);
 	void setYearFilter(const QString &yearFilter);
 	void setModeFilter(const QString &modeFilter);
 	void setBrowserFileError(const QString &message);
+	void setBrowserSessionState(bool available, bool stored);
+	void browserSessionSaved(bool success);
+	void browserSessionCleared(bool success);
+	void openRestoredBrowserSession(const QString &path, const QString &savedAt);
 
 signals:
 	void changed();
@@ -90,6 +103,9 @@ private:
 	bool m_loaded = false;
 	bool m_error = false;
 	bool m_selectedDiveDirty = false;
+	bool m_browserStorageAvailable = false;
+	bool m_durableSessionStored = false;
+	QString m_durableSessionStatus;
 
 	void rebuildDiveLists();
 };

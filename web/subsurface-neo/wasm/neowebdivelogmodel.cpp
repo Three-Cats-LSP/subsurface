@@ -154,6 +154,26 @@ NeoWebDiveLogModel::NeoWebDiveLogModel(QObject *parent) : QObject(parent)
 {
 #ifdef __EMSCRIPTEN__
 	webDiveLogModel = this;
+	EM_ASM({
+		if (!('indexedDB' in window)) {
+			_neo_web_session_state(0, 0);
+			return;
+		}
+		const request = indexedDB.open('subsurface-neo', 1);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			if (!database.objectStoreNames.contains('sessions'))
+				database.createObjectStore('sessions', { keyPath: 'key' });
+		};
+		request.onerror = () => _neo_web_session_state(0, 0);
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction('sessions', 'readonly');
+			const getRequest = transaction.objectStore('sessions').get('current-native-xml');
+			getRequest.onerror = () => _neo_web_session_state(1, 0);
+			getRequest.onsuccess = () => _neo_web_session_state(1, getRequest.result ? 1 : 0);
+		};
+	});
 #endif
 }
 
@@ -241,6 +261,21 @@ bool NeoWebDiveLogModel::error() const
 bool NeoWebDiveLogModel::selectedDiveDirty() const
 {
 	return m_selectedDiveDirty;
+}
+
+bool NeoWebDiveLogModel::browserStorageAvailable() const
+{
+	return m_browserStorageAvailable;
+}
+
+bool NeoWebDiveLogModel::durableSessionStored() const
+{
+	return m_durableSessionStored;
+}
+
+QString NeoWebDiveLogModel::durableSessionStatus() const
+{
+	return m_durableSessionStatus;
 }
 
 void NeoWebDiveLogModel::chooseLocalFile()
@@ -336,6 +371,9 @@ bool NeoWebDiveLogModel::updateSelectedDive(const QString &location, const QStri
 	m_selectedDiveDirty = true;
 	rebuildDiveLists();
 	emit changed();
+#ifdef __EMSCRIPTEN__
+	saveBrowserSession();
+#endif
 	return true;
 }
 
@@ -431,6 +469,147 @@ void NeoWebDiveLogModel::exportNativeXmlBackup()
 	if (m_loaded)
 		downloadBrowserText(QStringLiteral("subsurface-neo-browser-backup.xml"), QStringLiteral("application/xml"), nativeXmlBackup());
 #endif
+}
+
+void NeoWebDiveLogModel::saveBrowserSession()
+{
+#ifdef __EMSCRIPTEN__
+	if (!m_loaded)
+		return;
+	m_durableSessionStatus = tr("Saving this dive-log workspace in browser storage…");
+	emit changed();
+	const QByteArray xml = nativeXmlBackup().toUtf8();
+	EM_ASM({
+		const xml = UTF8ToString($0, $1);
+		const request = indexedDB.open('subsurface-neo', 1);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			if (!database.objectStoreNames.contains('sessions'))
+				database.createObjectStore('sessions', { keyPath: 'key' });
+		};
+		request.onerror = () => _neo_web_session_saved(0);
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction('sessions', 'readwrite');
+			transaction.oncomplete = () => _neo_web_session_saved(1);
+			transaction.onerror = () => _neo_web_session_saved(0);
+			transaction.objectStore('sessions').put({
+				key: 'current-native-xml',
+				xml,
+				savedAt: new Date().toISOString()
+			});
+		};
+	}, xml.constData(), xml.size());
+#else
+	m_durableSessionStatus = tr("Durable browser storage is available only in the WebAssembly build.");
+	emit changed();
+#endif
+}
+
+void NeoWebDiveLogModel::restoreBrowserSession()
+{
+#ifdef __EMSCRIPTEN__
+	m_durableSessionStatus = tr("Restoring the saved browser workspace…");
+	emit changed();
+	EM_ASM({
+		const request = indexedDB.open('subsurface-neo', 1);
+		request.onerror = () => _neo_web_session_state(0, 0);
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction('sessions', 'readonly');
+			const getRequest = transaction.objectStore('sessions').get('current-native-xml');
+			getRequest.onerror = () => _neo_web_session_state(1, 0);
+			getRequest.onsuccess = () => {
+				const record = getRequest.result;
+				if (!record || typeof record.xml !== 'string') {
+					_neo_web_session_state(1, 0);
+					return;
+				}
+				FS.mkdirTree('/tmp');
+				const path = '/tmp/neo-restored-' + Date.now() + '.xml';
+				FS.writeFile(path, new TextEncoder().encode(record.xml));
+				const pathSize = lengthBytesUTF8(path) + 1;
+				const pathPointer = _malloc(pathSize);
+				stringToUTF8(path, pathPointer, pathSize);
+				const savedAt = record.savedAt || '';
+				const savedAtSize = lengthBytesUTF8(savedAt) + 1;
+				const savedAtPointer = _malloc(savedAtSize);
+				stringToUTF8(savedAt, savedAtPointer, savedAtSize);
+				_neo_web_session_restored(pathPointer, savedAtPointer);
+				_free(pathPointer);
+				_free(savedAtPointer);
+			};
+		};
+	});
+#else
+	m_durableSessionStatus = tr("Durable browser storage is available only in the WebAssembly build.");
+	emit changed();
+#endif
+}
+
+void NeoWebDiveLogModel::clearBrowserSession()
+{
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		const request = indexedDB.open('subsurface-neo', 1);
+		request.onerror = () => _neo_web_session_cleared(0);
+		request.onsuccess = () => {
+			const transaction = request.result.transaction('sessions', 'readwrite');
+			transaction.oncomplete = () => _neo_web_session_cleared(1);
+			transaction.onerror = () => _neo_web_session_cleared(0);
+			transaction.objectStore('sessions').delete('current-native-xml');
+		};
+	});
+#else
+	m_durableSessionStatus = tr("Durable browser storage is available only in the WebAssembly build.");
+	emit changed();
+#endif
+}
+
+void NeoWebDiveLogModel::setBrowserSessionState(bool available, bool stored)
+{
+	m_browserStorageAvailable = available;
+	m_durableSessionStored = stored;
+	if (!available)
+		m_durableSessionStatus = tr("This browser does not provide durable IndexedDB storage.");
+	else if (stored)
+		m_durableSessionStatus = tr("A saved dive-log workspace is available on this device.");
+	else
+		m_durableSessionStatus = tr("No dive-log workspace is saved in this browser yet.");
+	emit changed();
+}
+
+void NeoWebDiveLogModel::browserSessionSaved(bool success)
+{
+	m_browserStorageAvailable = success || m_browserStorageAvailable;
+	m_durableSessionStored = success;
+	m_durableSessionStatus = success ?
+		tr("Browser workspace saved. Later edits will be saved automatically.") :
+		tr("The browser workspace could not be saved.");
+	emit changed();
+}
+
+void NeoWebDiveLogModel::browserSessionCleared(bool success)
+{
+	if (success)
+		m_durableSessionStored = false;
+	m_durableSessionStatus = success ? tr("Saved browser workspace removed.") :
+		tr("The saved browser workspace could not be removed.");
+	emit changed();
+}
+
+void NeoWebDiveLogModel::openRestoredBrowserSession(const QString &path, const QString &savedAt)
+{
+	openLocalFile(QUrl::fromLocalFile(path));
+	QFile::remove(path);
+	if (m_loaded) {
+		m_browserStorageAvailable = true;
+		m_durableSessionStored = true;
+		m_fileStatus = savedAt.isEmpty() ? tr("Restored the saved browser workspace.") :
+			tr("Restored the browser workspace saved at %1.").arg(savedAt);
+		m_durableSessionStatus = tr("Edits to this workspace are saved automatically on this device.");
+		emit changed();
+	}
 }
 
 void NeoWebDiveLogModel::setSearchText(const QString &searchText)
@@ -571,5 +750,29 @@ extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_file_error(const char *message)
 {
 	if (webDiveLogModel)
 		webDiveLogModel->setBrowserFileError(QString::fromUtf8(message ? message : "Browser file import failed."));
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_session_state(int available, int stored)
+{
+	if (webDiveLogModel)
+		webDiveLogModel->setBrowserSessionState(available != 0, stored != 0);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_session_saved(int success)
+{
+	if (webDiveLogModel)
+		webDiveLogModel->browserSessionSaved(success != 0);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_session_cleared(int success)
+{
+	if (webDiveLogModel)
+		webDiveLogModel->browserSessionCleared(success != 0);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void neo_web_session_restored(const char *path, const char *savedAt)
+{
+	if (webDiveLogModel && path)
+		webDiveLogModel->openRestoredBrowserSession(QString::fromUtf8(path), QString::fromUtf8(savedAt ? savedAt : ""));
 }
 #endif
