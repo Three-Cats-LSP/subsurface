@@ -28,6 +28,12 @@ Kirigami.ApplicationWindow {
 	Overlay.modal: Rectangle { color: "#99050A14" }
 	Overlay.modeless: Rectangle { color: "#66050A14" }
 
+	Shortcut {
+		sequence: "Tab"
+		enabled: pageStack.currentItem === neoAboutPage && neoAboutPage.keyboardEntryPending
+		onActivated: neoAboutPage.focusPrimaryAction()
+	}
+
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
 		visible: initialized && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&

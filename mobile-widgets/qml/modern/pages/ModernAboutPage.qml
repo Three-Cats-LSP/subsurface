@@ -13,18 +13,24 @@ Kirigami.ScrollablePage {
 	background: Rectangle { color: tokens.background }
 	property bool wideLayout: width >= 760
 	property bool manualUpdateCheck: false
+	property bool keyboardEntryPending: true
 	Modern.DesignTokens { id: tokens }
 
 	function focusPrimaryAction() {
+		keyboardEntryPending = false
 		Qt.callLater(function() { updateButton.forceActiveFocus(Qt.TabFocusReason) })
+	}
+
+	function prepareKeyboardEntry() {
+		keyboardEntryPending = true
 	}
 
 	onVisibleChanged: {
 		if (visible)
-			focusPrimaryAction()
+			prepareKeyboardEntry()
 	}
-	StackView.onActivated: focusPrimaryAction()
-	Component.onCompleted: if (visible) focusPrimaryAction()
+	StackView.onActivated: prepareKeyboardEntry()
+	Component.onCompleted: if (visible) prepareKeyboardEntry()
 
 	function openLink(url) { Qt.openUrlExternally(url) }
 
