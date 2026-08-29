@@ -68,6 +68,8 @@ require(
 		'if (neoDesktopShellActive) {',
 		'pageStack.push(page)',
 		'pageStack.lastItem?.objectName',
+		'function neoPageUsesOwnHeader(page)',
+		'pageStack.globalToolBar.preferredHeight: neoHeaderSuppressed ? 0',
 	),
 	"Neo navigation",
 )
@@ -150,8 +152,62 @@ require(
 
 neo_spin_box = source("mobile-widgets/qml/modern/components/NeoSpinBox.qml")
 neo_combo_box = source("mobile-widgets/qml/modern/components/NeoComboBox.qml")
+neo_text_field = source("mobile-widgets/qml/modern/components/NeoTextField.qml")
+neo_icon = source("mobile-widgets/qml/modern/components/NeoDiveIcon.qml")
 require(neo_spin_box, ('Accessible.name: accessibleName.length > 0 ? accessibleName : qsTr("Numeric value")',), "Neo numeric accessibility")
-require(neo_combo_box, ('Accessible.role: Accessible.ComboBox',), "Neo selection accessibility")
+require(
+	neo_combo_box,
+	(
+		'Accessible.role: Accessible.ComboBox',
+		'MouseArea {',
+		'anchors.fill: parent',
+		'onClicked: control.popup.visible ? control.popup.close() : control.popup.open()',
+	),
+	"Neo selection accessibility",
+)
+require(
+	neo_text_field,
+	(
+		'property bool floatingLabelVisible:',
+		'placeholderTextColor: control.floatingLabelVisible ? "transparent"',
+		'id: floatingLabelBackground',
+		'color: control.activeFocus ? tokens.accent : tokens.textMuted',
+	),
+	"Neo outlined field labels",
+)
+require(
+	neo_icon,
+	(
+		'import Qt5Compat.GraphicalEffects',
+		'source: "qrc:/qml/oxygen-tank-5232839.png"',
+		'ColorOverlay {',
+	),
+	"Neo attributed dive icon",
+)
+
+profile_scene = source("profile-widget/profilescene.cpp")
+qml_profile = source("profile-widget/qmlprofile.cpp")
+require(
+	profile_scene,
+	(
+		'static void applyNeoProfilePalette(QImage &image)',
+		'const QColor background("#06111E")',
+		'const QColor grid("#1E3B50")',
+		'if (neoTheme)',
+	),
+	"Neo profile palette",
+)
+require(qml_profile, ('m_profileWidget->setNeoTheme(true);',), "Neo QML profile theme bridge")
+
+cmake = source("CMakeLists.txt")
+require(
+	cmake,
+	(
+		'elseif(WIN32)',
+		'add_executable(${SUBSURFACE_TARGET} WIN32 ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES})',
+	),
+	"Neo Windows GUI target",
+)
 
 stats_manager = source("mobile-widgets/statsmanager.cpp")
 require(
@@ -175,4 +231,4 @@ require(
 	"Neo statistics palette",
 )
 
-print("Neo map, statistics, and navigation responsive contracts validated")
+print("Neo responsive, form, profile, icon, and Windows packaging contracts validated")

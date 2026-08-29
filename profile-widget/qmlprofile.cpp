@@ -43,6 +43,7 @@ QMLProfile::~QMLProfile()
 void QMLProfile::createProfileView()
 {
 	m_profileWidget.reset(new ProfileScene(m_devicePixelRatio * 0.8, false, false));
+	m_profileWidget->setNeoTheme(true);
 }
 
 void QMLProfile::rebuildInspectorPlot()

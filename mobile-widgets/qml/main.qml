@@ -76,12 +76,27 @@ Kirigami.ApplicationWindow {
 	Kirigami.Theme.highlightColor: "#169DD0"
 	Kirigami.Theme.highlightedTextColor: "#F7FAFC"
 
-	// next setup the tab bar on top
+	function neoPageUsesOwnHeader(page) {
+		if (!page)
+			return false
+		if (page === neoDashboard || page === modernDiveList || page === neoMorePage ||
+			page === neoSettingsHub || page === neoAboutPage || page === neoAccountSecurityPage ||
+			page === neoDiveComputerCenter || page === neoPlannerLab || page === neoOperationsHub ||
+			page === neoEquipmentLibrary || page === neoDataPortability || page === neoSitesHub ||
+			page === neoStatisticsHub || page === cloudSyncPage || page === mapPage)
+			return true
+		return String(page.objectName || "").indexOf("Modern") === 0
+	}
+
+	readonly property bool neoHeaderSuppressed: neoPageUsesOwnHeader(pageStack.currentItem)
+
+	// Neo pages carry their own responsive title and actions. Keep Kirigami's
+	// toolbar only for mature compatibility pages that still rely on it.
 	pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.ToolBar
 	pageStack.globalToolBar.showNavigationButtons: Kirigami.ApplicationHeaderStyle.NoNavigationButtons
 	pageStack.globalToolBar.canContainHandles: true
-	pageStack.globalToolBar.minimumHeight: Kirigami.Units.gridUnit * 1.6
-	pageStack.globalToolBar.preferredHeight: Math.round(Kirigami.Units.gridUnit * (Qt.platform.os == "ios" ? 2.5 : 2))
+	pageStack.globalToolBar.minimumHeight: neoHeaderSuppressed ? 0 : Kirigami.Units.gridUnit * 1.6
+	pageStack.globalToolBar.preferredHeight: neoHeaderSuppressed ? 0 : Math.round(Kirigami.Units.gridUnit * (Qt.platform.os == "ios" ? 2.5 : 2))
 	pageStack.globalToolBar.maximumHeight: pageStack.globalToolBar.preferredHeight
 	pageStack.anchors.leftMargin: neoDesktopShellActive ? neoSidebarWidth : 0
 

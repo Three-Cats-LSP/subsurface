@@ -34,10 +34,20 @@ ComboBox {
 		font.pixelSize: 16
 	}
 	background: Rectangle {
-		color: control.down ? tokens.surfaceRaised : tokens.background
+		color: control.down || control.popup.visible ? tokens.surfaceRaised : tokens.background
 		radius: tokens.radiusSmall
 		border.width: 1
-		border.color: control.activeFocus ? tokens.accent : tokens.border
+		border.color: control.activeFocus || control.popup.visible ? tokens.accent : tokens.border
+	}
+	// A read-only TextInput consumes pointer events on some Qt/Material builds.
+	// Cover the complete non-editable control so the field body and chevron
+	// have identical dropdown behaviour.
+	MouseArea {
+		anchors.fill: parent
+		enabled: control.enabled && !control.editable
+		hoverEnabled: true
+		cursorShape: Qt.PointingHandCursor
+		onClicked: control.popup.visible ? control.popup.close() : control.popup.open()
 	}
 	delegate: ItemDelegate {
 		id: optionDelegate

@@ -669,6 +669,10 @@ if (SUBSURFACE_TARGET_EXECUTABLE MATCHES "MobileExecutable")
 
 	if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
 		qt_add_executable(${SUBSURFACE_TARGET} ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES})
+	elseif(WIN32)
+		# The Neo desktop build is a GUI application. Without the WIN32 target
+		# flag Windows opens a second console window beside the QML interface.
+		add_executable(${SUBSURFACE_TARGET} WIN32 ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES})
 	else()
 		add_executable(${SUBSURFACE_TARGET} ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES})
 	endif()

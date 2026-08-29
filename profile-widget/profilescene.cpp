@@ -92,6 +92,7 @@ ProfileScene::ProfileScene(double dpr, bool printMode, bool isGrayscale) :
 	dpr(dpr),
 	printMode(printMode),
 	isGrayscale(isGrayscale),
+	neoTheme(false),
 	empty(true),
 	maxtime(-1),
 	maxdepth(-1),
@@ -631,6 +632,79 @@ void ProfileScene::anim(double fraction)
 		axis->anim(fraction);
 }
 
+static QColor neoProfileAccent(qreal hue)
+{
+	if (hue < 0.0)
+		return QColor("#8FB7D1");
+	const qreal degrees = hue * 360.0;
+	if (degrees < 35.0 || degrees >= 330.0)
+		return QColor("#FF6B7A");
+	if (degrees < 80.0)
+		return QColor("#F4C430");
+	if (degrees < 210.0)
+		return QColor("#22D4EB");
+	if (degrees < 260.0)
+		return QColor("#38A3FF");
+	return QColor("#D86CF0");
+}
+
+static QColor mixProfileColor(const QColor &from, const QColor &to, qreal amount)
+{
+	amount = std::clamp(amount, qreal(0.0), qreal(1.0));
+	return QColor::fromRgbF(
+		from.redF() + (to.redF() - from.redF()) * amount,
+		from.greenF() + (to.greenF() - from.greenF()) * amount,
+		from.blueF() + (to.blueF() - from.blueF()) * amount,
+		1.0);
+}
+
+static void applyNeoProfilePalette(QImage &image)
+{
+	const QColor background("#06111E");
+	const QColor surface("#0A2033");
+	const QColor grid("#1E3B50");
+	const QColor text("#A8C5D8");
+	const QColor legacyBackground = getColor(::BACKGROUND, false);
+
+	for (int y = 0; y < image.height(); ++y) {
+		QRgb *pixel = reinterpret_cast<QRgb *>(image.scanLine(y));
+		const QRgb *end = pixel + image.width();
+		for (; pixel != end; ++pixel) {
+			const QColor source = QColor::fromRgba(*pixel);
+			const int backgroundDistance = std::abs(source.red() - legacyBackground.red()) +
+				std::abs(source.green() - legacyBackground.green()) +
+				std::abs(source.blue() - legacyBackground.blue());
+			if (backgroundDistance < 12) {
+				*pixel = background.rgba();
+				continue;
+			}
+
+			const qreal hue = source.hslHueF();
+			const qreal saturation = source.hslSaturationF();
+			const qreal lightness = source.lightnessF();
+			QColor mapped;
+			if (saturation < 0.10) {
+				if (lightness > 0.97)
+					mapped = grid;
+				else if (lightness < 0.35)
+					mapped = text;
+				else
+					mapped = mixProfileColor(background, surface, 0.35 + (1.0 - lightness) * 0.35);
+			} else {
+				const QColor accent = neoProfileAccent(hue);
+				if (lightness > 0.62)
+					mapped = mixProfileColor(background, accent,
+						std::clamp(0.08 + saturation * 0.22 + (1.0 - lightness) * 0.12, 0.08, 0.28));
+				else
+					mapped = mixProfileColor(accent, QColor("#FFFFFF"),
+						std::clamp((lightness - 0.25) * 0.25, 0.0, 0.10));
+			}
+			mapped.setAlpha(source.alpha());
+			*pixel = mapped.rgba();
+		}
+	}
+}
+
 void ProfileScene::draw(QPainter *painter, const QRect &pos,
 			const struct dive *d, int dc,
 			DivePlannerPointsModel *plannerModel, bool inPlanner)
@@ -647,6 +721,8 @@ void ProfileScene::draw(QPainter *painter, const QRect &pos,
 	imgPainter.setRenderHint(QPainter::SmoothPixmapTransform);
 	render(&imgPainter, QRect(QPoint(), size), sceneRect(), Qt::IgnoreAspectRatio);
 	imgPainter.end();
+	if (neoTheme)
+		applyNeoProfilePalette(image);
 
 	if (isGrayscale) {
 		// convert QImage to grayscale before rendering

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 import QtQuick
+import Qt5Compat.GraphicalEffects
 
 Canvas {
 	id: icon
@@ -66,9 +67,7 @@ Canvas {
 			ctx.beginPath(); ctx.arc(17, 20, 1, 0, Math.PI * 2); ctx.fill()
 			line(ctx, [10, 5, 10, 2, 18, 2, 18, 5]); line(ctx, [10, 23, 10, 26, 18, 26, 18, 23])
 		} else if (name === "tank") {
-			ctx.strokeRect(10, 7, 8, 16)
-			line(ctx, [12, 7, 12, 4, 16, 4, 16, 7])
-			line(ctx, [9, 11, 19, 11]); line(ctx, [9, 19, 19, 19])
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
 			ctx.beginPath(); ctx.arc(10, 11, 5, 0, Math.PI * 2); ctx.stroke()
 			ctx.beginPath(); ctx.arc(10, 11, 1.5, 0, Math.PI * 2); ctx.stroke()
@@ -133,5 +132,24 @@ Canvas {
 			ctx.beginPath(); ctx.arc(14, 14, 8, 0, Math.PI * 2); ctx.stroke()
 		}
 		ctx.restore()
+	}
+
+	Image {
+		id: oxygenTankSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.08))
+		visible: icon.name === "tank"
+		source: "qrc:/qml/oxygen-tank-5232839.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: oxygenTankSource
+		visible: oxygenTankSource.visible
+		source: oxygenTankSource
+		color: icon.iconColor
+		cached: true
 	}
 }

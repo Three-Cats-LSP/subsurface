@@ -48,6 +48,7 @@ public:
 	void draw(QPainter *painter, const QRect &pos,
 		  const struct dive *d, int dc,
 		  DivePlannerPointsModel *plannerModel = nullptr, bool inPlanner = false);
+	void setNeoTheme(bool enabled) { neoTheme = enabled; }
 	double calcZoomPosition(double zoom, double originalPos, double delta);
 
 	const struct dive *d;
@@ -65,6 +66,7 @@ private:
 	double dpr; // Device Pixel Ratio. A DPR of one corresponds to a "standard" PC screen.
 	bool printMode;
 	bool isGrayscale;
+	bool neoTheme;
 	bool empty; // The profile currently shows nothing.
 	int maxtime;
 	int maxdepth;
