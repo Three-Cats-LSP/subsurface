@@ -19,6 +19,7 @@ Control {
 	signal statisticsRequested()
 	signal equipmentRequested()
 	signal importRequested()
+	signal portabilityRequested()
 	signal settingsRequested()
 
 	Modern.DesignTokens { id: tokens }
@@ -105,6 +106,7 @@ Control {
 					{ key: "statistics", label: qsTr("Statistics"), icon: "stats" },
 					{ key: "equipment", label: qsTr("Equipment"), icon: "gear" },
 					{ key: "import", label: qsTr("Import"), icon: "import" },
+					{ key: "portability", label: qsTr("Data & Backup"), icon: "export" },
 					{ key: "settings", label: qsTr("Settings"), icon: "settings" }
 				]
 
@@ -167,6 +169,7 @@ Control {
 						case "statistics": sidebar.statisticsRequested(); break
 						case "equipment": sidebar.equipmentRequested(); break
 						case "import": sidebar.importRequested(); break
+						case "portability": sidebar.portabilityRequested(); break
 						case "settings": sidebar.settingsRequested(); break
 						}
 					}

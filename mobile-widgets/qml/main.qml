@@ -64,6 +64,7 @@ Kirigami.ApplicationWindow {
 		onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)
 		onEquipmentRequested: showPageFromDrawer(neoEquipmentLibrary)
 		onImportRequested: showPageFromDrawer(neoDiveComputerCenter)
+		onPortabilityRequested: showPageFromDrawer(neoDataPortability)
 		onSettingsRequested: showPageFromDrawer(neoSettingsHub)
 	}
 
@@ -119,6 +120,8 @@ Kirigami.ApplicationWindow {
 			return "equipment"
 		if (page === neoDiveComputerCenter)
 			return "import"
+		if (page === neoDataPortability)
+			return "portability"
 		if (page === neoSettingsHub || page === settingsWindow || page === neoAboutPage || page === neoAccountSecurityPage)
 			return "settings"
 		return ""

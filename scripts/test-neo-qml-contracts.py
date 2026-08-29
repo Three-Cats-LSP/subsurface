@@ -58,11 +58,23 @@ require(
 		'onMapRequested: showPageFromDrawer(mapPage)',
 		'onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)',
 		'onOpenSites: showPageFromDrawer(neoSitesHub)',
+		'onPortabilityRequested: showPageFromDrawer(neoDataPortability)',
 		'if (neoDesktopShellActive) {',
 		'pageStack.push(page)',
 		'pageStack.lastItem?.objectName',
 	),
 	"Neo navigation",
+)
+
+desktop_sidebar = source("mobile-widgets/qml/modern/components/NeoDesktopSidebar.qml")
+require(
+	desktop_sidebar,
+	(
+		'signal portabilityRequested()',
+		'{ key: "portability", label: qsTr("Data & Backup"), icon: "export" }',
+		'case "portability": sidebar.portabilityRequested(); break',
+	),
+	"Neo desktop data navigation",
 )
 
 stats_manager = source("mobile-widgets/statsmanager.cpp")
