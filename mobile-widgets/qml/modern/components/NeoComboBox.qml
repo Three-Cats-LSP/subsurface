@@ -11,6 +11,8 @@ ComboBox {
 	leftPadding: 12
 	rightPadding: 34
 	font.pixelSize: 13
+	Accessible.name: accessibleName.length > 0 ? accessibleName : displayText
+	Accessible.role: Accessible.ComboBox
 	contentItem: TextInput {
 		text: control.editable ? control.editText : control.displayText
 		font: control.font
@@ -23,7 +25,6 @@ ComboBox {
 		selectedTextColor: tokens.textPrimary
 		validator: control.validator
 		inputMethodHints: control.inputMethodHints
-		Accessible.name: control.accessibleName.length > 0 ? control.accessibleName : control.displayText
 	}
 	indicator: Text {
 		x: control.width - width - 12

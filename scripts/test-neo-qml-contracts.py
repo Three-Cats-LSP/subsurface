@@ -113,6 +113,24 @@ require(
 	"Neo backup inspection summary",
 )
 
+planner = source("mobile-widgets/qml/modern/pages/ModernPlannerLab.qml")
+require(
+	planner,
+	(
+		'accessibleName: qsTr("Decompression model")',
+		'accessibleName: qsTr("GF low")',
+		'accessibleName: qsTr("Dive mode")',
+		'accessibleName: qsTr("Reserve gas (%1)").arg(page.pressureUnit)',
+		'accessibleName: qsTr("Gas for segment %1").arg(index + 1)',
+	),
+	"Neo planner accessibility",
+)
+
+neo_spin_box = source("mobile-widgets/qml/modern/components/NeoSpinBox.qml")
+neo_combo_box = source("mobile-widgets/qml/modern/components/NeoComboBox.qml")
+require(neo_spin_box, ('Accessible.name: accessibleName.length > 0 ? accessibleName : qsTr("Numeric value")',), "Neo numeric accessibility")
+require(neo_combo_box, ('Accessible.role: Accessible.ComboBox',), "Neo selection accessibility")
+
 stats_manager = source("mobile-widgets/statsmanager.cpp")
 require(
 	stats_manager,

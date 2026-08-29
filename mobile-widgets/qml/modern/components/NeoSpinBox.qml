@@ -10,7 +10,7 @@ SpinBox {
 
 	implicitHeight: 44
 	editable: false
-	Accessible.name: accessibleName
+	Accessible.name: accessibleName.length > 0 ? accessibleName : qsTr("Numeric value")
 	Accessible.role: Accessible.SpinBox
 
 	contentItem: TextInput {
