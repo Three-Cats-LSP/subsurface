@@ -116,7 +116,10 @@ require(
 )
 forbid(
 	dive_details,
-	('\t\tdelegate: Item {\n\t\t\tid: delegateRoot\n\t\t\trequired property int index',),
+	(
+		'\t\tdelegate: Item {\n\t\t\tid: delegateRoot\n\t\t\trequired property int index',
+		'onPinchCanceled:',
+	),
 	"Neo populated dive details",
 )
 

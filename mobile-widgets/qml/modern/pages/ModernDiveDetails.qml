@@ -452,10 +452,9 @@ Kirigami.Page {
 											profile.lastPinchCenterX = pinch.center.x
 											profile.lastPinchCenterY = pinch.center.y
 										}
-										onPinchFinished: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
-										onPinchCanceled: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
+									onPinchFinished: { profile.lastScale = profile.scale; delegateRoot.profileGestureActive = false }
 
-									MouseArea {
+								MouseArea {
 											id: profileMouseArea
 											anchors.fill: parent
 											property bool isZoomed: profile.scale > 1.02
