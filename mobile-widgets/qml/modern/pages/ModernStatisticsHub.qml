@@ -9,6 +9,7 @@ import "../components" as Components
 
 Kirigami.ScrollablePage {
 	id: page
+	objectName: "ModernStatisticsHub"
 	title: qsTr("Statistics")
 	background: Rectangle { color: tokens.background }
 
@@ -20,7 +21,10 @@ Kirigami.ScrollablePage {
 	StatsManager { id: statsManager }
 	ChartListModel { id: chartListModel }
 
-	Component.onCompleted: statsManager.init(statsView, chartListModel)
+	Component.onCompleted: {
+		statsManager.init(statsView, chartListModel)
+		statsManager.setDarkThemeOverride(true)
+	}
 	onVisibleChanged: if (visible) statsManager.doit()
 	onWidthChanged: if (visible) redrawTimer.restart()
 
@@ -64,6 +68,7 @@ Kirigami.ScrollablePage {
 		}
 
 		GridLayout {
+			objectName: "NeoStatisticsMetrics"
 			Layout.fillWidth: true
 			columns: page.wideLayout ? 4 : 2
 			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
@@ -101,6 +106,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Components.ModernCard {
+			objectName: "NeoStatisticsChartCard"
 			Layout.fillWidth: true
 			contentPadding: tokens.space12
 
@@ -177,6 +183,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Components.ModernCard {
+			objectName: "NeoStatisticsControls"
 			visible: page.controlsOpen
 			Layout.fillWidth: true
 			contentPadding: tokens.space12

@@ -36,6 +36,7 @@ public:
 	Q_INVOKABLE void var2OperationChanged(int idx);
 	Q_INVOKABLE void sortMode1Changed(int idx);
 	Q_INVOKABLE void setChart(int idx);
+	Q_INVOKABLE void setDarkThemeOverride(bool enabled);
 signals:
 	void var1ListChanged();
 	void binner1ListChanged();
@@ -69,6 +70,7 @@ private:
 	int sortMode1Index;
 	StatsState::UIState uiState;	// Remember UI state so that we can interpret indexes
 	bool themeInitialized;		// setTheme() crashes if called in init()
+	bool darkThemeOverride = false;	// Neo always uses its dark canvas, independently of the legacy preference.
 	void updateUi();
 };
 

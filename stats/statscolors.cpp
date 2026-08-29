@@ -102,27 +102,27 @@ class StatsThemeDark : public StatsTheme {
 public:
 	StatsThemeDark()
 	{
-		backgroundColor = Qt::black;
-		fillColor = QColor(0x64, 0x96, 0xca);
-		borderColor = QColor(0x66, 0xb2, 0xff);
-		selectedColor = QColor(0x55, 0x89, 0xbb);
-		selectedBorderColor = QColor(0x00, 0x4d, 0x99);
-		highlightedColor = Qt::yellow;
-		highlightedBorderColor = QColor(0x55, 0x55, 0xdd);
+		backgroundColor = QColor("#06111E");
+		fillColor = QColor("#0EAAC7");
+		borderColor = QColor("#22D4EB");
+		selectedColor = QColor("#43D17A");
+		selectedBorderColor = QColor("#A7F3D0");
+		highlightedColor = QColor("#FFB84D");
+		highlightedBorderColor = QColor("#FFE0A3");
 		darkLabelColor = Qt::white;
-		lightLabelColor = Qt::black;
-		axisColor = Qt::white;
-		gridColor = QColor(0x33, 0x33, 0x33);
-		informationBorderColor = Qt::white;
-		informationColor = QColor(0x00, 0x00, 0xff, 192); // Note: fourth argument is opacity
-		legendColor = QColor(0xff, 0x71, 0x33, 192); // Note: fourth argument is opacity
-		legendBorderColor = Qt::white;
-		quartileMarkerColor = Qt::cyan;
-		regressionItemColor = Qt::cyan;
-		meanMarkerColor = Qt::magenta;
-		medianMarkerColor = Qt::cyan;
-		selectionLassoColor = Qt::white;
-		selectionOverlayColor = Qt::darkGray;
+		lightLabelColor = QColor("#06111E");
+		axisColor = QColor("#A9BAC8");
+		gridColor = QColor("#1E3B50");
+		informationBorderColor = QColor("#22D4EB");
+		informationColor = QColor(0x0d, 0x26, 0x3c, 232);
+		legendColor = QColor(0x0d, 0x26, 0x3c, 232);
+		legendBorderColor = QColor("#1E3B50");
+		quartileMarkerColor = QColor("#22D4EB");
+		regressionItemColor = QColor("#22D4EB");
+		meanMarkerColor = QColor("#FFB84D");
+		medianMarkerColor = QColor("#43D17A");
+		selectionLassoColor = QColor("#F2F8FB");
+		selectionOverlayColor = QColor("#1E3B50");
 
 		// use a bold version of the application font for axis labels, axis title and chart title
 		axisLabelFont.setWeight(QFont::Bold);

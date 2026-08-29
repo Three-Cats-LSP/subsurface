@@ -1280,6 +1280,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	MapPage {
 		id: mapPage
 		visible: false
+		onOpenSites: showPageFromDrawer(neoSitesHub)
 	}
 
 	RecoverCache {

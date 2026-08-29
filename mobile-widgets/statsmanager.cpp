@@ -131,6 +131,16 @@ void StatsManager::setChart(int idx)
 	updateUi();
 }
 
+void StatsManager::setDarkThemeOverride(bool enabled)
+{
+	darkThemeOverride = enabled;
+	if (!view)
+		return;
+	const QString theme = ThemeInterface::instance()->property("currentTheme").toString();
+	view->setTheme(enabled || theme == "Dark");
+	view->plot(state);
+}
+
 void StatsManager::themeChanged()
 {
 	if (!view)
@@ -139,5 +149,5 @@ void StatsManager::themeChanged()
 	// We could just make currentTheme accessible instead of
 	// using Qt's inane propertySystem. Whatever.
 	QString theme = ThemeInterface::instance()->property("currentTheme").toString();
-	view->setTheme(theme == "Dark");
+	view->setTheme(darkThemeOverride || theme == "Dark");
 }

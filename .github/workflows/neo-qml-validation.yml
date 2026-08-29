@@ -8,7 +8,9 @@ on:
     paths:
       - '.github/workflows/neo-qml-validation.yml'
       - 'mobile-widgets/qml/main.qml'
+      - 'mobile-widgets/qml/MapPage.qml'
       - 'mobile-widgets/qml/modern/**'
+      - 'scripts/test-neo-qml-contracts.py'
       - 'web/subsurface-neo/wasm/**.qml'
 
 permissions: read-all
@@ -36,11 +38,15 @@ jobs:
           test -x "$QMLFORMAT"
           mapfile -d '' files < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f -name '*.qml' -print0)
           files+=(mobile-widgets/qml/main.qml)
+          files+=(mobile-widgets/qml/MapPage.qml)
           test "${#files[@]}" -gt 0
           for file in "${files[@]}"; do
             echo "Parsing $file"
             "$QMLFORMAT" "$file" >/dev/null
           done
+
+      - name: Verify responsive Neo UI contracts
+        run: python3 scripts/test-neo-qml-contracts.py
 
       - name: Verify Neo translation extraction coverage
         shell: bash
@@ -53,6 +59,7 @@ jobs:
           test -x "$LUPDATE"
           mapfile -d '' sources < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f \( -name '*.qml' -o -name '*.cpp' -o -name '*.h' \) -print0)
           sources+=(mobile-widgets/qml/main.qml)
+          sources+=(mobile-widgets/qml/MapPage.qml)
           "$LUPDATE" "${sources[@]}" -no-obsolete -ts /tmp/subsurface-neo-source.ts
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
