@@ -47,14 +47,7 @@ Canvas {
 		} else if (name === "gas") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "gear") {
-			ctx.beginPath(); ctx.ellipse(10, 2, 8, 3); ctx.stroke()
-			ctx.beginPath(); ctx.moveTo(10, 5); ctx.quadraticCurveTo(5, 7, 5, 14); ctx.lineTo(5, 18); ctx.lineTo(23, 18); ctx.lineTo(23, 14); ctx.quadraticCurveTo(23, 7, 18, 5); ctx.stroke()
-			ctx.beginPath(); ctx.ellipse(2, 10, 5, 7); ctx.stroke(); ctx.beginPath(); ctx.ellipse(21, 10, 5, 7); ctx.stroke()
-			ctx.beginPath(); ctx.arc(14, 12, 5, 0, Math.PI * 2); ctx.stroke()
-			line(ctx, [10.5, 8.5, 17.5, 15.5]); line(ctx, [17.5, 8.5, 10.5, 15.5])
-			ctx.strokeRect(5, 18, 18, 3); line(ctx, [8, 21, 6, 25, 22, 25, 20, 21])
-			ctx.beginPath(); ctx.arc(10, 23, 1, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(18, 23, 1, 0, Math.PI * 2); ctx.stroke()
-			ctx.beginPath(); ctx.moveTo(5, 24); ctx.quadraticCurveTo(14, 30, 23, 24); ctx.stroke()
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "device") {
 			ctx.beginPath(); ctx.roundedRect(6, 5, 16, 18, 4, 4); ctx.stroke()
 			ctx.beginPath(); ctx.roundedRect(9, 8, 10, 8, 1.5, 1.5); ctx.stroke()
@@ -186,11 +179,30 @@ Canvas {
 	}
 
 	Image {
+		id: gearSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "gear"
+		source: "qrc:/qml/sports-15710848.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: gearSource
+		visible: gearSource.visible
+		source: gearSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
 		id: diveTypeSource
 		anchors.fill: parent
 		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
 		visible: icon.name === "type"
-		source: "qrc:/qml/spot-17916440.png"
+		source: "qrc:/qml/scuba-diving-18643383.png"
 		fillMode: Image.PreserveAspectFit
 		smooth: true
 		mipmap: true

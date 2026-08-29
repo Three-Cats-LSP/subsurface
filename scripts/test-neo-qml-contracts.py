@@ -114,8 +114,9 @@ require(
 		'"cylinderList": model.cylinderList',
 		'"diveMode": model.diveMode',
 		'function primaryGas()',
-		'value: delegateRoot.primaryGas().length > 0 ? delegateRoot.primaryGas()',
-		'label: qsTr("Tank")',
+		'function cylinderGasSummary()',
+		'label: qsTr("Gas & cylinder")',
+		'label: qsTr("Gear")',
 		'iconName: "type"',
 		'Accessible.name: qsTr("Dive details for %1")',
 	),
@@ -191,10 +192,24 @@ require(
 		'source: "qrc:/qml/oxygen-tank-5232839.png"',
 		'source: "qrc:/qml/container-16494765.png"',
 		'source: "qrc:/qml/regulator-5158240.png"',
-		'source: "qrc:/qml/spot-17916440.png"',
+		'source: "qrc:/qml/sports-15710848.png"',
+		'source: "qrc:/qml/scuba-diving-18643383.png"',
 		'ColorOverlay {',
 	),
 	"Neo attributed dive icon",
+)
+
+dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
+require(
+	dive_details,
+	(
+		'label: qsTr("Gas & cylinder")',
+		'value: delegateRoot.cylinderGasSummary()',
+		'label: qsTr("Gear")',
+		'qsTr("Weights: %1")',
+		'iconName: "gear"',
+	),
+	"Neo combined cylinder and gear cards",
 )
 
 dive_editor = source("mobile-widgets/qml/modern/pages/ModernDiveEditor.qml")

@@ -91,6 +91,8 @@
 		<file alias="container-16494765.png">../../icons/container-16494765.png</file>
 		<file alias="regulator-5158240.png">../../icons/regulator-5158240.png</file>
 		<file alias="spot-17916440.png">../../icons/spot-17916440.png</file>
+		<file alias="sports-15710848.png">../../icons/sports-15710848.png</file>
+		<file alias="scuba-diving-18643383.png">../../icons/scuba-diving-18643383.png</file>
 	</qresource>
 
 	<qresource prefix="/">

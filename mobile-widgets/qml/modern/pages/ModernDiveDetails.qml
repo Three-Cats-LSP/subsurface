@@ -211,6 +211,14 @@ Kirigami.Page {
 				return value.toUpperCase()
 			}
 
+			function cylinderGasSummary() {
+				var gas = primaryGas()
+				var cylinder = modelData.cylinder || ""
+				if (gas.length > 0 && cylinder.length > 0)
+					return gas + "  ·  " + cylinder
+				return gas || cylinder
+			}
+
 			function decoModelSummary() {
 				if (PrefTechnicalDetails.display_deco_mode === Enums.VPMB)
 					return qsTr("VPM-B")
@@ -701,18 +709,18 @@ Kirigami.Page {
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
 							Layout.columnSpan: page.width >= 760 ? 1 : 3
-							label: qsTr("Gas")
-							value: delegateRoot.primaryGas().length > 0 ? delegateRoot.primaryGas() : qsTr("Not recorded")
+							label: qsTr("Gas & cylinder")
+							value: delegateRoot.cylinderGasSummary().length > 0 ? delegateRoot.cylinderGasSummary() : qsTr("Not recorded")
 							detail: delegateRoot.pressureSummary()
 							iconName: "gas"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
 							Layout.columnSpan: page.width >= 760 ? 1 : 3
-							label: qsTr("Tank")
-							value: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0 ? delegateRoot.modelData.cylinder : qsTr("Not recorded")
-							detail: delegateRoot.modelData.suit || ""
-							iconName: "tank"
+							label: qsTr("Gear")
+							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : qsTr("Not recorded")
+							detail: qsTr("Weights: %1").arg(delegateRoot.modelData.sumWeight && delegateRoot.modelData.sumWeight.length > 0 ? delegateRoot.modelData.sumWeight : qsTr("Not recorded"))
+							iconName: "gear"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true

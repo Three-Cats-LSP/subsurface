@@ -186,7 +186,8 @@ Kirigami.ScrollablePage {
 				"<a href=\"https://www.flaticon.com/free-icon/oxygen-tank_5232839\">Oxygen tank icon created by Magnific — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/container_16494765\">Container icon created by Three musketeers — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/regulator_5158240\">Mode regulator icon created by Magnific — Flaticon</a><br>" +
-				"<a href=\"https://www.flaticon.com/free-icon/spot_17916440\">Spot icon created by Anditii Creative — Flaticon</a>")
+				"<a href=\"https://www.flaticon.com/free-icon/sports_15710848\">Sports gear icon — Flaticon</a><br>" +
+				"<a href=\"https://www.flaticon.com/free-icon/scuba-diving_18643383\">Scuba-diving type icon — Flaticon</a>")
 			textFormat: Text.RichText
 			wrapMode: Text.WordWrap
 			horizontalAlignment: Text.AlignHCenter
