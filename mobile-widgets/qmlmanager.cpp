@@ -20,6 +20,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonParseError>
+#include <QCryptographicHash>
 #include <QPdfWriter>
 #include <QPainter>
 #include <QPageLayout>
@@ -1949,15 +1950,24 @@ struct neo_backup_contents {
 	QJsonObject metadata;
 };
 
-static bool readZipEntry(zip_t *archive, const char *name, QByteArray *result)
+static bool readZipEntry(zip_t *archive, const char *name, QByteArray *result, zip_uint64_t maximumSize)
 {
+	zip_stat_t stats;
+	zip_stat_init(&stats);
+	if (zip_stat(archive, name, 0, &stats) == 0 && (stats.valid & ZIP_STAT_SIZE) && stats.size > maximumSize)
+		return false;
 	zip_file_t *file = zip_fopen(archive, name, 0);
 	if (!file)
 		return false;
 	char buffer[4096];
 	zip_int64_t read;
-	while ((read = zip_fread(file, buffer, sizeof(buffer))) > 0)
+	while ((read = zip_fread(file, buffer, sizeof(buffer))) > 0) {
+		if (static_cast<zip_uint64_t>(result->size()) + static_cast<zip_uint64_t>(read) > maximumSize) {
+			zip_fclose(file);
+			return false;
+		}
 		result->append(buffer, static_cast<int>(read));
+	}
 	const bool complete = read == 0 && zip_fclose(file) == 0;
 	if (read != 0)
 		zip_fclose(file);
@@ -1974,9 +1984,12 @@ static bool readNeoBackupBundle(const QString &fileName, neo_backup_contents *co
 	}
 	QByteArray manifestData;
 	QByteArray metadataData;
-	const bool validEntries = readZipEntry(archive, "divelog.xml", &contents->divelogXml) &&
-		readZipEntry(archive, "manifest.json", &manifestData) &&
-		readZipEntry(archive, "neo-metadata.json", &metadataData);
+	constexpr zip_uint64_t maximumDiveLogSize = 256ULL * 1024ULL * 1024ULL;
+	constexpr zip_uint64_t maximumManifestSize = 1024ULL * 1024ULL;
+	constexpr zip_uint64_t maximumMetadataSize = 16ULL * 1024ULL * 1024ULL;
+	const bool validEntries = readZipEntry(archive, "divelog.xml", &contents->divelogXml, maximumDiveLogSize) &&
+		readZipEntry(archive, "manifest.json", &manifestData, maximumManifestSize) &&
+		readZipEntry(archive, "neo-metadata.json", &metadataData, maximumMetadataSize);
 	zip_close(archive);
 	QJsonParseError manifestError;
 	QJsonParseError metadataError;
@@ -1985,9 +1998,11 @@ static bool readNeoBackupBundle(const QString &fileName, neo_backup_contents *co
 	const QJsonObject manifest = manifestDocument.object();
 	contents->manifest = manifest;
 	contents->metadata = metadataDocument.object();
+	const QString expectedDiveLogChecksum = manifest.value("divelogSha256").toString();
+	const QString actualDiveLogChecksum = QString::fromLatin1(QCryptographicHash::hash(contents->divelogXml, QCryptographicHash::Sha256).toHex());
 	if (!validEntries || contents->divelogXml.isEmpty() || manifestError.error != QJsonParseError::NoError ||
 		metadataError.error != QJsonParseError::NoError || !manifestDocument.isObject() || !metadataDocument.isObject() || manifest.value("format").toString() != "subsurface-neo" ||
-		manifest.value("version").toInt() != 1) {
+		manifest.value("version").toInt() != 1 || (!expectedDiveLogChecksum.isEmpty() && expectedDiveLogChecksum.compare(actualDiveLogChecksum, Qt::CaseInsensitive) != 0)) {
 		*error = QMLManager::tr("This file is not a valid Subsurface Neo backup package.");
 		return false;
 	}
@@ -2137,6 +2152,7 @@ QString QMLManager::createNeoBackupBundle(const QString &directory)
 	neoMetadata.insert("plannerPresets", QJsonValue::fromVariant(settings.value("subsurface-neo/planner/presets")));
 	const QJsonObject equipment = neoMetadata.value("equipmentKits").toObject();
 	QJsonObject manifest { { "format", "subsurface-neo" }, { "version", 1 }, { "createdAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+		{ "divelogSha256", QString::fromLatin1(QCryptographicHash::hash(xmlData, QCryptographicHash::Sha256).toHex()) },
 		{ "dives", static_cast<int>(divelog.dives.size()) }, { "sites", static_cast<int>(divelog.sites.size()) },
 		{ "equipmentKits", static_cast<int>(equipment.value("kits").toArray().size()) }, { "equipmentItems", static_cast<int>(equipment.value("equipmentItems").toArray().size()) },
 		{ "collections", static_cast<int>(neoMetadata.value("collections").toArray().size()) }, { "plannerPresets", static_cast<int>(neoMetadata.value("plannerPresets").toArray().size()) } };

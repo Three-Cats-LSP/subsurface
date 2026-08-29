@@ -49,4 +49,14 @@ for fragment in (
 	if fragment not in windows:
 		raise SystemExit(f"Windows --user data isolation is missing: {fragment}")
 
+for fragment in (
+	"maximumDiveLogSize",
+	"maximumManifestSize",
+	"maximumMetadataSize",
+	'QCryptographicHash::hash(contents->divelogXml, QCryptographicHash::Sha256)',
+	'{ "divelogSha256", QString::fromLatin1(QCryptographicHash::hash(xmlData, QCryptographicHash::Sha256).toHex()) }',
+):
+	if fragment not in manager:
+		raise SystemExit(f"Neo backup size/integrity contract is missing: {fragment}")
+
 print("Neo populated-log and transactional site-edit contracts validated")
