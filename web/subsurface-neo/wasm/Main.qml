@@ -967,8 +967,14 @@ ApplicationWindow {
 						NeoField { Layout.fillWidth: true; text: webPlanner.bottomTimeMinutes.toString(); placeholderText: qsTr("Bottom time (min)"); validator: IntValidator { bottom: 1; top: 600 } onEditingFinished: webPlanner.bottomTimeMinutes = Number(text) }
 						NeoField { Layout.fillWidth: true; text: webPlanner.ascentRate.toFixed(1); placeholderText: qsTr("Ascent rate (m/min)"); validator: DoubleValidator { bottom: 1; top: 30 } onEditingFinished: webPlanner.ascentRate = Number(text) }
 						NeoField { Layout.fillWidth: true; text: webPlanner.gas; placeholderText: qsTr("Gas"); onEditingFinished: webPlanner.gas = text }
+						NeoField { Layout.fillWidth: true; text: webPlanner.sacRate.toFixed(1); placeholderText: qsTr("SAC (L/min)"); validator: DoubleValidator { bottom: 5; top: 100 } onEditingFinished: webPlanner.sacRate = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.cylinderVolume.toFixed(1); placeholderText: qsTr("Cylinder (L)"); validator: DoubleValidator { bottom: 1; top: 40 } onEditingFinished: webPlanner.cylinderVolume = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.startPressure.toString(); placeholderText: qsTr("Start pressure (bar)"); validator: IntValidator { bottom: 50; top: 400 } onEditingFinished: webPlanner.startPressure = Number(text) }
+						NeoField { Layout.fillWidth: true; text: webPlanner.reservePressure.toString(); placeholderText: qsTr("Reserve (bar)"); validator: IntValidator { bottom: 0; top: 399 } onEditingFinished: webPlanner.reservePressure = Number(text) }
 					}
+					NeoButton { text: webPlanner.safetyStop ? qsTr("Safety stop: 3 min at 5 m") : qsTr("Safety stop: Off"); onClicked: webPlanner.safetyStop = !webPlanner.safetyStop }
 					Text { text: webPlanner.summary; color: webPlanner.valid ? window.accent : "#ff8f8f"; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+					Text { visible: webPlanner.gasSummary.length > 0; text: webPlanner.gasSummary; color: webPlanner.gasAdequate ? window.accent : "#ff8f8f"; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					Text { text: webPlanner.warning; color: "#f1ae45"; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					Repeater {
 						model: webPlanner.waypoints

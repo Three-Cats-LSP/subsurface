@@ -17,7 +17,7 @@ The current bootstrap provides:
 - selectable dive-detail pages with recorded profile samples;
 - durable IndexedDB-backed browser editing for location, buddy, notes, mode, gas, and gear, with explicit restore and forget controls;
 - selected-dive JSON, dive-list CSV, and native XML session-backup downloads;
-- a responsive draft-planner workspace with explicit native-planner safety warnings;
+- a responsive draft-planner workspace with SAC/cylinder/reserve gas estimates, configurable safety stops, and explicit native-planner safety warnings;
 - a revision/checksum cloud-manifest conflict preview that never overwrites silently;
 - an interactive depth, temperature, NDL, and cylinder-pressure chart;
 - recorded TTS, deco-stop, CNS, and CCR-setpoint values in the sample inspector;
