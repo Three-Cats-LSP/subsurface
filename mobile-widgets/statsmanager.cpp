@@ -50,6 +50,23 @@ static void setBinnerList(const StatsState::BinnerList &list, QStringList &strin
 void StatsManager::updateUi()
 {
 	uiState = state.getUIState();
+	QString newChartTitle;
+	QString newChartSubtype;
+	for (const StatsState::Chart &chart: uiState.charts.charts) {
+		if (chart.id == uiState.charts.selected) {
+			newChartTitle = chart.name;
+			newChartSubtype = chart.subtypeName;
+			break;
+		}
+	}
+	if (chartTitle != newChartTitle) {
+		chartTitle = newChartTitle;
+		emit chartTitleChanged();
+	}
+	if (chartSubtype != newChartSubtype) {
+		chartSubtype = newChartSubtype;
+		emit chartSubtypeChanged();
+	}
 	setVariableList(uiState.var1, var1List, var1Index);
 	setBinnerList(uiState.binners1, binner1List, binner1Index);
 	setVariableList(uiState.var2, var2List, var2Index);

@@ -45,6 +45,8 @@ require(
 		'objectName: "NeoStatisticsControls"',
 		'columns: page.wideLayout ? 3 : 2',
 		'statsManager.setDarkThemeOverride(true)',
+		'statsManager.chartTitle.length > 0',
+		'statsManager.chartSubtype.length > 0',
 	),
 	"Neo statistics",
 )
@@ -69,6 +71,7 @@ require(
 	(
 		"void StatsManager::setDarkThemeOverride(bool enabled)",
 		"darkThemeOverride || theme == \"Dark\"",
+		"chart.id == uiState.charts.selected",
 	),
 	"Neo statistics theme bridge",
 )

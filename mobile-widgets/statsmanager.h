@@ -24,6 +24,8 @@ public:
 	Q_PROPERTY(int binner2Index MEMBER binner2Index NOTIFY binner2IndexChanged)
 	Q_PROPERTY(int operation2Index MEMBER operation2Index NOTIFY operation2IndexChanged)
 	Q_PROPERTY(int sortMode1Index MEMBER sortMode1Index NOTIFY sortMode1IndexChanged)
+	Q_PROPERTY(QString chartTitle MEMBER chartTitle NOTIFY chartTitleChanged)
+	Q_PROPERTY(QString chartSubtype MEMBER chartSubtype NOTIFY chartSubtypeChanged)
 
 	StatsManager();
 	~StatsManager();
@@ -50,6 +52,8 @@ signals:
 	void binner2IndexChanged();
 	void operation2IndexChanged();
 	void sortMode1IndexChanged();
+	void chartTitleChanged();
+	void chartSubtypeChanged();
 private slots:
 	void themeChanged();
 private:
@@ -68,6 +72,8 @@ private:
 	int binner2Index;
 	int operation2Index;
 	int sortMode1Index;
+	QString chartTitle;
+	QString chartSubtype;
 	StatsState::UIState uiState;	// Remember UI state so that we can interpret indexes
 	bool themeInitialized;		// setTheme() crashes if called in init()
 	bool darkThemeOverride = false;	// Neo always uses its dark canvas, independently of the legacy preference.

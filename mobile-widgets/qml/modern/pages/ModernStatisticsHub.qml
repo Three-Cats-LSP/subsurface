@@ -116,8 +116,20 @@ Kirigami.ScrollablePage {
 				ColumnLayout {
 					Layout.fillWidth: true
 					spacing: 1
-					Text { text: qsTr("Dive activity"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-					Text { visible: page.wideLayout; text: qsTr("Calculated from the current log and active filters"); color: tokens.textMuted; font.pixelSize: 10 }
+					Text {
+						text: statsManager.chartTitle.length > 0 ? statsManager.chartTitle : qsTr("Dive activity")
+						color: tokens.textPrimary
+						font.pixelSize: 18
+						font.weight: Font.DemiBold
+					}
+					Text {
+						visible: page.wideLayout
+						text: statsManager.chartSubtype.length > 0
+							? qsTr("%1 · calculated from the current log and active filters").arg(statsManager.chartSubtype)
+							: qsTr("Calculated from the current log and active filters")
+						color: tokens.textMuted
+						font.pixelSize: 10
+					}
 				}
 				Components.NeoButton {
 					text: page.wideLayout ? qsTr("Chart type") : qsTr("Chart")
