@@ -7,6 +7,7 @@ on:
     branches: [modern-ui]
     paths:
       - '.github/workflows/neo-qml-validation.yml'
+      - 'mobile-widgets/qml/main.qml'
       - 'mobile-widgets/qml/modern/**'
       - 'web/subsurface-neo/wasm/**.qml'
 
@@ -34,6 +35,7 @@ jobs:
           fi
           test -x "$QMLFORMAT"
           mapfile -d '' files < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f -name '*.qml' -print0)
+          files+=(mobile-widgets/qml/main.qml)
           test "${#files[@]}" -gt 0
           for file in "${files[@]}"; do
             echo "Parsing $file"
@@ -50,6 +52,7 @@ jobs:
           fi
           test -x "$LUPDATE"
           mapfile -d '' sources < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f \( -name '*.qml' -o -name '*.cpp' -o -name '*.h' \) -print0)
+          sources+=(mobile-widgets/qml/main.qml)
           "$LUPDATE" "${sources[@]}" -no-obsolete -ts /tmp/subsurface-neo-source.ts
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
