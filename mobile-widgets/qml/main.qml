@@ -330,7 +330,7 @@ Kirigami.ApplicationWindow {
 					width: Math.min(implicitWidth, parent.width)
 					Layout.margins: Kirigami.Units.smallSpacing
 					Image {
-						source: "qrc:/qml/subsurface-mobile-icon.png"
+						source: "qrc:/qml/subsurface-neo-icon.svg"
 						fillMode: Image.PreserveAspectCrop
 						sourceSize.width: Kirigami.Units.iconSizes.large
 						width: Kirigami.Units.iconSizes.large
@@ -730,6 +730,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		// pages like Settings and DiveDetailsEdit need at least ~24 gridUnits
 		// to avoid clipping content in two-column mode
 		var numColumns = Math.max(Math.floor(rootItem.width / (24 * kirigamiGridUnit)), 1)
+		// Neo's Windows shell is a single-workspace application. Let each page use
+		// the full content area instead of pinning the dashboard beside every
+		// destination as an unrelated narrow column.
+		if (Qt.platform.os === "windows")
+			numColumns = 1
 		if (Screen.primaryOrientation === Qt.PortraitOrientation && PrefDisplay.singleColumnPortrait) {
 			manager.appendTextToLog("show only one column in portrait mode");
 			numColumns = 1;

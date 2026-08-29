@@ -14,6 +14,10 @@ Kirigami.ScrollablePage {
 	property bool wideLayout: width >= 760
 	property bool manualUpdateCheck: false
 	Modern.DesignTokens { id: tokens }
+	onVisibleChanged: {
+		if (visible)
+			Qt.callLater(function() { updateButton.forceActiveFocus(Qt.TabFocusReason) })
+	}
 
 	function openLink(url) { Qt.openUrlExternally(url) }
 
@@ -42,7 +46,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				spacing: tokens.space16
 				Image {
-					source: "qrc:/qml/subsurface-mobile-icon.png"
+					source: "qrc:/qml/subsurface-neo-icon.svg"
 					Layout.preferredWidth: page.wideLayout ? 96 : 72
 					Layout.preferredHeight: page.wideLayout ? 96 : 72
 					fillMode: Image.PreserveAspectFit
@@ -71,6 +75,7 @@ Kirigami.ScrollablePage {
 					font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
 				}
 				Button {
+					id: updateButton
 					Layout.fillWidth: true
 					enabled: !NeoUpdate.checking
 					text: NeoUpdate.checking ? qsTr("Checking…") : (NeoUpdate.updateAvailable ? qsTr("Download %1").arg(NeoUpdate.latestVersion) : qsTr("Check for updates"))

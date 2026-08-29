@@ -149,7 +149,7 @@ Kirigami.ScrollablePage {
 		}
 		Image {
 			id: image
-			source: "qrc:/qml/subsurface-mobile-icon.png"
+			source: "qrc:/qml/subsurface-neo-icon.svg"
 			fillMode: Image.PreserveAspectCrop
 			Layout.alignment: Qt.AlignHCenter + Qt.AlignVCenter
 			Layout.maximumWidth: pageWidth / 2

@@ -5,6 +5,7 @@
         <file alias="star-icon">icons/star.svg</file>
         <file alias="subsurface-icon">icons/subsurface-icon.svg</file>
         <file alias="subsurface-mobile-icon">icons/subsurface-mobile-icon.png</file>
+        <file alias="subsurface-neo-icon">icons/subsurface-neo-icon.svg</file>
         <file alias="list-add-icon">icons/plus.png</file>
         <file alias="list-remove-icon">icons/trash.png</file>
         <file alias="list-remove-disabled-icon">icons/trash-forbidden.png</file>

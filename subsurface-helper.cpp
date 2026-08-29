@@ -175,7 +175,7 @@ void run_mobile_ui(double initial_font_size)
 		exit(1);
 	}
 	QQuickWindow *qml_window = qobject_cast<QQuickWindow *>(qqWindowObject);
-	qml_window->setIcon(QIcon(":subsurface-mobile-icon"));
+	qml_window->setIcon(QIcon(":subsurface-neo-icon"));
 	report_info("qqwindow devicePixelRatio %f %f", qml_window->devicePixelRatio(), qml_window->screen()->devicePixelRatio());
 	QScreen *screen = qml_window->screen();
 	int qmlWW = qml_window->width();

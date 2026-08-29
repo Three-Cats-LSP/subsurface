@@ -85,6 +85,7 @@
 		<file>icons/dive.jpg</file>
 		<file alias="nocloud.svg">icons/nocloud.svg</file>
 		<file alias="subsurface-mobile-icon.png">../../icons/subsurface-mobile-icon.png</file>
+		<file alias="subsurface-neo-icon.svg">../../icons/subsurface-neo-icon.svg</file>
 	</qresource>
 
 	<qresource prefix="/">

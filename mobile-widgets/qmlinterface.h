@@ -248,11 +248,26 @@ public slots:
 		//TODO: Actually change the dive mode in the dive here - this will need untangling to enable access to the dive
 		DivePlannerPointsModel::instance()->cylindersChanged();
 	}
-	void set_planner_deco_mode(DECO_MODE value) { PlannerShared::set_planner_deco_mode((deco_mode)value); }
+	void set_planner_deco_mode(DECO_MODE value) {
+		if (planner_deco_mode() == value)
+			return;
+		PlannerShared::set_planner_deco_mode((deco_mode)value);
+		emit planner_deco_modeChanged(value);
+	}
 	void set_reserve_gas(int value) { PlannerShared::set_reserve_gas(value); }
 	void set_safetystop(bool value) { DivePlannerPointsModel::instance()->setSafetyStop(value); }
-	void set_planner_gflow(int value) { DivePlannerPointsModel::instance()->setGFLow(value); }
-	void set_planner_gfhigh(int value) { DivePlannerPointsModel::instance()->setGFHigh(value); }
+	void set_planner_gflow(int value) {
+		if (planner_gflow() == value)
+			return;
+		DivePlannerPointsModel::instance()->setGFLow(value);
+		emit planner_gflowChanged(value);
+	}
+	void set_planner_gfhigh(int value) {
+		if (planner_gfhigh() == value)
+			return;
+		DivePlannerPointsModel::instance()->setGFHigh(value);
+		emit planner_gfhighChanged(value);
+	}
 	void set_vpmb_conservatism(int value) { DivePlannerPointsModel::instance()->setVpmbConservatism(value); }
 	void set_dobailout(bool value) { PlannerShared::set_dobailout(value); }
 	void set_drop_stone_mode(bool value) { DivePlannerPointsModel::instance()->setDropStoneMode(value); }
