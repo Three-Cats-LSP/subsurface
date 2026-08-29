@@ -56,6 +56,9 @@ require(
 		'onMapRequested: showPageFromDrawer(mapPage)',
 		'onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)',
 		'onOpenSites: showPageFromDrawer(neoSitesHub)',
+		'if (neoDesktopShellActive) {',
+		'pageStack.push(page)',
+		'pageStack.lastItem?.objectName',
 	),
 	"Neo navigation",
 )

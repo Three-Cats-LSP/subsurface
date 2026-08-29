@@ -227,6 +227,13 @@ Kirigami.ApplicationWindow {
 	function showPageFromDrawer(page) {
 		detailsWindow.endEditMode()
 		pageStack.clear()
+		// The desktop sidebar is the navigation root. Keeping Dashboard under
+		// every destination lets Kirigami expose both pages side-by-side on very
+		// wide windows, which breaks the single-workspace Neo layout.
+		if (neoDesktopShellActive) {
+			pageStack.push(page)
+			return
+		}
 		pageStack.push(neoDashboard)
 		if (page !== neoDashboard)
 			showPage(page)
@@ -913,7 +920,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					manager.appendTextToLog("pageStack forced back to map")
 				}
 			} else if (pageStack.currentItem.objectName !== mapPage.objectName &&
-					   pageStack.lastItem.objectName === mapPage.objectName &&
+					   pageStack.lastItem?.objectName === mapPage.objectName &&
 					   hackToOpenMap === 1 /* MapSelected */) {
 				// if we just picked the mapPage and are suddenly back on a different page
 				// force things back to the mapPage
