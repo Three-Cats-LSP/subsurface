@@ -68,8 +68,100 @@ static QMap<color_index_t, std::array<QColor, 2>> profile_color = {
 	{ DURATION_LINE, {{ BLACK1, BLACK1_LOW_TRANS }} }
 };
 
+static thread_local bool use_neo_profile_colors = false;
+
+static QColor neoProfileColor(color_index_t i)
+{
+	switch (i) {
+	case BACKGROUND:
+		return QColor("#06111E");
+	case BACKGROUND_TRANS:
+		return QColor(6, 17, 30, 150);
+	case TEXT_BACKGROUND:
+		return QColor(10, 32, 51, 238);
+	case TIME_GRID:
+	case DEPTH_GRID:
+	case BOUNDING_BOX:
+	case HR_AXIS:
+		return QColor("#1E3B50");
+	case TIME_TEXT:
+	case TEMP_TEXT:
+	case PRESSURE_TEXT:
+	case HR_TEXT:
+	case SAC_DEFAULT:
+	case DURATION_LINE:
+		return QColor("#8FB7D1");
+	case DEPTH_TOP:
+		return QColor(56, 163, 255, 52);
+	case DEPTH_BOTTOM:
+		return QColor(56, 163, 255, 115);
+	case SAMPLE_DEEP:
+	case SAMPLE_SHALLOW:
+		return QColor("#38A3FF");
+	case SMOOTHED:
+	case TEMP_PLOT:
+		return QColor("#22D4EB");
+	case MEAN_DEPTH:
+	case HR_PLOT:
+	case EVENTS:
+		return QColor("#FF6B7A");
+	case CEILING_SHALLOW:
+		return QColor(255, 107, 122, 54);
+	case CEILING_DEEP:
+		return QColor(255, 107, 122, 105);
+	case CALC_CEILING_SHALLOW:
+		return QColor(34, 212, 235, 48);
+	case CALC_CEILING_DEEP:
+		return QColor(56, 163, 255, 90);
+	case TISSUE_PERCENTAGE:
+		return QColor("#D86CF0");
+	case ALERT_BG:
+		return QColor("#5B2633");
+	case ALERT_FG:
+	case PO2_ALERT:
+	case PN2_ALERT:
+	case PHE_ALERT:
+		return QColor("#FF6B7A");
+	case PO2:
+		return QColor("#36D98B");
+	case PN2:
+		return QColor("#22D4EB");
+	case PHE:
+		return QColor("#D86CF0");
+	case O2SETPOINT:
+	case SCR_OCPO2:
+		return QColor("#F4C430");
+	case CCRSENSOR1:
+		return QColor("#22D4EB");
+	case CCRSENSOR2:
+		return QColor("#38A3FF");
+	case CCRSENSOR3:
+		return QColor("#D86CF0");
+	case PP_LINES:
+		return QColor(143, 183, 209, 105);
+	case MINUTE:
+		return QColor(30, 59, 80, 95);
+	default:
+		break;
+	}
+	return profile_color.value(i, std::array<QColor, 2>{ QColor(Qt::black), QColor(Qt::black) })[0];
+}
+
+ScopedProfileColorTheme::ScopedProfileColorTheme(bool neoEnabled) :
+	previous(use_neo_profile_colors)
+{
+	use_neo_profile_colors = neoEnabled;
+}
+
+ScopedProfileColorTheme::~ScopedProfileColorTheme()
+{
+	use_neo_profile_colors = previous;
+}
+
 QColor getColor(const color_index_t i, bool isGrayscale)
 {
+	if (use_neo_profile_colors && !isGrayscale)
+		return neoProfileColor(i);
 	if (profile_color.count() > i && i >= 0)
 		return profile_color[i][isGrayscale ? 1 : 0];
 	return QColor(Qt::black);
@@ -91,6 +183,10 @@ QColor getSacColor(int sac, int avg_sac)
 QColor getPressureColor(double density)
 {
 	QColor color;
+	if (use_neo_profile_colors) {
+		const qreal bounded = qBound(0.0, density / 8.0, 1.0);
+		return QColor::fromRgbF(0.14 + 0.82 * bounded, 0.83 - 0.46 * bounded, 0.56 - 0.42 * bounded);
+	}
 
 	int h = ((int) (180.0 - 180.0 * density / 8.0));
 	while (h < 0)

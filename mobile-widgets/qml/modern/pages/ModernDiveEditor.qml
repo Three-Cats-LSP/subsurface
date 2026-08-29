@@ -16,7 +16,6 @@ Kirigami.Page {
 	property bool newDive: false
 	property bool defaultKitApplied: false
 	signal saved()
-	signal advancedEditorRequested(int diveId)
 
 	Modern.DesignTokens { id: tokens }
 
@@ -29,10 +28,10 @@ Kirigami.Page {
 			return
 		manager.commitChanges(dive.id, numberField.text, dateField.text, locationField.text,
 			gpsField.text, durationField.text, depthField.text, airTempField.text,
-			waterTempField.text, suitField.text, buddyField.text, dive.diveGuide || "", composedTags(), modeBox.currentText,
-			dive.sumWeight || "", notesField.text, equipmentValues(dive.startPressure, startPressureField.text),
+			waterTempField.text, suitField.text, buddyField.text, diveGuideField.text, composedTags(), modeBox.currentText,
+			weightField.text, notesField.text, equipmentValues(dive.startPressure, startPressureField.text),
 			equipmentValues(dive.endPressure, endPressureField.text), equipmentValues(dive.firstGas, gasField.text), equipmentValues(dive.getCylinder, cylinderBox.currentText),
-			dive.rating || 0, dive.viz || 0, "view")
+			ratingBox.value, visibilityBox.value, "view")
 		saved()
 	}
 
@@ -234,8 +233,32 @@ Kirigami.Page {
 				Components.NeoTextField { id: locationField; Layout.fillWidth: true; placeholderText: qsTr("Dive site"); text: dive ? dive.location || "" : "" }
 				Components.NeoTextField { id: gpsField; Layout.fillWidth: true; placeholderText: qsTr("GPS coordinates"); text: dive ? dive.gps || "" : "" }
 				Components.NeoTextField { id: buddyField; Layout.fillWidth: true; placeholderText: qsTr("Buddy"); text: dive ? dive.buddy || "" : "" }
+				Components.NeoTextField { id: diveGuideField; Layout.fillWidth: true; placeholderText: qsTr("Dive guide"); text: dive ? dive.diveGuide || "" : "" }
 				Components.NeoTextField { id: suitField; Layout.fillWidth: true; placeholderText: qsTr("Suit / gear"); text: dive ? dive.suit || "" : "" }
 				Components.NeoTextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Additional tags"); text: page.additionalTags() }
+			}
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.leftMargin: tokens.space16
+				Layout.rightMargin: tokens.space16
+				Text { text: qsTr("Dive conditions"); color: tokens.textMuted; font.pixelSize: 10 }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: page.width >= 700 ? 2 : 1
+					columnSpacing: tokens.space12
+					rowSpacing: tokens.space8
+					ColumnLayout {
+						Layout.fillWidth: true
+						Text { text: qsTr("Rating"); color: tokens.textSecondary; font.pixelSize: 12 }
+						Components.NeoSpinBox { id: ratingBox; Layout.fillWidth: true; from: 0; to: 5; value: dive ? dive.rating || 0 : 0; accessibleName: qsTr("Dive rating") }
+					}
+					ColumnLayout {
+						Layout.fillWidth: true
+						Text { text: qsTr("Visibility"); color: tokens.textSecondary; font.pixelSize: 12 }
+						Components.NeoSpinBox { id: visibilityBox; Layout.fillWidth: true; from: 0; to: 5; value: dive ? dive.viz || 0 : 0; accessibleName: qsTr("Underwater visibility rating") }
+					}
+				}
 			}
 
 			Components.ModernCard {
@@ -252,16 +275,16 @@ Kirigami.Page {
 				Layout.rightMargin: tokens.space16
 				Layout.bottomMargin: tokens.space24
 				Text { text: qsTr("Cylinders and weights"); color: tokens.textMuted; font.pixelSize: 10 }
-				Text { Layout.fillWidth: true; text: qsTr("Choose the primary cylinder and gas here. Use the full editor for additional cylinders and weight-system changes."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap }
+				Text { Layout.fillWidth: true; text: qsTr("Primary cylinder, gas and weighting used for this dive."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap }
 				Components.NeoComboBox { id: cylinderBox; Layout.fillWidth: true; editable: true; model: dive ? dive.cylinderList : []; currentIndex: find(dive && dive.getCylinder && dive.getCylinder.length ? dive.getCylinder[0] : "") }
 				GridLayout {
 					Layout.fillWidth: true
-					columns: page.width >= 700 ? 3 : 1
+					columns: page.width >= 700 ? 2 : 1
 					Components.NeoTextField { id: gasField; Layout.fillWidth: true; placeholderText: qsTr("Gas mix"); text: dive && dive.firstGas && dive.firstGas.length ? dive.firstGas[0] : "" }
+					Components.NeoTextField { id: weightField; Layout.fillWidth: true; placeholderText: qsTr("Weight"); text: dive ? dive.sumWeight || "" : "" }
 					Components.NeoTextField { id: startPressureField; Layout.fillWidth: true; placeholderText: qsTr("Start pressure"); text: dive && dive.startPressure && dive.startPressure.length ? dive.startPressure[0] : "" }
 					Components.NeoTextField { id: endPressureField; Layout.fillWidth: true; placeholderText: qsTr("End pressure"); text: dive && dive.endPressure && dive.endPressure.length ? dive.endPressure[0] : "" }
 				}
-				Components.NeoButton { text: qsTr("Open full equipment editor"); onClicked: if (dive) advancedEditorRequested(dive.id) }
 			}
 		}
 	}

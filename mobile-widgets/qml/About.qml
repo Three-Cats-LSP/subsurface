@@ -48,11 +48,6 @@ Kirigami.ScrollablePage {
 				return
 			}
 			editorPage.saved.connect(function() { showPage(detailsPage) })
-			editorPage.advancedEditorRequested.connect(function(diveId) {
-				manager.selectDive(diveId)
-				showPage(detailsWindow)
-				detailsWindow.startEditMode()
-			})
 			showPage(editorPage)
 		})
 		showPage(detailsPage)

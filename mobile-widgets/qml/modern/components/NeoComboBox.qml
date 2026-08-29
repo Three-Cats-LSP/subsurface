@@ -43,11 +43,33 @@ ComboBox {
 	// Cover the complete non-editable control so the field body and chevron
 	// have identical dropdown behaviour.
 	MouseArea {
+		id: fieldMouseArea
 		anchors.fill: parent
 		enabled: control.enabled && !control.editable
 		hoverEnabled: true
+		preventStealing: true
+		z: 1000
 		cursorShape: Qt.PointingHandCursor
-		onClicked: control.popup.visible ? control.popup.close() : control.popup.open()
+		onPressed: function(mouse) {
+			mouse.accepted = true
+			control.forceActiveFocus()
+			if (control.popup.visible)
+				control.popup.close()
+			else
+				control.popup.open()
+		}
+	}
+	// Editable combos keep normal text selection/typing, while a tap anywhere in
+	// the field also reveals the available presets instead of requiring the
+	// narrow chevron target.
+	TapHandler {
+		enabled: control.enabled && control.editable
+		acceptedButtons: Qt.LeftButton
+		gesturePolicy: TapHandler.ReleaseWithinBounds
+		onTapped: {
+			control.forceActiveFocus()
+			control.popup.open()
+		}
 	}
 	delegate: ItemDelegate {
 		id: optionDelegate

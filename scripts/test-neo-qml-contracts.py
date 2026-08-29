@@ -166,7 +166,11 @@ require(
 		'Accessible.role: Accessible.ComboBox',
 		'MouseArea {',
 		'anchors.fill: parent',
-		'onClicked: control.popup.visible ? control.popup.close() : control.popup.open()',
+		'preventStealing: true',
+		'z: 1000',
+		'control.popup.open()',
+		'TapHandler {',
+		'enabled: control.enabled && control.editable',
 	),
 	"Neo selection accessibility",
 )
@@ -203,9 +207,19 @@ require(
 		'composedTags(), modeBox.currentText',
 		'name: "regulator"',
 		'name: "type"',
+		'id: diveGuideField',
+		'id: weightField',
+		'id: ratingBox',
+		'id: visibilityBox',
 	),
 	"Neo dive classification editor",
 )
+for removed_editor_route in (
+	'advancedEditorRequested',
+	'Open full equipment editor',
+):
+	if removed_editor_route in dive_editor:
+		raise AssertionError(f"Neo dive editor still exposes legacy full editor route: {removed_editor_route}")
 
 mobile_model = source("qt-models/mobilelistmodel.cpp")
 manager = source("mobile-widgets/qmlmanager.cpp")
@@ -224,14 +238,24 @@ qml_profile = source("profile-widget/qmlprofile.cpp")
 require(
 	profile_scene,
 	(
-		'static void applyNeoProfilePalette(QImage &image)',
-		'const QColor background("#06111E")',
-		'const QColor grid("#1E3B50")',
-		'if (neoTheme)',
+		'ScopedProfileColorTheme neoColors(neoTheme);',
+		'image.fill(getColor(::BACKGROUND, isGrayscale));',
 	),
 	"Neo profile palette",
 )
-require(qml_profile, ('m_profileWidget->setNeoTheme(true);',), "Neo QML profile theme bridge")
+require(qml_profile, ('ScopedProfileColorTheme neoColors(true);', 'm_profileWidget->setNeoTheme(true);'), "Neo QML profile theme bridge")
+
+color_source = source("core/color.cpp")
+require(
+	color_source,
+	(
+		'static thread_local bool use_neo_profile_colors = false;',
+		'static QColor neoProfileColor(color_index_t i)',
+		'return QColor("#06111E");',
+		'if (use_neo_profile_colors && !isGrayscale)',
+	),
+	"Neo native profile renderer palette",
+)
 
 cmake = source("CMakeLists.txt")
 require(

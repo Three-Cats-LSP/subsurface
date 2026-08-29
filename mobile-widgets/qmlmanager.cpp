@@ -1249,6 +1249,20 @@ static weight_t parseWeight(const QString &text)
 }
 
 // update the dive and return the notes field, stripped of the HTML junk
+static QString normalizeGasMixAlias(const QString &value)
+{
+	const QString simplified = value.simplified();
+	QRegularExpression nitroxExpression(QStringLiteral("^nitrox(?:\\s*(?:ean)?\\s*(\\d{1,2}))?\\s*%?$"),
+					      QRegularExpression::CaseInsensitiveOption);
+	const QRegularExpressionMatch nitroxMatch = nitroxExpression.match(simplified);
+	if (!nitroxMatch.hasMatch())
+		return simplified;
+	// A bare 'Nitrox' is the common recreational EAN32 preset.  Explicit
+	// percentages such as 'Nitrox 36' retain their requested oxygen fraction.
+	const QString oxygen = nitroxMatch.captured(1);
+	return QStringLiteral("EAN%1").arg(oxygen.isEmpty() ? QStringLiteral("32") : oxygen);
+}
+
 void QMLManager::commitChanges(QString diveId, QString number, QString date, QString location, QString gps, QString duration, QString depth,
 			       QString airtemp, QString watertemp, QString suit, QString buddy, QString diveGuide, QString tags, QString diveMode, QString weight, QString notes,
 			       QStringList startpressure, QStringList endpressure, QStringList gasmix, QStringList usedCylinder, int rating, int visibility, QString state)
@@ -1327,6 +1341,8 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 		startpressure = QStringList();
 	if (endpressure == QStringList(QString()))
 		endpressure = QStringList();
+	for (QString &mix : gasmix)
+		mix = normalizeGasMixAlias(mix);
 	if (formatStartPressure(d) != startpressure || formatEndPressure(d) != endpressure) {
 		diveChanged = true;
 		for ( int i = 0, j = 0 ; j < startpressure.length() && j < endpressure.length() ; i++ ) {

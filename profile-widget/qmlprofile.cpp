@@ -42,6 +42,7 @@ QMLProfile::~QMLProfile()
 
 void QMLProfile::createProfileView()
 {
+	ScopedProfileColorTheme neoColors(true);
 	m_profileWidget.reset(new ProfileScene(m_devicePixelRatio * 0.8, false, false));
 	m_profileWidget->setNeoTheme(true);
 }

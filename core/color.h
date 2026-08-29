@@ -151,4 +151,19 @@ QColor getColor(const color_index_t i, bool isGrayscale = false);
 QColor getSacColor(int sac, int diveSac);
 QColor getPressureColor(double density);
 
+// Profile colors are normally shared by the desktop profile renderer.  Neo uses
+// the same renderer with a scoped palette so that vector drawing, text and
+// antialiasing remain untouched.
+class ScopedProfileColorTheme {
+public:
+	explicit ScopedProfileColorTheme(bool neoEnabled);
+	~ScopedProfileColorTheme();
+
+	ScopedProfileColorTheme(const ScopedProfileColorTheme &) = delete;
+	ScopedProfileColorTheme &operator=(const ScopedProfileColorTheme &) = delete;
+
+private:
+	bool previous;
+};
+
 #endif // COLOR_H

@@ -28,6 +28,17 @@ Kirigami.ApplicationWindow {
 	Overlay.modal: Rectangle { color: "#99050A14" }
 	Overlay.modeless: Rectangle { color: "#66050A14" }
 
+	// Keep the application frame visually closed even when the page or desktop
+	// sidebar reaches the native window edge.
+	Rectangle {
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.bottom: parent.bottom
+		height: 1
+		color: "#1E3B50"
+		z: 10000
+	}
+
 	Shortcut {
 		sequence: "Tab"
 		enabled: pageStack.currentItem === neoAboutPage && neoAboutPage.keyboardEntryPending
@@ -1051,11 +1062,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				return
 			}
 			editorPage.saved.connect(function() { showPage(detailsPage) })
-			editorPage.advancedEditorRequested.connect(function(diveId) {
-				manager.selectDive(diveId)
-				showPage(detailsWindow)
-				detailsWindow.startEditMode()
-			})
 			showPage(editorPage)
 		})
 		showPage(detailsPage)
