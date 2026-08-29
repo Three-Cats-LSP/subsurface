@@ -37,15 +37,8 @@ Kirigami.ApplicationWindow {
 	footer: NeoComponents.NeoBottomNavigation {
 		id: neoBottomNavigation
 		visible: initialized && !neoDesktopShellActive && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
-			(pageStack.currentItem === neoDashboard ||
-			 pageStack.currentItem === modernDiveList ||
-			 pageStack.currentItem === neoSitesHub ||
-			 pageStack.currentItem === neoStatisticsHub ||
-			 pageStack.currentItem === mapPage ||
-			 pageStack.currentItem === statistics)
-		currentSection: pageStack.currentItem === modernDiveList ? "dives" :
-			(pageStack.currentItem === neoSitesHub || pageStack.currentItem === mapPage) ? "sites" :
-			(pageStack.currentItem === neoStatisticsHub || pageStack.currentItem === statistics) ? "stats" : "home"
+			rootItem.neoShowsBottomNavigation(pageStack.currentItem)
+		currentSection: rootItem.neoBottomSectionForPage(pageStack.currentItem)
 		onHomeRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
@@ -129,6 +122,26 @@ Kirigami.ApplicationWindow {
 		if (page === neoSettingsHub || page === settingsWindow || page === neoAboutPage || page === neoAccountSecurityPage)
 			return "settings"
 		return ""
+	}
+
+	function neoShowsBottomNavigation(page) {
+		return page === neoDashboard || page === modernDiveList || page === neoSitesHub ||
+			page === neoStatisticsHub || page === mapPage || page === statistics ||
+			page === neoMorePage || page === neoPlannerLab || page === cloudSyncPage ||
+			page === neoDiveComputerCenter || page === neoEquipmentLibrary || page === neoDataPortability ||
+			page === neoSettingsHub || page === neoAboutPage || page === neoAccountSecurityPage
+	}
+
+	function neoBottomSectionForPage(page) {
+		if (page === modernDiveList)
+			return "dives"
+		if (page === neoSitesHub || page === mapPage)
+			return "sites"
+		if (page === neoStatisticsHub || page === statistics)
+			return "stats"
+		if (page === neoDashboard)
+			return "home"
+		return "more"
 	}
 
 	function isBackgroundProgressMessage(message) {

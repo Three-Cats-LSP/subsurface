@@ -43,10 +43,14 @@ ToolBar {
 
 			delegate: ItemDelegate {
 				required property var modelData
+				objectName: "neoBottomNavigation-" + modelData.key
 				Layout.fillWidth: true
 				Layout.fillHeight: true
 				padding: 0
 				hoverEnabled: true
+				activeFocusOnTab: true
+				Accessible.name: modelData.label
+				Accessible.description: modelData.key === bar.currentSection ? qsTr("Current section") : ""
 
 				contentItem: Column {
 					anchors.centerIn: parent
