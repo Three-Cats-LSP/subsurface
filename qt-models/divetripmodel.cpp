@@ -307,6 +307,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::StartPressureRole: return formatStartPressure(d);
 	case MobileListModel::EndPressureRole: return formatEndPressure(d);
 	case MobileListModel::FirstGasRole: return formatFirstGas(d);
+	case MobileListModel::DiveModeRole: return QString::fromLatin1(divemode_text[(int)d->dcs[0].divemode]);
 	case MobileListModel::SelectedRole: return d->selected;
 	case MobileListModel::DiveInTripRole: return d->divetrip != NULL;
 	case MobileListModel::IsInvalidRole: return d->invalid;

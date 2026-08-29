@@ -88,6 +88,9 @@
 		<file alias="subsurface-mobile-icon.png">../../icons/subsurface-mobile-icon.png</file>
 		<file alias="subsurface-neo-icon.svg">../../icons/subsurface-neo-icon.svg</file>
 		<file alias="oxygen-tank-5232839.png">../../icons/oxygen-tank-5232839.png</file>
+		<file alias="container-16494765.png">../../icons/container-16494765.png</file>
+		<file alias="regulator-5158240.png">../../icons/regulator-5158240.png</file>
+		<file alias="spot-17916440.png">../../icons/spot-17916440.png</file>
 	</qresource>
 
 	<qresource prefix="/">

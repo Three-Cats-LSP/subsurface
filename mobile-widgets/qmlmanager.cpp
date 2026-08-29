@@ -1250,7 +1250,7 @@ static weight_t parseWeight(const QString &text)
 
 // update the dive and return the notes field, stripped of the HTML junk
 void QMLManager::commitChanges(QString diveId, QString number, QString date, QString location, QString gps, QString duration, QString depth,
-			       QString airtemp, QString watertemp, QString suit, QString buddy, QString diveGuide, QString tags, QString weight, QString notes,
+			       QString airtemp, QString watertemp, QString suit, QString buddy, QString diveGuide, QString tags, QString diveMode, QString weight, QString notes,
 			       QStringList startpressure, QStringList endpressure, QStringList gasmix, QStringList usedCylinder, int rating, int visibility, QString state)
 {
 	struct dive *orig = divelog.dives.get_by_uniq_id(diveId.toInt());
@@ -1273,6 +1273,7 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 		report_info("buddy   :'%s'", qPrintable(buddy));
 		report_info("diveGde :'%s'", qPrintable(diveGuide));
 		report_info("tags    :'%s'", qPrintable(tags));
+		report_info("divemode:'%s'", qPrintable(diveMode));
 		report_info("weight  :'%s'", qPrintable(weight));
 		report_info("state   :'%s'", qPrintable(state));
 	}
@@ -1401,6 +1402,20 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 			diveGuide = diveGuide.replace(QRegularExpression("\\s*,\\s*"), ", ");
 		diveChanged = true;
 		d->diveguide = diveGuide.toStdString();
+	}
+	if (!diveMode.trimmed().isEmpty()) {
+		int requestedMode = -1;
+		for (int mode = OC; mode <= FREEDIVE; ++mode) {
+			if (diveMode.compare(QString::fromLatin1(divemode_text[mode]), Qt::CaseInsensitive) == 0 ||
+			    diveMode.compare(gettextFromC::tr(divemode_text_ui[mode]), Qt::CaseInsensitive) == 0) {
+				requestedMode = mode;
+				break;
+			}
+		}
+		if (requestedMode >= 0 && static_cast<int>(d->dcs[0].divemode) != requestedMode) {
+			diveChanged = true;
+			d->dcs[0].divemode = static_cast<divemode_t>(requestedMode);
+		}
 	}
 	// normalize the tag list we have and the one we get from the UI
 	// try hard to deal with accidental white space issues

@@ -45,11 +45,7 @@ Canvas {
 			ctx.beginPath(); ctx.moveTo(12, 17); ctx.lineTo(12, 7); ctx.arc(14, 7, 2, Math.PI, 0); ctx.lineTo(16, 17); ctx.stroke()
 			line(ctx, [14, 10, 14, 20])
 		} else if (name === "gas") {
-			ctx.beginPath(); ctx.moveTo(10, 8); ctx.lineTo(10, 23); ctx.quadraticCurveTo(10, 26, 13, 26); ctx.lineTo(17, 26); ctx.quadraticCurveTo(20, 26, 20, 23); ctx.lineTo(20, 10); ctx.quadraticCurveTo(20, 8, 17, 7); ctx.lineTo(13, 7); ctx.quadraticCurveTo(10, 8, 10, 10); ctx.stroke()
-			line(ctx, [13, 7, 13, 4, 17, 4, 17, 7]); line(ctx, [12, 4, 18, 4]); line(ctx, [15, 4, 15, 2])
-			ctx.beginPath(); ctx.arc(15, 2, 1.3, 0, Math.PI * 2); ctx.stroke()
-			ctx.beginPath(); ctx.roundedRect(6, 3, 7, 4, 2, 2); ctx.stroke()
-			line(ctx, [17, 3, 20, 3, 20, 6, 17, 6]); line(ctx, [18, 11, 19, 12, 19, 14]); line(ctx, [19, 16, 19, 20])
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "gear") {
 			ctx.beginPath(); ctx.ellipse(10, 2, 8, 3); ctx.stroke()
 			ctx.beginPath(); ctx.moveTo(10, 5); ctx.quadraticCurveTo(5, 7, 5, 14); ctx.lineTo(5, 18); ctx.lineTo(23, 18); ctx.lineTo(23, 14); ctx.quadraticCurveTo(23, 7, 18, 5); ctx.stroke()
@@ -69,11 +65,9 @@ Canvas {
 		} else if (name === "tank") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
-			ctx.beginPath(); ctx.arc(10, 11, 5, 0, Math.PI * 2); ctx.stroke()
-			ctx.beginPath(); ctx.arc(10, 11, 1.5, 0, Math.PI * 2); ctx.stroke()
-			ctx.beginPath(); ctx.moveTo(15, 11); ctx.bezierCurveTo(23, 11, 23, 18, 18, 19); ctx.stroke()
-			ctx.beginPath(); ctx.rect(15, 17, 7, 5); ctx.stroke()
-			line(ctx, [17, 19.5, 20, 19.5])
+			// Rendered by the attributed Flaticon source below.
+		} else if (name === "type") {
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "boat") {
 			line(ctx, [5, 16, 23, 16, 20, 21, 9, 21, 5, 16])
 			line(ctx, [9, 16, 11, 10, 19, 10, 21, 16]); line(ctx, [13, 10, 13, 7, 18, 10])
@@ -149,6 +143,63 @@ Canvas {
 		anchors.fill: oxygenTankSource
 		visible: oxygenTankSource.visible
 		source: oxygenTankSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: gasContainerSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.08))
+		visible: icon.name === "gas"
+		source: "qrc:/qml/container-16494765.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: gasContainerSource
+		visible: gasContainerSource.visible
+		source: gasContainerSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: regulatorSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "regulator"
+		source: "qrc:/qml/regulator-5158240.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: regulatorSource
+		visible: regulatorSource.visible
+		source: regulatorSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: diveTypeSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "type"
+		source: "qrc:/qml/spot-17916440.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: diveTypeSource
+		visible: diveTypeSource.visible
+		source: diveTypeSource
 		color: icon.iconColor
 		cached: true
 	}

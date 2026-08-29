@@ -29,11 +29,39 @@ Kirigami.Page {
 			return
 		manager.commitChanges(dive.id, numberField.text, dateField.text, locationField.text,
 			gpsField.text, durationField.text, depthField.text, airTempField.text,
-			waterTempField.text, suitField.text, buddyField.text, dive.diveGuide || "", tagsField.text,
+			waterTempField.text, suitField.text, buddyField.text, dive.diveGuide || "", composedTags(), modeBox.currentText,
 			dive.sumWeight || "", notesField.text, equipmentValues(dive.startPressure, startPressureField.text),
 			equipmentValues(dive.endPressure, endPressureField.text), equipmentValues(dive.firstGas, gasField.text), equipmentValues(dive.getCylinder, cylinderBox.currentText),
 			dive.rating || 0, dive.viz || 0, "view")
 		saved()
+	}
+
+	function primaryDiveType() {
+		if (!dive || !dive.tags)
+			return ""
+		return String(dive.tags).split(",")[0].trim()
+	}
+
+	function additionalTags() {
+		if (!dive || !dive.tags)
+			return ""
+		var values = String(dive.tags).split(",")
+		values.shift()
+		return values.join(",").trim()
+	}
+
+	function composedTags() {
+		var values = []
+		var requestedType = typeBox.currentText.trim()
+		var remaining = tagsField.text.split(",")
+		if (requestedType.length > 0)
+			values.push(requestedType)
+		for (var i = 0; i < remaining.length; ++i) {
+			var tag = remaining[i].trim()
+			if (tag.length > 0 && values.indexOf(tag) < 0)
+				values.push(tag)
+		}
+		return values.join(", ")
 	}
 
 	function equipmentValues(original, replacement) {
@@ -151,12 +179,63 @@ Kirigami.Page {
 				Layout.fillWidth: true
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
+				Text { text: qsTr("Dive classification"); color: tokens.textMuted; font.pixelSize: 10 }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: page.width >= 700 ? 2 : 1
+					columnSpacing: tokens.space12
+					rowSpacing: tokens.space8
+					RowLayout {
+						Layout.fillWidth: true
+						Components.NeoDiveIcon { name: "regulator"; iconColor: tokens.accent; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 3
+							Text { text: qsTr("MODE"); color: tokens.textMuted; font.pixelSize: 9; font.weight: Font.DemiBold }
+							Components.NeoComboBox {
+								id: modeBox
+								Layout.fillWidth: true
+								model: ["OC", "CCR", "PSCR", qsTr("Freedive")]
+								currentIndex: Math.max(0, find(dive && dive.diveMode ? dive.diveMode : "OC"))
+							}
+						}
+					}
+					RowLayout {
+						Layout.fillWidth: true
+						Components.NeoDiveIcon { name: "type"; iconColor: tokens.accent; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+						ColumnLayout {
+							Layout.fillWidth: true
+							spacing: 3
+							Text { text: qsTr("TYPE"); color: tokens.textMuted; font.pixelSize: 9; font.weight: Font.DemiBold }
+							Components.NeoComboBox {
+								id: typeBox
+								Layout.fillWidth: true
+								editable: true
+								model: [qsTr("Boat"), qsTr("Shore"), qsTr("Pool"), qsTr("Cave"), qsTr("Wreck"), qsTr("Training"), qsTr("Other")]
+								Component.onCompleted: {
+									var initialType = page.primaryDiveType()
+									var typeIndex = find(initialType)
+									if (typeIndex >= 0)
+										currentIndex = typeIndex
+									else
+										editText = initialType
+								}
+							}
+						}
+					}
+				}
+			}
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.leftMargin: tokens.space16
+				Layout.rightMargin: tokens.space16
 				Text { text: qsTr("People and place"); color: tokens.textMuted; font.pixelSize: 10 }
 				Components.NeoTextField { id: locationField; Layout.fillWidth: true; placeholderText: qsTr("Dive site"); text: dive ? dive.location || "" : "" }
 				Components.NeoTextField { id: gpsField; Layout.fillWidth: true; placeholderText: qsTr("GPS coordinates"); text: dive ? dive.gps || "" : "" }
 				Components.NeoTextField { id: buddyField; Layout.fillWidth: true; placeholderText: qsTr("Buddy"); text: dive ? dive.buddy || "" : "" }
 				Components.NeoTextField { id: suitField; Layout.fillWidth: true; placeholderText: qsTr("Suit / gear"); text: dive ? dive.suit || "" : "" }
-				Components.NeoTextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Tags"); text: dive ? dive.tags || "" : "" }
+				Components.NeoTextField { id: tagsField; Layout.fillWidth: true; placeholderText: qsTr("Additional tags"); text: page.additionalTags() }
 			}
 
 			Components.ModernCard {

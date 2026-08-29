@@ -112,6 +112,11 @@ require(
 		'property var modelData: ({',
 		'"getCylinder": model.getCylinder',
 		'"cylinderList": model.cylinderList',
+		'"diveMode": model.diveMode',
+		'function primaryGas()',
+		'value: delegateRoot.primaryGas().length > 0 ? delegateRoot.primaryGas()',
+		'label: qsTr("Tank")',
+		'iconName: "type"',
 		'Accessible.name: qsTr("Dive details for %1")',
 	),
 	"Neo populated dive details",
@@ -180,9 +185,38 @@ require(
 	(
 		'import Qt5Compat.GraphicalEffects',
 		'source: "qrc:/qml/oxygen-tank-5232839.png"',
+		'source: "qrc:/qml/container-16494765.png"',
+		'source: "qrc:/qml/regulator-5158240.png"',
+		'source: "qrc:/qml/spot-17916440.png"',
 		'ColorOverlay {',
 	),
 	"Neo attributed dive icon",
+)
+
+dive_editor = source("mobile-widgets/qml/modern/pages/ModernDiveEditor.qml")
+require(
+	dive_editor,
+	(
+		'Text { text: qsTr("Dive classification")',
+		'id: modeBox',
+		'id: typeBox',
+		'composedTags(), modeBox.currentText',
+		'name: "regulator"',
+		'name: "type"',
+	),
+	"Neo dive classification editor",
+)
+
+mobile_model = source("qt-models/mobilelistmodel.cpp")
+manager = source("mobile-widgets/qmlmanager.cpp")
+require(mobile_model, ('roles[DiveModeRole] = "diveMode"',), "Neo dive mode role")
+require(
+	manager,
+	(
+		'QString tags, QString diveMode, QString weight',
+		'd->dcs[0].divemode = static_cast<divemode_t>(requestedMode)',
+	),
+	"Neo dive mode persistence",
 )
 
 profile_scene = source("profile-widget/profilescene.cpp")

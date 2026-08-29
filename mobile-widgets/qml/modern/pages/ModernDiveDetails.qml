@@ -112,6 +112,7 @@ Kirigami.Page {
 				"duration": model.duration,
 				"waterTemp": model.waterTemp,
 				"firstGas": model.firstGas,
+				"diveMode": model.diveMode,
 				"cylinder": model.cylinder,
 				"suit": model.suit,
 				"tags": model.tags,
@@ -198,6 +199,16 @@ Kirigami.Page {
 				var pressure = start.length > 0 && end.length > 0 ? start + " → " + end : start || end
 				var sac = modelData.sac || ""
 				return pressure.length > 0 && sac.length > 0 ? pressure + "  ·  SAC " + sac : pressure || sac
+			}
+
+			function primaryGas() {
+				var gas = modelData.firstGas
+				var value = ""
+				if (typeof gas === "string")
+					value = gas
+				else if (gas && gas.length > 0)
+					value = String(gas[0])
+				return value.toUpperCase()
 			}
 
 			function decoModelSummary() {
@@ -691,24 +702,24 @@ Kirigami.Page {
 							Layout.fillWidth: true
 							Layout.columnSpan: page.width >= 760 ? 1 : 3
 							label: qsTr("Gas")
-							value: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0 ? delegateRoot.modelData.firstGas : qsTr("Not recorded")
+							value: delegateRoot.primaryGas().length > 0 ? delegateRoot.primaryGas() : qsTr("Not recorded")
 							detail: delegateRoot.pressureSummary()
 							iconName: "gas"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
 							Layout.columnSpan: page.width >= 760 ? 1 : 3
-							label: qsTr("Gear")
+							label: qsTr("Tank")
 							value: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0 ? delegateRoot.modelData.cylinder : qsTr("Not recorded")
 							detail: delegateRoot.modelData.suit || ""
-							iconName: "gear"
+							iconName: "tank"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
 							Layout.columnSpan: page.width >= 760 ? 1 : 2
 							label: qsTr("Mode")
-							value: profile.diveMode.length > 0 ? profile.diveMode : qsTr("Not recorded")
-							detail: profile.diveMode.length > 0 ? qsTr("Recorded dive mode") : ""
+							value: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? delegateRoot.modelData.diveMode : qsTr("Not recorded")
+							detail: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? qsTr("Recorded dive mode") : ""
 							iconName: "regulator"
 						}
 						Components.DiveInfoCard {
@@ -716,7 +727,7 @@ Kirigami.Page {
 							Layout.columnSpan: page.width >= 760 ? 1 : 2
 							label: qsTr("Type")
 							value: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded")
-							iconName: "boat"
+							iconName: "type"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true

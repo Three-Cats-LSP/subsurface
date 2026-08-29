@@ -130,13 +130,16 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Interface artwork"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Regulator and oxygen tank icons by Magnific, sea icon by Anditii Creative, and marine icon by IconBaandar, provided through Flaticon."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Regulator and oxygen tank icons by Magnific, container icon by Three musketeers, sea and spot icons by Anditii Creative, and marine icon by IconBaandar, provided through Flaticon."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Flow {
 				Layout.fillWidth: true; spacing: tokens.space8
 				Button { text: qsTr("Regulator credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/regulator_4864503") }
 				Button { text: qsTr("Gas icon credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/sea_14546011") }
 				Button { text: qsTr("Gear icon credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/marine_14836868") }
 				Button { text: qsTr("Dive tank credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/oxygen-tank_5232839") }
+				Button { text: qsTr("Gas container credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/container_16494765") }
+				Button { text: qsTr("Mode icon credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/regulator_5158240") }
+				Button { text: qsTr("Type icon credit"); onClicked: page.openLink("https://www.flaticon.com/free-icon/spot_17916440") }
 			}
 		}
 

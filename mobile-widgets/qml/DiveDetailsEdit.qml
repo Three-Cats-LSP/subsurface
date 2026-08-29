@@ -119,7 +119,7 @@ Item {
 		manager.commitChanges(dive_id, detailsEdit.number, detailsEdit.dateText, locationBox.editText, detailsEdit.gpsText, detailsEdit.durationText,
 				      detailsEdit.depthText, detailsEdit.airtempText, detailsEdit.watertempText,
 				      suitBox.editText, buddyBox.editText, diveguideBox.editText, detailsEdit.tagText,
-				      detailsEdit.weightText, detailsEdit.notesText, startpressure,
+				      "", detailsEdit.weightText, detailsEdit.notesText, startpressure,
 				      endpressure, usedGas, usedCyl,
 				      detailsEdit.rating,
 				      detailsEdit.visibility, state)

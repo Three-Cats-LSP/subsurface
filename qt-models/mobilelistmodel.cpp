@@ -47,6 +47,7 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[StartPressureRole] = "startPressure";
 	roles[EndPressureRole] = "endPressure";
 	roles[FirstGasRole] = "firstGas";
+	roles[DiveModeRole] = "diveMode";
 	roles[SelectedRole] = "selected";
 	roles[DiveInTripRole] = "diveInTrip";
 	roles[DiveAbove] = "diveAbove";

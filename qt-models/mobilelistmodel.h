@@ -54,6 +54,7 @@ public:
 		StartPressureRole,
 		EndPressureRole,
 		FirstGasRole,
+		DiveModeRole,
 		SelectedRole,
 		DiveInTripRole,
 		DiveAbove,

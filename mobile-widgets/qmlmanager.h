@@ -205,7 +205,7 @@ public slots:
 	void commitChanges(QString diveId, QString number, QString date, QString location, QString gps,
 			   QString duration, QString depth, QString airtemp,
 			   QString watertemp, QString suit, QString buddy,
-			   QString diveGuide, QString tags, QString weight, QString notes, QStringList startpressure,
+			   QString diveGuide, QString tags, QString diveMode, QString weight, QString notes, QStringList startpressure,
 			   QStringList endpressure, QStringList gasmix, QStringList usedCylinder, int rating, int visibility, QString state);
 	void updateTripDetails(QString tripIdString, QString tripLocation, QString tripNotes);
 	void removeDiveFromTrip(int id);
