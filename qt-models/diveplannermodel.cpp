@@ -1753,7 +1753,11 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		gas["decoUsed"] = get_volume_string(cylinder.deco_gas_used, true);
 		gas["startPressure"] = get_pressure_string(cylinder.start, true);
 		gas["endPressure"] = get_pressure_string(cylinder.end, true);
-		gas["remaining"] = get_volume_string(cylinder.gas_volume(cylinder.end), true);
+		// A cylinder that is exhausted can have a negative calculated end
+		// pressure.  Do not feed that sentinel into volume conversion, where it
+		// wraps into the enormous positive value previously shown in Neo exports.
+		const pressure_t nonNegativeEnd { .mbar = std::max(0, cylinder.end.mbar) };
+		gas["remaining"] = get_volume_string(cylinder.gas_volume(nonNegativeEnd), true);
 		gas["belowMinimum"] = cylinder.end.mbar <= (10_bar).mbar;
 		gas["belowReserve"] = cylinder.end.mbar > (10_bar).mbar && cylinder.end.mbar < qPrefDivePlanner::reserve_gas();
 		gasAnalysis.append(gas);

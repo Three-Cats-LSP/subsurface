@@ -387,6 +387,7 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantList desktopSchedule = desktopEquivalent.value("schedule").toList();
 	QVERIFY(!desktopSchedule.empty());
 	QCOMPARE(desktopSchedule.first().toMap().value("depth").toInt(), 21000);
+	QVERIFY(!desktopEquivalent.value("gasAnalysis").toList().first().toMap().value("remaining").toString().contains(QStringLiteral("4,294")));
 	bool switchedToEan50 = false;
 	bool switchedToOxygen = false;
 	for (const QVariant &timelineRow : desktopEquivalent.value("timeline").toList()) {
