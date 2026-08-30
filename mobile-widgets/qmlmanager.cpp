@@ -1265,7 +1265,7 @@ static QString normalizeGasMixAlias(const QString &value)
 
 void QMLManager::commitChanges(QString diveId, QString number, QString date, QString location, QString gps, QString duration, QString depth,
 			       QString airtemp, QString watertemp, QString suit, QString buddy, QString diveGuide, QString tags, QString diveMode, QString weight, QString notes,
-			       QStringList startpressure, QStringList endpressure, QStringList gasmix, QStringList usedCylinder, int rating, int visibility, QString state)
+			       QStringList startpressure, QStringList endpressure, QStringList gasmix, QStringList usedCylinder, int rating, int visibility, QString visibilityDistance, QString state)
 {
 	struct dive *orig = divelog.dives.get_by_uniq_id(diveId.toInt());
 
@@ -1457,6 +1457,11 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 	if (d->visibility != visibility) {
 		diveChanged = true;
 		d->visibility = visibility;
+	}
+	const int requestedVisibilityMm = visibilityDistance.trimmed().isEmpty() ? 0 : parseLengthToMm(visibilityDistance);
+	if (d->visibility_distance.mm != requestedVisibilityMm) {
+		diveChanged = true;
+		d->visibility_distance.mm = requestedVisibilityMm;
 	}
 	if (formatNotes(d) != notes) {
 		diveChanged = true;

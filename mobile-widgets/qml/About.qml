@@ -188,8 +188,10 @@ Kirigami.ScrollablePage {
 				"<a href=\"https://www.flaticon.com/free-icon/regulator_5158240\">Mode regulator icon created by Magnific — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/sports_15710848\">Sports gear icon — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/scuba-diving_18643383\">Scuba-diving type icon — Flaticon</a><br>" +
-				"<a href=\"https://www.flaticon.com/free-icon/compass_18112879\">Compass type icon — Flaticon</a><br>" +
+				"<a href=\"https://www.flaticon.com/free-icon/no-diving_2483459\">No-diving type icon created by Magnific — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/air-tank_17916416\">Dives air-tank icon — Flaticon</a><br>" +
+				"<a href=\"https://www.flaticon.com/free-icon/water_14053108\">Planner water icon created by Roundicons Premium — Flaticon</a><br>" +
+				"<a href=\"https://www.flaticon.com/free-icon/dive-computer_1922948\">Import dive-computer icon — Flaticon</a><br>" +
 				"<a href=\"https://www.flaticon.com/free-icon/tank_14116551\">Equipment item tank icon — Flaticon</a>")
 			textFormat: Text.RichText
 			wrapMode: Text.WordWrap

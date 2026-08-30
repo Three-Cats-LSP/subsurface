@@ -59,4 +59,18 @@ for fragment in (
 	if fragment not in manager:
 		raise SystemExit(f"Neo backup size/integrity contract is missing: {fragment}")
 
+visibility_contracts = {
+	"core/dive.h": "depth_t visibility_distance",
+	"core/save-xml.cpp": "visibilitydistance='",
+	"core/parse-xml.cpp": 'MATCH_STATE("visibilitydistance.dive", depth',
+	"core/save-git.cpp": '"visibilitydistance "',
+	"core/load-git.cpp": "parse_dive_visibilitydistance",
+	"qt-models/mobilelistmodel.cpp": 'roles[VisibilityDistanceRole] = "visibilityDistance"',
+	"mobile-widgets/qmlmanager.cpp": "d->visibility_distance.mm = requestedVisibilityMm",
+}
+for relative_path, fragment in visibility_contracts.items():
+	contents = (ROOT / relative_path).read_text(encoding="utf-8")
+	if fragment not in contents:
+		raise SystemExit(f"Neo visibility-distance persistence contract is missing from {relative_path}: {fragment}")
+
 print("Neo populated-log and transactional site-edit contracts validated")

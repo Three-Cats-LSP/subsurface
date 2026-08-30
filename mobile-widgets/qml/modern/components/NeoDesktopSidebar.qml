@@ -107,8 +107,8 @@ Control {
 					{ key: "map", label: qsTr("Map"), icon: "map" },
 					{ key: "statistics", label: qsTr("Statistics"), icon: "stats" },
 					{ key: "equipment", label: qsTr("Equipment"), icon: "gear" },
-					{ key: "planner", label: qsTr("Dive Planner"), icon: "depth" },
-					{ key: "import", label: qsTr("Import"), icon: "import" },
+					{ key: "planner", label: qsTr("Dive Planner"), icon: "planner" },
+					{ key: "import", label: qsTr("Import"), icon: "diveComputer" },
 					{ key: "portability", label: qsTr("Data & Backup"), icon: "export" },
 					{ key: "settings", label: qsTr("Settings"), icon: "settings" }
 				]

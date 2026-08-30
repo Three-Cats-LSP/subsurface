@@ -122,7 +122,7 @@ Item {
 				      "", detailsEdit.weightText, detailsEdit.notesText, startpressure,
 				      endpressure, usedGas, usedCyl,
 				      detailsEdit.rating,
-				      detailsEdit.visibility, state)
+				      detailsEdit.visibility, "", state)
 		Qt.inputMethod.hide()
 		// now make sure we directly show the saved dive (this may be a new dive, or it may have moved)
 		clearDetailsEdit()

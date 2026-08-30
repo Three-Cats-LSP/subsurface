@@ -357,7 +357,7 @@ Kirigami.Page {
 								spacing: tokens.space8
 
 								Components.NeoDiveIcon {
-									name: "tank"
+									name: "dives"
 									iconColor: tokens.accent
 									Layout.preferredWidth: 22
 									Layout.preferredHeight: 22
@@ -709,13 +709,13 @@ Kirigami.Page {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						columns: 6
+						columns: page.width >= 700 ? 8 : 2
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: 2
+							Layout.columnSpan: page.width >= 700 ? 3 : 2
 							label: qsTr("Gas & cylinder")
 							value: delegateRoot.cylinderGasSummary().length > 0 ? delegateRoot.cylinderGasSummary() : qsTr("Not recorded")
 							detail: delegateRoot.pressureSummary()
@@ -723,7 +723,7 @@ Kirigami.Page {
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: 2
+							Layout.columnSpan: 1
 							label: qsTr("Mode")
 							value: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? delegateRoot.modelData.diveMode : qsTr("Not recorded")
 							detail: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? qsTr("Recorded dive mode") : ""
@@ -731,26 +731,26 @@ Kirigami.Page {
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: 2
+							Layout.columnSpan: page.width >= 700 ? 2 : 1
 							label: qsTr("Type")
 							value: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded")
 							iconName: "type"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: 3
-							label: qsTr("Gear")
-							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : qsTr("Not recorded")
-							detail: qsTr("Weights: %1").arg(delegateRoot.modelData.sumWeight && delegateRoot.modelData.sumWeight.length > 0 ? delegateRoot.modelData.sumWeight : qsTr("Not recorded"))
-							iconName: "gear"
-						}
-						Components.DiveInfoCard {
-							Layout.fillWidth: true
-							Layout.columnSpan: 3
+							Layout.columnSpan: page.width >= 700 ? 2 : 2
 							label: qsTr("Buddy")
 							value: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0 ? delegateRoot.modelData.buddy : qsTr("Not recorded")
 							detail: delegateRoot.modelData.diveGuide || ""
 							iconName: "buddy"
+						}
+						Components.DiveInfoCard {
+							Layout.fillWidth: true
+							Layout.columnSpan: page.width >= 700 ? 8 : 2
+							label: qsTr("Gear")
+							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : qsTr("Not recorded")
+							detail: qsTr("Weights: %1").arg(delegateRoot.modelData.sumWeight && delegateRoot.modelData.sumWeight.length > 0 ? delegateRoot.modelData.sumWeight : qsTr("Not recorded"))
+							iconName: "gear"
 						}
 					}
 

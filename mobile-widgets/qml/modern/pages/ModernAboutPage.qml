@@ -142,8 +142,10 @@ Kirigami.ScrollablePage {
 					"<a href='https://www.flaticon.com/free-icon/container_16494765'>Gas</a> · " +
 					"<a href='https://www.flaticon.com/free-icon/sports_15710848'>Gear</a> · " +
 					"<a href='https://www.flaticon.com/free-icon/regulator_5158240'>Mode</a> · " +
-					"<a href='https://www.flaticon.com/free-icon/compass_18112879'>Type</a> · " +
+					"<a href='https://www.flaticon.com/free-icon/no-diving_2483459'>Type</a> · " +
 					"<a href='https://www.flaticon.com/free-icon/air-tank_17916416'>Dives</a> · " +
+					"<a href='https://www.flaticon.com/free-icon/water_14053108'>Planner</a> · " +
+					"<a href='https://www.flaticon.com/free-icon/dive-computer_1922948'>Import</a> · " +
 					"<a href='https://www.flaticon.com/free-icon/tank_14116551'>Equipment items</a> · Flaticon"
 				onLinkActivated: function(link) { page.openLink(link) }
 			}

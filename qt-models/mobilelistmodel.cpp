@@ -27,6 +27,7 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[DepthDurationRole] = "depthDuration";
 	roles[RatingRole] = "rating";
 	roles[VizRole] = "viz";
+	roles[VisibilityDistanceRole] = "visibilityDistance";
 	roles[SuitRole] = "suit";
 	roles[AirTempRole] = "airTemp";
 	roles[WaterTempRole] = "waterTemp";

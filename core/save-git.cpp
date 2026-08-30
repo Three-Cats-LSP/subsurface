@@ -412,6 +412,7 @@ static void create_dive_buffer(const struct dive &dive, struct membuffer *b)
 		put_format(b, "duration %u:%02u min\n", FRACTION_TUPLE(dive.dcs[0].duration.seconds, 60));
 	SAVE("rating", rating);
 	SAVE("visibility", visibility);
+	put_depth(b, dive.visibility_distance, "visibilitydistance ", "m\n");
 	SAVE("wavesize", wavesize);
 	SAVE("current", current);
 	SAVE("surge", surge);

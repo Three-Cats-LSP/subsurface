@@ -1220,8 +1220,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernPlannerLab {
 		id: neoPlannerLab
 		visible: false
-		onOpenGasTools: showPage(divePlannerCalculatorWindow)
-		onOpenPlannerSettings: showPage(divePlannerSetupWindow)
 	}
 
 	NeoPages.ModernOperationsHub {

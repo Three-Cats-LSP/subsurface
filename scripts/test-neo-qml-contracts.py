@@ -193,7 +193,9 @@ require(
 		'source: "qrc:/qml/container-16494765.png"',
 		'source: "qrc:/qml/regulator-5158240.png"',
 		'source: "qrc:/qml/sports-15710848.png"',
-		'source: "qrc:/qml/compass-18112879.png"',
+		'source: "qrc:/qml/no-diving-2483459.png"',
+		'source: "qrc:/qml/water-14053108.png"',
+		'source: "qrc:/qml/dive-computer-1922948.png"',
 		'source: "qrc:/qml/air-tank-17916416.png"',
 		'source: "qrc:/qml/tank-14116551.png"',
 		'ColorOverlay {',
@@ -227,7 +229,8 @@ require(
 		'id: diveGuideField',
 		'id: weightField',
 		'id: ratingBox',
-		'id: visibilityBox',
+		'id: visibilityField',
+		'dive.visibilityDistance',
 	),
 	"Neo dive classification editor",
 )
@@ -241,11 +244,13 @@ for removed_editor_route in (
 mobile_model = source("qt-models/mobilelistmodel.cpp")
 manager = source("mobile-widgets/qmlmanager.cpp")
 require(mobile_model, ('roles[DiveModeRole] = "diveMode"',), "Neo dive mode role")
+require(mobile_model, ('roles[VisibilityDistanceRole] = "visibilityDistance"',), "Neo visibility distance role")
 require(
 	manager,
 	(
 		'QString tags, QString diveMode, QString weight',
 		'd->dcs[0].divemode = static_cast<divemode_t>(requestedMode)',
+		'd->visibility_distance.mm = requestedVisibilityMm',
 	),
 	"Neo dive mode persistence",
 )

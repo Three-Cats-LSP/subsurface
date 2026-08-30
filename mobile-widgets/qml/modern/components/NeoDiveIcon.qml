@@ -61,6 +61,10 @@ Canvas {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "equipmentItem") {
 			// Rendered by the attributed Flaticon source below.
+		} else if (name === "planner") {
+			// Rendered by the attributed Flaticon source below.
+		} else if (name === "diveComputer") {
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "type") {
@@ -206,16 +210,55 @@ Canvas {
 		anchors.fill: parent
 		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
 		visible: icon.name === "type"
-		source: "qrc:/qml/compass-18112879.png"
+		source: "qrc:/qml/no-diving-2483459.png"
 		fillMode: Image.PreserveAspectFit
 		smooth: true
 		mipmap: true
+		mirror: true
 	}
 
 	ColorOverlay {
 		anchors.fill: diveTypeSource
 		visible: diveTypeSource.visible
 		source: diveTypeSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: plannerSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "planner"
+		source: "qrc:/qml/water-14053108.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: plannerSource
+		visible: plannerSource.visible
+		source: plannerSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: diveComputerSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "diveComputer"
+		source: "qrc:/qml/dive-computer-1922948.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: diveComputerSource
+		visible: diveComputerSource.visible
+		source: diveComputerSource
 		color: icon.iconColor
 		cached: true
 	}

@@ -2353,6 +2353,7 @@ std::unique_ptr<dive> dive::create_merged_dive(const struct dive &a, const struc
 	MERGE_TXT(res, a, b, suit, ", ");
 	MERGE_MAX(res, a, b, number);
 	MERGE_NONZERO(res, a, b, visibility);
+	MERGE_NONZERO(res, a, b, visibility_distance.mm);
 	MERGE_NONZERO(res, a, b, wavesize);
 	MERGE_NONZERO(res, a, b, current);
 	MERGE_NONZERO(res, a, b, surge);

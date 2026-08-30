@@ -34,6 +34,7 @@ public:
 		DepthDurationRole,
 		RatingRole,
 		VizRole,
+		VisibilityDistanceRole,
 		SuitRole,
 		AirTempRole,
 		WaterTempRole,

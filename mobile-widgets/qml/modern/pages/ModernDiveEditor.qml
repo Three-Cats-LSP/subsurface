@@ -31,7 +31,7 @@ Kirigami.Page {
 			waterTempField.text, suitField.text, buddyField.text, diveGuideField.text, composedTags(), modeBox.currentText,
 			weightField.text, notesField.text, equipmentValues(dive.startPressure, startPressureField.text),
 			equipmentValues(dive.endPressure, endPressureField.text), equipmentValues(dive.firstGas, gasField.text), equipmentValues(dive.getCylinder, cylinderBox.currentText),
-			ratingBox.value, visibilityBox.value, "view")
+			ratingBox.value, dive ? dive.viz || 0 : 0, visibilityField.text, "view")
 		saved()
 	}
 
@@ -268,13 +268,13 @@ Kirigami.Page {
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
 				Layout.bottomMargin: tokens.space24
-				contentPadding: tokens.space12
+				contentPadding: tokens.space8
 				Text { text: qsTr("Dive conditions"); color: tokens.textMuted; font.pixelSize: 10 }
 				GridLayout {
 					Layout.fillWidth: true
 					columns: page.width >= 560 ? 2 : 1
-					columnSpacing: tokens.space16
-					rowSpacing: tokens.space8
+					columnSpacing: tokens.space12
+					rowSpacing: tokens.space4
 					RowLayout {
 						Layout.fillWidth: true
 						Text { Layout.fillWidth: true; text: qsTr("Rating"); color: tokens.textSecondary; font.pixelSize: 12 }
@@ -283,7 +283,7 @@ Kirigami.Page {
 					RowLayout {
 						Layout.fillWidth: true
 						Text { Layout.fillWidth: true; text: qsTr("Visibility"); color: tokens.textSecondary; font.pixelSize: 12 }
-						Components.NeoSpinBox { id: visibilityBox; Layout.preferredWidth: 160; from: 0; to: 5; value: dive ? dive.viz || 0 : 0; accessibleName: qsTr("Underwater visibility rating") }
+						Components.NeoTextField { id: visibilityField; Layout.preferredWidth: 180; placeholderText: Backend.length === Enums.METERS ? qsTr("e.g. 10 m") : qsTr("e.g. 30 ft"); text: dive ? dive.visibilityDistance || "" : ""; accessibleName: qsTr("Underwater visibility distance") }
 					}
 				}
 			}

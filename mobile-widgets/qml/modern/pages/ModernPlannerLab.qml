@@ -13,9 +13,22 @@ Kirigami.ScrollablePage {
 	id: page
 	title: qsTr("Planner & decompression lab")
 	background: Rectangle { color: tokens.background }
-	signal openGasTools()
-	signal openPlannerSettings()
 	Modern.DesignTokens { id: tokens }
+	property bool advancedSettingsExpanded: false
+	property bool gasToolsExpanded: false
+	property int selectedProfileIndex: 0
+	property int gasOxygen: 21
+	property int gasHelium: 0
+	property var gasCalculatorResults: []
+	property var profileOptions: {
+		var options = []
+		for (var builtInIndex = 0; builtInIndex < builtInProfiles.length; ++builtInIndex)
+			options.push({ "label": qsTr("%1 v%2").arg(builtInProfiles[builtInIndex].name).arg(builtInProfiles[builtInIndex].version), "kind": "builtIn", "sourceIndex": builtInIndex, "summary": builtInProfiles[builtInIndex].summary })
+		var saved = plannerStorage.presets || []
+		for (var savedIndex = 0; savedIndex < saved.length; ++savedIndex)
+			options.push({ "label": saved[savedIndex].name, "kind": "saved", "sourceIndex": savedIndex, "summary": qsTr("Saved Neo profile") })
+		return options
+	}
 	property string depthUnit: Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
 	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
 	property string sacUnit: Backend.volume === Enums.LITER ? qsTr("L/min") : qsTr("cu ft/min")
@@ -317,6 +330,24 @@ Kirigami.ScrollablePage {
 		activeProfileModified = false
 		generatePlan(false, true)
 	}
+	function loadSelectedProfile() {
+		var option = profileOptions[selectedProfileIndex]
+		if (!option)
+			return
+		if (option.kind === "builtIn")
+			loadBuiltInProfile(option.sourceIndex)
+		else
+			loadPreset(option.sourceIndex)
+	}
+	function selectedSavedProfile() {
+		var option = profileOptions[selectedProfileIndex]
+		return option && option.kind === "saved" ? option : null
+	}
+	function calculateGasTools() {
+		gasHelium = Math.min(gasHelium, 100 - gasOxygen)
+		var cylinderType = cylinders.count > 0 ? cylinders.get(0).type : (PrefEquipment.default_cylinder || "AL80")
+		gasCalculatorResults = Backend.divePlannerPointsModel.calculateGasInfo(cylinderType, gasOxygen * 10, gasHelium * 10)
+	}
 
 	function updateGasNames() {
 		var names = []
@@ -558,7 +589,7 @@ Kirigami.ScrollablePage {
  Components.NeoTextField { Layout.preferredWidth: 86; accessibleName: qsTr("Deco SAC (%1)").arg(page.sacUnit); text: page.sacText(Backend.decosac); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { Backend.decosac = page.sacValue(text); page.generatePlan() } } }
 				Text { text: qsTr("Active settings: %1").arg(Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")); color: tokens.textPrimary }
 				Text { text: qsTr("Bottom/deco SAC: %1 / %2 %3").arg(page.sacText(Backend.bottomsac)).arg(page.sacText(Backend.decosac)).arg(page.sacUnit); color: tokens.textPrimary }
-				Components.NeoButton { text: qsTr("More planner settings"); onClicked: page.openPlannerSettings() }
+				Components.NeoButton { text: page.advancedSettingsExpanded ? qsTr("Hide planner settings") : qsTr("More planner settings"); onClicked: page.advancedSettingsExpanded = !page.advancedSettingsExpanded }
 			}
 		}
 		Components.ModernCard {
@@ -567,31 +598,26 @@ Kirigami.ScrollablePage {
 			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Text { text: qsTr("Native profiles and external native mappings contain only settings Subsurface supports. Mappings do not claim schedule compatibility."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
-			Text { text: qsTr("App reference presets"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
-			Repeater { model: page.builtInProfiles; delegate: RowLayout {
-				required property int index
-				required property var modelData
+			RowLayout {
 				Layout.fillWidth: true
-				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("%1 v%2").arg(modelData.name).arg(modelData.version); color: tokens.textPrimary; font.weight: Font.DemiBold }
- Text { text: modelData.summary; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
- Text { visible: modelData.id.indexOf("lsp-") === 0; text: qsTr("Native settings only."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
-				Components.NeoButton { text: qsTr("Load"); onClicked: page.loadBuiltInProfile(index) }
-			} }
-			Text { text: qsTr("My profiles"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
-			RowLayout { Layout.fillWidth: true; TextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }
+				Components.NeoComboBox { id: profilePresetBox; Layout.fillWidth: true; accessibleName: qsTr("Profile preset"); model: page.profileOptions; textRole: "label"; currentIndex: page.selectedProfileIndex; onActivated: page.selectedProfileIndex = currentIndex }
+				Components.NeoButton { text: qsTr("Load"); enabled: profilePresetBox.currentIndex >= 0; onClicked: page.loadSelectedProfile() }
+			}
+			Text { Layout.fillWidth: true; text: page.profileOptions[page.selectedProfileIndex] ? page.profileOptions[page.selectedProfileIndex].summary : ""; color: tokens.textSecondary; wrapMode: Text.WordWrap }
+			Text { text: qsTr("Save or manage my profiles"); color: tokens.textMuted; font.weight: Font.DemiBold; Layout.fillWidth: true }
+			RowLayout { Layout.fillWidth: true; Components.NeoTextField { id: presetName; Layout.fillWidth: true; placeholderText: qsTr("Preset name") }
  Components.NeoButton { text: qsTr("Save current profile"); enabled: presetName.text.trim().length > 0; onClicked: { page.savePreset(presetName.text); presetName.clear() } } }
-			Repeater { model: plannerStorage.presets; delegate: RowLayout {
-				required property int index
-				required property var modelData
+			RowLayout {
+				visible: page.selectedSavedProfile() !== null
 				Layout.fillWidth: true
-				Components.NeoTextField { id: savedPresetName; Layout.fillWidth: true; text: modelData.name }
-				Components.NeoButton { text: qsTr("Load"); onClicked: page.loadPreset(index) }
-				Components.NeoButton { text: qsTr("Rename"); enabled: savedPresetName.text.trim().length > 0 && savedPresetName.text !== modelData.name; onClicked: page.renamePreset(index, savedPresetName.text) }
-				Components.NeoButton { text: qsTr("Duplicate"); onClicked: page.duplicatePreset(index) }
-				Components.NeoButton { text: qsTr("Remove"); onClicked: { var removedName = modelData.name; var saved = plannerStorage.presets || []; saved.splice(index, 1); plannerStorage.presets = saved; if (page.activeProfileName === removedName) { page.activeProfileName = ""; page.activeProfileModified = false } } }
-			} }
+				Components.NeoTextField { id: selectedPresetName; Layout.fillWidth: true; text: page.selectedSavedProfile() ? plannerStorage.presets[page.selectedSavedProfile().sourceIndex].name : "" }
+				Components.NeoButton { text: qsTr("Rename"); onClicked: page.renamePreset(page.selectedSavedProfile().sourceIndex, selectedPresetName.text) }
+				Components.NeoButton { text: qsTr("Duplicate"); onClicked: page.duplicatePreset(page.selectedSavedProfile().sourceIndex) }
+				Components.NeoButton { text: qsTr("Remove"); variant: "danger"; onClicked: { var option = page.selectedSavedProfile(); if (!option) return; var saved = plannerStorage.presets || []; var removedName = saved[option.sourceIndex].name; saved.splice(option.sourceIndex, 1); plannerStorage.presets = saved; page.selectedProfileIndex = 0; if (page.activeProfileName === removedName) { page.activeProfileName = ""; page.activeProfileModified = false } } }
+			}
 		}
 		Components.ModernCard {
+			visible: page.advancedSettingsExpanded
 			Layout.fillWidth: true
 			Text { text: qsTr("Travel and stop settings"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("These rates and stop choices are sent directly to the established Subsurface planner."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
@@ -844,7 +870,20 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below runs the active native planner—there is no separate table formula."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoButton { Layout.fillWidth: true; text: qsTr("Open gas calculator"); onClicked: page.openGasTools() }
+			Components.NeoButton { Layout.fillWidth: true; text: page.gasToolsExpanded ? qsTr("Hide gas calculator") : qsTr("Gas calculator"); onClicked: { page.gasToolsExpanded = !page.gasToolsExpanded; if (page.gasToolsExpanded && page.gasCalculatorResults.length === 0) page.calculateGasTools() } }
+			ColumnLayout {
+				visible: page.gasToolsExpanded
+				Layout.fillWidth: true
+				GridLayout {
+					Layout.fillWidth: true
+					columns: page.width >= 700 ? 3 : 1
+					RowLayout { Layout.fillWidth: true; Label { text: qsTr("Oxygen %"); color: tokens.textMuted; Layout.fillWidth: true } Components.NeoSpinBox { from: 0; to: 100; value: page.gasOxygen; onValueModified: page.gasOxygen = value } }
+					RowLayout { Layout.fillWidth: true; Label { text: qsTr("Helium %"); color: tokens.textMuted; Layout.fillWidth: true } Components.NeoSpinBox { from: 0; to: 100; value: page.gasHelium; onValueModified: page.gasHelium = value } }
+					Components.NeoButton { text: qsTr("Calculate"); onClicked: page.calculateGasTools() }
+				}
+				GridLayout { Layout.fillWidth: true; columns: 3; Label { text: qsTr("pO₂"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: qsTr("MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: Backend.o2narcotic ? qsTr("END @ MOD") : qsTr("EAD @ MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } }
+				Repeater { model: page.gasCalculatorResults; delegate: GridLayout { required property var modelData; Layout.fillWidth: true; columns: 3; Label { text: modelData.po2 || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.mod || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.ead || "—"; color: tokens.textSecondary; Layout.fillWidth: true } } }
+			}
 			Components.NeoButton { Layout.fillWidth: true; text: qsTr("Calculate NDL reference"); onClicked: page.calculateNdlReference() }
 			Repeater { model: page.ndlReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: qsTr("%1 %2").arg(modelData.depth).arg(page.depthUnit); color: tokens.textPrimary; Layout.fillWidth: true }
  Label { text: modelData.available ? page.formatDuration(modelData.ndl) : qsTr("Not available"); color: modelData.available ? tokens.textSecondary : tokens.textMuted } } }

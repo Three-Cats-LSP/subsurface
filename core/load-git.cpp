@@ -277,6 +277,9 @@ static void parse_dive_rating(char *line, struct git_parser_state *state)
 static void parse_dive_visibility(char *line, struct git_parser_state *state)
 { state->active_dive->visibility = get_index(line); }
 
+static void parse_dive_visibilitydistance(char *line, struct git_parser_state *state)
+{ state->active_dive->visibility_distance = get_depth(line); }
+
 static void parse_dive_wavesize(char *line, struct git_parser_state *state)
 { state->active_dive->wavesize = get_index(line); }
 
@@ -1090,7 +1093,7 @@ static const std::array dive_action {
 	D(airpressure), D(airtemp), D(buddy), D(chill), D(current), D(cylinder), D(diveguide),
 	keyword_action { "divemaster", parse_dive_diveguide },
 	D(divesiteid), D(duration), D(gps), D(invalid), D(location), D(notes), D(notrip), D(rating), D(suit), D(surge),
-	D(tags), D(visibility), D(watersalinity), D(watertemp), D(wavesize), D(weightsystem)
+	D(tags), D(visibility), D(visibilitydistance), D(watersalinity), D(watertemp), D(wavesize), D(weightsystem)
 };
 
 static void dive_parser(char *line, struct git_parser_state *state)

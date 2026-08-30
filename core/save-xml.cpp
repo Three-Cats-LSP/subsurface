@@ -475,6 +475,7 @@ void save_one_dive_to_mb(struct membuffer *b, const struct dive &dive, bool anon
 		put_format(b, " rating='%d'", dive.rating);
 	if (dive.visibility)
 		put_format(b, " visibility='%d'", dive.visibility);
+	put_depth(b, dive.visibility_distance, " visibilitydistance='", " m'");
 	if (dive.wavesize)
 		put_format(b, " wavesize='%d'", dive.wavesize);
 	if (dive.current)

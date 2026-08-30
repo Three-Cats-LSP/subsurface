@@ -54,6 +54,7 @@ struct dive {
 	int number = 0;
 	int rating = 0;
 	int wavesize = 0, current = 0, visibility = 0, surge = 0, chill = 0; /* 0 - 5 star ratings */
+	depth_t visibility_distance; /* measured horizontal visibility; separate from the legacy rating */
 	int sac = 0, otu = 0, cns = 0, maxcns = 0;
 
 	/* Calculated based on dive computer data */

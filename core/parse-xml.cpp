@@ -1355,6 +1355,8 @@ static void try_to_fill_dive(struct dive *dive, const char *name, char *buf, str
 		return;
 	if (MATCH("visibility.dive", get_rating, &dive->visibility))
 		return;
+	if (MATCH_STATE("visibilitydistance.dive", depth, &dive->visibility_distance))
+		return;
 	if (MATCH("wavesize.dive", get_rating, &dive->wavesize))
 		return;
 	if (MATCH("current.dive", get_rating, &dive->current))

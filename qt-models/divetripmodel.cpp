@@ -287,6 +287,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 										      formatDiveDuration(d));
 	case MobileListModel::RatingRole: return d->rating;
 	case MobileListModel::VizRole: return d->visibility;
+	case MobileListModel::VisibilityDistanceRole: return d->visibility_distance.mm ? get_depth_string(d->visibility_distance.mm, true, true) : QString();
 	case MobileListModel::SuitRole: return QString::fromStdString(d->suit);
 	case MobileListModel::AirTempRole: return get_temperature_string(d->airtemp, true);
 	case MobileListModel::WaterTempRole: return get_temperature_string(d->watertemp, true);
