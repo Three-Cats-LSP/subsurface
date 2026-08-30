@@ -1698,27 +1698,63 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	results["timeline"] = timeline;
 	QVariantList schedule;
 	int totalDecoSeconds = 0;
-	for (const QVariant &timelineValue : timeline) {
-		const QVariantMap timelineRow = timelineValue.toMap();
-		if (timelineRow.value("phase").toString() != QStringLiteral("deco") ||
-		    timelineRow.value("duration").toInt() <= 0)
+	for (const decostop &stop : decostops) {
+		// The mature planner also reports zero-time depths that it cleared while
+		// ascending. They are useful internally, but they are not deco stops.
+		if (stop.time <= 0)
 			continue;
-		QVariantMap row = timelineRow;
-		totalDecoSeconds += row.value("duration").toInt();
+		QVariantMap row;
+		row.insert("depth", stop.depth);
+		row.insert("duration", stop.time);
+		row.insert("phase", QStringLiteral("deco"));
+		totalDecoSeconds += stop.time;
 		if (!d->dcs.empty()) {
 			const struct sample *matchingSample = nullptr;
 			for (const struct sample &sample : d->dcs[0].samples) {
-				if (sample.time.seconds < row.value("runTime").toInt())
+				if (sample.depth.mm != stop.depth)
 					continue;
 				matchingSample = &sample;
-				break;
+				if (sample.in_deco || sample.stoptime.seconds > 0)
+					break;
 			}
 			if (matchingSample) {
+				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], matchingSample->time);
+				if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
+					row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
+				row.insert("runTime", matchingSample->time.seconds);
 				row.insert("tts", matchingSample->tts.seconds);
 				row.insert("cns", matchingSample->cns);
+				row.insert("setpoint", matchingSample->setpoint.mbar);
 			}
 		}
 		schedule.append(row);
+	}
+	// Plans with explicit deco gases can expose their stops only through the
+	// completed native waypoint timeline. Fall back to those dwell rows when
+	// the planner's auxiliary stop table is empty.
+	if (schedule.empty()) {
+		for (const QVariant &timelineValue : timeline) {
+			const QVariantMap timelineRow = timelineValue.toMap();
+			if (timelineRow.value("phase").toString() != QStringLiteral("deco") ||
+			    timelineRow.value("duration").toInt() <= 0)
+				continue;
+			QVariantMap row = timelineRow;
+			totalDecoSeconds += row.value("duration").toInt();
+			if (!d->dcs.empty()) {
+				const struct sample *matchingSample = nullptr;
+				for (const struct sample &sample : d->dcs[0].samples) {
+					if (sample.time.seconds < row.value("runTime").toInt())
+						continue;
+					matchingSample = &sample;
+					break;
+				}
+				if (matchingSample) {
+					row.insert("tts", matchingSample->tts.seconds);
+					row.insert("cns", matchingSample->cns);
+				}
+			}
+			schedule.append(row);
+		}
 	}
 	results["schedule"] = schedule;
 	results["decoTimeSeconds"] = totalDecoSeconds;
