@@ -1684,10 +1684,12 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			row.insert("phase", QStringLiteral("descent"));
 		else if (point.depth.mm < previousTimelineDepth.mm)
 			row.insert("phase", QStringLiteral("ascent"));
+		else if (point.depth.mm > SURFACE_THRESHOLD && point.time > enteredProfileRuntime)
+			// Native stop waypoints can retain the entered flag. Runtime is the
+			// reliable boundary between the requested profile and generated ascent.
+			row.insert("phase", QStringLiteral("deco"));
 		else if (point.entered)
 			row.insert("phase", QStringLiteral("level"));
-		else if (point.depth.mm > SURFACE_THRESHOLD)
-			row.insert("phase", QStringLiteral("deco"));
 		else
 			row.insert("phase", QStringLiteral("surface"));
 		timeline.append(row);
