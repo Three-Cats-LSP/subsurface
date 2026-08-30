@@ -96,7 +96,7 @@ Kirigami.Page {
 			Components.MetricCard {
 				label: qsTr("Logged dives")
 				value: String(mapPage.loggedDiveCount())
-				iconName: "tank"
+				iconName: "dives"
 				Layout.fillWidth: true
 				Layout.minimumWidth: 0
 			}

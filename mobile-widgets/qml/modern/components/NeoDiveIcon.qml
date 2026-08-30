@@ -130,25 +130,6 @@ Canvas {
 	}
 
 	Image {
-		id: oxygenTankSource
-		anchors.fill: parent
-		anchors.margins: Math.max(1, Math.round(parent.width * 0.08))
-		visible: icon.name === "tank"
-		source: "qrc:/qml/oxygen-tank-5232839.png"
-		fillMode: Image.PreserveAspectFit
-		smooth: true
-		mipmap: true
-	}
-
-	ColorOverlay {
-		anchors.fill: oxygenTankSource
-		visible: oxygenTankSource.visible
-		source: oxygenTankSource
-		color: icon.iconColor
-		cached: true
-	}
-
-	Image {
 		id: gasContainerSource
 		anchors.fill: parent
 		anchors.margins: Math.max(1, Math.round(parent.width * 0.08))
@@ -267,7 +248,10 @@ Canvas {
 		id: divesSource
 		anchors.fill: parent
 		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
-		visible: icon.name === "dives"
+		// Keep "tank" as a compatibility alias, but always render the current
+		// Dives artwork. This prevents a dynamic legacy key from reviving the old
+		// oxygen-tank icon in an otherwise updated Neo surface.
+		visible: icon.name === "dives" || icon.name === "tank"
 		source: "qrc:/qml/air-tank-17916416.png"
 		fillMode: Image.PreserveAspectFit
 		smooth: true

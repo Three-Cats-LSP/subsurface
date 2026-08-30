@@ -76,7 +76,7 @@ Kirigami.ScrollablePage {
 			Components.MetricCard {
 				label: qsTr("Dives")
 				value: String(NeoDashboard.diveCount)
-				iconName: "tank"
+				iconName: "dives"
 				Layout.fillWidth: true
 				Layout.minimumWidth: 0
 			}

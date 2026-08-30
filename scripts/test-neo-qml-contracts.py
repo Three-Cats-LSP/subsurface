@@ -193,7 +193,6 @@ require(
 	neo_icon,
 	(
 		'import Qt5Compat.GraphicalEffects',
-		'source: "qrc:/qml/oxygen-tank-5232839.png"',
 		'source: "qrc:/qml/container-16494765.png"',
 		'source: "qrc:/qml/regulator-5158240.png"',
 		'source: "qrc:/qml/sports-15710848.png"',
@@ -201,6 +200,7 @@ require(
 		'source: "qrc:/qml/water-14053108.png"',
 		'source: "qrc:/qml/dive-computer-1922948.png"',
 		'source: "qrc:/qml/air-tank-17916416.png"',
+		'visible: icon.name === "dives" || icon.name === "tank"',
 		'source: "qrc:/qml/tank-14116551.png"',
 		'ColorOverlay {',
 	),
@@ -222,6 +222,20 @@ require(
 	),
 	"Neo combined cylinder and gear cards",
 )
+
+for dive_count_surface in (
+	"mobile-widgets/qml/MapPage.qml",
+	"mobile-widgets/qml/modern/pages/ModernDashboard.qml",
+	"mobile-widgets/qml/modern/pages/ModernSitesHub.qml",
+	"mobile-widgets/qml/modern/pages/ModernStatisticsHub.qml",
+	"mobile-widgets/qml/modern/components/NeoDesktopSidebar.qml",
+	"mobile-widgets/qml/modern/components/NeoBottomNavigation.qml",
+):
+	content = source(dive_count_surface)
+	if '"tank"' in content:
+		raise AssertionError(f"Old dive-count tank icon remains in {dive_count_surface}")
+	if '"dives"' not in content:
+		raise AssertionError(f"New dive-count icon missing from {dive_count_surface}")
 
 dive_editor = source("mobile-widgets/qml/modern/pages/ModernDiveEditor.qml")
 require(

@@ -35,7 +35,7 @@ ToolBar {
 		Repeater {
 			model: [
 				{ key: "home", label: qsTr("Home"), icon: "home" },
-				{ key: "dives", label: qsTr("Dives"), icon: "tank" },
+				{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 				{ key: "sites", label: qsTr("Sites"), icon: "site" },
 				{ key: "stats", label: qsTr("Stats"), icon: "stats" },
 				{ key: "more", label: qsTr("More"), icon: "more" }
