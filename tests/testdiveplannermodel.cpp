@@ -490,7 +490,9 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 
 	auto calculate = [model](int depth, int duration, int oxygen = 21) {
 		QVariantMap cylinder;
-		cylinder.insert("type", "AL80");
+		// Keep the regression focused on decompression behavior rather than an
+		// exhausted single cylinder at the deeper/longer fixture profiles.
+		cylinder.insert("type", "D12 232 bar");
 		cylinder.insert("mix", QString::number(oxygen) + "/0");
 		cylinder.insert("pressure", 200);
 		cylinder.insert("use", OC_GAS);
@@ -582,7 +584,9 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 		prefs.vpmb_conservatism = fixture.value(QStringLiteral("vpmbConservatism")).toInt(0);
 
 		QVariantMap cylinder;
-		cylinder.insert(QStringLiteral("type"), QStringLiteral("AL80"));
+		// Use enough back-gas capacity for every fixture so a required schedule
+		// is not suppressed by an already exhausted cylinder.
+		cylinder.insert(QStringLiteral("type"), QStringLiteral("D12 232 bar"));
 		cylinder.insert(QStringLiteral("mix"), fixture.value(QStringLiteral("mix")).toString(QStringLiteral("21/0")));
 		cylinder.insert(QStringLiteral("pressure"), 200);
 		cylinder.insert(QStringLiteral("use"), OC_GAS);

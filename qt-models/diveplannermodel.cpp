@@ -1758,6 +1758,34 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			schedule.append(row);
 		}
 	}
+	// Some air-only plans omit generated ascent waypoints and the auxiliary
+	// stop table, while the planner dive computer still contains the complete
+	// stepped ascent. Recover actual post-profile dwell segments from those
+	// samples so the Neo schedule never loses native stops.
+	if (schedule.empty() && !d->dcs.empty()) {
+		const std::vector<struct sample> &samples = d->dcs[0].samples;
+		for (size_t i = 1; i < samples.size(); ++i) {
+			const struct sample &previousSample = samples[i - 1];
+			const struct sample &currentSample = samples[i];
+			const int duration = currentSample.time.seconds - previousSample.time.seconds;
+			if (duration <= 0 || currentSample.time.seconds <= enteredProfileRuntime ||
+			    currentSample.depth.mm <= SURFACE_THRESHOLD || currentSample.depth.mm != previousSample.depth.mm)
+				continue;
+			QVariantMap row;
+			row.insert("depth", currentSample.depth.mm);
+			row.insert("duration", duration);
+			row.insert("runTime", currentSample.time.seconds);
+			row.insert("phase", QStringLiteral("deco"));
+			const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], currentSample.time);
+			if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
+				row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
+			row.insert("tts", currentSample.tts.seconds);
+			row.insert("cns", currentSample.cns);
+			row.insert("setpoint", currentSample.setpoint.mbar);
+			totalDecoSeconds += duration;
+			schedule.append(row);
+		}
+	}
 	results["schedule"] = schedule;
 	results["decoTimeSeconds"] = totalDecoSeconds;
 
