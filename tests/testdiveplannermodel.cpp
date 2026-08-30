@@ -302,6 +302,7 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(result.value("otu").toInt() >= 0);
 	QVERIFY(result.contains("schedule"));
 	QVERIFY(result.value("schedule").canConvert<QVariantList>());
+	QVERIFY(result.contains("analysis"));
 	QVERIFY(!result.value("gasAnalysis").toList().empty());
 	QVERIFY(result.value("gasAnalysis").toList().first().toMap().contains("remaining"));
 	QVERIFY(result.value("gasAnalysis").toList().first().toMap().contains("startPressure"));
@@ -317,6 +318,12 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("surfaceGf"));
 	QVERIFY(lastSample.contains("po2"));
 	QVERIFY(lastSample.contains("tissueLoad"));
+	const QVariantMap analysis = result.value("analysis").toMap();
+	QVERIFY(!analysis.empty());
+	QVERIFY(qAbs(analysis.value("time").toInt() - 21 * 60) <= 60);
+	QVERIFY(qAbs(analysis.value("depth").toInt() - 18000) <= 1000);
+	QVERIFY(!result.value("notes").toString().contains("<div>"));
+	QVERIFY(!result.value("notes").toString().contains("</table>"));
 	const QVariantMap customWater = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10150, 1013, false);
 	QVERIFY(!customWater.value("profile").toList().empty());
 
@@ -328,6 +335,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(!decoSchedule.empty());
 	QVERIFY(decoSchedule.first().toMap().contains("depth"));
 	QVERIFY(decoSchedule.first().toMap().contains("duration"));
+	for (const QVariant &stop : decoSchedule)
+		QVERIFY(stop.toMap().value("duration").toInt() > 0);
 
 	// The profile keeps the inspector's native plot values alongside the
 	// schedule. The detailed fields above are asserted on the regular profile

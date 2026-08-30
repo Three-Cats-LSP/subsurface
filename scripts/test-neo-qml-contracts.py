@@ -152,6 +152,10 @@ require(
 		'accessibleName: qsTr("Dive mode")',
 		'accessibleName: qsTr("Reserve gas (%1)").arg(page.pressureUnit)',
 		'accessibleName: qsTr("Gas for segment %1").arg(index + 1)',
+		'model: page.profileLabels',
+		'return analysis[name] !== undefined ? analysis[name] : fallback',
+		'text: qsTr("Oxygen %:")',
+		'text: qsTr("Helium %:")',
 	),
 	"Neo planner accessibility",
 )
@@ -207,6 +211,9 @@ dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
 require(
 	dive_details,
 	(
+		'"visibilityDistance": model.visibilityDistance',
+		'text: qsTr("Rating: %1/5")',
+		'text: qsTr("Visibility: %1")',
 		'label: qsTr("Gas & cylinder")',
 		'value: delegateRoot.cylinderGasSummary()',
 		'label: qsTr("Gear")',
@@ -230,6 +237,7 @@ require(
 		'id: weightField',
 		'id: ratingBox',
 		'id: visibilityField',
+		'text: qsTr("Underwater visibility:")',
 		'dive.visibilityDistance',
 	),
 	"Neo dive classification editor",

@@ -16,6 +16,7 @@ Kirigami.ScrollablePage {
 	Modern.DesignTokens { id: tokens }
 	property bool advancedSettingsExpanded: false
 	property bool gasToolsExpanded: false
+	property bool nativeReportExpanded: false
 	property int selectedProfileIndex: 0
 	property int gasOxygen: 21
 	property int gasHelium: 0
@@ -29,6 +30,13 @@ Kirigami.ScrollablePage {
 			options.push({ "label": saved[savedIndex].name, "kind": "saved", "sourceIndex": savedIndex, "summary": qsTr("Saved Neo profile") })
 		return options
 	}
+	property var profileLabels: {
+		var labels = []
+		var options = profileOptions
+		for (var i = 0; i < options.length; ++i)
+			labels.push(options[i].label)
+		return labels
+	}
 	property string depthUnit: Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
 	property string pressureUnit: Backend.pressure === Enums.BAR ? qsTr("bar") : qsTr("psi")
 	property string sacUnit: Backend.volume === Enums.LITER ? qsTr("L/min") : qsTr("cu ft/min")
@@ -39,6 +47,7 @@ Kirigami.ScrollablePage {
 	property int customSalinity: 10300
 	property string planNotes: ""
 	property var profileData: []
+	property var analysis: ({})
 	property var schedule: []
 	property var gasAnalysis: []
 	property bool exceedsNDL: false
@@ -422,6 +431,7 @@ Kirigami.ScrollablePage {
 		planNotes = result.notes || ""
 		updateGasReference()
 		profileData = result.profile || []
+		analysis = result.analysis || ({})
 		schedule = result.schedule || []
 		gasAnalysis = result.gasAnalysis || []
 		exceedsNDL = result.exceedsNDL === true
@@ -472,7 +482,17 @@ Kirigami.ScrollablePage {
 		var gases = contingencyResult.gasAnalysis || []
 		lines.push("", qsTr("GAS STATUS"))
 		for (var j = 0; j < gases.length; ++j) lines.push(qsTr("%1: remaining %2; end %3").arg(gases[j].mix).arg(gases[j].remaining).arg(gases[j].endPressure))
-		if (contingencyResult.notes) lines.push("", qsTr("PLANNER NOTES AND WARNINGS"), contingencyResult.notes)
+		var contingencyWarnings = []
+		if (contingencyResult.planSaveAllowed !== true)
+			contingencyWarnings.push(qsTr("The native planner could not create a valid saveable contingency plan."))
+		for (var gasIndex = 0; gasIndex < gases.length; ++gasIndex) {
+			if (gases[gasIndex].belowMinimum)
+				contingencyWarnings.push(qsTr("%1 has insufficient gas.").arg(gases[gasIndex].mix))
+			else if (gases[gasIndex].belowReserve)
+				contingencyWarnings.push(qsTr("%1 finishes below the configured reserve.").arg(gases[gasIndex].mix))
+		}
+		if (contingencyWarnings.length > 0)
+			lines.push("", qsTr("PLANNER WARNINGS"), contingencyWarnings.join("\n"))
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
 		return lines.join("\n")
 	}
@@ -483,7 +503,7 @@ Kirigami.ScrollablePage {
 		return mainPlan + "\n\n" + "=".repeat(64) + "\n\n" + contingencySlate()
 	}
 	function finalSampleValue(name, fallback) {
-		return profileData.length > 0 && profileData[profileData.length - 1][name] !== undefined ? profileData[profileData.length - 1][name] : fallback
+		return analysis[name] !== undefined ? analysis[name] : fallback
 	}
 	function profileMaxTime() {
 		var maximum = 0
@@ -526,6 +546,21 @@ Kirigami.ScrollablePage {
 	function formatSetpoint(mbar) {
 		return mbar && mbar > 0 ? (mbar / 1000.0).toFixed(2) + " bar" : "—"
 	}
+	function plannerWarningLines() {
+		var warnings = []
+		if (exceedsNDL)
+			warnings.push(qsTr("This recreational plan exceeds the no-decompression limit."))
+		else if (!planSaveAllowed)
+			warnings.push(qsTr("The native planner could not create a valid saveable plan."))
+		for (var i = 0; i < gasAnalysis.length; ++i) {
+			var gas = gasAnalysis[i]
+			if (gas.belowMinimum)
+				warnings.push(qsTr("%1 has insufficient gas.").arg(gas.mix))
+			else if (gas.belowReserve)
+				warnings.push(qsTr("%1 finishes below the configured reserve.").arg(gas.mix))
+		}
+		return warnings
+	}
 	function waterDescription() {
 		return waterType.currentIndex === 3 ? qsTr("Custom (%1 kg/10,000 L)").arg(customSalinity) : waterType.currentText
 	}
@@ -551,8 +586,9 @@ Kirigami.ScrollablePage {
 			var stop = schedule[i]
 			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "") + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
 		}
-		if (planNotes.length > 0)
-			lines.push("", qsTr("PLANNER NOTES AND WARNINGS"), planNotes)
+		var warnings = plannerWarningLines()
+		if (warnings.length > 0)
+			lines.push("", qsTr("PLANNER WARNINGS"), warnings.join("\n"))
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
 		return lines.join("\n")
 	}
@@ -600,7 +636,7 @@ Kirigami.ScrollablePage {
 			Components.NeoButton { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
 			RowLayout {
 				Layout.fillWidth: true
-				Components.NeoComboBox { id: profilePresetBox; Layout.fillWidth: true; accessibleName: qsTr("Profile preset"); model: page.profileOptions; textRole: "label"; currentIndex: page.selectedProfileIndex; onActivated: page.selectedProfileIndex = currentIndex }
+				Components.NeoComboBox { id: profilePresetBox; Layout.fillWidth: true; accessibleName: qsTr("Profile preset"); model: page.profileLabels; currentIndex: page.selectedProfileIndex; onActivated: page.selectedProfileIndex = currentIndex }
 				Components.NeoButton { text: qsTr("Load"); enabled: profilePresetBox.currentIndex >= 0; onClicked: page.loadSelectedProfile() }
 			}
 			Text { Layout.fillWidth: true; text: page.profileOptions[page.selectedProfileIndex] ? page.profileOptions[page.selectedProfileIndex].summary : ""; color: tokens.textSecondary; wrapMode: Text.WordWrap }
@@ -731,13 +767,13 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Profile segments"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
  Components.NeoButton { text: qsTr("Add segment"); onClicked: page.addSegment() } }
-			Text { text: qsTr("Each row is a depth/time waypoint. Use separate rows for multilevel profiles and gas switches."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Each row is time spent at a target depth. Neo inserts travel using the active descent and ascent rates. Use separate rows for multilevel profiles and gas switches."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Repeater { model: segments; delegate: GridLayout {
 				required property int index; required property real depth; required property real duration; required property int gas; required property real setpoint; required property int divemode
 				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("%1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoTextField { Layout.fillWidth: true; text: depth; placeholderText: qsTr("Depth (%1)").arg(page.depthUnit); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "depth", Number(text)); page.generatePlan() } }
-				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Minutes"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
+				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Time at depth (min)"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Gas for segment %1").arg(index + 1); model: page.gasNames; currentIndex: gas; onActivated: { segments.setProperty(index, "gas", currentIndex); page.generatePlan() } }
 				Components.NeoTextField { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
 				Components.NeoButton { text: qsTr("Remove"); enabled: segments.count > 1; onClicked: { segments.remove(index); page.generatePlan() } }
@@ -820,7 +856,8 @@ Kirigami.ScrollablePage {
  Item { Layout.fillWidth: true } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoTextArea { Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
+			Components.NeoButton { visible: page.planNotes.length > 0; Layout.fillWidth: true; text: page.nativeReportExpanded ? qsTr("Hide native planner report") : qsTr("Show native planner report"); onClicked: page.nativeReportExpanded = !page.nativeReportExpanded }
+			Components.NeoTextArea { visible: page.nativeReportExpanded && page.planNotes.length > 0; Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 			Repeater { model: page.schedule; delegate: GridLayout {
 				required property var modelData
@@ -845,10 +882,6 @@ Kirigami.ScrollablePage {
  Components.NeoButton { text: qsTr("Copy package"); onClicked: manager.copyToClipboard(page.planPackage()) }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Package TXT"); onClicked: planPackageTextFolder.open() }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Package PDF"); onClicked: planPackagePdfFolder.open() } }
-			Label { visible: page.plannerTextExport.length > 0; text: qsTr("Planner text saved: %1").arg(page.plannerTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
-			Label { visible: page.plannerPdfExport.length > 0; text: qsTr("Planner PDF saved: %1").arg(page.plannerPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
-			Label { visible: page.planPackageTextExport.length > 0; text: qsTr("Plan package text saved: %1").arg(page.planPackageTextExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
-			Label { visible: page.planPackagePdfExport.length > 0; text: qsTr("Plan package PDF saved: %1").arg(page.planPackagePdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
@@ -877,8 +910,8 @@ Kirigami.ScrollablePage {
 				GridLayout {
 					Layout.fillWidth: true
 					columns: page.width >= 700 ? 3 : 1
-					RowLayout { Layout.fillWidth: true; Label { text: qsTr("Oxygen %"); color: tokens.textMuted; Layout.fillWidth: true } Components.NeoSpinBox { from: 0; to: 100; value: page.gasOxygen; onValueModified: page.gasOxygen = value } }
-					RowLayout { Layout.fillWidth: true; Label { text: qsTr("Helium %"); color: tokens.textMuted; Layout.fillWidth: true } Components.NeoSpinBox { from: 0; to: 100; value: page.gasHelium; onValueModified: page.gasHelium = value } }
+					RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("Oxygen %:"); color: tokens.textMuted; Layout.preferredWidth: 76 } Components.NeoSpinBox { Layout.preferredWidth: 140; from: 0; to: 100; value: page.gasOxygen; onValueModified: page.gasOxygen = value } Item { Layout.fillWidth: true } }
+					RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("Helium %:"); color: tokens.textMuted; Layout.preferredWidth: 76 } Components.NeoSpinBox { Layout.preferredWidth: 140; from: 0; to: 100; value: page.gasHelium; onValueModified: page.gasHelium = value } Item { Layout.fillWidth: true } }
 					Components.NeoButton { text: qsTr("Calculate"); onClicked: page.calculateGasTools() }
 				}
 				GridLayout { Layout.fillWidth: true; columns: 3; Label { text: qsTr("pO₂"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: qsTr("MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: Backend.o2narcotic ? qsTr("END @ MOD") : qsTr("EAD @ MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } }

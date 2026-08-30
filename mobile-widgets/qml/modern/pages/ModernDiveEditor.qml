@@ -277,13 +277,17 @@ Kirigami.Page {
 					rowSpacing: tokens.space4
 					RowLayout {
 						Layout.fillWidth: true
-						Text { Layout.fillWidth: true; text: qsTr("Rating"); color: tokens.textSecondary; font.pixelSize: 12 }
+						spacing: tokens.space8
+						Text { Layout.preferredWidth: 130; text: qsTr("Rating (0-5):"); color: tokens.textSecondary; font.pixelSize: 12 }
 						Components.NeoSpinBox { id: ratingBox; Layout.preferredWidth: 160; from: 0; to: 5; value: dive ? dive.rating || 0 : 0; accessibleName: qsTr("Dive rating") }
+						Item { Layout.fillWidth: true }
 					}
 					RowLayout {
 						Layout.fillWidth: true
-						Text { Layout.fillWidth: true; text: qsTr("Visibility"); color: tokens.textSecondary; font.pixelSize: 12 }
-						Components.NeoTextField { id: visibilityField; Layout.preferredWidth: 180; placeholderText: Backend.length === Enums.METERS ? qsTr("e.g. 10 m") : qsTr("e.g. 30 ft"); text: dive ? dive.visibilityDistance || "" : ""; accessibleName: qsTr("Underwater visibility distance") }
+						spacing: tokens.space8
+						Text { Layout.preferredWidth: 130; text: qsTr("Underwater visibility:"); color: tokens.textSecondary; font.pixelSize: 12 }
+						Components.NeoTextField { id: visibilityField; Layout.preferredWidth: 180; placeholderText: Backend.length === Enums.METERS ? qsTr("Distance, e.g. 10 m") : qsTr("Distance, e.g. 30 ft"); text: dive ? dive.visibilityDistance || "" : ""; accessibleName: qsTr("Underwater visibility distance") }
+						Item { Layout.fillWidth: true }
 					}
 				}
 			}

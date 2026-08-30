@@ -28,6 +28,8 @@
 #include <QTextDocument>
 #include <QtConcurrent>
 #include <QVariantMap>
+#include <cstdlib>
+#include <limits>
 
 #define VARIATIONS_IN_BACKGROUND 1
 
@@ -1565,13 +1567,35 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	}
 	diveplan.salinity = waterType;
 
-	// Populate the actual dive plan segments from QML data
+	// Neo rows describe time spent at a target depth. Insert travel between
+	// levels using the active planner rates; passing the whole dwell time as one
+	// depth transition creates an unrealistic diagonal descent (for example a
+	// 30-minute descent to 30 m).
+	int enteredProfileRuntime = 0;
+	depth_t previousDepth = 0_m;
+	depth_t deepestEnteredDepth = 0_m;
+	for (const QVariant &segData : segmentsData)
+		deepestEnteredDepth.mm = std::max(deepestEnteredDepth.mm, units_to_depth(segData.toMap()["depth"].toInt()).mm);
 	for (const QVariant &segData : segmentsData) {
 		QVariantMap map = segData.toMap();
 		int cylinderId = map["gas"].toInt();
 		divemode_t divemode = get_local_divemode(d, dcNr, cylinderId, static_cast<divemode_t>(map["divemode"].toInt()));
-
-		plan_add_segment(diveplan, map["duration"].toInt() * 60, units_to_depth(map["depth"].toInt()), cylinderId, map["setpoint"].toInt(), true, divemode);
+		const depth_t targetDepth = units_to_depth(map["depth"].toInt());
+		const int depthDelta = std::abs(targetDepth.mm - previousDepth.mm);
+		if (depthDelta > 0) {
+			const int travelRate = targetDepth.mm > previousDepth.mm
+				? std::max(1, prefs.descrate)
+				: std::max(1, ascent_velocity(previousDepth, deepestEnteredDepth, enteredProfileRuntime));
+			const int travelDuration = (depthDelta + travelRate - 1) / travelRate;
+			plan_add_segment(diveplan, travelDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
+			enteredProfileRuntime += travelDuration;
+		}
+		const int dwellDuration = std::max(0, map["duration"].toInt()) * 60;
+		if (dwellDuration > 0) {
+			plan_add_segment(diveplan, dwellDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
+			enteredProfileRuntime += dwellDuration;
+		}
+		previousDepth = targetDepth;
 	}
 
 	struct diveplan plan_copy = diveplan;
@@ -1613,7 +1637,9 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	d->notes = notes_qstr.toStdString();
 	// Build the results map
 	QVariantMap results;
-	results["notes"] = QString::fromStdString(d->notes);
+	QTextDocument notesDocument;
+	notesDocument.setHtml(QString::fromStdString(d->notes));
+	results["notes"] = notesDocument.toPlainText().trimmed();
 	results["maxDepth"] = get_depth_string(d->maxdepth, true);
 	results["duration"] = QString::number(d->duration.seconds / 60) + " min";
 	// AI-generated (Claude)
@@ -1626,6 +1652,10 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	results["otu"] = d->otu;
 	QVariantList schedule;
 	for (const decostop &stop : decostops) {
+		// The mature planner also reports zero-time depths that it cleared while
+		// ascending. They are useful internally, but they are not deco stops.
+		if (stop.time <= 0)
+			continue;
 		QVariantMap row;
 		row.insert("depth", stop.depth);
 		row.insert("duration", stop.time);
@@ -1669,6 +1699,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	results["gasAnalysis"] = gasAnalysis;
 
 	QVariantList profileData;
+	QVariantMap analysis;
+	int closestAnalysisSample = std::numeric_limits<int>::max();
 	if (d->dcs.size() > 0) {
 		// Project the planner's established tissue/GF results for display only.
 		const plot_info plot = has_planner_deco_state
@@ -1700,10 +1732,16 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				point["po2"] = static_cast<int>(std::lround(plotIt->pressures.o2 * 1000.0));
 				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
 			}
+			const int analysisDistance = std::abs(sample.time.seconds - enteredProfileRuntime);
+			if (analysisDistance < closestAnalysisSample) {
+				closestAnalysisSample = analysisDistance;
+				analysis = point;
+			}
 			profileData.append(point);
 		}
 	}
 	results["profile"] = profileData;
+	results["analysis"] = analysis;
 
 	// Save the dive if requested
 	int newDiveId = -1;

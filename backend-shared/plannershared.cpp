@@ -3,6 +3,7 @@
 #include "core/settings/qPrefDivePlanner.h"
 #include "core/settings/qPrefTechnicalDetails.h"
 #include "core/settings/qPrefUnit.h"
+#include "core/units.h"
 #include "qt-models/diveplannermodel.h"
 #include "qt-models/cylindermodel.h"
 
@@ -18,7 +19,9 @@ void PlannerShared::set_planner_deco_mode(deco_mode value)
 
 int PlannerShared::reserve_gas()
 {
-	return qPrefDivePlanner::reserve_gas();
+	// The stored preference is millibar. QML edits the value in the user's
+	// display unit, just like DivePlannerPointsModel::setReserveGas().
+	return get_pressure_units(qPrefDivePlanner::reserve_gas(), nullptr);
 }
 void PlannerShared::set_reserve_gas(int value)
 {

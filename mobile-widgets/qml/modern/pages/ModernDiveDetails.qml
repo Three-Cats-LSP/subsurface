@@ -128,7 +128,8 @@ Kirigami.Page {
 				"gps": model.gps,
 				"sumWeight": model.sumWeight,
 				"rating": model.rating,
-				"viz": model.viz
+				"viz": model.viz,
+				"visibilityDistance": model.visibilityDistance
 			})
 			Accessible.role: Accessible.Pane
 			Accessible.name: qsTr("Dive details for %1").arg(modelData.location || qsTr("Unnamed dive site"))
@@ -281,7 +282,14 @@ Kirigami.Page {
 									font.weight: Font.DemiBold
 									elide: Text.ElideRight
 								}
-								Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								RowLayout {
+									Layout.fillWidth: true
+									spacing: tokens.space12
+									Text { text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+									Text { visible: delegateRoot.modelData.rating > 0; text: qsTr("Rating: %1/5").arg(delegateRoot.modelData.rating); color: tokens.textSecondary; font.pixelSize: 11 }
+									Text { visible: delegateRoot.modelData.visibilityDistance && delegateRoot.modelData.visibilityDistance.length > 0; text: qsTr("Visibility: %1").arg(delegateRoot.modelData.visibilityDistance || ""); color: tokens.textSecondary; font.pixelSize: 11 }
+									Item { Layout.fillWidth: true }
+								}
 							}
 
 							Rectangle {

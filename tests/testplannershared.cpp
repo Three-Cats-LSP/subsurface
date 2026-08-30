@@ -74,6 +74,11 @@ void TestPlannerShared::test_planning()
 	// switch_at_req_stop
 	// doo2breaks
 	// min_switch_duration
+	qPrefUnits::set_unit_system(METRIC);
+	qPrefDivePlanner::set_reserve_gas(40000);
+	QCOMPARE(PlannerShared::reserve_gas(), 40);
+	PlannerShared::set_reserve_gas(55);
+	QCOMPARE(qPrefDivePlanner::reserve_gas(), 55000);
 }
 
 void TestPlannerShared::test_gas()
