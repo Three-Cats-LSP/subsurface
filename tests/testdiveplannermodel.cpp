@@ -515,22 +515,22 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	QVERIFY(noDeco.value("planSaveAllowed").toBool());
 	for (const QVariant &sample : noDeco.value("profile").toList())
 		QVERIFY(!sample.toMap().value("inDeco").toBool());
-	const QVariantMap deco40 = calculate(40, 25);
-	const QVariantMap deco50 = calculate(50, 30);
-	QVERIFY(deco40.value("planSaveAllowed").toBool());
-	QVERIFY(!deco40.value("schedule").toList().empty());
+	const QVariantMap deco45 = calculate(45, 30);
+	const QVariantMap deco50 = calculate(50, 35);
+	QVERIFY(deco45.value("planSaveAllowed").toBool());
+	QVERIFY(!deco45.value("schedule").toList().empty());
 	QVERIFY(!deco50.value("schedule").toList().empty());
-	QVERIFY(runtime(deco50) > runtime(deco40));
+	QVERIFY(runtime(deco50) > runtime(deco45));
 
 	// Monotonicity checks are stable across native implementation details.
 	const QVariantMap shallow = calculate(30, 25);
-	const QVariantMap longBottomTime = calculate(40, 30);
-	QVERIFY(runtime(deco40) >= runtime(shallow));
-	QVERIFY(runtime(longBottomTime) >= runtime(deco40));
+	const QVariantMap longBottomTime = calculate(45, 35);
+	QVERIFY(runtime(deco45) >= runtime(shallow));
+	QVERIFY(runtime(longBottomTime) >= runtime(deco45));
 	prefs.gfhigh = 85;
-	const QVariantMap relaxedGf = calculate(40, 25);
+	const QVariantMap relaxedGf = calculate(45, 30);
 	prefs.gfhigh = 70;
-	const QVariantMap conservativeGf = calculate(40, 25);
+	const QVariantMap conservativeGf = calculate(45, 30);
 	QVERIFY(runtime(conservativeGf) >= runtime(relaxedGf));
 
 	// Gas and toxicity assertions are checked through the same QML-facing data
@@ -540,8 +540,8 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	const QVariantMap ean32 = calculate(30, 30, 32);
 	QVERIFY(runtime(ean32) <= runtime(air));
 	QVERIFY(air.value("otu").toInt() >= 0);
-	QVERIFY(deco40.value("otu").toInt() >= 0);
-	QVERIFY(!deco40.value("gasAnalysis").toList().empty());
+	QVERIFY(deco45.value("otu").toInt() >= 0);
+	QVERIFY(!deco45.value("gasAnalysis").toList().empty());
 
 	// VPM-B verification follows the native model's own conservatism ordering,
 	// instead of comparing schedules from a different implementation.
