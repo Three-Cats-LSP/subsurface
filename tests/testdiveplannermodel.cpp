@@ -404,9 +404,9 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	const QVariantList oxygenReference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 1000, 0);
 	const QVariantList ean50Reference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 500, 0);
 	QCOMPARE(oxygenReference.at(4).toMap().value("mod").toString(), get_depth_string(3_m, true));
-	QCOMPARE(oxygenReference.at(6).toMap().value("mod").toString(), get_depth_string(6_m, true));
+	QCOMPARE(oxygenReference.at(6).toMap().value("decoSwitch").toString(), get_depth_string(6_m, true));
 	QCOMPARE(ean50Reference.at(4).toMap().value("mod").toString(), get_depth_string(17_m, true));
-	QCOMPARE(ean50Reference.at(6).toMap().value("mod").toString(), get_depth_string(21_m, true));
+	QCOMPARE(ean50Reference.at(6).toMap().value("decoSwitch").toString(), get_depth_string(21_m, true));
 
 	// The profile keeps the inspector's native plot values alongside the
 	// schedule. The detailed fields above are asserted on the regular profile

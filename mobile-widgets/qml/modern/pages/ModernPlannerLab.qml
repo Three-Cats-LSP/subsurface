@@ -400,7 +400,7 @@ Kirigami.ScrollablePage {
 			var bottomReference = gasInfoAt(values, Backend.bottompo2 / 100.0)
 			var decoReference = gasInfoAt(values, Backend.decopo2 / 100.0)
 			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he,
-				"bottomMod": bottomReference.mod || "—", "decoSwitch": decoReference.mod || "—", "ead": bottomReference.ead || "—" })
+				"bottomMod": bottomReference.mod || "—", "decoSwitch": decoReference.decoSwitch || decoReference.mod || "—", "ead": bottomReference.ead || "—" })
 		}
 		gasReference = references
 	}

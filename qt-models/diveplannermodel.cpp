@@ -1855,6 +1855,9 @@ QVariantList DivePlannerPointsModel::calculateGasInfo(const QString &cylinderTyp
 
 		// Calculate MOD
 		depth_t mod = temp_dive.gas_mod(temp_cyl.gasmix, po2_limit, 1_m);
+		// Match the desktop planner's "Deco switch at" column: gas switches
+		// are aligned to actual 3 m / 10 ft decompression-stop increments.
+		depth_t deco_switch = temp_dive.gas_mod(temp_cyl.gasmix, po2_limit, m_or_ft(3, 10));
 
 		// Calculate EAD/END at the MOD
 		double p_amb_at_mod = temp_dive.depth_to_atm(mod);
@@ -1872,6 +1875,7 @@ QVariantList DivePlannerPointsModel::calculateGasInfo(const QString &cylinderTyp
 		QVariantMap row;
 		row["po2"] = QString::number(po2, 'f', 1);
 		row["mod"] = get_depth_string(mod, true);
+		row["decoSwitch"] = get_depth_string(deco_switch, true);
 		row["ead"] = get_depth_string(narcotic_depth, true);
 		results.append(row);
 	}

@@ -163,6 +163,7 @@ require(
 		'text: qsTr("He %")',
 		'qsTr("Deco switch %1 (pO₂ %2 bar)")',
 		'qsTr("Bottom MOD %1 (pO₂ %2 bar)")',
+		'decoReference.decoSwitch || decoReference.mod || "—"',
 		'placeholderText: qsTr("Runtime at segment end (min)")',
 		'text: qsTr("Oxygen %:")',
 		'text: qsTr("Helium %:")',
