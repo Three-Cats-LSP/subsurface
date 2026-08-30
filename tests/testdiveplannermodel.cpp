@@ -308,8 +308,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(result.contains("schedule"));
 	QVERIFY(result.value("schedule").canConvert<QVariantList>());
 	QVERIFY(result.contains("analysis"));
-	QVERIFY(result.value("runtimeSeconds").toInt() >= 21 * 60);
-	QCOMPARE(result.value("bottomTimeSeconds").toInt(), 21 * 60);
+	QVERIFY(result.value("runtimeSeconds").toInt() >= 20 * 60);
+	QCOMPARE(result.value("bottomTimeSeconds").toInt(), 20 * 60);
 	const QVariantList timeline = result.value("timeline").toList();
 	QVERIFY(!timeline.empty());
 	QCOMPARE(timeline.first().toMap().value("phase").toString(), QStringLiteral("descent"));
@@ -365,6 +365,46 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSavedPlannerDuration >= 30 * 60);
 	QCOMPARE(lastSavedPlannerDuration, savedPlan.value("runtimeSeconds").toInt());
 	QVERIFY(!lastSavedPlannerNotes.isEmpty());
+
+	// Match the canonical desktop case reported by users: 40 m at 30 min
+	// runtime on air with EAN50 and oxygen available for decompression.
+	QVariantMap ean50Cylinder = cylinder;
+	ean50Cylinder.insert("type", "10L 200 bar");
+	ean50Cylinder.insert("mix", "50/0");
+	ean50Cylinder.insert("use", OC_GAS);
+	QVariantMap oxygenCylinder = ean50Cylinder;
+	oxygenCylinder.insert("mix", "100/0");
+	cylinder.insert("type", "12L 200 bar");
+	cylinder.insert("mix", "21/0");
+	cylinder.insert("use", OC_GAS);
+	segment.insert("depth", 40);
+	segment.insert("duration", 30);
+	segments[0] = segment;
+	const QVariantMap desktopEquivalent = model->calculatePlan(QVariantList { cylinder, ean50Cylinder, oxygenCylinder },
+		segments, "2026-01-01", "12:00:00", OC, 10300, 1013, false);
+	QVERIFY(desktopEquivalent.value("runtimeSeconds").toInt() >= 60 * 60);
+	QVERIFY(desktopEquivalent.value("runtimeSeconds").toInt() <= 64 * 60);
+	const QVariantList desktopSchedule = desktopEquivalent.value("schedule").toList();
+	QVERIFY(!desktopSchedule.empty());
+	QCOMPARE(desktopSchedule.first().toMap().value("depth").toInt(), 21000);
+	bool switchedToEan50 = false;
+	bool switchedToOxygen = false;
+	for (const QVariant &timelineRow : desktopEquivalent.value("timeline").toList()) {
+		const QVariantMap row = timelineRow.toMap();
+		if (!row.value("gasSwitch").toBool())
+			continue;
+		switchedToEan50 |= row.value("gas").toString() == QStringLiteral("EAN50");
+		switchedToOxygen |= row.value("gas").toString() == QStringLiteral("oxygen");
+	}
+	QVERIFY(switchedToEan50);
+	QVERIFY(switchedToOxygen);
+
+	const QVariantList oxygenReference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 1000, 0);
+	const QVariantList ean50Reference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 500, 0);
+	QCOMPARE(oxygenReference.at(4).toMap().value("mod").toString(), get_depth_string(3_m, true));
+	QCOMPARE(oxygenReference.at(6).toMap().value("mod").toString(), get_depth_string(6_m, true));
+	QCOMPARE(ean50Reference.at(4).toMap().value("mod").toString(), get_depth_string(17_m, true));
+	QCOMPARE(ean50Reference.at(6).toMap().value("mod").toString(), get_depth_string(21_m, true));
 
 	// The profile keeps the inspector's native plot values alongside the
 	// schedule. The detailed fields above are asserted on the regular profile

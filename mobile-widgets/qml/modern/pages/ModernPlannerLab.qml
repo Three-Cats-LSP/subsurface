@@ -368,6 +368,25 @@ Kirigami.ScrollablePage {
 			names.push(qsTr("Gas %1").arg(i + 1))
 		gasNames = names
 	}
+	function mixOxygen(mix) {
+		var value = Number(String(mix).split("/")[0])
+		return isNaN(value) ? 21 : Math.max(0, Math.min(100, Math.round(value)))
+	}
+	function mixHelium(mix) {
+		var parts = String(mix).split("/")
+		var value = Number(parts.length > 1 ? parts[1] : 0)
+		return isNaN(value) ? 0 : Math.max(0, Math.min(100 - mixOxygen(mix), Math.round(value)))
+	}
+	function setCylinderMix(index, oxygen, helium) {
+		var safeOxygen = Math.max(0, Math.min(100, Math.round(oxygen)))
+		var safeHelium = Math.max(0, Math.min(100 - safeOxygen, Math.round(helium)))
+		cylinders.setProperty(index, "mix", safeOxygen + "/" + safeHelium)
+		generatePlan()
+	}
+	function gasInfoAt(values, po2Bar) {
+		var index = Math.max(0, Math.min(values.length - 1, Math.round((po2Bar - 1.0) * 10)))
+		return values.length > 0 ? values[index] : ({})
+	}
 	function updateGasReference() {
 		var references = []
 		for (var i = 0; i < cylinders.count; ++i) {
@@ -378,8 +397,10 @@ Kirigami.ScrollablePage {
 			var parsedHe = Number(parts.length > 1 ? parts[1] : 0)
 			var he = isNaN(parsedHe) ? 0 : Math.max(0, Math.min(100 - o2, parsedHe))
 			var values = Backend.divePlannerPointsModel.calculateGasInfo(cylinder.type, Math.round(o2 * 10), Math.round(he * 10))
-			var reference = values.length > 4 ? values[4] : ({})
-			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he, "mod": reference.mod || "—", "ead": reference.ead || "—" })
+			var bottomReference = gasInfoAt(values, Backend.bottompo2 / 100.0)
+			var decoReference = gasInfoAt(values, Backend.decopo2 / 100.0)
+			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he,
+				"bottomMod": bottomReference.mod || "—", "decoSwitch": decoReference.mod || "—", "ead": bottomReference.ead || "—" })
 		}
 		gasReference = references
 	}
@@ -407,7 +428,7 @@ Kirigami.ScrollablePage {
 	function addSegment() {
 		var last = segments.get(segments.count - 1)
 		segments.append({ "depth": last ? last.depth : (Backend.length === Enums.METERS ? 18 : 60),
-			"duration": 10, "gas": last ? last.gas : 0, "setpoint": last ? last.setpoint : Backend.default_setpoint,
+			"duration": last ? last.duration + 10 : 10, "gas": last ? last.gas : 0, "setpoint": last ? last.setpoint : Backend.default_setpoint,
 			"divemode": last ? last.divemode : 0 })
 		generatePlan()
 	}
@@ -778,30 +799,34 @@ Kirigami.ScrollablePage {
  Components.NeoButton { text: qsTr("Add gas"); onClicked: page.addCylinder() } }
 			Repeater { model: cylinders; delegate: GridLayout {
 				required property int index; required property string type; required property string mix; required property real pressure; required property int use
-				Layout.fillWidth: true; columns: page.width >= 700 ? 5 : 2
+				property int oxygen: page.mixOxygen(mix)
+				property int helium: page.mixHelium(mix)
+				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("Gas %1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Cylinder type for gas %1").arg(index + 1); model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: { cylinders.setProperty(index, "type", currentText); page.generatePlan() } }
-				Components.NeoTextField { Layout.fillWidth: true; text: mix; placeholderText: qsTr("O₂/He e.g. 32/0"); onEditingFinished: { cylinders.setProperty(index, "mix", text); page.generatePlan() } }
+				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoSpinBox { accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); from: 0; to: 100; value: oxygen; onValueModified: page.setCylinderMix(index, value, helium) } }
+				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoSpinBox { accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); from: 0; to: 100 - oxygen; value: helium; onValueModified: page.setCylinderMix(index, oxygen, value) } }
 				Components.NeoTextField { Layout.fillWidth: true; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
 				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }
  Components.NeoButton { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
 			} }
-			Text { visible: page.gasReference.length > 0; text: qsTr("Gas reference at pO₂ 1.4 bar"); color: tokens.textSecondary; font.weight: Font.DemiBold }
+			Text { visible: page.gasReference.length > 0; text: qsTr("Gas depth reference"); color: tokens.textSecondary; font.weight: Font.DemiBold }
 			Repeater { model: page.gasReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: modelData.name + " " + modelData.mix; color: tokens.textMuted; Layout.fillWidth: true }
- Label { text: qsTr("MOD %1").arg(modelData.mod); color: tokens.textPrimary }
+ Label { text: qsTr("Deco switch %1 (pO₂ %2 bar)").arg(modelData.decoSwitch).arg((Backend.decopo2 / 100.0).toFixed(1)); color: tokens.accent }
+ Label { text: qsTr("Bottom MOD %1 (pO₂ %2 bar)").arg(modelData.bottomMod).arg((Backend.bottompo2 / 100.0).toFixed(1)); color: tokens.textPrimary }
  Label { text: (Backend.o2narcotic ? qsTr("END %1") : qsTr("EAD %1")).arg(modelData.ead); color: tokens.textPrimary } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
 			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Profile segments"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
  Components.NeoButton { text: qsTr("Add segment"); onClicked: page.addSegment() } }
-			Text { text: qsTr("Each row is time spent at a target depth. Neo inserts travel using the active descent and ascent rates. Use separate rows for multilevel profiles and gas switches."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Each row is a target depth and the runtime when that segment ends. Neo inserts travel within that runtime, matching Subsurface's native planner. Use separate rows for multilevel profiles and requested gas changes."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Repeater { model: segments; delegate: GridLayout {
 				required property int index; required property real depth; required property real duration; required property int gas; required property real setpoint; required property int divemode
 				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("%1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoTextField { Layout.fillWidth: true; text: depth; placeholderText: qsTr("Depth (%1)").arg(page.depthUnit); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "depth", Number(text)); page.generatePlan() } }
-				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Time at depth (min)"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
+				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Runtime at segment end (min)"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Gas for segment %1").arg(index + 1); model: page.gasNames; currentIndex: gas; onActivated: { segments.setProperty(index, "gas", currentIndex); page.generatePlan() } }
 				Components.NeoTextField { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
 				Components.NeoButton { text: qsTr("Remove"); enabled: segments.count > 1; onClicked: { segments.remove(index); page.generatePlan() } }

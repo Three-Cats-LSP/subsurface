@@ -1567,10 +1567,11 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	}
 	diveplan.salinity = waterType;
 
-	// Neo rows describe time spent at a target depth. Insert travel between
-	// levels using the active planner rates; passing the whole dwell time as one
-	// depth transition creates an unrealistic diagonal descent (for example a
-	// 30-minute descent to 30 m).
+	// Neo rows use the mature planner's waypoint semantics: the entered time is
+	// the runtime at the end of that target-depth segment.  Insert travel first,
+	// then use only the remaining time as the level segment.  Thus a 40 m / 30
+	// min row becomes roughly two minutes of descent plus 28 minutes at depth,
+	// matching the desktop planner rather than adding descent on top of 30 min.
 	int enteredProfileRuntime = 0;
 	depth_t previousDepth = 0_m;
 	depth_t deepestEnteredDepth = 0_m;
@@ -1590,7 +1591,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			plan_add_segment(diveplan, travelDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
 			enteredProfileRuntime += travelDuration;
 		}
-		const int dwellDuration = std::max(0, map["duration"].toInt()) * 60;
+		const int requestedRuntime = std::max(0, map["duration"].toInt()) * 60;
+		const int dwellDuration = std::max(0, requestedRuntime - enteredProfileRuntime);
 		if (dwellDuration > 0) {
 			plan_add_segment(diveplan, dwellDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
 			enteredProfileRuntime += dwellDuration;
