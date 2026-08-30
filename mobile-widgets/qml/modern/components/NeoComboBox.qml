@@ -39,36 +39,31 @@ ComboBox {
 		border.width: 1
 		border.color: control.activeFocus || control.popup.visible ? tokens.accent : tokens.border
 	}
-	// A read-only TextInput consumes pointer events on some Qt/Material builds.
-	// Cover the complete non-editable control so the field body and chevron
-	// have identical dropdown behaviour.
+	// TextInput consumes pointer events on some Qt/Material builds, including
+	// editable combos. Cover the complete field so every combo opens from its
+	// body as well as its chevron. Editable controls retain keyboard input and
+	// receive a best-effort cursor position from the click.
 	MouseArea {
 		id: fieldMouseArea
 		anchors.fill: parent
-		enabled: control.enabled && !control.editable
+		enabled: control.enabled
 		hoverEnabled: true
 		preventStealing: true
 		z: 1000
 		cursorShape: Qt.PointingHandCursor
 		onPressed: function(mouse) {
 			mouse.accepted = true
-			control.forceActiveFocus()
+			if (control.editable && control.contentItem) {
+				control.contentItem.forceActiveFocus()
+				var localPoint = fieldMouseArea.mapToItem(control.contentItem, mouse.x, mouse.y)
+				control.contentItem.cursorPosition = control.contentItem.positionAt(localPoint.x, localPoint.y)
+			} else {
+				control.forceActiveFocus()
+			}
 			if (control.popup.visible)
 				control.popup.close()
 			else
 				control.popup.open()
-		}
-	}
-	// Editable combos keep normal text selection/typing, while a tap anywhere in
-	// the field also reveals the available presets instead of requiring the
-	// narrow chevron target.
-	TapHandler {
-		enabled: control.enabled && control.editable
-		acceptedButtons: Qt.LeftButton
-		gesturePolicy: TapHandler.ReleaseWithinBounds
-		onTapped: {
-			control.forceActiveFocus()
-			control.popup.open()
 		}
 	}
 	delegate: ItemDelegate {

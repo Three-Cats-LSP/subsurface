@@ -57,6 +57,10 @@ Canvas {
 			line(ctx, [10, 5, 10, 2, 18, 2, 18, 5]); line(ctx, [10, 23, 10, 26, 18, 26, 18, 23])
 		} else if (name === "tank") {
 			// Rendered by the attributed Flaticon source below.
+		} else if (name === "dives") {
+			// Rendered by the attributed Flaticon source below.
+		} else if (name === "equipmentItem") {
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "type") {
@@ -202,7 +206,7 @@ Canvas {
 		anchors.fill: parent
 		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
 		visible: icon.name === "type"
-		source: "qrc:/qml/scuba-diving-18643383.png"
+		source: "qrc:/qml/compass-18112879.png"
 		fillMode: Image.PreserveAspectFit
 		smooth: true
 		mipmap: true
@@ -212,6 +216,44 @@ Canvas {
 		anchors.fill: diveTypeSource
 		visible: diveTypeSource.visible
 		source: diveTypeSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: divesSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "dives"
+		source: "qrc:/qml/air-tank-17916416.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: divesSource
+		visible: divesSource.visible
+		source: divesSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: equipmentItemSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "equipmentItem"
+		source: "qrc:/qml/tank-14116551.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: equipmentItemSource
+		visible: equipmentItemSource.visible
+		source: equipmentItemSource
 		color: icon.iconColor
 		cached: true
 	}

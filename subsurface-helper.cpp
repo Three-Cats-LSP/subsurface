@@ -191,6 +191,7 @@ void run_mobile_ui(double initial_font_size)
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
 	int width = 800;
 	int height = 1200;
+	bool heightOverridden = false;
 	if (qEnvironmentVariableIsSet("SUBSURFACE_MOBILE_WIDTH")) {
 		bool ok;
 		int width_override = qEnvironmentVariableIntValue("SUBSURFACE_MOBILE_WIDTH", &ok);
@@ -204,9 +205,20 @@ void run_mobile_ui(double initial_font_size)
 		int height_override = qEnvironmentVariableIntValue("SUBSURFACE_MOBILE_HEIGHT", &ok);
 		if (ok) {
 			height = height_override;
+			heightOverridden = true;
 			report_info("overriding window height: %d", height);
 		}
 	}
+#ifdef Q_OS_WIN
+	// The QML Window size is its client area, while QScreen::availableGeometry()
+	// also has to accommodate the native title bar and frame. The historical
+	// 1200px default therefore opened below the Windows taskbar and hid the
+	// bottom border and Cloud & Sync card. Keep explicit test/developer size
+	// overrides intact, but make the normal first window fit the work area with
+	// enough room for the native frame.
+	if (!heightOverridden)
+		height = qMin(height, qMax(480, screen->availableGeometry().height() - 64));
+#endif
 	qml_window->setHeight(height);
 	qml_window->setWidth(width);
 #endif // not Q_OS_ANDROID and not Q_OS_IOS

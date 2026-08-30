@@ -303,13 +303,20 @@ Kirigami.Page {
 								accessibleName: qsTr("Edit dive")
 								onClicked: page.editRequested(delegateRoot.modelData)
 							}
-							ToolButton { text: "⋯"; Accessible.name: qsTr("More dive actions"); onClicked: diveActions.open() }
-							Menu {
-								id: diveActions
-								MenuItem { text: qsTr("Edit dive"); onTriggered: page.editRequested(delegateRoot.modelData) }
-								MenuSeparator {}
-								MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onTriggered: diveReportFolder.open() }
-								MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onTriggered: diveReportTextFolder.open() }
+							ToolButton {
+								id: diveMenuButton
+								text: "⋯"
+								Accessible.name: qsTr("More dive actions")
+								onClicked: diveActions.open()
+								Menu {
+									id: diveActions
+									x: Math.max(0, diveMenuButton.width - implicitWidth)
+									y: diveMenuButton.height
+									MenuItem { text: qsTr("Edit dive"); onTriggered: page.editRequested(delegateRoot.modelData) }
+									MenuSeparator {}
+									MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onTriggered: diveReportFolder.open() }
+									MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onTriggered: diveReportTextFolder.open() }
+								}
 							}
 						}
 						Text { visible: page.diveReportPdfExport.length > 0; text: qsTr("PDF saved: %1").arg(page.diveReportPdfExport); color: tokens.success; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -702,13 +709,13 @@ Kirigami.Page {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						columns: page.width >= 760 ? 5 : 6
+						columns: 6
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: page.width >= 760 ? 1 : 3
+							Layout.columnSpan: 2
 							label: qsTr("Gas & cylinder")
 							value: delegateRoot.cylinderGasSummary().length > 0 ? delegateRoot.cylinderGasSummary() : qsTr("Not recorded")
 							detail: delegateRoot.pressureSummary()
@@ -716,15 +723,7 @@ Kirigami.Page {
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: page.width >= 760 ? 1 : 3
-							label: qsTr("Gear")
-							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : qsTr("Not recorded")
-							detail: qsTr("Weights: %1").arg(delegateRoot.modelData.sumWeight && delegateRoot.modelData.sumWeight.length > 0 ? delegateRoot.modelData.sumWeight : qsTr("Not recorded"))
-							iconName: "gear"
-						}
-						Components.DiveInfoCard {
-							Layout.fillWidth: true
-							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							Layout.columnSpan: 2
 							label: qsTr("Mode")
 							value: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? delegateRoot.modelData.diveMode : qsTr("Not recorded")
 							detail: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0 ? qsTr("Recorded dive mode") : ""
@@ -732,14 +731,22 @@ Kirigami.Page {
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							Layout.columnSpan: 2
 							label: qsTr("Type")
 							value: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0 ? delegateRoot.modelData.tags : qsTr("Not recorded")
 							iconName: "type"
 						}
 						Components.DiveInfoCard {
 							Layout.fillWidth: true
-							Layout.columnSpan: page.width >= 760 ? 1 : 2
+							Layout.columnSpan: 3
+							label: qsTr("Gear")
+							value: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0 ? delegateRoot.modelData.suit : qsTr("Not recorded")
+							detail: qsTr("Weights: %1").arg(delegateRoot.modelData.sumWeight && delegateRoot.modelData.sumWeight.length > 0 ? delegateRoot.modelData.sumWeight : qsTr("Not recorded"))
+							iconName: "gear"
+						}
+						Components.DiveInfoCard {
+							Layout.fillWidth: true
+							Layout.columnSpan: 3
 							label: qsTr("Buddy")
 							value: delegateRoot.modelData.buddy && delegateRoot.modelData.buddy.length > 0 ? delegateRoot.modelData.buddy : qsTr("Not recorded")
 							detail: delegateRoot.modelData.diveGuide || ""

@@ -20,6 +20,8 @@ Kirigami.ApplicationWindow {
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
 	background: Rectangle { color: "#0B1220" }
+	readonly property int neoAvailableWidth: Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : Screen.width
+	readonly property int neoAvailableHeight: Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : Screen.height
 	// Keep Qt Quick Controls in step with the Neo shell. Several mature pages
 	// use these controls for forms and actions.
 	Material.theme: Material.Dark
@@ -34,7 +36,7 @@ Kirigami.ApplicationWindow {
 		anchors.left: parent.left
 		anchors.right: parent.right
 		anchors.bottom: parent.bottom
-		height: 1
+		height: 2
 		color: "#1E3B50"
 		z: 10000
 	}
@@ -74,9 +76,11 @@ Kirigami.ApplicationWindow {
 		onMapRequested: showPageFromDrawer(mapPage)
 		onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)
 		onEquipmentRequested: showPageFromDrawer(neoEquipmentLibrary)
+		onPlannerRequested: showPageFromDrawer(neoPlannerLab)
 		onImportRequested: showPageFromDrawer(neoDiveComputerCenter)
 		onPortabilityRequested: showPageFromDrawer(neoDataPortability)
 		onSettingsRequested: showPageFromDrawer(neoSettingsHub)
+		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 	}
 
 	// we want to use our own colors for Kirigami, so let's define our colorset
@@ -144,6 +148,8 @@ Kirigami.ApplicationWindow {
 			return "statistics"
 		if (page === neoEquipmentLibrary)
 			return "equipment"
+		if (page === neoPlannerLab)
+			return "planner"
 		if (page === neoDiveComputerCenter)
 			return "import"
 		if (page === neoDataPortability)
@@ -885,7 +891,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		// or more specifically, reset the Kirigami sizes when we notice them
 		if (Screen.orientation === screenSizeObject.lastOrientation) {
 			// not rotation
-			if (width > Screen.width || height > Screen.height) {
+			if (width > neoAvailableWidth || height > neoAvailableHeight) {
 				manager.appendTextToLog("[screensetup] received size update that exceeds screen size")
 				if (screenSizeObject.initialWidth !== undefined) {
 					manager.appendTextToLog("[screensetup] resetting to initial size " + screenSizeObject.initialWidth + " x " + screenSizeObject.initialHeight)
@@ -895,7 +901,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 					// we don't have a size that we believe, yet - using Screen size is almost certainly wrong
 					manager.appendTextToLog("[screensetup] restricting to screen size " + Screen.width + " x " + Screen.height)
 					rootItem.width = Screen.width
-					rootItem.heigh = Screen.height
+					rootItem.height = neoAvailableHeight
 				}
 			} else {
 				// this could be a realistic size

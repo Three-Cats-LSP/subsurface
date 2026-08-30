@@ -55,7 +55,7 @@ Kirigami.ScrollablePage {
 		GridLayout {
 			Layout.fillWidth: true; columns: 3; columnSpacing: tokens.space8
 			Components.MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 0; label: qsTr("Kits"); value: String(NeoEquipmentKits.kits.length); iconName: "gear" }
-			Components.MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 0; label: qsTr("Items"); value: String(NeoEquipmentKits.equipmentItems.length); iconName: "gas" }
+			Components.MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 0; label: qsTr("Items"); value: String(NeoEquipmentKits.equipmentItems.length); iconName: "equipmentItem" }
 			Components.MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 0; label: qsTr("Active"); value: String(page.activeItemCount()); iconName: "gear" }
 		}
 
@@ -92,7 +92,7 @@ Kirigami.ScrollablePage {
 				delegate: Components.ModernCard {
 					required property var modelData
 					Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
-					RowLayout { Layout.fillWidth: true; Rectangle { Layout.preferredWidth: 40; Layout.preferredHeight: 40; radius: 20; color: tokens.surfaceRaised; Components.NeoDiveIcon { anchors.centerIn: parent; width: 22; height: 22; name: "gear"; iconColor: tokens.accent } } ColumnLayout { Layout.fillWidth: true; spacing: 2; Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true } Text { text: [modelData.category, modelData.manufacturer, modelData.model].filter(function(value) { return value && value.length > 0 }).join("  •  ") || qsTr("Uncategorized"); color: tokens.textSecondary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true } } Text { visible: modelData.retired === true; text: qsTr("RETIRED"); color: tokens.warning; font.pixelSize: 10; font.weight: Font.DemiBold } }
+					RowLayout { Layout.fillWidth: true; Rectangle { Layout.preferredWidth: 40; Layout.preferredHeight: 40; radius: 20; color: tokens.surfaceRaised; Components.NeoDiveIcon { anchors.centerIn: parent; width: 22; height: 22; name: "equipmentItem"; iconColor: tokens.accent } } ColumnLayout { Layout.fillWidth: true; spacing: 2; Text { text: modelData.name; color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true } Text { text: [modelData.category, modelData.manufacturer, modelData.model].filter(function(value) { return value && value.length > 0 }).join("  •  ") || qsTr("Uncategorized"); color: tokens.textSecondary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true } } Text { visible: modelData.retired === true; text: qsTr("RETIRED"); color: tokens.warning; font.pixelSize: 10; font.weight: Font.DemiBold } }
 					Text { visible: modelData.serviceDate && modelData.serviceDate.length > 0; text: qsTr("Last service: %1%2").arg(modelData.serviceDate).arg(modelData.serviceInterval ? qsTr("  •  every %1").arg(modelData.serviceInterval) : ""); color: tokens.textMuted; font.pixelSize: 12 }
 					Text { text: qsTr("Used on %1 dives").arg(NeoEquipmentKits.usageCount(modelData.name)); color: tokens.textMuted; font.pixelSize: 12 }
 					RowLayout { Layout.fillWidth: true; Components.NeoButton { text: qsTr("Edit"); compact: true; onClicked: page.editItem(modelData) } Item { Layout.fillWidth: true } Components.NeoButton { text: qsTr("Remove"); variant: "danger"; compact: true; onClicked: NeoEquipmentKits.removeEquipmentItem(modelData.name) } }

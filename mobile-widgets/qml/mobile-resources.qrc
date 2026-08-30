@@ -93,6 +93,9 @@
 		<file alias="spot-17916440.png">../../icons/spot-17916440.png</file>
 		<file alias="sports-15710848.png">../../icons/sports-15710848.png</file>
 		<file alias="scuba-diving-18643383.png">../../icons/scuba-diving-18643383.png</file>
+		<file alias="compass-18112879.png">../../icons/compass-18112879.png</file>
+		<file alias="air-tank-17916416.png">../../icons/air-tank-17916416.png</file>
+		<file alias="tank-14116551.png">../../icons/tank-14116551.png</file>
 	</qresource>
 
 	<qresource prefix="/">

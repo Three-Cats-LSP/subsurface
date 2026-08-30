@@ -275,6 +275,7 @@ Kirigami.Page {
 					"waterTemp": model.waterTemp,
 					"firstGas": model.firstGas,
 					"cylinder": model.cylinder,
+					"suit": model.suit,
 					"tags": model.tags,
 					"isInvalid": model.isInvalid,
 					"tripShortDate": model.tripShortDate,
@@ -283,6 +284,20 @@ Kirigami.Page {
 				})
 				property bool longPressTriggered: false
 				property bool collectionMatch: page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0
+				function firstListValue(value) {
+					if (typeof value === "string")
+						return value
+					if (value && value.length > 0)
+						return String(value[0])
+					return ""
+				}
+				function gasAndCylinderSummary() {
+					var gas = firstListValue(modelData.firstGas)
+					if (gas.toUpperCase() === "AIR")
+						gas = qsTr("Air")
+					var cylinder = modelData.cylinder || ""
+					return gas.length > 0 && cylinder.length > 0 ? gas + "  ·  " + cylinder : gas || cylinder
+				}
 				function activateDelegate() {
 					if (modelData.isTrip)
 						page.diveListModel.toggle(modelData.row)
@@ -417,11 +432,11 @@ Kirigami.Page {
 								columnSpacing: tokens.space8
 								rowSpacing: tokens.space4
 								RowLayout {
-									visible: delegateRoot.modelData.firstGas && delegateRoot.modelData.firstGas.length > 0
+									visible: delegateRoot.gasAndCylinderSummary().length > 0
 									Layout.fillWidth: true
 									spacing: tokens.space4
 									Components.NeoDiveIcon { name: "gas"; iconColor: tokens.accent; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
-									Text { Layout.fillWidth: true; text: delegateRoot.modelData.firstGas || ""; color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight }
+									Text { Layout.fillWidth: true; text: delegateRoot.gasAndCylinderSummary(); color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 								RowLayout {
 									visible: miniProfile.diveMode.length > 0
@@ -431,17 +446,17 @@ Kirigami.Page {
 									Text { Layout.fillWidth: true; text: miniProfile.diveMode; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 								RowLayout {
-									visible: delegateRoot.modelData.cylinder && delegateRoot.modelData.cylinder.length > 0
+									visible: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0
 									Layout.fillWidth: true
 									spacing: tokens.space4
 									Components.NeoDiveIcon { name: "gear"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
-									Text { Layout.fillWidth: true; text: delegateRoot.modelData.cylinder || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.suit || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 								RowLayout {
 									visible: delegateRoot.modelData.tags && delegateRoot.modelData.tags.length > 0
 									Layout.fillWidth: true
 									spacing: tokens.space4
-									Components.NeoDiveIcon { name: "boat"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+									Components.NeoDiveIcon { name: "type"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
 									Text { Layout.fillWidth: true; text: delegateRoot.modelData.tags || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 							}

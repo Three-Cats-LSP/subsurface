@@ -18,9 +18,11 @@ Control {
 	signal mapRequested()
 	signal statisticsRequested()
 	signal equipmentRequested()
+	signal plannerRequested()
 	signal importRequested()
 	signal portabilityRequested()
 	signal settingsRequested()
+	signal cloudRequested()
 
 	Modern.DesignTokens { id: tokens }
 
@@ -100,11 +102,12 @@ Control {
 			Repeater {
 				model: [
 					{ key: "dashboard", label: qsTr("Dashboard"), icon: "home" },
-					{ key: "dives", label: qsTr("Dives"), icon: "tank" },
+					{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 					{ key: "sites", label: qsTr("Dive Sites"), icon: "site" },
 					{ key: "map", label: qsTr("Map"), icon: "map" },
 					{ key: "statistics", label: qsTr("Statistics"), icon: "stats" },
 					{ key: "equipment", label: qsTr("Equipment"), icon: "gear" },
+					{ key: "planner", label: qsTr("Dive Planner"), icon: "depth" },
 					{ key: "import", label: qsTr("Import"), icon: "import" },
 					{ key: "portability", label: qsTr("Data & Backup"), icon: "export" },
 					{ key: "settings", label: qsTr("Settings"), icon: "settings" }
@@ -168,6 +171,7 @@ Control {
 						case "map": sidebar.mapRequested(); break
 						case "statistics": sidebar.statisticsRequested(); break
 						case "equipment": sidebar.equipmentRequested(); break
+						case "planner": sidebar.plannerRequested(); break
 						case "import": sidebar.importRequested(); break
 						case "portability": sidebar.portabilityRequested(); break
 						case "settings": sidebar.settingsRequested(); break
@@ -180,6 +184,7 @@ Control {
 		Item { Layout.fillHeight: true }
 
 		Rectangle {
+			id: cloudCard
 			Layout.fillWidth: true
 			Layout.leftMargin: 12
 			Layout.rightMargin: 12
@@ -189,6 +194,13 @@ Control {
 			color: tokens.surface
 			border.width: 1
 			border.color: tokens.border
+			Accessible.role: Accessible.Button
+			Accessible.name: qsTr("Open Cloud & Sync")
+			activeFocusOnTab: true
+			Keys.onReturnPressed: sidebar.cloudRequested()
+			Keys.onEnterPressed: sidebar.cloudRequested()
+			Keys.onSpacePressed: sidebar.cloudRequested()
+			TapHandler { onTapped: sidebar.cloudRequested() }
 
 			RowLayout {
 				anchors.fill: parent

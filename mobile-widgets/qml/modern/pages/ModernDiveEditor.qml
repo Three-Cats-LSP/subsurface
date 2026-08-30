@@ -242,29 +242,6 @@ Kirigami.Page {
 				Layout.fillWidth: true
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
-				Text { text: qsTr("Dive conditions"); color: tokens.textMuted; font.pixelSize: 10 }
-				GridLayout {
-					Layout.fillWidth: true
-					columns: page.width >= 700 ? 2 : 1
-					columnSpacing: tokens.space12
-					rowSpacing: tokens.space8
-					ColumnLayout {
-						Layout.fillWidth: true
-						Text { text: qsTr("Rating"); color: tokens.textSecondary; font.pixelSize: 12 }
-						Components.NeoSpinBox { id: ratingBox; Layout.fillWidth: true; from: 0; to: 5; value: dive ? dive.rating || 0 : 0; accessibleName: qsTr("Dive rating") }
-					}
-					ColumnLayout {
-						Layout.fillWidth: true
-						Text { text: qsTr("Visibility"); color: tokens.textSecondary; font.pixelSize: 12 }
-						Components.NeoSpinBox { id: visibilityBox; Layout.fillWidth: true; from: 0; to: 5; value: dive ? dive.viz || 0 : 0; accessibleName: qsTr("Underwater visibility rating") }
-					}
-				}
-			}
-
-			Components.ModernCard {
-				Layout.fillWidth: true
-				Layout.leftMargin: tokens.space16
-				Layout.rightMargin: tokens.space16
 				Text { text: qsTr("Notes"); color: tokens.textMuted; font.pixelSize: 10 }
 				Components.NeoTextArea { id: notesField; Layout.fillWidth: true; Layout.preferredHeight: 150; text: dive ? dive.notes || "" : "" }
 			}
@@ -273,7 +250,6 @@ Kirigami.Page {
 				Layout.fillWidth: true
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
-				Layout.bottomMargin: tokens.space24
 				Text { text: qsTr("Cylinders and weights"); color: tokens.textMuted; font.pixelSize: 10 }
 				Text { Layout.fillWidth: true; text: qsTr("Primary cylinder, gas and weighting used for this dive."); color: tokens.textSecondary; font.pixelSize: 13; wrapMode: Text.WordWrap }
 				Components.NeoComboBox { id: cylinderBox; Layout.fillWidth: true; editable: true; model: dive ? dive.cylinderList : []; currentIndex: find(dive && dive.getCylinder && dive.getCylinder.length ? dive.getCylinder[0] : "") }
@@ -284,6 +260,31 @@ Kirigami.Page {
 					Components.NeoTextField { id: weightField; Layout.fillWidth: true; placeholderText: qsTr("Weight"); text: dive ? dive.sumWeight || "" : "" }
 					Components.NeoTextField { id: startPressureField; Layout.fillWidth: true; placeholderText: qsTr("Start pressure"); text: dive && dive.startPressure && dive.startPressure.length ? dive.startPressure[0] : "" }
 					Components.NeoTextField { id: endPressureField; Layout.fillWidth: true; placeholderText: qsTr("End pressure"); text: dive && dive.endPressure && dive.endPressure.length ? dive.endPressure[0] : "" }
+				}
+			}
+
+			Components.ModernCard {
+				Layout.fillWidth: true
+				Layout.leftMargin: tokens.space16
+				Layout.rightMargin: tokens.space16
+				Layout.bottomMargin: tokens.space24
+				contentPadding: tokens.space12
+				Text { text: qsTr("Dive conditions"); color: tokens.textMuted; font.pixelSize: 10 }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: page.width >= 560 ? 2 : 1
+					columnSpacing: tokens.space16
+					rowSpacing: tokens.space8
+					RowLayout {
+						Layout.fillWidth: true
+						Text { Layout.fillWidth: true; text: qsTr("Rating"); color: tokens.textSecondary; font.pixelSize: 12 }
+						Components.NeoSpinBox { id: ratingBox; Layout.preferredWidth: 160; from: 0; to: 5; value: dive ? dive.rating || 0 : 0; accessibleName: qsTr("Dive rating") }
+					}
+					RowLayout {
+						Layout.fillWidth: true
+						Text { Layout.fillWidth: true; text: qsTr("Visibility"); color: tokens.textSecondary; font.pixelSize: 12 }
+						Components.NeoSpinBox { id: visibilityBox; Layout.preferredWidth: 160; from: 0; to: 5; value: dive ? dive.viz || 0 : 0; accessibleName: qsTr("Underwater visibility rating") }
+					}
 				}
 			}
 		}
