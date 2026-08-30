@@ -17,6 +17,11 @@
 #include <memory>
 #include <vector>
 
+namespace {
+int lastSavedPlannerDuration = -1;
+QString lastSavedPlannerNotes;
+}
+
 #ifdef MAP_SUPPORT
 #include "desktop-widgets/mapwidget.h"
 #include "desktop-widgets/mainwindow.h"
@@ -303,6 +308,12 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(result.contains("schedule"));
 	QVERIFY(result.value("schedule").canConvert<QVariantList>());
 	QVERIFY(result.contains("analysis"));
+	QVERIFY(result.value("runtimeSeconds").toInt() >= 21 * 60);
+	QCOMPARE(result.value("bottomTimeSeconds").toInt(), 21 * 60);
+	const QVariantList timeline = result.value("timeline").toList();
+	QVERIFY(!timeline.empty());
+	QCOMPARE(timeline.first().toMap().value("phase").toString(), QStringLiteral("descent"));
+	QVERIFY(timeline.last().toMap().value("runTime").toInt() == result.value("runtimeSeconds").toInt());
 	QVERIFY(!result.value("gasAnalysis").toList().empty());
 	QVERIFY(result.value("gasAnalysis").toList().first().toMap().contains("remaining"));
 	QVERIFY(result.value("gasAnalysis").toList().first().toMap().contains("startPressure"));
@@ -336,7 +347,24 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(decoSchedule.first().toMap().contains("depth"));
 	QVERIFY(decoSchedule.first().toMap().contains("duration"));
 	for (const QVariant &stop : decoSchedule)
+	{
 		QVERIFY(stop.toMap().value("duration").toInt() > 0);
+		QVERIFY(stop.toMap().contains("runTime"));
+		QVERIFY(stop.toMap().contains("gas"));
+	}
+
+	// A saved planner dive must retain the generated runtime even though generic
+	// fixup deliberately ignores planner dive computers at the top level.
+	lastSavedPlannerDuration = -1;
+	lastSavedPlannerNotes.clear();
+	segment.insert("depth", 30);
+	segment.insert("duration", 30);
+	segments[0] = segment;
+	const QVariantMap savedPlan = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10300, 1013, true);
+	QVERIFY(savedPlan.value("planSaveAllowed").toBool());
+	QVERIFY(lastSavedPlannerDuration >= 30 * 60);
+	QCOMPARE(lastSavedPlannerDuration, savedPlan.value("runtimeSeconds").toInt());
+	QVERIFY(!lastSavedPlannerNotes.isEmpty());
 
 	// The profile keeps the inspector's native plot values alongside the
 	// schedule. The detailed fields above are asserted on the regular profile
@@ -543,7 +571,11 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 // Command stubs — these are referenced by various qt-models source files
 namespace Command {
 
-void addDive(std::unique_ptr<dive>, bool, bool) {}
+void addDive(std::unique_ptr<dive> d, bool, bool)
+{
+	lastSavedPlannerDuration = d ? d->duration.seconds : -1;
+	lastSavedPlannerNotes = d ? QString::fromStdString(d->notes) : QString();
+}
 void importDives(struct divelog *, int, const QString &) {}
 void replanDive(dive *) {}
 int editCylinder(int, cylinder_t, EditCylinderType, bool) { return 0; }

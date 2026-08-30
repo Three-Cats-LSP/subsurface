@@ -48,11 +48,15 @@ Kirigami.ScrollablePage {
 	property string planNotes: ""
 	property var profileData: []
 	property var analysis: ({})
+	property var timeline: []
 	property var schedule: []
 	property var gasAnalysis: []
 	property bool exceedsNDL: false
 	property bool planSaveAllowed: false
 	property int planOtu: 0
+	property int runtimeSeconds: 0
+	property int bottomTimeSeconds: 0
+	property int decoTimeSeconds: 0
 	property var cylinderTypes: manager.cylinderListInit
 	property var gasNames: []
 	property var gasReference: []
@@ -432,11 +436,15 @@ Kirigami.ScrollablePage {
 		updateGasReference()
 		profileData = result.profile || []
 		analysis = result.analysis || ({})
+		timeline = result.timeline || []
 		schedule = result.schedule || []
 		gasAnalysis = result.gasAnalysis || []
 		exceedsNDL = result.exceedsNDL === true
 		planSaveAllowed = result.planSaveAllowed === true
 		planOtu = result.otu || 0
+		runtimeSeconds = result.runtimeSeconds || 0
+		bottomTimeSeconds = result.bottomTimeSeconds || 0
+		decoTimeSeconds = result.decoTimeSeconds || 0
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
 			manager.selectDive(result.newDiveId)
 			showPage(diveList)
@@ -546,6 +554,20 @@ Kirigami.ScrollablePage {
 	function formatSetpoint(mbar) {
 		return mbar && mbar > 0 ? (mbar / 1000.0).toFixed(2) + " bar" : "—"
 	}
+	function phaseLabel(phase) {
+		if (phase === "descent") return qsTr("Descend to")
+		if (phase === "ascent") return qsTr("Ascend to")
+		if (phase === "level") return qsTr("Stay at")
+		if (phase === "deco") return qsTr("Deco stop")
+		if (phase === "switch") return qsTr("Gas switch")
+		return qsTr("Surface")
+	}
+	function timelineLine(row) {
+		var depth = (row.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit
+		var action = phaseLabel(row.phase) + " " + depth
+		var gas = row.gasSwitch ? qsTr("switch to %1").arg(row.gas) : row.gas
+		return action + "  ·  " + formatDuration(row.duration) + "  ·  " + qsTr("runtime %1").arg(formatDuration(row.runTime)) + "  ·  " + gas + (row.setpoint > 0 ? "  ·  SP " + formatSetpoint(row.setpoint) : "")
+	}
 	function plannerWarningLines() {
 		var warnings = []
 		if (exceedsNDL)
@@ -577,9 +599,15 @@ Kirigami.ScrollablePage {
 			lines.push(qsTr("%1: used %2; remaining %3; end %4").arg(gas.mix).arg(gas.used).arg(gas.remaining).arg(gas.endPressure))
 		}
 		lines.push("", qsTr("CALCULATED ANALYSIS"))
+		lines.push(qsTr("Runtime: %1  Bottom profile: %2  Decompression stops: %3").arg(formatDuration(runtimeSeconds)).arg(formatDuration(bottomTimeSeconds)).arg(formatDuration(decoTimeSeconds)))
 		lines.push(qsTr("NDL: %1  TTS: %2  Ceiling: %3").arg(formatDuration(finalSampleValue("ndl", -1))).arg(formatDuration(finalSampleValue("tts", -1))).arg(finalSampleValue("ceiling", 0) > 0 ? (finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit : "—"))
 		lines.push(qsTr("Current GF: %1%  Surface GF: %2%  pO₂: %3 bar  Tissue: %4%").arg(finalSampleValue("gf", 0).toFixed(0)).arg(finalSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("po2", 0) > 0 ? (finalSampleValue("po2", 0) / 1000.0).toFixed(2) : "—").arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
-		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("DECOMPRESSION SCHEDULE"))
+		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("FULL PLAN"))
+		if (timeline.length === 0)
+			lines.push(qsTr("No plan segments generated."))
+		for (var timelineIndex = 0; timelineIndex < timeline.length; ++timelineIndex)
+			lines.push(timelineLine(timeline[timelineIndex]))
+		lines.push("", qsTr("DECOMPRESSION STOPS"))
 		if (schedule.length === 0)
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i) {
@@ -782,7 +810,8 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Calculated profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 8 : 2
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 5 : 2
+				Components.MetricCard { label: qsTr("Runtime"); value: page.formatDuration(page.runtimeSeconds); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("NDL"); value: page.formatDuration(page.finalSampleValue("ndl", -1)); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("TTS"); value: page.formatDuration(page.finalSampleValue("tts", -1)); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Ceiling"); value: page.finalSampleValue("ceiling", 0) > 0 ? (page.finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) : "—"; suffix: page.finalSampleValue("ceiling", 0) > 0 ? page.depthUnit : ""; Layout.fillWidth: true }
@@ -858,6 +887,18 @@ Kirigami.ScrollablePage {
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { visible: page.planNotes.length > 0; Layout.fillWidth: true; text: page.nativeReportExpanded ? qsTr("Hide native planner report") : qsTr("Show native planner report"); onClicked: page.nativeReportExpanded = !page.nativeReportExpanded }
 			Components.NeoTextArea { visible: page.nativeReportExpanded && page.planNotes.length > 0; Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
+			Text { visible: page.timeline.length > 0; text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
+			Repeater { model: page.timeline; delegate: GridLayout {
+				required property var modelData
+				Layout.fillWidth: true
+				columns: page.width >= 700 ? 6 : 2
+				Label { text: page.phaseLabel(modelData.phase); color: modelData.gasSwitch ? tokens.accent : tokens.textMuted; Layout.fillWidth: true }
+				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
+				Label { text: qsTr("Segment %1").arg(page.formatDuration(modelData.duration)); color: tokens.textSecondary }
+				Label { text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textPrimary }
+				Label { text: modelData.gasSwitch ? qsTr("Switch → %1").arg(modelData.gas) : modelData.gas; color: modelData.gasSwitch ? tokens.accent : tokens.textSecondary }
+				Label { visible: modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
+			} }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 			Repeater { model: page.schedule; delegate: GridLayout {
 				required property var modelData

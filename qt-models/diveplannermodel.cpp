@@ -1630,6 +1630,18 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		updateMaxDepth();
 		d->fixup_dive();
 	}
+	// Planner dive computers are intentionally ignored by the generic dive
+	// fixup when deriving the top-level duration.  Neo saves the generated plan
+	// directly, so preserve the native planner runtime explicitly for the dive
+	// list and details header.
+	int runtimeSeconds = 0;
+	if (!d->dcs.empty() && !d->dcs[0].samples.empty())
+		runtimeSeconds = d->dcs[0].samples.back().time.seconds;
+	for (const divedatapoint &point : diveplan.dp)
+		runtimeSeconds = std::max(runtimeSeconds, point.time);
+	if (!d->dcs.empty())
+		d->dcs[0].duration.seconds = runtimeSeconds;
+	d->duration.seconds = runtimeSeconds;
 	QString notes_qstr = QString::fromStdString(d->notes);
 	notes_qstr.replace("&#10138;", "&#8593;");
 	notes_qstr.replace("&#10136;", "&#8595;");
@@ -1641,7 +1653,9 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	notesDocument.setHtml(QString::fromStdString(d->notes));
 	results["notes"] = notesDocument.toPlainText().trimmed();
 	results["maxDepth"] = get_depth_string(d->maxdepth, true);
-	results["duration"] = QString::number(d->duration.seconds / 60) + " min";
+	results["duration"] = QString::number((runtimeSeconds + 30) / 60) + " min";
+	results["runtimeSeconds"] = runtimeSeconds;
+	results["bottomTimeSeconds"] = enteredProfileRuntime;
 	// AI-generated (Claude)
 	// Only flag the recreational no-decompression-limit violation here: other
 	// planner errors are reported as text in the plan notes, and the mobile UI
@@ -1650,7 +1664,46 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	results["exceedsNDL"] = exceedsNDL;
 	results["planSaveAllowed"] = planError == PLAN_OK;
 	results["otu"] = d->otu;
+	QVariantList timeline;
+	int previousTime = 0;
+	depth_t previousTimelineDepth = 0_m;
+	int previousCylinder = -1;
+	for (const divedatapoint &point : diveplan.dp) {
+		if (point.time <= 0 || point.time < previousTime || point.cylinderid < 0 ||
+		    static_cast<size_t>(point.cylinderid) >= d->cylinders.size())
+			continue;
+		const bool gasSwitch = previousCylinder >= 0 && point.cylinderid != previousCylinder;
+		const int segmentDuration = point.time - previousTime;
+		if (segmentDuration == 0 && !gasSwitch)
+			continue;
+		QVariantMap row;
+		row.insert("depth", point.depth.mm);
+		row.insert("duration", segmentDuration);
+		row.insert("runTime", point.time);
+		row.insert("gas", QString::fromStdString(d->cylinders[point.cylinderid].gasmix.name()));
+		row.insert("gasSwitch", gasSwitch);
+		row.insert("setpoint", point.setpoint);
+		row.insert("entered", point.entered);
+		if (segmentDuration == 0)
+			row.insert("phase", QStringLiteral("switch"));
+		else if (point.depth.mm > previousTimelineDepth.mm)
+			row.insert("phase", QStringLiteral("descent"));
+		else if (point.depth.mm < previousTimelineDepth.mm)
+			row.insert("phase", QStringLiteral("ascent"));
+		else if (point.entered)
+			row.insert("phase", QStringLiteral("level"));
+		else if (point.depth.mm > SURFACE_THRESHOLD)
+			row.insert("phase", QStringLiteral("deco"));
+		else
+			row.insert("phase", QStringLiteral("surface"));
+		timeline.append(row);
+		previousTime = point.time;
+		previousTimelineDepth = point.depth;
+		previousCylinder = point.cylinderid;
+	}
+	results["timeline"] = timeline;
 	QVariantList schedule;
+	int totalDecoSeconds = 0;
 	for (const decostop &stop : decostops) {
 		// The mature planner also reports zero-time depths that it cleared while
 		// ascending. They are useful internally, but they are not deco stops.
@@ -1660,23 +1713,30 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		row.insert("depth", stop.depth);
 		row.insert("duration", stop.time);
 		row.insert("phase", QStringLiteral("deco"));
+		totalDecoSeconds += stop.time;
 		if (!d->dcs.empty()) {
+			const struct sample *matchingSample = nullptr;
 			for (const struct sample &sample : d->dcs[0].samples) {
-				if (!sample.in_deco || sample.depth.mm != stop.depth)
+				if (sample.depth.mm != stop.depth)
 					continue;
-				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], sample.time);
+				matchingSample = &sample;
+				if (sample.in_deco || sample.stoptime.seconds > 0)
+					break;
+			}
+			if (matchingSample) {
+				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], matchingSample->time);
 				if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
 					row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
-				row.insert("runTime", sample.time.seconds);
-				row.insert("tts", sample.tts.seconds);
-				row.insert("cns", sample.cns);
-				row.insert("setpoint", sample.setpoint.mbar);
-				break;
+				row.insert("runTime", matchingSample->time.seconds);
+				row.insert("tts", matchingSample->tts.seconds);
+				row.insert("cns", matchingSample->cns);
+				row.insert("setpoint", matchingSample->setpoint.mbar);
 			}
 		}
 		schedule.append(row);
 	}
 	results["schedule"] = schedule;
+	results["decoTimeSeconds"] = totalDecoSeconds;
 
 	// The planner has already calculated consumption and end pressures while
 	// constructing this dive. Expose those results rather than recalculate
@@ -1739,6 +1799,11 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			}
 			profileData.append(point);
 		}
+	}
+	if (!analysis.isEmpty()) {
+		const int calculatedTts = std::max(0, runtimeSeconds - enteredProfileRuntime);
+		if (analysis.value("tts").toInt() <= 0 && calculatedTts > 0)
+			analysis["tts"] = calculatedTts;
 	}
 	results["profile"] = profileData;
 	results["analysis"] = analysis;

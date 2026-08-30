@@ -783,7 +783,7 @@ Kirigami.Page {
 									color: tokens.textPrimary
 									font.pixelSize: 13
 									wrapMode: Text.WordWrap
-									textFormat: Text.PlainText
+									textFormat: Text.RichText
 								}
 							}
 						}
