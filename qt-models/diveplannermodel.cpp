@@ -1568,36 +1568,28 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	diveplan.salinity = waterType;
 
 	// Neo rows use the mature planner's waypoint semantics: the entered time is
-	// the runtime at the end of that target-depth segment.  Insert travel first,
-	// then use only the remaining time as the level segment.  Thus a 40 m / 30
-	// min row becomes roughly two minutes of descent plus 28 minutes at depth,
-	// matching the desktop planner rather than adding descent on top of 30 min.
+	// the runtime at the end of that target-depth segment. Pass the same runtime
+	// delta that createTemporaryPlan() gives the native engine; it expands the
+	// transition using the configured rates. Only drop-stone mode inserts the
+	// initial descent explicitly, exactly as the desktop planner does.
 	int enteredProfileRuntime = 0;
-	depth_t previousDepth = 0_m;
-	depth_t deepestEnteredDepth = 0_m;
-	for (const QVariant &segData : segmentsData)
-		deepestEnteredDepth.mm = std::max(deepestEnteredDepth.mm, units_to_depth(segData.toMap()["depth"].toInt()).mm);
+	bool firstEnteredSegment = true;
 	for (const QVariant &segData : segmentsData) {
 		QVariantMap map = segData.toMap();
 		int cylinderId = map["gas"].toInt();
 		divemode_t divemode = get_local_divemode(d, dcNr, cylinderId, static_cast<divemode_t>(map["divemode"].toInt()));
 		const depth_t targetDepth = units_to_depth(map["depth"].toInt());
-		const int depthDelta = std::abs(targetDepth.mm - previousDepth.mm);
-		if (depthDelta > 0) {
-			const int travelRate = targetDepth.mm > previousDepth.mm
-				? std::max(1, prefs.descrate)
-				: std::max(1, ascent_velocity(previousDepth, deepestEnteredDepth, enteredProfileRuntime));
-			const int travelDuration = (depthDelta + travelRate - 1) / travelRate;
-			plan_add_segment(diveplan, travelDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
-			enteredProfileRuntime += travelDuration;
-		}
 		const int requestedRuntime = std::max(0, map["duration"].toInt()) * 60;
-		const int dwellDuration = std::max(0, requestedRuntime - enteredProfileRuntime);
-		if (dwellDuration > 0) {
-			plan_add_segment(diveplan, dwellDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
-			enteredProfileRuntime += dwellDuration;
+		int segmentDuration = std::max(0, requestedRuntime - enteredProfileRuntime);
+		if (firstEnteredSegment && prefs.drop_stone_mode && targetDepth.mm > 0) {
+			const int travelDuration = targetDepth.mm / std::max(1, prefs.descrate);
+			plan_add_segment(diveplan, travelDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
+			segmentDuration = std::max(0, segmentDuration - travelDuration);
 		}
-		previousDepth = targetDepth;
+		if (segmentDuration > 0)
+			plan_add_segment(diveplan, segmentDuration, targetDepth, cylinderId, map["setpoint"].toInt(), true, divemode);
+		enteredProfileRuntime = std::max(enteredProfileRuntime, requestedRuntime);
+		firstEnteredSegment = false;
 	}
 
 	struct diveplan plan_copy = diveplan;
