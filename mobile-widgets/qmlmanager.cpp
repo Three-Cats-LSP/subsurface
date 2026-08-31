@@ -532,6 +532,18 @@ int QMLManager::swipeRowForDive(int id) const
 	return -1;
 }
 
+int QMLManager::adjacentSwipeRow(int row, bool planned, int direction) const
+{
+	const QAbstractItemModel *model = MobileModels::instance()->swipeModel();
+	const int step = direction < 0 ? -1 : 1;
+	for (int candidate = row + step; candidate >= 0 && candidate < model->rowCount(); candidate += step) {
+		const QModelIndex index = model->index(candidate, 0, QModelIndex());
+		if (index.isValid() && model->data(index, MobileListModelBase::IsPlannedRole).toBool() == planned)
+			return candidate;
+	}
+	return -1;
+}
+
 void QMLManager::updateAllGlobalLists()
 {
 	emit buddyListChanged();

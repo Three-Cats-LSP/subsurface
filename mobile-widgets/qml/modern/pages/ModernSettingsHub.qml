@@ -122,6 +122,12 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Interface"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Components.NeoSwitch {
+					Layout.fillWidth: true
+					text: qsTr("Day / light theme")
+					checked: subsurfaceTheme.currentTheme !== "Dark"
+					onToggled: subsurfaceTheme.currentTheme = checked ? "Blue" : "Dark"
+				}
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Single-column portrait layout"); checked: PrefDisplay.singleColumnPortrait; onToggled: PrefDisplay.singleColumnPortrait = checked }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Three-metre profile grid"); checked: PrefDisplay.three_m_based_grid; onToggled: PrefDisplay.three_m_based_grid = checked }
 				GridLayout {

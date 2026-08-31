@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "color.h"
+#include "settings/qPrefDisplay.h"
 #include <QMap>
 #include <array>
 
@@ -72,35 +73,36 @@ static thread_local bool use_neo_profile_colors = false;
 
 static QColor neoProfileColor(color_index_t i)
 {
+	const bool light = qPrefDisplay::theme() != QStringLiteral("Dark");
 	switch (i) {
 	case BACKGROUND:
-		return QColor("#06111E");
+		return QColor(light ? "#F7F9FC" : "#06111E");
 	case BACKGROUND_TRANS:
-		return QColor(6, 17, 30, 150);
+		return light ? QColor(247, 249, 252, 180) : QColor(6, 17, 30, 150);
 	case TEXT_BACKGROUND:
-		return QColor(10, 32, 51, 238);
+		return light ? QColor(255, 255, 255, 238) : QColor(10, 32, 51, 238);
 	case TIME_GRID:
 	case DEPTH_GRID:
 	case BOUNDING_BOX:
 	case HR_AXIS:
-		return QColor("#1E3B50");
+		return QColor(light ? "#D8E0E8" : "#1E3B50");
 	case TIME_TEXT:
 	case TEMP_TEXT:
 	case PRESSURE_TEXT:
 	case HR_TEXT:
 	case SAC_DEFAULT:
 	case DURATION_LINE:
-		return QColor("#8FB7D1");
+		return QColor(light ? "#4A5568" : "#8FB7D1");
 	case DEPTH_TOP:
-		return QColor(56, 163, 255, 52);
+		return light ? QColor(8, 145, 178, 38) : QColor(56, 163, 255, 52);
 	case DEPTH_BOTTOM:
-		return QColor(56, 163, 255, 115);
+		return light ? QColor(8, 145, 178, 92) : QColor(56, 163, 255, 115);
 	case SAMPLE_DEEP:
 	case SAMPLE_SHALLOW:
-		return QColor("#38A3FF");
+		return QColor(light ? "#087EA4" : "#38A3FF");
 	case SMOOTHED:
 	case TEMP_PLOT:
-		return QColor("#22D4EB");
+		return QColor(light ? "#0891B2" : "#22D4EB");
 	case MEAN_DEPTH:
 	case HR_PLOT:
 	case EVENTS:

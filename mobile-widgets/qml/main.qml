@@ -19,16 +19,17 @@ Kirigami.ApplicationWindow {
 	// the documentation claims that the ApplicationWindow should pick up the font set on
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
-	background: Rectangle { color: "#0B1220" }
+	readonly property bool neoLightTheme: subsurfaceTheme.currentTheme !== "Dark"
+	background: Rectangle { color: rootItem.neoLightTheme ? "#F0F4F8" : "#0B1220" }
 	readonly property int neoAvailableWidth: Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : Screen.width
 	readonly property int neoAvailableHeight: Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : Screen.height
 	// Keep Qt Quick Controls in step with the Neo shell. Several mature pages
 	// use these controls for forms and actions.
-	Material.theme: Material.Dark
-	Material.primary: "#111B2E"
-	Material.accent: "#44C7F4"
-	Overlay.modal: Rectangle { color: "#99050A14" }
-	Overlay.modeless: Rectangle { color: "#66050A14" }
+	Material.theme: neoLightTheme ? Material.Light : Material.Dark
+	Material.primary: neoLightTheme ? "#FFFFFF" : "#111B2E"
+	Material.accent: neoLightTheme ? "#0891B2" : "#44C7F4"
+	Overlay.modal: Rectangle { color: rootItem.neoLightTheme ? "#66000000" : "#99050A14" }
+	Overlay.modeless: Rectangle { color: rootItem.neoLightTheme ? "#33000000" : "#66050A14" }
 
 	// Keep the application frame visually closed even when the page or desktop
 	// sidebar reaches the native window edge.
@@ -37,7 +38,7 @@ Kirigami.ApplicationWindow {
 		anchors.right: parent.right
 		anchors.bottom: parent.bottom
 		height: 2
-		color: "#1E3B50"
+		color: rootItem.neoLightTheme ? "#D8E0E8" : "#1E3B50"
 		z: 10000
 	}
 
@@ -85,10 +86,10 @@ Kirigami.ApplicationWindow {
 	// we want to use our own colors for Kirigami, so let's define our colorset
 	Kirigami.Theme.inherit: false
 	Kirigami.Theme.colorSet: Kirigami.Theme.Button
-	Kirigami.Theme.backgroundColor: "#0B1220"
-	Kirigami.Theme.textColor: "#F7FAFC"
-	Kirigami.Theme.highlightColor: "#169DD0"
-	Kirigami.Theme.highlightedTextColor: "#F7FAFC"
+	Kirigami.Theme.backgroundColor: neoLightTheme ? "#F0F4F8" : "#0B1220"
+	Kirigami.Theme.textColor: neoLightTheme ? "#1A202C" : "#F7FAFC"
+	Kirigami.Theme.highlightColor: neoLightTheme ? "#0891B2" : "#169DD0"
+	Kirigami.Theme.highlightedTextColor: "#FFFFFF"
 
 	function neoPageUsesOwnHeader(page) {
 		if (!page)
@@ -116,8 +117,8 @@ Kirigami.ApplicationWindow {
 
 	// expose header colors so Kirigami's AbstractApplicationHeader can read them
 	// (on iOS, items with inherit:false get system palette colors instead of app theme)
-	property color headerBackgroundColor: "#111B2E"
-	property color headerTextColor: "#F7FAFC"
+	property color headerBackgroundColor: neoLightTheme ? "#FFFFFF" : "#111B2E"
+	property color headerTextColor: neoLightTheme ? "#1A202C" : "#F7FAFC"
 
 	property alias notificationText: manager.notificationText
 	property alias pluggedInDeviceName: manager.pluggedInDeviceName
@@ -1073,6 +1074,9 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		})
 		detailsPage.deleteRequested.connect(function(diveId) {
 			manager.deleteDive(diveId)
+			showPageFromDrawer(returnToPlans ? modernPlansList : modernDiveList)
+		})
+		detailsPage.backRequested.connect(function() {
 			showPageFromDrawer(returnToPlans ? modernPlansList : modernDiveList)
 		})
 		showPage(detailsPage)

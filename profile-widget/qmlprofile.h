@@ -15,6 +15,7 @@ class QMLProfile : public QQuickPaintedItem
 {
 	Q_OBJECT
 	Q_PROPERTY(int diveId MEMBER m_diveId WRITE setDiveId)
+	Q_PROPERTY(bool plannerPreview READ plannerPreview WRITE setPlannerPreview NOTIFY plannerPreviewChanged)
 	Q_PROPERTY(int numDC READ numDC NOTIFY numDCChanged)
 	Q_PROPERTY(int currentDC READ currentDC NOTIFY currentDCChanged)
 	Q_PROPERTY(QString computerName READ computerName NOTIFY currentDCChanged)
@@ -34,6 +35,8 @@ public:
 
 	int diveId() const;
 	void setDiveId(int diveId);
+	bool plannerPreview() const;
+	void setPlannerPreview(bool enabled);
 	int currentDC() const;
 	QString computerName() const;
 	QString computerSerial() const;
@@ -56,6 +59,7 @@ public slots:
 
 private:
 	int m_diveId;
+	bool m_plannerPreview;
 	int m_dc;
 	qreal m_devicePixelRatio;
 	int m_margin;
@@ -67,6 +71,7 @@ private:
 	void rotateDC(int dir);
 	int numDC() const;
 	const divecomputer *currentDiveComputer() const;
+	const struct dive *currentDive() const;
 
 private slots:
 	void divesChanged(const QVector<dive *> &dives, DiveField);
@@ -78,6 +83,7 @@ signals:
 	void yOffsetChanged();
 	void numDCChanged();
 	void currentDCChanged();
+	void plannerPreviewChanged();
 };
 
 #endif // QMLPROFILE_H

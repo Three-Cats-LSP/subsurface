@@ -2,6 +2,7 @@
 #include "qmlprofile.h"
 #include "profilescene.h"
 #include "mobile-widgets/qmlmanager.h"
+#include "mobile-widgets/themeinterface.h"
 #include "core/divelist.h"
 #include "core/event.h"
 #include "core/errorhelper.h"
@@ -12,6 +13,7 @@
 #include "core/sample.h"
 #include "core/subsurface-string.h"
 #include "core/units.h"
+#include "qt-models/diveplannermodel.h"
 #include <QTransform>
 #include <QScreen>
 #include <QElapsedTimer>
@@ -21,6 +23,7 @@
 QMLProfile::QMLProfile(QQuickItem *parent) :
 	QQuickPaintedItem(parent),
 	m_diveId(0),
+	m_plannerPreview(false),
 	m_dc(0),
 	m_devicePixelRatio(1.0),
 	m_margin(0),
@@ -33,6 +36,20 @@ QMLProfile::QMLProfile(QQuickItem *parent) :
 	connect(QMLManager::instance(), &QMLManager::sendScreenChanged, this, &QMLProfile::screenChanged);
 	connect(this, &QMLProfile::scaleChanged, this, &QMLProfile::triggerUpdate);
 	connect(&diveListNotifier, &DiveListNotifier::divesChanged, this, &QMLProfile::divesChanged);
+	connect(ThemeInterface::instance(), &ThemeInterface::currentThemeChanged, this, [this]() {
+		createProfileView();
+		rebuildInspectorPlot();
+		triggerUpdate();
+	});
+	connect(DivePlannerPointsModel::instance(), &DivePlannerPointsModel::planPreviewChanged, this, [this]() {
+		if (!m_plannerPreview)
+			return;
+		m_dc = 0;
+		rebuildInspectorPlot();
+		emit numDCChanged();
+		emit currentDCChanged();
+		triggerUpdate();
+	});
 	setDevicePixelRatio(QMLManager::instance()->lastDevicePixelRatio());
 }
 
@@ -50,11 +67,12 @@ void QMLProfile::createProfileView()
 void QMLProfile::rebuildInspectorPlot()
 {
 	m_inspectorPlot.reset();
-	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	const divecomputer *dc = currentDiveComputer();
 	if (!d || !dc)
 		return;
-	m_inspectorPlot = std::make_unique<plot_info>(create_plot_info_new(d, dc, nullptr));
+	struct deco_state *plannerState = m_plannerPreview ? &DivePlannerPointsModel::instance()->final_deco_state : nullptr;
+	m_inspectorPlot = std::make_unique<plot_info>(create_plot_info_new(d, dc, plannerState));
 }
 
 // we need this so we can connect update() to the scaleChanged() signal - which the connect above cannot do
@@ -78,9 +96,9 @@ void QMLProfile::paint(QPainter *painter)
 	// in applying that dpr scaling twice. So we hard-code it here to be the identity matrix
 	QRect painterRect = painter->viewport();
 	painter->resetTransform();
-	if (m_diveId < 0)
+	if (!m_plannerPreview && m_diveId < 0)
 		return;
-	struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	if (!d)
 		return;
 
@@ -91,7 +109,8 @@ void QMLProfile::paint(QPainter *painter)
 	if (!nearly_0(m_xOffset) || !nearly_0(m_yOffset))
 		painter->translate(m_xOffset, m_yOffset);
 
-	m_profileWidget->draw(painter, painterRect, d, m_dc, nullptr, false);
+	DivePlannerPointsModel *plannerModel = m_plannerPreview ? DivePlannerPointsModel::instance() : nullptr;
+	m_profileWidget->draw(painter, painterRect, d, m_dc, plannerModel, m_plannerPreview);
 }
 
 void QMLProfile::setMargin(int margin)
@@ -116,9 +135,32 @@ void QMLProfile::setDiveId(int diveId)
 	triggerUpdate();
 }
 
+bool QMLProfile::plannerPreview() const
+{
+	return m_plannerPreview;
+}
+
+void QMLProfile::setPlannerPreview(bool enabled)
+{
+	if (m_plannerPreview == enabled)
+		return;
+	m_plannerPreview = enabled;
+	m_dc = 0;
+	rebuildInspectorPlot();
+	emit plannerPreviewChanged();
+	emit numDCChanged();
+	emit currentDCChanged();
+	triggerUpdate();
+}
+
+const struct dive *QMLProfile::currentDive() const
+{
+	return m_plannerPreview ? DivePlannerPointsModel::instance()->previewDive() : divelog.dives.get_by_uniq_id(m_diveId);
+}
+
 const divecomputer *QMLProfile::currentDiveComputer() const
 {
-	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	if (!d || m_dc < 0 || m_dc >= d->number_of_computers())
 		return nullptr;
 	return &d->dcs[m_dc];
@@ -349,7 +391,7 @@ void QMLProfile::prevDC()
 QVariantList QMLProfile::profileMarkers() const
 {
 	QVariantList result;
-	const struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	const divecomputer *dc = currentDiveComputer();
 	if (!d || !dc || dc->samples.empty())
 		return result;
@@ -380,7 +422,7 @@ QVariantList QMLProfile::profileMarkers() const
 
 void QMLProfile::setCurrentDC(int index)
 {
-	struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	if (!d || index < 0 || index >= d->number_of_computers() || index == m_dc)
 		return;
 	m_dc = index;
@@ -391,7 +433,7 @@ void QMLProfile::setCurrentDC(int index)
 
 void QMLProfile::rotateDC(int dir)
 {
-	struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	if (!d)
 		return;
 	int numDC = d->number_of_computers();
@@ -407,6 +449,6 @@ void QMLProfile::rotateDC(int dir)
 
 int QMLProfile::numDC() const
 {
-	struct dive *d = divelog.dives.get_by_uniq_id(m_diveId);
+	const struct dive *d = currentDive();
 	return d ? d->number_of_computers() : 0;
 }

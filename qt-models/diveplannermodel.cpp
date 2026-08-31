@@ -1532,6 +1532,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		results["schedule"] = QVariantList();
 		results["profile"] = QVariantList();
 		results["newDiveId"] = -1;
+		emit planPreviewChanged();
 		return results;
 	}
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
@@ -1625,6 +1626,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		deco_state_cache cache;
 		planError = plan(&plan_deco_state, diveplan, d, dcNr, 60, cache, true, shouldSave, &decostops);
 		has_planner_deco_state = true;
+		final_deco_state = plan_deco_state;
 		if (shouldComputeVariations()) {
 			QString variations = computeVariations(plan_copy, plan_deco_state, nullptr);
 			if (!variations.isEmpty()) {
@@ -1971,6 +1973,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		Command::addDive(std::move(d_to_save), false, true);
 	}
 	results["newDiveId"] = newDiveId;
+	emit planPreviewChanged();
 
 	return results;
 }

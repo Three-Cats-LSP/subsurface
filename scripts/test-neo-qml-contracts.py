@@ -187,9 +187,9 @@ require(
 		'text: qsTr("O₂ %")',
 		'text: qsTr("He %")',
 		'Layout.preferredWidth: 78; Layout.maximumWidth: 78',
-		'ctx.fillText(qsTr("Depth (%1)").arg(page.depthUnit)',
-		'ctx.fillText(qsTr("Runtime")',
-		'if (!switchPoint.gasSwitch) continue',
+		'QMLProfile {',
+		'plannerPreview: true',
+		'id: plannerNativeProfile',
 		'Layout.fillWidth: true; Layout.preferredWidth: 1',
 		'qsTr("Deco switch %1 (pO₂ %2 bar)")',
 		'qsTr("Bottom MOD %1 (pO₂ %2 bar)")',
@@ -200,6 +200,21 @@ require(
 	),
 	"Neo planner accessibility",
 )
+
+details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
+require(
+	details,
+	(
+		'text: qsTr("Back")',
+		'qsTr("Previous plan")',
+		'qsTr("Next dive")',
+		'manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
+	),
+	"Neo scoped dive and plan navigation",
+)
+
+tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")
+require(tokens, ('lightTheme', '"#F0F4F8"', '"#0891B2"'), "Neo day theme palette")
 require(planner, ('showPageFromDrawer(modernPlansList)',), "Neo saved-plan navigation")
 forbid(planner, ('showPage(diveList)',), "Neo saved-plan navigation")
 if not (planner.index('text: qsTr("Gas sufficiency")') < planner.index('text: qsTr("Contingency scenario")') < planner.index('text: qsTr("Technical tools")')):
@@ -357,7 +372,7 @@ require(
 	(
 		'static thread_local bool use_neo_profile_colors = false;',
 		'static QColor neoProfileColor(color_index_t i)',
-		'return QColor("#06111E");',
+		'return QColor(light ? "#F7F9FC" : "#06111E");',
 		'if (use_neo_profile_colors && !isGrayscale)',
 	),
 	"Neo native profile renderer palette",

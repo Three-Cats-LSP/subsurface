@@ -884,39 +884,13 @@ Kirigami.ScrollablePage {
 				Components.MetricCard { label: qsTr("Max tissue loading"); value: page.finalSampleValue("tissueLoad", 0) > 0 ? page.finalSampleValue("tissueLoad", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("tissueLoad", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }
 			}
-			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 250; onPaint: {
-				var ctx = getContext("2d"); ctx.reset(); if (page.profileData.length < 2) return
-				var maxTime = 0, maxDepth = 0; for (var i = 0; i < page.profileData.length; ++i) { maxTime = Math.max(maxTime, page.profileData[i].time); maxDepth = Math.max(maxDepth, page.profileData[i].depth) }
-				if (maxTime <= 0 || maxDepth <= 0) return
-				var left = page.profileChartLeft, right = page.profileChartRight, top = page.profileChartTop, bottom = page.profileChartBottom
-				var w = width - left - right, h = height - top - bottom
-				ctx.font = "11px sans-serif"; ctx.fillStyle = tokens.textMuted; ctx.strokeStyle = tokens.border; ctx.lineWidth = 1
-				for (var depthTick = 0; depthTick <= 4; ++depthTick) {
-					var depthValue = maxDepth / 4 * depthTick
-					var depthY = top + depthTick / 4 * h
-					ctx.beginPath(); ctx.moveTo(left, depthY); ctx.lineTo(left + w, depthY); ctx.stroke()
-					ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText((depthValue / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(0), left - 7, depthY)
+			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: Math.max(280, Math.min(420, page.height * 0.42)); onPaint: getContext("2d").reset()
+				QMLProfile {
+					id: plannerNativeProfile
+					anchors.fill: parent
+					plannerPreview: true
+					clip: true
 				}
-				for (var timeTick = 0; timeTick <= 5; ++timeTick) {
-					var timeValue = maxTime / 5 * timeTick
-					var timeX = left + timeTick / 5 * w
-					ctx.beginPath(); ctx.moveTo(timeX, top); ctx.lineTo(timeX, top + h); ctx.stroke()
-					ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(page.formatPlanDuration(Math.round(timeValue)), timeX, top + h + 7)
-				}
-				ctx.save(); ctx.translate(11, top + h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(qsTr("Depth (%1)").arg(page.depthUnit), 0, 0); ctx.restore()
-				ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(qsTr("Runtime"), left + w / 2, height)
-				ctx.strokeStyle = page.exceedsNDL ? "#F87171" : tokens.accent; ctx.lineWidth = 2; ctx.beginPath()
-				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = left + p.time / maxTime * w; var y = top + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
-				ctx.strokeStyle = "#FB923C"; ctx.lineWidth = 2; ctx.beginPath(); var ceilingStarted = false
-				for (var k = 0; k < page.profileData.length; ++k) { var ceilingPoint = page.profileData[k]; if (ceilingPoint.ceiling <= 0) { ceilingStarted = false; continue }; var ceilingX = left + ceilingPoint.time / maxTime * w; var ceilingY = top + ceilingPoint.ceiling / maxDepth * h; if (!ceilingStarted) { ctx.moveTo(ceilingX, ceilingY); ceilingStarted = true } else ctx.lineTo(ceilingX, ceilingY) }; ctx.stroke()
-				for (var switchIndex = 0; switchIndex < page.profileData.length; ++switchIndex) {
-					var switchPoint = page.profileData[switchIndex]
-					if (!switchPoint.gasSwitch) continue
-					var switchX = left + switchPoint.time / maxTime * w
-					ctx.strokeStyle = tokens.accent; ctx.beginPath(); ctx.moveTo(switchX, top); ctx.lineTo(switchX, top + h); ctx.stroke()
-					ctx.fillStyle = tokens.accent; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(">> " + (switchPoint.gas || ""), switchX, top + 4)
-				}
-			}
 				Rectangle {
 					visible: page.inspectedProfileSample !== null
 					x: page.profileSampleX(page.inspectedProfileSample, profileCanvas.width)

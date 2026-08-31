@@ -64,6 +64,7 @@ public:
 	void editStop(int row, divedatapoint newData);
 	divedatapoint at(int row) const;
 	struct diveplan &getDiveplan();
+	const struct dive *previewDive() const { return d; }
 	struct deco_state final_deco_state;
 
 	void loadFromDive(dive *d, int dcNr);
@@ -123,6 +124,7 @@ signals:
 	void calculatedPlanNotes(QString);
 	void variationsComputed(QString);
 	void planSaveAllowedChanged(bool allowed);
+	void planPreviewChanged();
 
 private:
 	explicit DivePlannerPointsModel(QObject *parent = 0);

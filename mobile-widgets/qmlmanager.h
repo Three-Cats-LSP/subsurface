@@ -218,6 +218,7 @@ public slots:
 	void saveChangesCloud(bool forceRemoteSync);
 	void selectDive(int id);
 	Q_INVOKABLE int swipeRowForDive(int id) const;
+	Q_INVOKABLE int adjacentSwipeRow(int row, bool planned, int direction) const;
 	void deleteDive(int id);
 	Q_INVOKABLE void deleteDives(const QVariantList &ids);
 	void deleteAccount();

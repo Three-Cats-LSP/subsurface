@@ -22,11 +22,15 @@ Kirigami.Page {
 	property bool editOpened: false
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
+	readonly property bool browsingPlans: navigationSection === "plans"
+	readonly property int previousScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, -1) : -1
+	readonly property int nextScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, 1) : -1
 	property string diveReportPdfExport: ""
 	property string diveReportTextExport: ""
 
 	signal editRequested(var dive)
 	signal deleteRequested(int diveId)
+	signal backRequested()
 	FolderDialog {
 		id: diveReportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
@@ -56,6 +60,10 @@ Kirigami.Page {
 	function refreshCurrentProfile() {
 		if (page.currentItem)
 			page.currentItem.refreshProfile()
+	}
+	function navigateToRow(row) {
+		if (row >= 0)
+			manager.selectSwipeRow(row)
 	}
 	function planClock(seconds) {
 		seconds = Math.max(0, Number(seconds || 0)); var remainder = seconds % 60
@@ -268,6 +276,33 @@ Kirigami.Page {
 					id: contentColumn
 					width: parent.width
 					spacing: tokens.space16
+
+					RowLayout {
+						Layout.fillWidth: true
+						Layout.leftMargin: tokens.space16
+						Layout.rightMargin: tokens.space16
+						Layout.topMargin: tokens.space12
+						spacing: tokens.space8
+						Components.NeoButton {
+							text: qsTr("Back")
+							accessibleName: page.browsingPlans ? qsTr("Back to plans") : qsTr("Back to dives")
+							compact: true
+							onClicked: page.backRequested()
+						}
+						Item { Layout.fillWidth: true }
+						Components.NeoButton {
+							text: page.browsingPlans ? qsTr("Previous plan") : qsTr("Previous dive")
+							compact: true
+							enabled: page.previousScopedRow >= 0
+							onClicked: page.navigateToRow(page.previousScopedRow)
+						}
+						Components.NeoButton {
+							text: page.browsingPlans ? qsTr("Next plan") : qsTr("Next dive")
+							compact: true
+							enabled: page.nextScopedRow >= 0
+							onClicked: page.navigateToRow(page.nextScopedRow)
+						}
+					}
 
 					ColumnLayout {
 						Layout.fillWidth: true
