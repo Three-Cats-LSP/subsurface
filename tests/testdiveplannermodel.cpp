@@ -333,6 +333,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(!analysis.empty());
 	QVERIFY(qAbs(analysis.value("time").toInt() - 21 * 60) <= 60);
 	QVERIFY(qAbs(analysis.value("depth").toInt() - 18000) <= 1000);
+	QVERIFY(analysis.value("ndl").toInt() > 0);
+	QVERIFY(analysis.value("cns").toInt() > 0);
 	QVERIFY(!result.value("notes").toString().contains("<div>"));
 	QVERIFY(!result.value("notes").toString().contains("</table>"));
 	const QVariantMap customWater = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10150, 1013, false);
@@ -399,11 +401,18 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 		const QVariantMap row = timelineRow.toMap();
 		if (!row.value("gasSwitch").toBool())
 			continue;
-		switchedToEan50 |= row.value("gas").toString() == QStringLiteral("EAN50");
-		switchedToOxygen |= row.value("gas").toString() == QStringLiteral("oxygen");
+		switchedToEan50 |= row.value("gas").toString() == QStringLiteral("50/0");
+		switchedToOxygen |= row.value("gas").toString() == QStringLiteral("100%");
 	}
 	QVERIFY(switchedToEan50);
 	QVERIFY(switchedToOxygen);
+	QCOMPARE(desktopEquivalent.value("gasAnalysis").toList().first().toMap().value("mix").toString(), QStringLiteral("Air"));
+	const QVariantList desktopProfile = desktopEquivalent.value("profile").toList();
+	QVERIFY(!desktopProfile.empty());
+	const double bottomSurfaceGf = desktopEquivalent.value("analysis").toMap().value("surfaceGf").toDouble();
+	const double surfacedSurfaceGf = desktopProfile.last().toMap().value("surfaceGf").toDouble();
+	QVERIFY(surfacedSurfaceGf > 0.0);
+	QVERIFY(surfacedSurfaceGf < bottomSurfaceGf);
 
 	const QVariantList oxygenReference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 1000, 0);
 	const QVariantList ean50Reference = model->calculateGasInfo(QStringLiteral("10L 200 bar"), 500, 0);

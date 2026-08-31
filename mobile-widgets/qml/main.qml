@@ -52,7 +52,6 @@ Kirigami.ApplicationWindow {
 		visible: initialized && !neoDesktopShellActive && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
 			rootItem.neoShowsBottomNavigation(pageStack.currentItem)
 		currentSection: rootItem.neoBottomSectionForPage(pageStack.currentItem)
-		onHomeRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onStatsRequested: showPageFromDrawer(neoStatisticsHub)
@@ -70,7 +69,6 @@ Kirigami.ApplicationWindow {
 		currentSection: rootItem.neoSectionForPage(pageStack.currentItem)
 		accountText: PrefCloudStorage.cloud_storage_email
 		statusText: manager.syncState
-		onDashboardRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onMapRequested: showPageFromDrawer(mapPage)
@@ -94,7 +92,7 @@ Kirigami.ApplicationWindow {
 	function neoPageUsesOwnHeader(page) {
 		if (!page)
 			return false
-		if (page === neoDashboard || page === modernDiveList || page === neoMorePage ||
+		if (page === modernDiveList || page === neoMorePage ||
 			page === neoSettingsHub || page === neoAboutPage || page === neoAccountSecurityPage ||
 			page === neoDiveComputerCenter || page === neoPlannerLab || page === neoOperationsHub ||
 			page === neoEquipmentLibrary || page === neoDataPortability || page === neoSitesHub ||
@@ -136,8 +134,6 @@ Kirigami.ApplicationWindow {
 	readonly property int neoContentWidth: Math.max(1, width - (neoDesktopShellActive ? neoSidebarWidth : 0))
 
 	function neoSectionForPage(page) {
-		if (page === neoDashboard)
-			return "dashboard"
 		if (page === modernDiveList || page?.objectName === "ModernDiveDetails" || page?.objectName === "ModernDiveEditor")
 			return "dives"
 		if (page === neoSitesHub)
@@ -160,7 +156,7 @@ Kirigami.ApplicationWindow {
 	}
 
 	function neoShowsBottomNavigation(page) {
-		return page === neoDashboard || page === modernDiveList || page === neoSitesHub ||
+		return page === modernDiveList || page === neoSitesHub ||
 			page === neoStatisticsHub || page === mapPage || page === statistics ||
 			page === neoMorePage || page === neoPlannerLab || page === cloudSyncPage ||
 			page === neoDiveComputerCenter || page === neoEquipmentLibrary || page === neoDataPortability ||
@@ -174,8 +170,6 @@ Kirigami.ApplicationWindow {
 			return "sites"
 		if (page === neoStatisticsHub || page === statistics)
 			return "stats"
-		if (page === neoDashboard)
-			return "home"
 		return "more"
 	}
 
@@ -262,22 +256,22 @@ Kirigami.ApplicationWindow {
 	function showPageFromDrawer(page) {
 		detailsWindow.endEditMode()
 		pageStack.clear()
-		// The desktop sidebar is the navigation root. Keeping Dashboard under
+		// The desktop sidebar is the navigation root. Keeping the dive list under
 		// every destination lets Kirigami expose both pages side-by-side on very
 		// wide windows, which breaks the single-workspace Neo layout.
 		if (neoDesktopShellActive) {
 			pageStack.push(page)
 			return
 		}
-		pageStack.push(neoDashboard)
-		if (page !== neoDashboard)
+		pageStack.push(modernDiveList)
+		if (page !== modernDiveList)
 			showPage(page)
 	}
 
 	function showNeoHome() {
 		detailsWindow.endEditMode()
 		pageStack.clear()
-		pageStack.push(neoDashboard)
+		pageStack.push(modernDiveList)
 	}
 
 	function showPage(page) {
@@ -1117,19 +1111,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		}
 	}
 
-	NeoPages.ModernDashboard {
-		id: neoDashboard
-		visible: false
-		onOpenDive: function(diveId) {
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				rootItem.openNeoDiveDetails(row)
-		}
-		onOpenDiveList: showPageFromDrawer(modernDiveList)
-		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
-		onOpenCloudSync: showPage(cloudSyncPage)
-	}
-
 	NeoPages.ModernDiveList {
 		id: modernDiveList
 		visible: false
@@ -1137,6 +1118,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			rootItem.openNeoDiveDetails(row)
 		}
 		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
+		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 		onAddDiveRequested: {
 			var diveId = manager.addDive()
 			var row = manager.swipeRowForDive(diveId)

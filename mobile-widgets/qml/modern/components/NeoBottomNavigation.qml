@@ -7,8 +7,7 @@ import ".." as Modern
 ToolBar {
 	id: bar
 
-	property string currentSection: "home"
-	signal homeRequested()
+	property string currentSection: "dives"
 	signal divesRequested()
 	signal sitesRequested()
 	signal statsRequested()
@@ -34,7 +33,6 @@ ToolBar {
 
 		Repeater {
 			model: [
-				{ key: "home", label: qsTr("Home"), icon: "home" },
 				{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 				{ key: "sites", label: qsTr("Sites"), icon: "site" },
 				{ key: "stats", label: qsTr("Stats"), icon: "stats" },
@@ -88,7 +86,6 @@ ToolBar {
 
 				onClicked: {
 					switch (modelData.key) {
-					case "home": bar.homeRequested(); break
 					case "dives": bar.divesRequested(); break
 					case "sites": bar.sitesRequested(); break
 					case "stats": bar.statsRequested(); break

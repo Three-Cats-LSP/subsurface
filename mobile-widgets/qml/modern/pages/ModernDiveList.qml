@@ -22,8 +22,16 @@ Kirigami.Page {
 	signal openDive(int row)
 	signal downloadRequested()
 	signal addDiveRequested()
+	signal cloudRequested()
 
 	Modern.DesignTokens { id: tokens }
+
+	function greeting() {
+		var hour = new Date().getHours()
+		if (hour < 12) return qsTr("Good morning")
+		if (hour < 18) return qsTr("Good afternoon")
+		return qsTr("Good evening")
+	}
 
 	function applyFilters() {
 		manager.setModernDiveFilter(searchField.text, peopleField.text, tagsField.text, locationField.text,
@@ -76,6 +84,35 @@ Kirigami.Page {
 		anchors.fill: parent
 		anchors.margins: tokens.space12
 		spacing: tokens.space12
+
+		RowLayout {
+			Layout.fillWidth: true
+			spacing: tokens.space12
+			ColumnLayout {
+				Layout.fillWidth: true
+				spacing: 2
+				Text { text: page.greeting(); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+				Text { text: qsTr("Here’s your diving summary"); color: tokens.textSecondary; font.pixelSize: 13 }
+			}
+			ToolButton {
+				Accessible.name: qsTr("Cloud & Sync")
+				contentItem: Components.NeoDiveIcon { name: "cloud"; iconColor: tokens.accent; width: 24; height: 24 }
+				ToolTip.visible: hovered
+				ToolTip.text: qsTr("Cloud & Sync")
+				onClicked: page.cloudRequested()
+			}
+		}
+
+		GridLayout {
+			Layout.fillWidth: true
+			columns: page.wideLayout ? 4 : 3
+			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
+			rowSpacing: tokens.space8
+			Components.MetricCard { label: qsTr("Dives"); value: String(NeoDashboard.diveCount); iconName: "dives"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+			Components.MetricCard { label: qsTr("Dive time"); value: NeoDashboard.totalTimeHours; suffix: qsTr("h"); iconName: "time"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+			Components.MetricCard { label: qsTr("Max depth"); value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"; suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""; iconName: "depth"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+			Components.MetricCard { visible: page.wideLayout; label: qsTr("Avg water"); value: NeoDashboard.averageWaterTemp.length > 0 ? NeoDashboard.averageWaterTemp : "—"; iconName: "temperature"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+		}
 
 		RowLayout {
 			Layout.fillWidth: true

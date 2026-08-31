@@ -41,6 +41,17 @@ static double unit_factor()
 
 static constexpr int decotimestep = 60; // seconds
 
+static QString neoPlannerGasLabel(const gasmix &mix)
+{
+	const int oxygen = (mix.o2.permille + 5) / 10;
+	const int helium = (mix.he.permille + 5) / 10;
+	if (oxygen == 21 && helium == 0)
+		return QStringLiteral("Air");
+	if (oxygen == 100 && helium == 0)
+		return QStringLiteral("100%");
+	return QStringLiteral("%1/%2").arg(oxygen).arg(helium);
+}
+
 static cylinder_t *real_cylinder_or_null(struct dive *d, int cylinderId)
 {
 	return d && cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size() ? d->get_cylinder(cylinderId) : nullptr;
@@ -1674,7 +1685,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		row.insert("depth", point.depth.mm);
 		row.insert("duration", segmentDuration);
 		row.insert("runTime", point.time);
-		row.insert("gas", QString::fromStdString(d->cylinders[point.cylinderid].gasmix.name()));
+		row.insert("gas", neoPlannerGasLabel(d->cylinders[point.cylinderid].gasmix));
 		row.insert("gasSwitch", gasSwitch);
 		row.insert("setpoint", point.setpoint);
 		row.insert("entered", point.entered);
@@ -1722,7 +1733,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			if (matchingSample) {
 				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], matchingSample->time);
 				if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
-					row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
+					row.insert("gas", neoPlannerGasLabel(d->cylinders[cylinderId].gasmix));
 				const int runTime = matchingSample->time.seconds;
 				row.insert("runTime", runTime);
 				// Planner samples do not always carry recorded-computer TTS.  The
@@ -1785,7 +1796,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			row.insert("phase", QStringLiteral("deco"));
 			const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], currentSample.time);
 			if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
-				row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
+				row.insert("gas", neoPlannerGasLabel(d->cylinders[cylinderId].gasmix));
 			row.insert("tts", currentSample.tts.seconds > 0 ? currentSample.tts.seconds :
 					   std::max(0, runtimeSeconds - currentSample.time.seconds));
 			row.insert("cns", currentSample.cns);
@@ -1805,7 +1816,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		if (cylinder.cylinder_use == NOT_USED)
 			continue;
 		QVariantMap gas;
-		gas["mix"] = QString::fromStdString(cylinder.gasmix.name());
+		gas["mix"] = neoPlannerGasLabel(cylinder.gasmix);
 		gas["used"] = get_volume_string(cylinder.gas_used, true);
 		gas["decoUsed"] = get_volume_string(cylinder.deco_gas_used, true);
 		gas["startPressure"] = get_pressure_string(cylinder.start, true);
@@ -1826,14 +1837,17 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	int closestAnalysisSample = std::numeric_limits<int>::max();
 	if (d->dcs.size() > 0) {
 		// Project the planner's established tissue/GF results for display only.
+		const bool oldCalcNdlTts = prefs.calcndltts;
+		prefs.calcndltts = true;
 		const plot_info plot = has_planner_deco_state
 			? create_plot_info_new(d, &d->dcs[0], &plan_deco_state)
 			: create_plot_info_new(d, &d->dcs[0], nullptr);
+		prefs.calcndltts = oldCalcNdlTts;
 		for (const struct sample &sample : d->dcs[0].samples) {
 			QVariantMap point;
 			point["time"] = sample.time.seconds;
 			point["depth"] = sample.depth.mm;
-			point["ndl"] = sample.ndl.seconds;
+			point["ndl"] = sample.ndl.seconds > 0 ? sample.ndl.seconds : -1;
 			point["tts"] = sample.tts.seconds;
 			point["ceiling"] = sample.stopdepth.mm;
 			point["stopTime"] = sample.stoptime.seconds;
@@ -1852,6 +1866,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				}
 				point["gf"] = plotIt->current_gf * 100.0;
 				point["surfaceGf"] = plotIt->surface_gf;
+				if (sample.ndl.seconds <= 0 && plotIt->ndl_calc > 0 && !plotIt->in_deco_calc)
+					point["ndl"] = plotIt->ndl_calc;
 				point["po2"] = static_cast<int>(std::lround(plotIt->pressures.o2 * 1000.0));
 				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
 			}
@@ -1867,6 +1883,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		const int calculatedTts = std::max(0, runtimeSeconds - enteredProfileRuntime);
 		if (analysis.value("tts").toInt() <= 0 && calculatedTts > 0)
 			analysis["tts"] = calculatedTts;
+		if (analysis.value("cns").toInt() <= 0 && d->cns > 0)
+			analysis["cns"] = d->cns;
 	}
 	results["profile"] = profileData;
 	results["analysis"] = analysis;

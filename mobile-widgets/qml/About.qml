@@ -71,6 +71,9 @@ Kirigami.ScrollablePage {
 			downloadFromDc.dcImportModel.clearTable()
 			showPageFromDrawer(downloadFromDc)
 		})
+		divesPage.cloudRequested.connect(function() {
+			aboutPage.openCloudSyncPage()
+		})
 		divesPage.addDiveRequested.connect(function() {
 			var diveId = manager.addDive()
 			var row = manager.swipeRowForDive(diveId)
@@ -83,34 +86,7 @@ Kirigami.ScrollablePage {
 	}
 
 	function openModernPreview() {
-		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDashboard.qml")
-		if (component.status !== Component.Ready) {
-			showPassiveNotification(qsTr("Unable to load Subsurface Neo Preview: %1").arg(component.errorString()), 6000)
-			return
-		}
-
-		var dashboard = component.createObject(rootItem)
-		if (dashboard === null) {
-			showPassiveNotification(qsTr("Unable to create Subsurface Neo Preview"), 6000)
-			return
-		}
-
-		dashboard.openDiveList.connect(function() {
-			aboutPage.openModernDiveList()
-		})
-		dashboard.openDive.connect(function(diveId) {
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				aboutPage.openModernDiveDetails(row)
-		})
-		dashboard.openImport.connect(function() {
-			downloadFromDc.dcImportModel.clearTable()
-			showPageFromDrawer(downloadFromDc)
-		})
-		dashboard.openCloudSync.connect(function() {
-			aboutPage.openCloudSyncPage()
-		})
-		showPage(dashboard)
+		openModernDiveList()
 	}
 
 	Connections {

@@ -89,6 +89,9 @@ dive_list = source("mobile-widgets/qml/modern/pages/ModernDiveList.qml")
 require(
 	dive_list,
 	(
+		'text: page.greeting()',
+		'value: String(NeoDashboard.diveCount)',
+		'value: NeoDashboard.totalTimeHours',
 		'property var modelData: ({',
 		'"location": model.location',
 		'"tripTitle": model.tripTitle',
@@ -154,6 +157,9 @@ require(
 		'accessibleName: qsTr("Gas for segment %1").arg(index + 1)',
 		'model: page.profileLabels',
 		'return analysis[name] !== undefined ? analysis[name] : fallback',
+		'function surfacedSampleValue(name, fallback)',
+		'function phaseSymbol(phase)',
+		'accessibleName: qsTr("Oxygen percentage for gas %1")',
 		'property var timeline: []',
 		'property int runtimeSeconds: 0',
 		'text: qsTr("Full plan")',
@@ -170,6 +176,21 @@ require(
 	),
 	"Neo planner accessibility",
 )
+forbid(
+	planner,
+	(
+		'Components.MetricCard { label: qsTr("TTS")',
+		'Components.MetricCard { label: qsTr("Ceiling")',
+		'Components.MetricCard { label: qsTr("Current GF")',
+		'Components.MetricCard { label: qsTr("pO₂")',
+	),
+	"Neo reduced calculated profile",
+)
+
+desktop_sidebar = source("mobile-widgets/qml/modern/components/NeoDesktopSidebar.qml")
+bottom_navigation = source("mobile-widgets/qml/modern/components/NeoBottomNavigation.qml")
+forbid(desktop_sidebar, ('label: qsTr("Dashboard")',), "Neo merged dashboard navigation")
+forbid(bottom_navigation, ('label: qsTr("Home")',), "Neo merged dashboard navigation")
 
 neo_spin_box = source("mobile-widgets/qml/modern/components/NeoSpinBox.qml")
 neo_combo_box = source("mobile-widgets/qml/modern/components/NeoComboBox.qml")
@@ -236,7 +257,7 @@ require(
 
 for dive_count_surface in (
 	"mobile-widgets/qml/MapPage.qml",
-	"mobile-widgets/qml/modern/pages/ModernDashboard.qml",
+	"mobile-widgets/qml/modern/pages/ModernDiveList.qml",
 	"mobile-widgets/qml/modern/pages/ModernSitesHub.qml",
 	"mobile-widgets/qml/modern/pages/ModernStatisticsHub.qml",
 	"mobile-widgets/qml/modern/components/NeoDesktopSidebar.qml",

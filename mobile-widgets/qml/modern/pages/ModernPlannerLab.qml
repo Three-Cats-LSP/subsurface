@@ -534,6 +534,12 @@ Kirigami.ScrollablePage {
 	function finalSampleValue(name, fallback) {
 		return analysis[name] !== undefined ? analysis[name] : fallback
 	}
+	function surfacedSampleValue(name, fallback) {
+		if (profileData.length === 0)
+			return fallback
+		var sample = profileData[profileData.length - 1]
+		return sample[name] !== undefined ? sample[name] : fallback
+	}
 	function profileMaxTime() {
 		var maximum = 0
 		for (var i = 0; i < profileData.length; ++i)
@@ -583,9 +589,17 @@ Kirigami.ScrollablePage {
 		if (phase === "switch") return qsTr("Gas switch")
 		return qsTr("Surface")
 	}
+	function phaseSymbol(phase) {
+		if (phase === "descent") return "↓"
+		if (phase === "ascent") return "↑"
+		if (phase === "switch") return "⇄"
+		if (phase === "level") return "●"
+		if (phase === "deco") return "●"
+		return "↑"
+	}
 	function timelineLine(row) {
 		var depth = (row.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit
-		var action = phaseLabel(row.phase) + " " + depth
+		var action = phaseSymbol(row.phase) + " " + depth
 		var gas = row.gasSwitch ? qsTr("switch to %1").arg(row.gas) : row.gas
 		return action + "  ·  " + formatDuration(row.duration) + "  ·  " + qsTr("runtime %1").arg(formatDuration(row.runTime)) + "  ·  " + gas + (row.setpoint > 0 ? "  ·  SP " + formatSetpoint(row.setpoint) : "")
 	}
@@ -804,8 +818,8 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("Gas %1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Cylinder type for gas %1").arg(index + 1); model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: { cylinders.setProperty(index, "type", currentText); page.generatePlan() } }
-				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoSpinBox { accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); from: 0; to: 100; value: oxygen; onValueModified: page.setCylinderMix(index, value, helium) } }
-				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoSpinBox { accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); from: 0; to: 100 - oxygen; value: helium; onValueModified: page.setCylinderMix(index, oxygen, value) } }
+				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoTextField { Layout.fillWidth: true; accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); text: String(oxygen); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, value, helium) } } }
+				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoTextField { Layout.fillWidth: true; accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); text: String(helium); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, oxygen, value) } } }
 				Components.NeoTextField { Layout.fillWidth: true; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
 				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }
  Components.NeoButton { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
@@ -835,15 +849,11 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Calculated profile"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 5 : 2
+			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 2
 				Components.MetricCard { label: qsTr("Runtime"); value: page.formatDuration(page.runtimeSeconds); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("NDL"); value: page.formatDuration(page.finalSampleValue("ndl", -1)); Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("TTS"); value: page.formatDuration(page.finalSampleValue("tts", -1)); Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("Ceiling"); value: page.finalSampleValue("ceiling", 0) > 0 ? (page.finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) : "—"; suffix: page.finalSampleValue("ceiling", 0) > 0 ? page.depthUnit : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("CNS"); value: page.finalSampleValue("cns", 0) > 0 ? String(page.finalSampleValue("cns", 0)) : "—"; suffix: page.finalSampleValue("cns", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("Current GF"); value: page.finalSampleValue("gf", 0) > 0 ? page.finalSampleValue("gf", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("gf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("Surface GF"); value: page.finalSampleValue("surfaceGf", 0) > 0 ? page.finalSampleValue("surfaceGf", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("surfaceGf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("pO₂"); value: page.finalSampleValue("po2", 0) > 0 ? (page.finalSampleValue("po2", 0) / 1000.0).toFixed(2) : "—"; suffix: page.finalSampleValue("po2", 0) > 0 ? "bar" : ""; Layout.fillWidth: true }
+				Components.MetricCard { label: qsTr("Surface GF"); value: page.surfacedSampleValue("surfaceGf", 0) > 0 ? page.surfacedSampleValue("surfaceGf", 0).toFixed(0) : "—"; suffix: page.surfacedSampleValue("surfaceGf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Max tissue loading"); value: page.finalSampleValue("tissueLoad", 0) > 0 ? page.finalSampleValue("tissueLoad", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("tissueLoad", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }
 			}
@@ -913,11 +923,11 @@ Kirigami.ScrollablePage {
 			Components.NeoButton { visible: page.planNotes.length > 0; Layout.fillWidth: true; text: page.nativeReportExpanded ? qsTr("Hide native planner report") : qsTr("Show native planner report"); onClicked: page.nativeReportExpanded = !page.nativeReportExpanded }
 			Components.NeoTextArea { visible: page.nativeReportExpanded && page.planNotes.length > 0; Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.timeline.length > 0; text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.timeline; delegate: GridLayout {
+			Repeater { model: page.timeline; delegate: RowLayout {
 				required property var modelData
 				Layout.fillWidth: true
-				columns: page.width >= 700 ? 6 : 2
-				Label { text: page.phaseLabel(modelData.phase); color: modelData.gasSwitch ? tokens.accent : tokens.textMuted; Layout.fillWidth: true }
+				spacing: tokens.space12
+				Label { text: page.phaseSymbol(modelData.phase); color: modelData.phase === "deco" ? "#F87171" : modelData.gasSwitch ? tokens.accent : tokens.textPrimary; font.pixelSize: 18; Layout.preferredWidth: 22; horizontalAlignment: Text.AlignHCenter }
 				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
 				Label { text: qsTr("Segment %1").arg(page.formatDuration(modelData.duration)); color: tokens.textSecondary }
 				Label { text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textPrimary }
@@ -925,11 +935,11 @@ Kirigami.ScrollablePage {
 				Label { visible: modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
 			} }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.schedule; delegate: GridLayout {
+			Repeater { model: page.schedule; delegate: RowLayout {
 				required property var modelData
 				Layout.fillWidth: true
-				columns: page.width >= 700 ? 8 : 2
-				Label { text: qsTr("Deco stop"); color: tokens.textMuted; Layout.fillWidth: true }
+				spacing: tokens.space12
+				Label { text: "●"; color: "#F87171"; Layout.preferredWidth: 22; horizontalAlignment: Text.AlignHCenter }
 				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
 				Label { text: qsTr("Stop %1").arg(page.formatDuration(modelData.duration)); color: tokens.textPrimary }
 				Label { visible: modelData.gas !== undefined; text: modelData.gas || ""; color: tokens.textSecondary }

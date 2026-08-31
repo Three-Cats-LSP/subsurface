@@ -8,11 +8,10 @@ Control {
 	id: sidebar
 	objectName: "neoDesktopSidebar"
 
-	property string currentSection: "dashboard"
+	property string currentSection: "dives"
 	property string accountText: ""
 	property string statusText: ""
 
-	signal dashboardRequested()
 	signal divesRequested()
 	signal sitesRequested()
 	signal mapRequested()
@@ -52,7 +51,7 @@ Control {
 			rightPadding: 18
 			hoverEnabled: true
 			activeFocusOnTab: true
-			Accessible.name: qsTr("Open dashboard")
+			Accessible.name: qsTr("Open dives")
 
 			contentItem: RowLayout {
 				spacing: 12
@@ -90,7 +89,7 @@ Control {
 					(brandButton.hovered ? tokens.surface : "transparent")
 			}
 
-			onClicked: sidebar.dashboardRequested()
+			onClicked: sidebar.divesRequested()
 		}
 
 		ColumnLayout {
@@ -101,7 +100,6 @@ Control {
 
 			Repeater {
 				model: [
-					{ key: "dashboard", label: qsTr("Dashboard"), icon: "home" },
 					{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 					{ key: "sites", label: qsTr("Dive Sites"), icon: "site" },
 					{ key: "map", label: qsTr("Map"), icon: "map" },
@@ -165,7 +163,6 @@ Control {
 
 					onClicked: {
 						switch (modelData.key) {
-						case "dashboard": sidebar.dashboardRequested(); break
 						case "dives": sidebar.divesRequested(); break
 						case "sites": sidebar.sitesRequested(); break
 						case "map": sidebar.mapRequested(); break
