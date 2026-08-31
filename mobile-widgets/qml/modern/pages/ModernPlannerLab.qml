@@ -383,6 +383,13 @@ Kirigami.ScrollablePage {
 		cylinders.setProperty(index, "mix", safeOxygen + "/" + safeHelium)
 		generatePlan()
 	}
+	function gasDisplayLabel(mix) {
+		var oxygen = mixOxygen(mix)
+		var helium = mixHelium(mix)
+		if (oxygen === 21 && helium === 0) return "Air"
+		if (oxygen === 100 && helium === 0) return "100%"
+		return oxygen + "/" + helium
+	}
 	function gasInfoAt(values, po2Bar) {
 		var index = Math.max(0, Math.min(values.length - 1, Math.round((po2Bar - 1.0) * 10)))
 		return values.length > 0 ? values[index] : ({})
@@ -627,7 +634,7 @@ Kirigami.ScrollablePage {
 		lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
-			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(cylinder.mix).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
+			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(gasDisplayLabel(cylinder.mix)).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
 		}
 		for (var analysisIndex = 0; analysisIndex < gasAnalysis.length; ++analysisIndex) {
 			var gas = gasAnalysis[analysisIndex]
@@ -635,8 +642,7 @@ Kirigami.ScrollablePage {
 		}
 		lines.push("", qsTr("CALCULATED ANALYSIS"))
 		lines.push(qsTr("Runtime: %1  Bottom profile: %2  Decompression stops: %3").arg(formatDuration(runtimeSeconds)).arg(formatDuration(bottomTimeSeconds)).arg(formatDuration(decoTimeSeconds)))
-		lines.push(qsTr("NDL: %1  TTS: %2  Ceiling: %3").arg(formatDuration(finalSampleValue("ndl", -1))).arg(formatDuration(finalSampleValue("tts", -1))).arg(finalSampleValue("ceiling", 0) > 0 ? (finalSampleValue("ceiling", 0) / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit : "—"))
-		lines.push(qsTr("Current GF: %1%  Surface GF: %2%  pO₂: %3 bar  Tissue: %4%").arg(finalSampleValue("gf", 0).toFixed(0)).arg(finalSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("po2", 0) > 0 ? (finalSampleValue("po2", 0) / 1000.0).toFixed(2) : "—").arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
+		lines.push(qsTr("NDL: %1  Surface GF: %2%  Tissue: %3%").arg(formatDuration(finalSampleValue("ndl", -1))).arg(surfacedSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
 		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("FULL PLAN"))
 		if (timeline.length === 0)
 			lines.push(qsTr("No plan segments generated."))
