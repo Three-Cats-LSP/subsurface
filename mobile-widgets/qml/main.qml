@@ -1064,6 +1064,10 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			editorPage.saved.connect(function() { showPage(detailsPage) })
 			showPage(editorPage)
 		})
+		detailsPage.deleteRequested.connect(function(diveId) {
+			manager.deleteDive(diveId)
+			showPageFromDrawer(modernDiveList)
+		})
 		showPage(detailsPage)
 	}
 

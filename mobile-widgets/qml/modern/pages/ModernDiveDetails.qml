@@ -25,6 +25,7 @@ Kirigami.Page {
 	property string diveReportTextExport: ""
 
 	signal editRequested(var dive)
+	signal deleteRequested(int diveId)
 	FolderDialog {
 		id: diveReportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
@@ -55,6 +56,13 @@ Kirigami.Page {
 		if (page.currentItem)
 			page.currentItem.refreshProfile()
 	}
+
+	function confirmDiveDelete(dive) {
+		pendingDeleteDive = dive
+		deleteDiveDialog.open()
+	}
+
+	property var pendingDeleteDive: null
 
 	function openEditorWhenReady() {
 		if (editOnReady && !editOpened && currentItem && currentItem.modelData) {
@@ -324,6 +332,8 @@ Kirigami.Page {
 									MenuSeparator {}
 									MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF report"); onTriggered: diveReportFolder.open() }
 									MenuItem { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save text report"); onTriggered: diveReportTextFolder.open() }
+									MenuSeparator {}
+									MenuItem { text: qsTr("Delete dive"); onTriggered: page.confirmDiveDelete(delegateRoot.modelData) }
 								}
 							}
 						}
@@ -875,14 +885,20 @@ Kirigami.Page {
 				}
 
 				Text { text: qsTr("Decompression"); color: tokens.textMuted; font.pixelSize: 11 }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Information box"); checked: ProfilePrefs.infobox; onToggled: { ProfilePrefs.infobox = checked; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Analysis model and GF"); checked: ProfilePrefs.decoinfo; onToggled: { ProfilePrefs.decoinfo = checked; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("NDL / TTS"); checked: ProfilePrefs.calcndltts; onToggled: { ProfilePrefs.calcndltts = checked; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Ceiling"); checked: ProfilePrefs.calcceiling; onToggled: { ProfilePrefs.calcceiling = checked; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tissue ceiling"); checked: ProfilePrefs.calcalltissues; onToggled: { ProfilePrefs.calcalltissues = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Ceiling in 3 m steps"); checked: ProfilePrefs.calcceiling3m; onToggled: { ProfilePrefs.calcceiling3m = checked; page.refreshCurrentProfile() } }
 
-				Text { text: qsTr("Gases"); color: tokens.textMuted; font.pixelSize: 11 }
-				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tissue saturation"); checked: ProfilePrefs.percentagegraph; onToggled: { ProfilePrefs.percentagegraph = checked; page.refreshCurrentProfile() } }
+				Text { text: qsTr("Gases & tissues"); color: tokens.textMuted; font.pixelSize: 11 }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("pO₂ graph"); checked: PrefPartialPressureGas.po2; onToggled: { PrefPartialPressureGas.po2 = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("pN₂ graph"); checked: PrefPartialPressureGas.pn2; onToggled: { PrefPartialPressureGas.pn2 = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("pHe graph"); checked: PrefPartialPressureGas.phe; onToggled: { PrefPartialPressureGas.phe = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tissue saturation"); checked: ProfilePrefs.percentagegraph; onToggled: { ProfilePrefs.percentagegraph = checked; if (checked) ProfilePrefs.hrgraph = false; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("MOD"); checked: ProfilePrefs.mod; onToggled: { ProfilePrefs.mod = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("EAD / END / EADD"); checked: ProfilePrefs.ead; onToggled: { ProfilePrefs.ead = checked; page.refreshCurrentProfile() } }
 
 				Text { text: qsTr("Cylinder"); color: tokens.textMuted; font.pixelSize: 11 }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Tank pressure"); checked: ProfilePrefs.tankbar; onToggled: { ProfilePrefs.tankbar = checked; page.refreshCurrentProfile() } }
@@ -890,8 +906,33 @@ Kirigami.Page {
 
 				Text { text: qsTr("Events & overlays"); color: tokens.textMuted; font.pixelSize: 11 }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Dive-computer ceiling"); checked: ProfilePrefs.dcceiling; onToggled: { ProfilePrefs.dcceiling = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Heart rate"); checked: ProfilePrefs.hrgraph; onToggled: { ProfilePrefs.hrgraph = checked; if (checked) ProfilePrefs.percentagegraph = false; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Ruler"); checked: ProfilePrefs.rulergraph; onToggled: { ProfilePrefs.rulergraph = checked; page.refreshCurrentProfile() } }
+				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Scaled graph"); checked: ProfilePrefs.zoomed_plot; onToggled: { ProfilePrefs.zoomed_plot = checked; page.refreshCurrentProfile() } }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Pictures"); checked: ProfilePrefs.show_pictures_in_profile; onToggled: { ProfilePrefs.show_pictures_in_profile = checked; page.refreshCurrentProfile() } }
 			}
+		}
+	}
+
+	Dialog {
+		id: deleteDiveDialog
+		parent: Overlay.overlay
+		anchors.centerIn: parent
+		modal: true
+		focus: true
+		title: qsTr("Delete dive?")
+		standardButtons: Dialog.Cancel | Dialog.Ok
+		onAccepted: {
+			if (page.pendingDeleteDive)
+				page.deleteRequested(page.pendingDeleteDive.id)
+			page.pendingDeleteDive = null
+		}
+		onRejected: page.pendingDeleteDive = null
+		contentItem: Text {
+			width: 320
+			text: qsTr("This removes the dive from the log. You can use Undo immediately afterwards if needed.")
+			color: tokens.textPrimary
+			wrapMode: Text.WordWrap
 		}
 	}
 

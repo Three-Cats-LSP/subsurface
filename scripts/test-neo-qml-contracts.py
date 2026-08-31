@@ -99,9 +99,16 @@ require(
 		'activeFocusOnTab: height > 0',
 		'Keys.onReturnPressed: activateDelegate()',
 		'Accessible.onPressAction: activateDelegate()',
+		'property bool selectionMode: false',
+		'function toggleDiveSelection(diveId)',
+		'manager.deleteDives(page.pendingDeleteIds)',
+		'text: qsTr("Select dives")',
 	),
 	"Neo populated dive list",
 )
+
+dive_action_sheet = source("mobile-widgets/qml/modern/components/DiveActionSheet.qml")
+require(dive_action_sheet, ('text: qsTr("Delete dive")', 'manager.deleteDive(diveId)'), "Neo single-dive deletion")
 forbid(
 	dive_list,
 	('\t\t\tdelegate: Item {\n\t\t\t\tid: delegateRoot\n\t\t\t\trequired property int index',),
@@ -122,6 +129,16 @@ require(
 		'label: qsTr("Gear")',
 		'iconName: "type"',
 		'Accessible.name: qsTr("Dive details for %1")',
+		'signal deleteRequested(int diveId)',
+		'MenuItem { text: qsTr("Delete dive")',
+		'text: qsTr("pO₂ graph")',
+		'text: qsTr("pN₂ graph")',
+		'text: qsTr("pHe graph")',
+		'text: qsTr("EAD / END / EADD")',
+		'text: qsTr("Ceiling in 3 m steps")',
+		'text: qsTr("Heart rate")',
+		'text: qsTr("Ruler")',
+		'text: qsTr("Scaled graph")',
 	),
 	"Neo populated dive details",
 )
@@ -183,6 +200,8 @@ require(
 	),
 	"Neo planner accessibility",
 )
+require(planner, ('showPageFromDrawer(modernDiveList)',), "Neo saved-plan navigation")
+forbid(planner, ('showPage(diveList)',), "Neo saved-plan navigation")
 if not (planner.index('text: qsTr("Gas sufficiency")') < planner.index('text: qsTr("Contingency scenario")') < planner.index('text: qsTr("Technical tools")')):
 	raise SystemExit("Neo planner section order must be gas sufficiency, contingency, then technical tools")
 forbid(
@@ -317,6 +336,7 @@ require(
 	),
 	"Neo dive mode persistence",
 )
+require(manager, ('void QMLManager::deleteDives(const QVariantList &ids)', 'Command::deleteDive(dives);'), "Neo bulk dive deletion")
 
 profile_scene = source("profile-widget/profilescene.cpp")
 qml_profile = source("profile-widget/qmlprofile.cpp")

@@ -1754,6 +1754,24 @@ void QMLManager::deleteDive(int id)
 	changesNeedSaving();
 }
 
+void QMLManager::deleteDives(const QVariantList &ids)
+{
+	QVector<dive *> dives;
+	dives.reserve(ids.size());
+	for (const QVariant &value : ids) {
+		const int id = value.toInt();
+		dive *d = divelog.dives.get_by_uniq_id(id);
+		if (d && !dives.contains(d))
+			dives.push_back(d);
+	}
+	if (dives.isEmpty()) {
+		appendTextToLog("trying to delete non-existing dives");
+		return;
+	}
+	Command::deleteDive(dives);
+	changesNeedSaving();
+}
+
 void QMLManager::toggleDiveInvalid(int id)
 {
 	struct dive *d = divelog.dives.get_by_uniq_id(id);

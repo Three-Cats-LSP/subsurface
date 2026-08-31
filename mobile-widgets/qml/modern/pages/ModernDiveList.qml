@@ -18,6 +18,9 @@ Kirigami.Page {
 	property bool advancedFiltersVisible: false
 	property string activeCollection: ""
 	property var activeCollectionDiveIds: []
+	property bool selectionMode: false
+	property var selectedDiveIds: []
+	property var pendingDeleteIds: []
 
 	signal openDive(int row)
 	signal downloadRequested()
@@ -66,10 +69,65 @@ Kirigami.Page {
 		collectionsDialog.open()
 	}
 
+	function isDiveSelected(diveId) {
+		return selectedDiveIds.indexOf(diveId) >= 0
+	}
+
+	function toggleDiveSelection(diveId) {
+		var next = selectedDiveIds.slice()
+		var position = next.indexOf(diveId)
+		if (position >= 0)
+			next.splice(position, 1)
+		else
+			next.push(diveId)
+		selectedDiveIds = next
+	}
+
+	function startSelection(diveId) {
+		selectionMode = true
+		selectedDiveIds = diveId === undefined ? [] : [diveId]
+	}
+
+	function cancelSelection() {
+		selectionMode = false
+		selectedDiveIds = []
+	}
+
+	function confirmDelete(ids) {
+		if (!ids || ids.length === 0)
+			return
+		pendingDeleteIds = ids.slice()
+		deleteDivesDialog.open()
+	}
+
 	Components.DiveActionSheet {
 		id: diveActions
 		onOpenDive: function(row) { page.openDive(row) }
 		onAddToCollectionRequested: function(diveId) { page.openCollections(diveId) }
+	}
+
+	Dialog {
+		id: deleteDivesDialog
+		parent: Overlay.overlay
+		anchors.centerIn: parent
+		modal: true
+		focus: true
+		title: page.pendingDeleteIds.length === 1 ? qsTr("Delete dive?") : qsTr("Delete %1 dives?").arg(page.pendingDeleteIds.length)
+		standardButtons: Dialog.Cancel | Dialog.Ok
+		onAccepted: {
+			manager.deleteDives(page.pendingDeleteIds)
+			page.pendingDeleteIds = []
+			page.cancelSelection()
+		}
+		onRejected: page.pendingDeleteIds = []
+		contentItem: Text {
+			width: 320
+			text: page.pendingDeleteIds.length === 1
+				? qsTr("This removes the selected dive from the log. You can use Undo immediately afterwards if needed.")
+				: qsTr("This removes all selected dives from the log in one action. You can use Undo immediately afterwards if needed.")
+			color: tokens.textPrimary
+			wrapMode: Text.WordWrap
+		}
 	}
 
 	Connections {
@@ -136,20 +194,25 @@ Kirigami.Page {
 			}
 
 			Components.NeoButton {
+				visible: !page.selectionMode
 				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
 				onClicked: page.filterVisible = !page.filterVisible
 			}
-			Components.NeoButton { visible: page.wideLayout; compact: true; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
-			Components.NeoButton { visible: page.wideLayout; compact: true; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
-			Components.NeoButton { visible: page.wideLayout; compact: true; text: qsTr("Import"); onClicked: page.downloadRequested() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Import"); onClicked: page.downloadRequested() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Select"); onClicked: page.startSelection() }
+			Components.NeoButton { visible: page.selectionMode; compact: true; text: qsTr("Cancel"); onClicked: page.cancelSelection() }
+			Components.NeoButton { visible: page.selectionMode; compact: true; variant: "danger"; enabled: page.selectedDiveIds.length > 0; text: qsTr("Delete (%1)").arg(page.selectedDiveIds.length); onClicked: page.confirmDelete(page.selectedDiveIds) }
 			Components.NeoButton {
+				visible: !page.selectionMode
 				variant: "primary"
 				text: page.wideLayout ? qsTr("+ New dive") : "+"
 				accessibleName: qsTr("Add a new dive")
 				onClicked: page.addDiveRequested()
 			}
 			ToolButton {
-				visible: !page.wideLayout
+				visible: !page.wideLayout && !page.selectionMode
 				text: "⋯"
 				Accessible.name: qsTr("More dive-list actions")
 				onClicked: listActions.open()
@@ -158,6 +221,8 @@ Kirigami.Page {
 				id: listActions
 				MenuItem { text: qsTr("Saved filters"); onTriggered: savedFiltersDialog.open() }
 				MenuItem { text: page.activeCollection.length > 0 ? qsTr("Current collection") : qsTr("Collections"); onTriggered: page.openCollections() }
+				MenuSeparator {}
+				MenuItem { text: qsTr("Select dives"); onTriggered: page.startSelection() }
 				MenuSeparator {}
 				MenuItem { text: qsTr("Import dives"); onTriggered: page.downloadRequested() }
 			}
@@ -338,6 +403,8 @@ Kirigami.Page {
 				function activateDelegate() {
 					if (modelData.isTrip)
 						page.diveListModel.toggle(modelData.row)
+					else if (page.selectionMode)
+						page.toggleDiveSelection(modelData.id)
 					else
 						page.openDive(modelData.row)
 				}
@@ -413,6 +480,12 @@ Kirigami.Page {
 							RowLayout {
 								Layout.fillWidth: true
 								spacing: tokens.space8
+								CheckBox {
+									visible: page.selectionMode
+									checked: page.isDiveSelected(delegateRoot.modelData.id)
+									Accessible.name: qsTr("Select dive")
+									onClicked: page.toggleDiveSelection(delegateRoot.modelData.id)
+								}
 								Rectangle {
 									visible: delegateRoot.modelData.number > 0
 									Layout.preferredWidth: 54
@@ -436,6 +509,12 @@ Kirigami.Page {
 										elide: Text.ElideRight
 									}
 									Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+								}
+								ToolButton {
+									visible: !page.selectionMode
+									text: "⋯"
+									Accessible.name: qsTr("Dive actions")
+									onClicked: diveActions.openForDive(delegateRoot.modelData)
 								}
 							}
 
@@ -516,6 +595,8 @@ Kirigami.Page {
 
 					TapHandler {
 						onLongPressed: {
+							if (page.selectionMode)
+								return
 							delegateRoot.longPressTriggered = true
 							diveActions.openForDive(delegateRoot.modelData)
 						}

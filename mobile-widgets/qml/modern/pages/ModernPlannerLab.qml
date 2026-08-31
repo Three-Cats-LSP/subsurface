@@ -480,7 +480,7 @@ Kirigami.ScrollablePage {
 		decoTimeSeconds = result.decoTimeSeconds || 0
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
 			manager.selectDive(result.newDiveId)
-			showPage(diveList)
+			showPageFromDrawer(modernDiveList)
 		}
 	}
 	function calculateContingency() {

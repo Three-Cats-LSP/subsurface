@@ -219,6 +219,7 @@ public slots:
 	void selectDive(int id);
 	Q_INVOKABLE int swipeRowForDive(int id) const;
 	void deleteDive(int id);
+	Q_INVOKABLE void deleteDives(const QVariantList &ids);
 	void deleteAccount();
 	void toggleDiveInvalid(int id);
 	void copyDiveData(int id);
