@@ -24,6 +24,7 @@
 #include "commands/command.h"
 #include "core/gettextfromc.h"
 #include "core/deco.h"
+#include "core/gas.h"
 #include <QApplication>
 #include <QTextDocument>
 #include <QtConcurrent>
@@ -50,6 +51,37 @@ static QString neoPlannerGasLabel(const gasmix &mix)
 	if (oxygen == 100 && helium == 0)
 		return QStringLiteral("100%");
 	return QStringLiteral("%1/%2").arg(oxygen).arg(helium);
+}
+
+static double neoPlannerCns(const dive &plannedDive, const diveplan &plan)
+{
+	double cns = 0.0;
+	int previousTime = 0;
+	depth_t previousDepth = 0_m;
+	for (const divedatapoint &point : plan.dp) {
+		const int duration = point.time - previousTime;
+		if (duration <= 0 || point.cylinderid < 0 ||
+		    static_cast<size_t>(point.cylinderid) >= plannedDive.cylinders.size())
+			continue;
+		const gasmix mix = plannedDive.cylinders[point.cylinderid].gasmix;
+		int startPo2 = 0;
+		int endPo2 = 0;
+		if (point.divemode == CCR && point.setpoint > 0) {
+			startPo2 = std::min(point.setpoint, plannedDive.depth_to_mbar(previousDepth));
+			endPo2 = std::min(point.setpoint, plannedDive.depth_to_mbar(point.depth));
+		} else if (point.divemode == PSCR) {
+			startPo2 = pscr_o2(plannedDive.depth_to_bar(previousDepth), mix);
+			endPo2 = pscr_o2(plannedDive.depth_to_bar(point.depth), mix);
+		} else {
+			const int oxygen = get_o2(mix);
+			startPo2 = std::lround(oxygen * plannedDive.depth_to_bar(previousDepth));
+			endPo2 = std::lround(oxygen * plannedDive.depth_to_bar(point.depth));
+		}
+		cns += cns_for_segment(duration, (startPo2 + endPo2) / 2);
+		previousTime = point.time;
+		previousDepth = point.depth;
+	}
+	return cns;
 }
 
 static cylinder_t *real_cylinder_or_null(struct dive *d, int cylinderId)
@@ -1650,7 +1682,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// Planner samples commonly omit computer-reported CNS. Preserve the
 	// unrounded result from Subsurface's established oxygen-exposure algorithm
 	// so shallow plans below one percent do not appear to have no CNS data.
-	const double calculatedCns = calculate_cns_dive(*d);
+	const double calculatedCns = neoPlannerCns(*d, diveplan);
 	QString notes_qstr = QString::fromStdString(d->notes);
 	notes_qstr.replace("&#10138;", "&#8593;");
 	notes_qstr.replace("&#10136;", "&#8595;");

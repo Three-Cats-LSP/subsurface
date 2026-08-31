@@ -185,11 +185,20 @@ static int calculate_otu(const struct dive &dive)
    po2 for each segment. Empirical testing showed that, for large changes in depth, the cns calculation for the mean po2
    value is extremely close, if not identical to the additive calculations for 0.1 bar increments in po2 from the start
    to the end of the segment, assuming a constant rate of change in po2 (i.e. depth) with time. */
-double calculate_cns_dive(const struct dive &dive)
+double cns_for_segment(int seconds, int po2_mbar)
+{
+	if (po2_mbar <= 500)
+		return 0.0;
+	// This formula is the result of fitting two lines to the Log of the NOAA CNS table.
+	const double rate = po2_mbar <= 1500 ? exp(-11.7853 + 0.00193873 * po2_mbar) :
+							       exp(-23.6349 + 0.00980829 * po2_mbar);
+	return static_cast<double>(seconds) * rate * 100.0;
+}
+
+static double calculate_cns_dive(const struct dive &dive)
 {
 	const struct divecomputer dc = dive.dcs[0];
 	double cns = 0.0;
-	double rate;
 	gasmix_loop loop_gas(dive, dc);
 	divemode_loop loop_mode(dc);
 	/* Calculate the CNS for each sample in this dive and sum them */
@@ -224,13 +233,7 @@ double calculate_cns_dive(const struct dive &dive)
 			po2 = (po2i + po2f) / 2;
 		}
 
-		/* Don't increase CNS when po2 below 500 matm */
-		if (po2 <= 500)
-			continue;
-
-		// This formula is the result of fitting two lines to the Log of the NOAA CNS table
-		rate = po2 <= 1500 ? exp(-11.7853 + 0.00193873 * po2) : exp(-23.6349 + 0.00980829 * po2);
-		cns += (double) t * rate * 100.0;
+		cns += cns_for_segment(t, po2);
 	}
 	return cns;
 }
