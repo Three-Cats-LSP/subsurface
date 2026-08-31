@@ -185,7 +185,7 @@ static int calculate_otu(const struct dive &dive)
    po2 for each segment. Empirical testing showed that, for large changes in depth, the cns calculation for the mean po2
    value is extremely close, if not identical to the additive calculations for 0.1 bar increments in po2 from the start
    to the end of the segment, assuming a constant rate of change in po2 (i.e. depth) with time. */
-static double calculate_cns_dive(const struct dive &dive)
+double calculate_cns_dive(const struct dive &dive)
 {
 	const struct divecomputer dc = dive.dcs[0];
 	double cns = 0.0;

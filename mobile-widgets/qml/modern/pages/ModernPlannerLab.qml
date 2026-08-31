@@ -643,7 +643,7 @@ Kirigami.ScrollablePage {
 		lines.push("", qsTr("CALCULATED ANALYSIS"))
 		lines.push(qsTr("Runtime: %1  Bottom profile: %2  Decompression stops: %3").arg(formatDuration(runtimeSeconds)).arg(formatDuration(bottomTimeSeconds)).arg(formatDuration(decoTimeSeconds)))
 		lines.push(qsTr("NDL: %1  Surface GF: %2%  Tissue: %3%").arg(formatDuration(finalSampleValue("ndl", -1))).arg(surfacedSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
-		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0)).arg(planOtu), "", qsTr("FULL PLAN"))
+		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0).toFixed(1)).arg(planOtu), "", qsTr("FULL PLAN"))
 		if (timeline.length === 0)
 			lines.push(qsTr("No plan segments generated."))
 		for (var timelineIndex = 0; timelineIndex < timeline.length; ++timelineIndex)
@@ -858,7 +858,7 @@ Kirigami.ScrollablePage {
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 2
 				Components.MetricCard { label: qsTr("Runtime"); value: page.formatDuration(page.runtimeSeconds); Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("NDL"); value: page.formatDuration(page.finalSampleValue("ndl", -1)); Layout.fillWidth: true }
-				Components.MetricCard { label: qsTr("CNS"); value: page.finalSampleValue("cns", 0) > 0 ? String(page.finalSampleValue("cns", 0)) : "—"; suffix: page.finalSampleValue("cns", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
+				Components.MetricCard { label: qsTr("CNS"); value: page.finalSampleValue("cns", 0) > 0 ? page.finalSampleValue("cns", 0).toFixed(1) : "—"; suffix: page.finalSampleValue("cns", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Surface GF"); value: page.surfacedSampleValue("surfaceGf", 0) > 0 ? page.surfacedSampleValue("surfaceGf", 0).toFixed(0) : "—"; suffix: page.surfacedSampleValue("surfaceGf", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("Max tissue loading"); value: page.finalSampleValue("tissueLoad", 0) > 0 ? page.finalSampleValue("tissueLoad", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("tissueLoad", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }

@@ -1647,10 +1647,10 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	if (!d->dcs.empty())
 		d->dcs[0].duration.seconds = runtimeSeconds;
 	d->duration.seconds = runtimeSeconds;
-	// Planner samples commonly omit computer-reported CNS. Use Subsurface's
-	// established whole-dive oxygen-exposure calculation for this generated
-	// profile so Neo does not present an empty CNS card for an ordinary plan.
-	divelog.dives.update_cylinder_related_info(*d);
+	// Planner samples commonly omit computer-reported CNS. Preserve the
+	// unrounded result from Subsurface's established oxygen-exposure algorithm
+	// so shallow plans below one percent do not appear to have no CNS data.
+	const double calculatedCns = calculate_cns_dive(*d);
 	QString notes_qstr = QString::fromStdString(d->notes);
 	notes_qstr.replace("&#10138;", "&#8593;");
 	notes_qstr.replace("&#10136;", "&#8595;");
@@ -1887,8 +1887,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		const int calculatedTts = std::max(0, runtimeSeconds - enteredProfileRuntime);
 		if (analysis.value("tts").toInt() <= 0 && calculatedTts > 0)
 			analysis["tts"] = calculatedTts;
-		if (analysis.value("cns").toInt() <= 0 && d->cns > 0)
-			analysis["cns"] = d->cns;
+		if (analysis.value("cns").toDouble() <= 0.0 && calculatedCns > 0.0)
+			analysis["cns"] = calculatedCns;
 	}
 	results["profile"] = profileData;
 	results["analysis"] = analysis;

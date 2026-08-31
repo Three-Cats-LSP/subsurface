@@ -334,7 +334,7 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(qAbs(analysis.value("time").toInt() - 21 * 60) <= 60);
 	QVERIFY(qAbs(analysis.value("depth").toInt() - 18000) <= 1000);
 	QVERIFY(analysis.value("ndl").toInt() > 0);
-	QVERIFY(analysis.value("cns").toInt() > 0);
+	QVERIFY(analysis.value("cns").toDouble() > 0.0);
 	QVERIFY(!result.value("notes").toString().contains("<div>"));
 	QVERIFY(!result.value("notes").toString().contains("</table>"));
 	const QVariantMap customWater = model->calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", OC, 10150, 1013, false);

@@ -15,6 +15,7 @@ struct deco_state;
 
 int comp_dives(const struct dive &a, const struct dive &b);
 int comp_dives_ptr(const struct dive *a, const struct dive *b);
+double calculate_cns_dive(const struct dive &dive);
 
 struct merge_result {
 	std::unique_ptr<struct dive> dive;
