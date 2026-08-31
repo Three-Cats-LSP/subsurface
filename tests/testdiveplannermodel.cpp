@@ -328,6 +328,8 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSample.contains("gf"));
 	QVERIFY(lastSample.contains("surfaceGf"));
 	QVERIFY(lastSample.contains("po2"));
+	QVERIFY(lastSample.contains("ead"));
+	QVERIFY(lastSample.contains("gas"));
 	QVERIFY(lastSample.contains("tissueLoad"));
 	const QVariantMap analysis = result.value("analysis").toMap();
 	QVERIFY(!analysis.empty());
@@ -409,6 +411,20 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QCOMPARE(desktopEquivalent.value("gasAnalysis").toList().first().toMap().value("mix").toString(), QStringLiteral("Air"));
 	const QVariantList desktopProfile = desktopEquivalent.value("profile").toList();
 	QVERIFY(!desktopProfile.empty());
+	bool hasCalculatedCeiling = false;
+	bool hasCalculatedTts = false;
+	bool hasProfileGasSwitch = false;
+	for (const QVariant &profileValue : desktopProfile) {
+		const QVariantMap sample = profileValue.toMap();
+		hasCalculatedCeiling |= sample.value("ceiling").toInt() > 0;
+		hasCalculatedTts |= sample.value("tts").toInt() > 0;
+		hasProfileGasSwitch |= sample.value("gasSwitch").toBool();
+		QVERIFY(sample.contains("ead"));
+		QVERIFY(sample.contains("gas"));
+	}
+	QVERIFY(hasCalculatedCeiling);
+	QVERIFY(hasCalculatedTts);
+	QVERIFY(hasProfileGasSwitch);
 	const double bottomSurfaceGf = desktopEquivalent.value("analysis").toMap().value("surfaceGf").toDouble();
 	const double surfacedSurfaceGf = desktopProfile.last().toMap().value("surfaceGf").toDouble();
 	QVERIFY(surfacedSurfaceGf > 0.0);

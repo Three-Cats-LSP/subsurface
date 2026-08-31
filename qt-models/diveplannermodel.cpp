@@ -1859,17 +1859,24 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			}
 			plotCns.push_back(cumulativeCns);
 		}
+		int previousProfileCylinder = -1;
 		for (const struct sample &sample : d->dcs[0].samples) {
 			QVariantMap point;
 			point["time"] = sample.time.seconds;
 			point["depth"] = sample.depth.mm;
 			point["ndl"] = sample.ndl.seconds > 0 ? sample.ndl.seconds : -1;
 			point["tts"] = sample.tts.seconds;
-			point["ceiling"] = sample.stopdepth.mm;
+			point["reportedCeiling"] = sample.stopdepth.mm;
 			point["stopTime"] = sample.stoptime.seconds;
 			point["cns"] = sample.cns;
 			point["setpoint"] = sample.setpoint.mbar;
 			point["inDeco"] = sample.in_deco;
+			const int profileCylinder = get_cylinderid_at_time(d, &d->dcs[0], sample.time);
+			if (profileCylinder >= 0 && static_cast<size_t>(profileCylinder) < d->cylinders.size()) {
+				point["gas"] = neoPlannerGasLabel(d->cylinders[profileCylinder].gasmix);
+				point["gasSwitch"] = previousProfileCylinder >= 0 && profileCylinder != previousProfileCylinder;
+				previousProfileCylinder = profileCylinder;
+			}
 			if (!plot.entry.empty()) {
 				auto plotIt = std::lower_bound(plot.entry.begin(), plot.entry.end(), sample.time.seconds,
 					[](const plot_data &entry, int time) { return entry.sec < time; });
@@ -1882,9 +1889,13 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				}
 				point["gf"] = plotIt->current_gf * 100.0;
 				point["surfaceGf"] = plotIt->surface_gf;
+				point["ceiling"] = plotIt->ceiling.mm;
+				if (plotIt->tts_calc > 0)
+					point["tts"] = plotIt->tts_calc;
 				if (sample.ndl.seconds <= 0 && plotIt->ndl_calc > 0 && !plotIt->in_deco_calc)
 					point["ndl"] = plotIt->ndl_calc;
 				point["po2"] = static_cast<int>(std::lround(plotIt->pressures.o2 * 1000.0));
+				point["ead"] = plotIt->ead.mm;
 				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
 				point["cns"] = plotCns[static_cast<size_t>(std::distance(plot.entry.begin(), plotIt))];
 			}

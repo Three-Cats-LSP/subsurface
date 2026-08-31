@@ -163,10 +163,17 @@ require(
 		'property var timeline: []',
 		'property int runtimeSeconds: 0',
 		'text: qsTr("Full plan")',
-		'qsTr("Switch → %1")',
+		'function formatPlanDuration(seconds)',
+		'"  ·  RT " + formatPlanDuration(row.runTime)',
+		'"  ·  pO₂ " + po2 + "  ·  EAD " + ead',
 		'qsTr("Runtime: %1  Bottom profile: %2  Decompression stops: %3")',
 		'text: qsTr("O₂ %")',
 		'text: qsTr("He %")',
+		'Layout.preferredWidth: 78; Layout.maximumWidth: 78',
+		'ctx.fillText(qsTr("Depth (%1)").arg(page.depthUnit)',
+		'ctx.fillText(qsTr("Runtime")',
+		'if (!switchPoint.gasSwitch) continue',
+		'Layout.fillWidth: true; Layout.preferredWidth: 1',
 		'qsTr("Deco switch %1 (pO₂ %2 bar)")',
 		'qsTr("Bottom MOD %1 (pO₂ %2 bar)")',
 		'decoReference.decoSwitch || decoReference.mod || "—"',
@@ -176,6 +183,8 @@ require(
 	),
 	"Neo planner accessibility",
 )
+if not (planner.index('text: qsTr("Gas sufficiency")') < planner.index('text: qsTr("Contingency scenario")') < planner.index('text: qsTr("Technical tools")')):
+	raise SystemExit("Neo planner section order must be gas sufficiency, contingency, then technical tools")
 forbid(
 	planner,
 	(

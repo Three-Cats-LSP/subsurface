@@ -73,6 +73,11 @@ Kirigami.ScrollablePage {
 	property string contingencyTextExport: ""
 	property string contingencyPdfExport: ""
 	property var inspectedProfileSample: null
+	property real plannerReadingWidth: Math.min(page.availableWidth, 1120)
+	readonly property real profileChartLeft: 52
+	readonly property real profileChartRight: 18
+	readonly property real profileChartTop: 12
+	readonly property real profileChartBottom: 34
 	property string activeProfileName: ""
 	property bool activeProfileModified: false
 	property string activeProfileId: ""
@@ -554,9 +559,9 @@ Kirigami.ScrollablePage {
 		return maximum
 	}
 	function inspectProfileAt(x, profileWidth) {
-		if (profileData.length === 0 || profileWidth <= 32)
+		if (profileData.length === 0 || profileWidth <= profileChartLeft + profileChartRight)
 			return
-		var targetTime = Math.max(0, Math.min(profileMaxTime(), (x - 16) / (profileWidth - 32) * profileMaxTime()))
+		var targetTime = Math.max(0, Math.min(profileMaxTime(), (x - profileChartLeft) / (profileWidth - profileChartLeft - profileChartRight) * profileMaxTime()))
 		var nearest = profileData[0]
 		for (var i = 1; i < profileData.length; ++i) {
 			if (Math.abs(profileData[i].time - targetTime) < Math.abs(nearest.time - targetTime))
@@ -565,12 +570,35 @@ Kirigami.ScrollablePage {
 		inspectedProfileSample = nearest
 	}
 	function profileSampleX(sample, profileWidth) {
-		return sample && profileMaxTime() > 0 ? 16 + sample.time / profileMaxTime() * (profileWidth - 32) : 0
+		return sample && profileMaxTime() > 0 ? profileChartLeft + sample.time / profileMaxTime() * (profileWidth - profileChartLeft - profileChartRight) : 0
+	}
+	function profileSampleAtTime(seconds) {
+		if (profileData.length === 0)
+			return null
+		var nearest = profileData[0]
+		for (var i = 1; i < profileData.length; ++i) {
+			if (Math.abs(profileData[i].time - seconds) < Math.abs(nearest.time - seconds))
+				nearest = profileData[i]
+		}
+		return nearest
+	}
+	function hasCalculatedCeiling() {
+		for (var i = 0; i < profileData.length; ++i) {
+			if (profileData[i].ceiling > 0)
+				return true
+		}
+		return false
 	}
 	function formatDuration(seconds) {
 		if (seconds === undefined || seconds < 0)
 			return "—"
 		return Math.floor(seconds / 60) + qsTr(" min") + (seconds % 60 ? " " + (seconds % 60) + qsTr(" s") : "")
+	}
+	function formatPlanDuration(seconds) {
+		if (seconds === undefined || seconds < 0)
+			return "—"
+		var remainder = seconds % 60
+		return Math.floor(seconds / 60) + ":" + (remainder < 10 ? "0" : "") + remainder
 	}
 	function algorithmName() {
 		if (Backend.planner_deco_mode === Enums.VPMB)
@@ -599,16 +627,21 @@ Kirigami.ScrollablePage {
 	function phaseSymbol(phase) {
 		if (phase === "descent") return "↓"
 		if (phase === "ascent") return "↑"
-		if (phase === "switch") return "⇄"
+		if (phase === "switch") return "●"
 		if (phase === "level") return "●"
 		if (phase === "deco") return "●"
 		return "↑"
 	}
 	function timelineLine(row) {
+		var sample = profileSampleAtTime(row.runTime)
 		var depth = (row.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit
 		var action = phaseSymbol(row.phase) + " " + depth
-		var gas = row.gasSwitch ? qsTr("switch to %1").arg(row.gas) : row.gas
-		return action + "  ·  " + formatDuration(row.duration) + "  ·  " + qsTr("runtime %1").arg(formatDuration(row.runTime)) + "  ·  " + gas + (row.setpoint > 0 ? "  ·  SP " + formatSetpoint(row.setpoint) : "")
+		var gas = (row.gas || "—").toUpperCase()
+		if (row.gasSwitch)
+			gas = ">> " + gas
+		var po2 = sample && sample.po2 > 0 ? (sample.po2 / 1000.0).toFixed(2) : "—"
+		var ead = sample && sample.ead !== undefined && sample.ead >= 0 ? (sample.ead / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit : "—"
+		return action + "  ·  " + formatPlanDuration(row.duration) + "  ·  " + gas + "  ·  RT " + formatPlanDuration(row.runTime) + "  ·  pO₂ " + po2 + "  ·  EAD " + ead + (row.setpoint > 0 ? "  ·  SP " + formatSetpoint(row.setpoint) : "")
 	}
 	function plannerWarningLines() {
 		var warnings = []
@@ -653,7 +686,7 @@ Kirigami.ScrollablePage {
 			lines.push(qsTr("No decompression stops generated."))
 		for (var i = 0; i < schedule.length; ++i) {
 			var stop = schedule[i]
-			lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "") + (stop.runTime !== undefined ? "  RT " + formatDuration(stop.runTime) : "") + (stop.tts !== undefined ? "  TTS " + formatDuration(stop.tts) : "") + (stop.setpoint !== undefined ? "  SP " + formatSetpoint(stop.setpoint) : ""))
+			lines.push(timelineLine(stop))
 		}
 		var warnings = plannerWarningLines()
 		if (warnings.length > 0)
@@ -796,25 +829,6 @@ Kirigami.ScrollablePage {
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
-			Text { text: qsTr("Contingency scenario"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Calculate a separate mature-planner result; the main plan remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			RowLayout { Layout.fillWidth: true; ComboBox { Layout.fillWidth: true; model: [qsTr("Extra bottom time"), qsTr("Deeper profile"), qsTr("Lost deco/travel gas")]; currentIndex: page.contingencyScenario; onActivated: page.contingencyScenario = currentIndex }
- Components.NeoSpinBox { visible: page.contingencyScenario !== 2; accessibleName: page.contingencyScenario === 0 ? qsTr("Extra bottom time in minutes") : qsTr("Extra depth (%1)").arg(page.depthUnit); from: 1; to: 30; value: page.contingencyDelta; onValueModified: page.contingencyDelta = value }
- Components.NeoComboBox { visible: page.contingencyScenario === 2; Layout.fillWidth: true; accessibleName: qsTr("Lost decompression or travel gas"); model: page.gasNames; currentIndex: page.contingencyGasIndex; onActivated: page.contingencyGasIndex = currentIndex }
- Label { visible: page.contingencyScenario !== 2; text: page.contingencyScenario === 0 ? qsTr("minutes") : page.depthUnit; color: tokens.textMuted } }
-			Components.NeoButton { Layout.fillWidth: true; text: qsTr("Calculate %1").arg(page.contingencyName()); onClicked: page.calculateContingency() }
-			ColumnLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true
-				Text { text: qsTr("Separate result: %1").arg(page.contingencyName()); color: tokens.accent; font.weight: Font.DemiBold }
-				Text { text: qsTr("Save allowed: %1 · NDL exceeded: %2 · OTU: %3").arg(page.contingencyResult && page.contingencyResult.planSaveAllowed ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult && page.contingencyResult.exceedsNDL ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult ? page.contingencyResult.otu : 0); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Repeater { model: page.contingencyResult ? page.contingencyResult.schedule || [] : []; delegate: Text { required property var modelData; text: qsTr("%1 %2 · %3%4").arg((modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1)).arg(page.depthUnit).arg(page.formatDuration(modelData.duration)).arg(modelData.gas !== undefined ? " · " + modelData.gas : ""); color: tokens.textSecondary; Layout.fillWidth: true } }
-				Repeater { model: page.contingencyResult ? page.contingencyResult.gasAnalysis || [] : []; delegate: Text { required property var modelData; text: qsTr("%1: remaining %2; end %3").arg(modelData.mix).arg(modelData.remaining).arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textSecondary; Layout.fillWidth: true } }
-				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Copy contingency"); onClicked: manager.copyToClipboard(page.contingencySlate()) }
- Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save TXT"); onClicked: contingencyTextFolder.open() }
- Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF"); onClicked: contingencyPdfFolder.open() } }
-			}
-		}
-		Components.ModernCard {
-			Layout.fillWidth: true
 			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Gases & cylinders"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
  Components.NeoButton { text: qsTr("Add gas"); onClicked: page.addCylinder() } }
 			Repeater { model: cylinders; delegate: GridLayout {
@@ -824,9 +838,9 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("Gas %1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Cylinder type for gas %1").arg(index + 1); model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: { cylinders.setProperty(index, "type", currentText); page.generatePlan() } }
-				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoTextField { Layout.fillWidth: true; accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); text: String(oxygen); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, value, helium) } } }
-				RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoTextField { Layout.fillWidth: true; accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); text: String(helium); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, oxygen, value) } } }
-				Components.NeoTextField { Layout.fillWidth: true; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
+				RowLayout { Layout.preferredWidth: 126; Layout.maximumWidth: 126; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoTextField { Layout.preferredWidth: 78; Layout.maximumWidth: 78; accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); text: String(oxygen); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, value, helium) } } }
+				RowLayout { Layout.preferredWidth: 126; Layout.maximumWidth: 126; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoTextField { Layout.preferredWidth: 78; Layout.maximumWidth: 78; accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); text: String(helium); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, oxygen, value) } } }
+				Components.NeoTextField { Layout.preferredWidth: 150; Layout.maximumWidth: 150; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
 				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }
  Components.NeoButton { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
 			} }
@@ -863,21 +877,45 @@ Kirigami.ScrollablePage {
 				Components.MetricCard { label: qsTr("Max tissue loading"); value: page.finalSampleValue("tissueLoad", 0) > 0 ? page.finalSampleValue("tissueLoad", 0).toFixed(0) : "—"; suffix: page.finalSampleValue("tissueLoad", 0) > 0 ? "%" : ""; Layout.fillWidth: true }
 				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }
 			}
-			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 190; onPaint: {
+			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: 250; onPaint: {
 				var ctx = getContext("2d"); ctx.reset(); if (page.profileData.length < 2) return
 				var maxTime = 0, maxDepth = 0; for (var i = 0; i < page.profileData.length; ++i) { maxTime = Math.max(maxTime, page.profileData[i].time); maxDepth = Math.max(maxDepth, page.profileData[i].depth) }
-				if (maxTime <= 0 || maxDepth <= 0) return; var margin = 16, w = width - margin * 2, h = height - margin * 2
+				if (maxTime <= 0 || maxDepth <= 0) return
+				var left = page.profileChartLeft, right = page.profileChartRight, top = page.profileChartTop, bottom = page.profileChartBottom
+				var w = width - left - right, h = height - top - bottom
+				ctx.font = "11px sans-serif"; ctx.fillStyle = tokens.textMuted; ctx.strokeStyle = tokens.border; ctx.lineWidth = 1
+				for (var depthTick = 0; depthTick <= 4; ++depthTick) {
+					var depthValue = maxDepth / 4 * depthTick
+					var depthY = top + depthTick / 4 * h
+					ctx.beginPath(); ctx.moveTo(left, depthY); ctx.lineTo(left + w, depthY); ctx.stroke()
+					ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText((depthValue / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(0), left - 7, depthY)
+				}
+				for (var timeTick = 0; timeTick <= 5; ++timeTick) {
+					var timeValue = maxTime / 5 * timeTick
+					var timeX = left + timeTick / 5 * w
+					ctx.beginPath(); ctx.moveTo(timeX, top); ctx.lineTo(timeX, top + h); ctx.stroke()
+					ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(page.formatPlanDuration(Math.round(timeValue)), timeX, top + h + 7)
+				}
+				ctx.save(); ctx.translate(11, top + h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(qsTr("Depth (%1)").arg(page.depthUnit), 0, 0); ctx.restore()
+				ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(qsTr("Runtime"), left + w / 2, height)
 				ctx.strokeStyle = page.exceedsNDL ? "#F87171" : tokens.accent; ctx.lineWidth = 2; ctx.beginPath()
-				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = margin + p.time / maxTime * w; var y = margin + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
-				ctx.strokeStyle = "#FB923C"; ctx.lineWidth = 1.5; ctx.beginPath(); var ceilingStarted = false
-				for (var k = 0; k < page.profileData.length; ++k) { var ceilingPoint = page.profileData[k]; if (ceilingPoint.ceiling <= 0) { ceilingStarted = false; continue }; var ceilingX = margin + ceilingPoint.time / maxTime * w; var ceilingY = margin + ceilingPoint.ceiling / maxDepth * h; if (!ceilingStarted) { ctx.moveTo(ceilingX, ceilingY); ceilingStarted = true } else ctx.lineTo(ceilingX, ceilingY) }; ctx.stroke()
+				for (var j = 0; j < page.profileData.length; ++j) { var p = page.profileData[j]; var x = left + p.time / maxTime * w; var y = top + p.depth / maxDepth * h; if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }; ctx.stroke()
+				ctx.strokeStyle = "#FB923C"; ctx.lineWidth = 2; ctx.beginPath(); var ceilingStarted = false
+				for (var k = 0; k < page.profileData.length; ++k) { var ceilingPoint = page.profileData[k]; if (ceilingPoint.ceiling <= 0) { ceilingStarted = false; continue }; var ceilingX = left + ceilingPoint.time / maxTime * w; var ceilingY = top + ceilingPoint.ceiling / maxDepth * h; if (!ceilingStarted) { ctx.moveTo(ceilingX, ceilingY); ceilingStarted = true } else ctx.lineTo(ceilingX, ceilingY) }; ctx.stroke()
+				for (var switchIndex = 0; switchIndex < page.profileData.length; ++switchIndex) {
+					var switchPoint = page.profileData[switchIndex]
+					if (!switchPoint.gasSwitch) continue
+					var switchX = left + switchPoint.time / maxTime * w
+					ctx.strokeStyle = tokens.accent; ctx.beginPath(); ctx.moveTo(switchX, top); ctx.lineTo(switchX, top + h); ctx.stroke()
+					ctx.fillStyle = tokens.accent; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(">> " + (switchPoint.gas || ""), switchX, top + 4)
+				}
 			}
 				Rectangle {
 					visible: page.inspectedProfileSample !== null
 					x: page.profileSampleX(page.inspectedProfileSample, profileCanvas.width)
-					y: 0
+					y: page.profileChartTop
 					width: 1
-					height: parent.height
+					height: parent.height - page.profileChartTop - page.profileChartBottom
 					color: tokens.textPrimary
 					opacity: 0.55
 				}
@@ -916,43 +954,28 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Profile sample at %1  ·  %2 %3").arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.time : 0)).arg(page.inspectedProfileSample ? (page.inspectedProfileSample.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) : "—").arg(page.depthUnit); color: tokens.textPrimary; font.weight: Font.DemiBold }
 					Text { text: qsTr("NDL %1   TTS %2   Ceiling %3").arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.ndl : -1)).arg(page.formatDuration(page.inspectedProfileSample ? page.inspectedProfileSample.tts : -1)).arg(page.inspectedProfileSample && page.inspectedProfileSample.ceiling > 0 ? (page.inspectedProfileSample.ceiling / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit : "—"); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 					Text { text: qsTr("GF %1%   Surface GF %2%   pO₂ %3 bar   Tissue %4%").arg(page.inspectedProfileSample && page.inspectedProfileSample.gf !== undefined ? page.inspectedProfileSample.gf.toFixed(0) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.surfaceGf !== undefined ? page.inspectedProfileSample.surfaceGf.toFixed(0) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.po2 > 0 ? (page.inspectedProfileSample.po2 / 1000.0).toFixed(2) : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.tissueLoad !== undefined ? page.inspectedProfileSample.tissueLoad.toFixed(0) : "—"); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-					Text { visible: page.inspectedProfileSample && page.inspectedProfileSample.cns > 0; text: qsTr("CNS %1%").arg(page.inspectedProfileSample ? page.inspectedProfileSample.cns : 0); color: tokens.textSecondary }
+					Text { text: qsTr("Gas %1   EAD %2   CNS %3%").arg(page.inspectedProfileSample && page.inspectedProfileSample.gas ? page.inspectedProfileSample.gas : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.ead !== undefined ? (page.inspectedProfileSample.ead / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit : "—").arg(page.inspectedProfileSample && page.inspectedProfileSample.cns > 0 ? page.inspectedProfileSample.cns.toFixed(1) : "—"); color: tokens.textSecondary }
 				}
 			}
 			RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Rectangle { width: 18; height: 3; color: page.exceedsNDL ? "#F87171" : tokens.accent }
  Text { text: qsTr("Profile"); color: tokens.textSecondary }
- Rectangle { width: 18; height: 3; color: "#FB923C" }
- Text { text: qsTr("Calculated ceiling"); color: tokens.textSecondary }
- Item { Layout.fillWidth: true } }
+ Rectangle { visible: page.hasCalculatedCeiling(); width: 18; height: 3; color: "#FB923C" }
+ Text { visible: page.hasCalculatedCeiling(); text: qsTr("Calculated ceiling"); color: tokens.textSecondary }
+ Text { visible: !page.hasCalculatedCeiling(); text: qsTr("No calculated ceiling"); color: tokens.textMuted }
+	Item { Layout.fillWidth: true } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { visible: page.planNotes.length > 0; Layout.fillWidth: true; text: page.nativeReportExpanded ? qsTr("Hide native planner report") : qsTr("Show native planner report"); onClicked: page.nativeReportExpanded = !page.nativeReportExpanded }
 			Components.NeoTextArea { visible: page.nativeReportExpanded && page.planNotes.length > 0; Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.timeline.length > 0; text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.timeline; delegate: RowLayout {
+			Repeater { model: page.timeline; delegate: Text {
 				required property var modelData
-				Layout.fillWidth: true
-				spacing: tokens.space12
-				Label { text: page.phaseSymbol(modelData.phase); color: modelData.phase === "deco" ? "#F87171" : modelData.gasSwitch ? tokens.accent : tokens.textPrimary; font.pixelSize: 18; Layout.preferredWidth: 22; horizontalAlignment: Text.AlignHCenter }
-				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
-				Label { text: qsTr("Segment %1").arg(page.formatDuration(modelData.duration)); color: tokens.textSecondary }
-				Label { text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textPrimary }
-				Label { text: modelData.gasSwitch ? qsTr("Switch → %1").arg(modelData.gas) : modelData.gas; color: modelData.gasSwitch ? tokens.accent : tokens.textSecondary }
-				Label { visible: modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
+				Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; text: page.timelineLine(modelData); color: modelData.phase === "deco" ? "#F87171" : modelData.gasSwitch ? tokens.accent : tokens.textPrimary; font.family: "monospace"; wrapMode: Text.Wrap
 			} }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.schedule; delegate: RowLayout {
+			Repeater { model: page.schedule; delegate: Text {
 				required property var modelData
-				Layout.fillWidth: true
-				spacing: tokens.space12
-				Label { text: "●"; color: "#F87171"; Layout.preferredWidth: 22; horizontalAlignment: Text.AlignHCenter }
-				Label { text: (modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + page.depthUnit; color: tokens.textPrimary }
-				Label { text: qsTr("Stop %1").arg(page.formatDuration(modelData.duration)); color: tokens.textPrimary }
-				Label { visible: modelData.gas !== undefined; text: modelData.gas || ""; color: tokens.textSecondary }
-				Label { visible: modelData.runTime !== undefined; text: qsTr("Run %1").arg(page.formatDuration(modelData.runTime)); color: tokens.textSecondary }
-				Label { visible: modelData.tts !== undefined; text: qsTr("TTS %1").arg(page.formatDuration(modelData.tts)); color: tokens.textSecondary }
-				Label { visible: modelData.setpoint !== undefined && modelData.setpoint > 0; text: qsTr("SP %1").arg(page.formatSetpoint(modelData.setpoint)); color: tokens.textSecondary }
-				Label { visible: modelData.cns !== undefined && modelData.cns > 0; text: qsTr("CNS %1%").arg(modelData.cns); color: tokens.textSecondary }
+				Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; text: page.timelineLine(modelData); color: "#F87171"; font.family: "monospace"; wrapMode: Text.Wrap
 			} }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan(false, true) }
  Components.NeoButton { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }
@@ -973,22 +996,43 @@ Kirigami.ScrollablePage {
 				required property var modelData
 				Layout.fillWidth: true
 				columns: page.width >= 700 ? 6 : 2
-				Label { text: modelData.mix; color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true }
-				Label { text: qsTr("Start %1").arg(modelData.startPressure); color: tokens.textSecondary; Layout.fillWidth: true }
-				Label { text: qsTr("Used %1").arg(modelData.used); color: tokens.textSecondary; Layout.fillWidth: true }
-				Label { text: qsTr("Deco %1").arg(modelData.decoUsed); color: tokens.textSecondary; Layout.fillWidth: true }
-				Label { text: qsTr("Remain %1").arg(modelData.remaining); color: tokens.textPrimary; Layout.fillWidth: true }
-				Label { text: modelData.belowMinimum ? qsTr("Insufficient gas") : modelData.belowReserve ? qsTr("Below reserve") : qsTr("End %1").arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.success; Layout.fillWidth: true }
+				Label { text: modelData.mix; color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+				Label { text: qsTr("Start %1").arg(modelData.startPressure); color: tokens.textSecondary; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+				Label { text: qsTr("Used %1").arg(modelData.used); color: tokens.textSecondary; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+				Label { text: qsTr("Deco %1").arg(modelData.decoUsed); color: tokens.textSecondary; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+				Label { text: qsTr("Remain %1").arg(modelData.remaining); color: tokens.textPrimary; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+				Label { text: modelData.belowMinimum ? qsTr("Insufficient gas") : modelData.belowReserve ? qsTr("Below reserve") : qsTr("End %1").arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.success; Layout.fillWidth: true; Layout.preferredWidth: 1 }
 			} }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
+			Text { text: qsTr("Contingency scenario"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			Text { Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Calculate a separate mature-planner result; the main plan remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			RowLayout { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; ComboBox { Layout.fillWidth: true; model: [qsTr("Extra bottom time"), qsTr("Deeper profile"), qsTr("Lost deco/travel gas")]; currentIndex: page.contingencyScenario; onActivated: page.contingencyScenario = currentIndex }
+ Components.NeoSpinBox { visible: page.contingencyScenario !== 2; accessibleName: page.contingencyScenario === 0 ? qsTr("Extra bottom time in minutes") : qsTr("Extra depth (%1)").arg(page.depthUnit); from: 1; to: 30; value: page.contingencyDelta; onValueModified: page.contingencyDelta = value }
+ Components.NeoComboBox { visible: page.contingencyScenario === 2; Layout.fillWidth: true; accessibleName: qsTr("Lost decompression or travel gas"); model: page.gasNames; currentIndex: page.contingencyGasIndex; onActivated: page.contingencyGasIndex = currentIndex }
+ Label { visible: page.contingencyScenario !== 2; text: page.contingencyScenario === 0 ? qsTr("minutes") : page.depthUnit; color: tokens.textMuted } }
+			Components.NeoButton { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Calculate %1").arg(page.contingencyName()); onClicked: page.calculateContingency() }
+			ColumnLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft
+				Text { text: qsTr("Separate result: %1").arg(page.contingencyName()); color: tokens.accent; font.weight: Font.DemiBold }
+				Text { text: qsTr("Save allowed: %1 · NDL exceeded: %2 · OTU: %3").arg(page.contingencyResult && page.contingencyResult.planSaveAllowed ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult && page.contingencyResult.exceedsNDL ? qsTr("Yes") : qsTr("No")).arg(page.contingencyResult ? page.contingencyResult.otu : 0); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Repeater { model: page.contingencyResult ? page.contingencyResult.schedule || [] : []; delegate: Text { required property var modelData; text: qsTr("%1 %2 · %3%4").arg((modelData.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1)).arg(page.depthUnit).arg(page.formatDuration(modelData.duration)).arg(modelData.gas !== undefined ? " · " + modelData.gas : ""); color: tokens.textSecondary; Layout.fillWidth: true } }
+				Repeater { model: page.contingencyResult ? page.contingencyResult.gasAnalysis || [] : []; delegate: Text { required property var modelData; text: qsTr("%1: remaining %2; end %3").arg(modelData.mix).arg(modelData.remaining).arg(modelData.endPressure); color: modelData.belowMinimum || modelData.belowReserve ? "#F87171" : tokens.textSecondary; Layout.fillWidth: true } }
+				RowLayout { Layout.fillWidth: true; Button { text: qsTr("Copy contingency"); onClicked: manager.copyToClipboard(page.contingencySlate()) }
+ Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save TXT"); onClicked: contingencyTextFolder.open() }
+ Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save PDF"); onClicked: contingencyPdfFolder.open() } }
+			}
+		}
+		Components.ModernCard {
+			Layout.fillWidth: true
 			Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below runs the active native planner—there is no separate table formula."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoButton { Layout.fillWidth: true; text: page.gasToolsExpanded ? qsTr("Hide gas calculator") : qsTr("Gas calculator"); onClicked: { page.gasToolsExpanded = !page.gasToolsExpanded; if (page.gasToolsExpanded && page.gasCalculatorResults.length === 0) page.calculateGasTools() } }
+			Text { Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below runs the active native planner—there is no separate table formula."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Components.NeoButton { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: page.gasToolsExpanded ? qsTr("Hide gas calculator") : qsTr("Gas calculator"); onClicked: { page.gasToolsExpanded = !page.gasToolsExpanded; if (page.gasToolsExpanded && page.gasCalculatorResults.length === 0) page.calculateGasTools() } }
 			ColumnLayout {
 				visible: page.gasToolsExpanded
 				Layout.fillWidth: true
+				Layout.maximumWidth: page.plannerReadingWidth
+				Layout.alignment: Qt.AlignLeft
 				GridLayout {
 					Layout.fillWidth: true
 					columns: page.width >= 700 ? 3 : 1
@@ -999,13 +1043,13 @@ Kirigami.ScrollablePage {
 				GridLayout { Layout.fillWidth: true; columns: 3; Label { text: qsTr("pO₂"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: qsTr("MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: Backend.o2narcotic ? qsTr("END @ MOD") : qsTr("EAD @ MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } }
 				Repeater { model: page.gasCalculatorResults; delegate: GridLayout { required property var modelData; Layout.fillWidth: true; columns: 3; Label { text: modelData.po2 || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.mod || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.ead || "—"; color: tokens.textSecondary; Layout.fillWidth: true } } }
 			}
-			Components.NeoButton { Layout.fillWidth: true; text: qsTr("Calculate NDL reference"); onClicked: page.calculateNdlReference() }
-			Repeater { model: page.ndlReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: qsTr("%1 %2").arg(modelData.depth).arg(page.depthUnit); color: tokens.textPrimary; Layout.fillWidth: true }
+			Components.NeoButton { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Calculate NDL reference"); onClicked: page.calculateNdlReference() }
+			Repeater { model: page.ndlReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Label { text: qsTr("%1 %2").arg(modelData.depth).arg(page.depthUnit); color: tokens.textPrimary; Layout.fillWidth: true }
  Label { text: modelData.available ? page.formatDuration(modelData.ndl) : qsTr("Not available"); color: modelData.available ? tokens.textSecondary : tokens.textMuted } } }
-			Text { visible: page.ndlReference.length > 0; text: qsTr("Reference only: uses the current model, gases, water, surface pressure, and one-minute level profile at each shown depth. Review the generated plan before diving."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { visible: page.ndlReference.length > 0; Layout.maximumWidth: page.plannerReadingWidth; text: qsTr("Reference only: uses the current model, gases, water, surface pressure, and one-minute level profile at each shown depth. Review the generated plan before diving."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Text { text: qsTr("Unit reference"); color: tokens.textPrimary; font.weight: Font.DemiBold }
-			Components.NeoTextField { Layout.fillWidth: true; text: page.conversionValue.toString(); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Value to convert"); onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.conversionValue = value } }
-			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 3 : 1
+			Components.NeoTextField { Layout.fillWidth: true; Layout.maximumWidth: 360; Layout.alignment: Qt.AlignLeft; text: page.conversionValue.toString(); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Value to convert"); onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.conversionValue = value } }
+			GridLayout { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; columns: page.width >= 700 ? 3 : 1
 				Label { text: qsTr("%1 m = %2 ft").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 3.28084).toFixed(2)); color: tokens.textSecondary }
 				Label { text: qsTr("%1 bar = %2 psi").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 14.5038).toFixed(2)); color: tokens.textSecondary }
 				Label { text: qsTr("%1 L = %2 US gal").arg(page.conversionValue.toFixed(2)).arg((page.conversionValue * 0.264172).toFixed(2)); color: tokens.textSecondary }
