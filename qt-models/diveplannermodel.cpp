@@ -1838,9 +1838,6 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	QVariantList profileData;
 	QVariantMap analysis;
 	int closestAnalysisSample = std::numeric_limits<int>::max();
-	double calculatedCns = 0.0;
-	int previousProfileTime = -1;
-	int previousProfilePo2 = 0;
 	if (d->dcs.size() > 0) {
 		// Project the planner's established tissue/GF results for display only.
 		const bool oldCalcNdlTts = prefs.calcndltts;
@@ -1849,6 +1846,18 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			? create_plot_info_new(d, &d->dcs[0], &plan_deco_state)
 			: create_plot_info_new(d, &d->dcs[0], nullptr);
 		prefs.calcndltts = oldCalcNdlTts;
+		std::vector<double> plotCns;
+		plotCns.reserve(plot.entry.size());
+		double cumulativeCns = 0.0;
+		for (size_t index = 0; index < plot.entry.size(); ++index) {
+			if (index > 0) {
+				const plot_data &previous = plot.entry[index - 1];
+				const plot_data &current = plot.entry[index];
+				const int averagePo2 = std::lround((previous.pressures.o2 + current.pressures.o2) * 500.0);
+				cumulativeCns += cns_for_segment(current.sec - previous.sec, averagePo2);
+			}
+			plotCns.push_back(cumulativeCns);
+		}
 		for (const struct sample &sample : d->dcs[0].samples) {
 			QVariantMap point;
 			point["time"] = sample.time.seconds;
@@ -1876,16 +1885,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 					point["ndl"] = plotIt->ndl_calc;
 				point["po2"] = static_cast<int>(std::lround(plotIt->pressures.o2 * 1000.0));
 				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
+				point["cns"] = plotCns[static_cast<size_t>(std::distance(plot.entry.begin(), plotIt))];
 			}
-			const int profilePo2 = point.value("po2").toInt();
-			if (previousProfileTime >= 0 && profilePo2 > 0 && previousProfilePo2 > 0)
-				calculatedCns += cns_for_segment(sample.time.seconds - previousProfileTime,
-									       (previousProfilePo2 + profilePo2) / 2);
-			if (profilePo2 > 0) {
-				previousProfileTime = sample.time.seconds;
-				previousProfilePo2 = profilePo2;
-			}
-			point["cns"] = calculatedCns;
 			const int analysisDistance = std::abs(sample.time.seconds - enteredProfileRuntime);
 			if (analysisDistance < closestAnalysisSample) {
 				closestAnalysisSample = analysisDistance;
