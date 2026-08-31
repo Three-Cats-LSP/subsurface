@@ -388,6 +388,10 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(desktopEquivalent.value("runtimeSeconds").toInt() > 30 * 60);
 	const QVariantList desktopSchedule = desktopEquivalent.value("schedule").toList();
 	QVERIFY(!desktopSchedule.empty());
+	for (const QVariant &stop : desktopSchedule) {
+		const QVariantMap row = stop.toMap();
+		QVERIFY(row.value("tts").toInt() > 0);
+	}
 	QVERIFY(!desktopEquivalent.value("gasAnalysis").toList().first().toMap().value("remaining").toString().contains(QStringLiteral("4,294")));
 	bool switchedToEan50 = false;
 	bool switchedToOxygen = false;

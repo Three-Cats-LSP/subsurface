@@ -1723,8 +1723,13 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], matchingSample->time);
 				if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
 					row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
-				row.insert("runTime", matchingSample->time.seconds);
-				row.insert("tts", matchingSample->tts.seconds);
+				const int runTime = matchingSample->time.seconds;
+				row.insert("runTime", runTime);
+				// Planner samples do not always carry recorded-computer TTS.  The
+				// completed native plan nevertheless gives us the exact remaining
+				// time to surface, so do not expose a misleading zero in Neo.
+				row.insert("tts", matchingSample->tts.seconds > 0 ? matchingSample->tts.seconds :
+						   std::max(0, runtimeSeconds - runTime));
 				row.insert("cns", matchingSample->cns);
 				row.insert("setpoint", matchingSample->setpoint.mbar);
 			}
@@ -1751,7 +1756,9 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 					break;
 				}
 				if (matchingSample) {
-					row.insert("tts", matchingSample->tts.seconds);
+					const int runTime = row.value("runTime").toInt();
+					row.insert("tts", matchingSample->tts.seconds > 0 ? matchingSample->tts.seconds :
+							   std::max(0, runtimeSeconds - runTime));
 					row.insert("cns", matchingSample->cns);
 				}
 			}
@@ -1779,7 +1786,8 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 			const int cylinderId = get_cylinderid_at_time(d, &d->dcs[0], currentSample.time);
 			if (cylinderId >= 0 && static_cast<size_t>(cylinderId) < d->cylinders.size())
 				row.insert("gas", QString::fromStdString(d->cylinders[cylinderId].gasmix.name()));
-			row.insert("tts", currentSample.tts.seconds);
+			row.insert("tts", currentSample.tts.seconds > 0 ? currentSample.tts.seconds :
+					   std::max(0, runtimeSeconds - currentSample.time.seconds));
 			row.insert("cns", currentSample.cns);
 			row.insert("setpoint", currentSample.setpoint.mbar);
 			totalDecoSeconds += duration;
