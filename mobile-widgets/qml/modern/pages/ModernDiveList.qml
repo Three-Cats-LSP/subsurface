@@ -13,6 +13,7 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property QtObject diveListModel: null
+	property bool plansOnly: false
 	property bool wideLayout: width >= 760
 	property bool filterVisible: false
 	property bool advancedFiltersVisible: false
@@ -149,8 +150,9 @@ Kirigami.Page {
 			ColumnLayout {
 				Layout.fillWidth: true
 				spacing: 2
-				Text { text: page.greeting(); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
-				Text { text: qsTr("Here’s your diving summary"); color: tokens.textSecondary; font.pixelSize: 13 }
+				Text { visible: !page.plansOnly; text: page.greeting(); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+				Text { visible: page.plansOnly; text: qsTr("Plans"); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+				Text { text: page.plansOnly ? qsTr("Saved decompression and dive plans") : qsTr("Here’s your diving summary"); color: tokens.textSecondary; font.pixelSize: 13 }
 			}
 			ToolButton {
 				Accessible.name: qsTr("Cloud & Sync")
@@ -162,6 +164,7 @@ Kirigami.Page {
 		}
 
 		GridLayout {
+			visible: !page.plansOnly
 			Layout.fillWidth: true
 			columns: page.wideLayout ? 4 : 3
 			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8
@@ -180,14 +183,14 @@ Kirigami.Page {
 				Layout.fillWidth: true
 				spacing: 2
 				Text {
-					text: qsTr("Dives")
+					text: page.plansOnly ? qsTr("Saved plans") : qsTr("Dives")
 					color: tokens.textPrimary
 					font.pixelSize: 26
 					font.weight: Font.DemiBold
 				}
 				Text {
-					text: page.activeCollection.length > 0 ? qsTr("Collection: %1").arg(page.activeCollection) :
-						(diveListModel ? qsTr("%1 shown").arg(diveListModel.shown) : "")
+					text: page.plansOnly ? qsTr("Plans are kept separate from completed and imported dives") :
+						(page.activeCollection.length > 0 ? qsTr("Collection: %1").arg(page.activeCollection) : qsTr("Completed, imported and manually entered dives"))
 					color: tokens.textSecondary
 					font.pixelSize: 12
 				}
@@ -198,14 +201,14 @@ Kirigami.Page {
 				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
 				onClicked: page.filterVisible = !page.filterVisible
 			}
-			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
-			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
-			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Import"); onClicked: page.downloadRequested() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode && !page.plansOnly; compact: true; text: qsTr("Saved"); onClicked: savedFiltersDialog.open() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode && !page.plansOnly; compact: true; text: page.activeCollection.length > 0 ? qsTr("Collection") : qsTr("Collections"); onClicked: page.openCollections() }
+			Components.NeoButton { visible: page.wideLayout && !page.selectionMode && !page.plansOnly; compact: true; text: qsTr("Import"); onClicked: page.downloadRequested() }
 			Components.NeoButton { visible: page.wideLayout && !page.selectionMode; compact: true; text: qsTr("Select"); onClicked: page.startSelection() }
 			Components.NeoButton { visible: page.selectionMode; compact: true; text: qsTr("Cancel"); onClicked: page.cancelSelection() }
 			Components.NeoButton { visible: page.selectionMode; compact: true; variant: "danger"; enabled: page.selectedDiveIds.length > 0; text: qsTr("Delete (%1)").arg(page.selectedDiveIds.length); onClicked: page.confirmDelete(page.selectedDiveIds) }
 			Components.NeoButton {
-				visible: !page.selectionMode
+				visible: !page.selectionMode && !page.plansOnly
 				variant: "primary"
 				text: page.wideLayout ? qsTr("+ New dive") : "+"
 				accessibleName: qsTr("Add a new dive")
@@ -379,13 +382,23 @@ Kirigami.Page {
 					"cylinder": model.cylinder,
 					"suit": model.suit,
 					"tags": model.tags,
+					"isPlanned": model.isPlanned,
+					"planTitle": model.planTitle,
+					"planRuntimeSeconds": model.planRuntimeSeconds,
+					"planBottomTimeSeconds": model.planBottomTimeSeconds,
+					"planDecoTimeSeconds": model.planDecoTimeSeconds,
 					"isInvalid": model.isInvalid,
 					"tripShortDate": model.tripShortDate,
 					"tripTitle": model.tripTitle,
 					"tripNrDives": model.tripNrDives
 				})
 				property bool longPressTriggered: false
-				property bool collectionMatch: page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0
+				property bool typeMatch: !modelData.isTrip && modelData.isPlanned === page.plansOnly
+				property bool collectionMatch: typeMatch && (page.activeCollection.length === 0 || page.activeCollectionDiveIds.indexOf(modelData.id) >= 0)
+				function planClock(seconds) {
+					seconds = Math.max(0, Number(seconds || 0)); var remainder = seconds % 60
+					return Math.floor(seconds / 60) + ":" + (remainder < 10 ? "0" : "") + remainder
+				}
 				function firstListValue(value) {
 					if (typeof value === "string")
 						return value
@@ -417,7 +430,7 @@ Kirigami.Page {
 					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.number > 0 ? "#" + modelData.number : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
 				Accessible.onPressAction: activateDelegate()
 				width: listView.width
-				height: modelData.isTrip ? 64 : (collectionMatch ? diveCard.implicitHeight : 0)
+				height: modelData.isTrip ? (page.plansOnly ? 0 : 64) : (collectionMatch ? diveCard.implicitHeight : 0)
 
 				Rectangle {
 					anchors.fill: parent
@@ -468,12 +481,12 @@ Kirigami.Page {
 
 					GridLayout {
 						Layout.fillWidth: true
-						columns: page.wideLayout ? 2 : 1
+						columns: delegateRoot.modelData.isPlanned ? 1 : (page.wideLayout ? 2 : 1)
 						columnSpacing: tokens.space16
 						rowSpacing: tokens.space12
 
 						ColumnLayout {
-							Layout.preferredWidth: page.wideLayout ? 310 : -1
+							Layout.preferredWidth: page.wideLayout && !delegateRoot.modelData.isPlanned ? 310 : -1
 							Layout.fillWidth: true
 							spacing: tokens.space8
 
@@ -501,7 +514,7 @@ Kirigami.Page {
 									spacing: 2
 									Text {
 										Layout.fillWidth: true
-										text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0 ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
+										text: delegateRoot.modelData.isPlanned ? delegateRoot.modelData.planTitle : (delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0 ? delegateRoot.modelData.location : qsTr("Unnamed dive site"))
 										color: tokens.textPrimary
 										font.pixelSize: 17
 										font.weight: Font.DemiBold
@@ -520,7 +533,7 @@ Kirigami.Page {
 
 							GridLayout {
 								Layout.fillWidth: true
-								columns: 3
+								columns: delegateRoot.modelData.isPlanned ? 5 : 3
 								columnSpacing: tokens.space8
 								ColumnLayout {
 									Layout.fillWidth: true
@@ -531,8 +544,20 @@ Kirigami.Page {
 								ColumnLayout {
 									Layout.fillWidth: true
 									spacing: 1
-									Text { text: qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }
-									Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+									Text { text: delegateRoot.modelData.isPlanned ? qsTr("RUN TIME") : qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.modelData.isPlanned ? delegateRoot.planClock(delegateRoot.modelData.planRuntimeSeconds) : (delegateRoot.modelData.duration || "—"); color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+								}
+								ColumnLayout {
+									visible: delegateRoot.modelData.isPlanned
+									Layout.fillWidth: true; spacing: 1
+									Text { text: qsTr("BOTTOM TIME"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.planClock(delegateRoot.modelData.planBottomTimeSeconds); color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
+								}
+								ColumnLayout {
+									visible: delegateRoot.modelData.isPlanned
+									Layout.fillWidth: true; spacing: 1
+									Text { text: qsTr("DECO TIME"); color: tokens.textMuted; font.pixelSize: 8 }
+									Text { text: delegateRoot.planClock(delegateRoot.modelData.planDecoTimeSeconds); color: tokens.textPrimary; font.pixelSize: 14; font.weight: Font.DemiBold }
 								}
 								ColumnLayout {
 									Layout.fillWidth: true
@@ -544,6 +569,7 @@ Kirigami.Page {
 
 							GridLayout {
 								Layout.fillWidth: true
+								visible: !delegateRoot.modelData.isPlanned
 								columns: 2
 								columnSpacing: tokens.space8
 								rowSpacing: tokens.space4

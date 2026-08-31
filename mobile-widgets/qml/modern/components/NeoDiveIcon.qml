@@ -63,6 +63,8 @@ Canvas {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "planner") {
 			// Rendered by the attributed Flaticon source below.
+		} else if (name === "slate") {
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "diveComputer") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
@@ -144,6 +146,25 @@ Canvas {
 		anchors.fill: gasContainerSource
 		visible: gasContainerSource.visible
 		source: gasContainerSource
+		color: icon.iconColor
+		cached: true
+	}
+
+	Image {
+		id: slateSource
+		anchors.fill: parent
+		anchors.margins: Math.max(1, Math.round(parent.width * 0.06))
+		visible: icon.name === "slate"
+		source: "qrc:/qml/slate-7717132.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
+	}
+
+	ColorOverlay {
+		anchors.fill: slateSource
+		visible: slateSource.visible
+		source: slateSource
 		color: icon.iconColor
 		cached: true
 	}

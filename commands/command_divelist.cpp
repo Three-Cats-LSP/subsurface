@@ -390,9 +390,12 @@ void DiveListBase::redo()
 AddDive::AddDive(std::unique_ptr<dive> d, bool autogroup, bool newNumber)
 {
 	setText(Command::Base::tr("add dive"));
+	const duration_t explicitPlannedDuration = d->is_planned() ? d->duration : 0_sec;
 	d->maxdepth = 0_m;
 	d->dcs[0].maxdepth = 0_m;
 	divelog.dives.fixup_dive(*d);
+	if (d->is_planned() && explicitPlannedDuration.seconds > 0)
+		d->duration = explicitPlannedDuration;
 
 	// this only matters if undoit were called before redoit
 	currentDive = nullptr;

@@ -16,7 +16,6 @@ Kirigami.ScrollablePage {
 	Modern.DesignTokens { id: tokens }
 	property bool advancedSettingsExpanded: false
 	property bool gasToolsExpanded: false
-	property bool nativeReportExpanded: false
 	property int selectedProfileIndex: 0
 	property int gasOxygen: 21
 	property int gasHelium: 0
@@ -105,14 +104,14 @@ Kirigami.ScrollablePage {
 	FolderDialog {
 		id: plannerTextFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-		onAccepted: page.plannerTextExport = manager.exportNeoPlannerText(selectedFolder, page.decoSlate())
+		onAccepted: page.plannerTextExport = manager.exportNeoPlannerText(selectedFolder, page.fullPlanExport())
 	}
 	FolderDialog { id: planPackageTextFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.planPackageTextExport = manager.exportNeoPlannerText(selectedFolder, page.planPackage()) }
 	FolderDialog { id: planPackagePdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.planPackagePdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.planPackage(), page.profileData) }
 	FolderDialog {
 		id: plannerPdfFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.decoSlate(), page.profileData)
+		onAccepted: page.plannerPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.fullPlanExport(), page.profileData)
 	}
 	FolderDialog { id: contingencyTextFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyTextExport = manager.exportNeoPlannerText(selectedFolder, page.contingencySlate()) }
 	FolderDialog { id: contingencyPdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.contingencySlate(), page.contingencyResult ? page.contingencyResult.profile || [] : []) }
@@ -480,7 +479,7 @@ Kirigami.ScrollablePage {
 		decoTimeSeconds = result.decoTimeSeconds || 0
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
 			manager.selectDive(result.newDiveId)
-			showPageFromDrawer(modernDiveList)
+			showPageFromDrawer(modernPlansList)
 		}
 	}
 	function calculateContingency() {
@@ -538,7 +537,7 @@ Kirigami.ScrollablePage {
 		return lines.join("\n")
 	}
 	function planPackage() {
-		var mainPlan = decoSlate()
+		var mainPlan = fullPlanExport()
 		if (!contingencyResult)
 			return mainPlan
 		return mainPlan + "\n\n" + "=".repeat(64) + "\n\n" + contingencySlate()
@@ -661,7 +660,7 @@ Kirigami.ScrollablePage {
 	function waterDescription() {
 		return waterType.currentIndex === 3 ? qsTr("Custom (%1 kg/10,000 L)").arg(customSalinity) : waterType.currentText
 	}
-	function decoSlate() {
+	function fullPlanExport() {
 		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
 		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")])
 		lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
@@ -692,6 +691,14 @@ Kirigami.ScrollablePage {
 		if (warnings.length > 0)
 			lines.push("", qsTr("PLANNER WARNINGS"), warnings.join("\n"))
 		lines.push("", qsTr("Planning aid only. Review all settings, gases, schedule and warnings before diving."))
+		return lines.join("\n")
+	}
+	function decoSlate() {
+		var lines = [qsTr("DIVE PLAN")]
+		if (timeline.length === 0)
+			lines.push(qsTr("No plan segments generated."))
+		for (var i = 0; i < timeline.length; ++i)
+			lines.push(timelineLine(timeline[i]))
 		return lines.join("\n")
 	}
 	Component.onCompleted: {
@@ -965,24 +972,16 @@ Kirigami.ScrollablePage {
 	Item { Layout.fillWidth: true } }
 			Label { visible: page.exceedsNDL; text: qsTr("This recreational plan exceeds the NDL. Review the schedule and warnings before saving."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Label { visible: !page.planSaveAllowed && !page.exceedsNDL; text: qsTr("The planner could not create a valid saveable plan. Correct the gas, bailout, or planner warnings before continuing."); color: "#F87171"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoButton { visible: page.planNotes.length > 0; Layout.fillWidth: true; text: page.nativeReportExpanded ? qsTr("Hide native planner report") : qsTr("Show native planner report"); onClicked: page.nativeReportExpanded = !page.nativeReportExpanded }
-			Components.NeoTextArea { visible: page.nativeReportExpanded && page.planNotes.length > 0; Layout.fillWidth: true; readOnly: true; text: page.planNotes; wrapMode: Text.Wrap; color: tokens.textPrimary; background: null }
 			Text { visible: page.timeline.length > 0; text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.timeline; delegate: Text {
-				required property var modelData
-				Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; text: page.timelineLine(modelData); color: modelData.phase === "deco" ? "#F87171" : modelData.gasSwitch ? tokens.accent : tokens.textPrimary; font.family: "monospace"; wrapMode: Text.Wrap
-			} }
+			Components.PlanSchedule { rows: page.timeline; profileData: page.profileData; maximumWidth: page.plannerReadingWidth; Layout.fillWidth: true }
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-			Repeater { model: page.schedule; delegate: Text {
-				required property var modelData
-				Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; text: page.timelineLine(modelData); color: "#F87171"; font.family: "monospace"; wrapMode: Text.Wrap
-			} }
+			Components.PlanSchedule { rows: page.schedule; profileData: page.profileData; maximumWidth: page.plannerReadingWidth; decoOnly: true; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan(false, true) }
+	Components.NeoButton { text: qsTr("Save plan"); variant: "primary"; enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) }
  Components.NeoButton { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }
- Item { Layout.fillWidth: true }
- Components.NeoButton { text: qsTr("Save plan"); enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) } }
+ Item { Layout.fillWidth: true } }
 			RowLayout { visible: page.contingencyResult !== null; Layout.fillWidth: true; Text { text: qsTr("Plan package includes the main plan and this selected contingency."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
  Components.NeoButton { text: qsTr("Copy package"); onClicked: manager.copyToClipboard(page.planPackage()) }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Package TXT"); onClicked: planPackageTextFolder.open() }

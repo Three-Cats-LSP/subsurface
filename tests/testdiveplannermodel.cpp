@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testdiveplannermodel.h"
 #include "qt-models/diveplannermodel.h"
+#include "qt-models/neoplanmetadata.h"
 #include "core/subsurfacestartup.h"
 #include "commands/command.h"
 #include "core/divelog.h"
@@ -369,6 +370,10 @@ void TestDivePlannerModel::testNeoPlanResultContract()
 	QVERIFY(lastSavedPlannerDuration >= 30 * 60);
 	QCOMPARE(lastSavedPlannerDuration, savedPlan.value("runtimeSeconds").toInt());
 	QVERIFY(!lastSavedPlannerNotes.isEmpty());
+	const QVariantMap savedMetadata = neoPlanMetadata(lastSavedPlannerNotes.toStdString());
+	QCOMPARE(savedMetadata.value("runtimeSeconds").toInt(), savedPlan.value("runtimeSeconds").toInt());
+	QCOMPARE(savedMetadata.value("bottomTimeSeconds").toInt(), 30 * 60);
+	QVERIFY(!savedMetadata.value("timeline").toList().empty());
 
 	// Match the canonical desktop case reported by users: 40 m at 30 min
 	// runtime on air with EAN50 and oxygen available for decompression.

@@ -200,7 +200,7 @@ require(
 	),
 	"Neo planner accessibility",
 )
-require(planner, ('showPageFromDrawer(modernDiveList)',), "Neo saved-plan navigation")
+require(planner, ('showPageFromDrawer(modernPlansList)',), "Neo saved-plan navigation")
 forbid(planner, ('showPage(diveList)',), "Neo saved-plan navigation")
 if not (planner.index('text: qsTr("Gas sufficiency")') < planner.index('text: qsTr("Contingency scenario")') < planner.index('text: qsTr("Technical tools")')):
 	raise SystemExit("Neo planner section order must be gas sufficiency, contingency, then technical tools")
@@ -260,6 +260,7 @@ require(
 		'source: "qrc:/qml/water-14053108.png"',
 		'source: "qrc:/qml/dive-computer-1922948.png"',
 		'source: "qrc:/qml/air-tank-17916416.png"',
+		'source: "qrc:/qml/slate-7717132.png"',
 		'visible: icon.name === "dives" || icon.name === "tank"',
 		'source: "qrc:/qml/tank-14116551.png"',
 		'ColorOverlay {',

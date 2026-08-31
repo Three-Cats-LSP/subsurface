@@ -13,6 +13,7 @@ Control {
 	property string statusText: ""
 
 	signal divesRequested()
+	signal plansRequested()
 	signal sitesRequested()
 	signal mapRequested()
 	signal statisticsRequested()
@@ -101,6 +102,7 @@ Control {
 			Repeater {
 				model: [
 					{ key: "dives", label: qsTr("Dives"), icon: "dives" },
+					{ key: "plans", label: qsTr("Plans"), icon: "slate" },
 					{ key: "sites", label: qsTr("Dive Sites"), icon: "site" },
 					{ key: "map", label: qsTr("Map"), icon: "map" },
 					{ key: "statistics", label: qsTr("Statistics"), icon: "stats" },
@@ -164,6 +166,7 @@ Control {
 					onClicked: {
 						switch (modelData.key) {
 						case "dives": sidebar.divesRequested(); break
+						case "plans": sidebar.plansRequested(); break
 						case "sites": sidebar.sitesRequested(); break
 						case "map": sidebar.mapRequested(); break
 						case "statistics": sidebar.statisticsRequested(); break

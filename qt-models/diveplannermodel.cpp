@@ -8,6 +8,7 @@
 #include "core/format.h"
 #include "core/subsurface-string.h"
 #include "qt-models/cylindermodel.h"
+#include "qt-models/neoplanmetadata.h"
 #include "core/metrics.h" // For defaultModelFont().
 #include "core/planner.h"
 #include "core/profile.h"
@@ -1912,8 +1913,44 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		if (analysis.value("tts").toInt() <= 0 && calculatedTts > 0)
 			analysis["tts"] = calculatedTts;
 	}
+	// Persist analysis only at schedule waypoints. Storing every generated plot
+	// sample in dive notes would needlessly inflate synced log files.
+	auto enrichScheduleRows = [&profileData](QVariantList &rows) {
+		for (QVariant &value : rows) {
+			QVariantMap row = value.toMap();
+			if (profileData.empty())
+				continue;
+			const int target = row.value("runTime").toInt();
+			QVariantMap nearest = profileData[0].toMap();
+			int nearestDistance = std::abs(nearest.value("time").toInt() - target);
+			for (const QVariant &profileValue : profileData) {
+				const QVariantMap candidate = profileValue.toMap();
+				const int distance = std::abs(candidate.value("time").toInt() - target);
+				if (distance < nearestDistance) {
+					nearest = candidate;
+					nearestDistance = distance;
+				}
+			}
+			row["po2"] = nearest.value("po2", -1);
+			row["ead"] = nearest.value("ead", -1);
+			value = row;
+		}
+	};
+	enrichScheduleRows(timeline);
+	enrichScheduleRows(schedule);
+	results["timeline"] = timeline;
+	results["schedule"] = schedule;
 	results["profile"] = profileData;
 	results["analysis"] = analysis;
+
+	QVariantMap neoMetadata;
+	neoMetadata["version"] = 1;
+	neoMetadata["runtimeSeconds"] = runtimeSeconds;
+	neoMetadata["bottomTimeSeconds"] = enteredProfileRuntime;
+	neoMetadata["decoTimeSeconds"] = totalDecoSeconds;
+	neoMetadata["timeline"] = timeline;
+	neoMetadata["schedule"] = schedule;
+	d->notes += neoPlanMetadataMarker(neoMetadata).toStdString();
 
 	// Save the dive if requested
 	int newDiveId = -1;
@@ -1923,8 +1960,15 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	if (shouldSave && planError == PLAN_OK) {
 		std::unique_ptr<dive> d_to_save = std::make_unique<dive>();
 		copy_dive(d, d_to_save.get());
+		// AddDive recalculates canonical fields. Retain these explicit values as
+		// well as the Neo payload so non-Neo readers also see a real duration.
+		d_to_save->duration.seconds = runtimeSeconds;
+		if (!d_to_save->dcs.empty())
+			d_to_save->dcs[0].duration.seconds = runtimeSeconds;
 		newDiveId = d_to_save->id;
-		Command::addDive(std::move(d_to_save), divelog.autogroup, true);
+		// Plans are intentionally not assigned to dive trips: they live in Neo's
+		// dedicated Plans workspace rather than among completed trip dives.
+		Command::addDive(std::move(d_to_save), false, true);
 	}
 	results["newDiveId"] = newDiveId;
 

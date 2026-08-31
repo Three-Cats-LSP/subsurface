@@ -4,6 +4,7 @@
 #include "core/divelog.h"
 #ifdef SUBSURFACE_MOBILE
 #include "qt-models/mobilelistmodel.h"
+#include "qt-models/neoplanmetadata.h"
 #endif
 #include "core/gettextfromc.h"
 #include "core/metrics.h"
@@ -271,6 +272,14 @@ QString DiveTripModelBase::getDescription(int column)
 QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role) const
 {
 #ifdef SUBSURFACE_MOBILE
+	const QVariantMap planMetadata = d->is_planned() ? neoPlanMetadata(d->notes) : QVariantMap();
+	const int planRuntime = planMetadata.value(QStringLiteral("runtimeSeconds"), d->duration.seconds).toInt();
+	const int planBottomTime = planMetadata.value(QStringLiteral("bottomTimeSeconds"), 0).toInt();
+	const int planDecoTime = planMetadata.value(QStringLiteral("decoTimeSeconds"), 0).toInt();
+	const QString planTitle = d->is_planned()
+		? tr("Dive plan %1 @ %2 min").arg(get_depth_string(d->dcs[0].maxdepth.mm, true, true))
+			.arg((planBottomTime + 30) / 60)
+		: QString();
 	// Special roles for mobile
 	switch (role) {
 	case MobileListModel::DiveDateRole: return (qlonglong)d->when;
@@ -280,9 +289,9 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::DateTimeRole: return formatDiveDateTime(d);
 	case MobileListModel::IdRole: return d->id;
 	case MobileListModel::NumberRole: return d->number;
-	case MobileListModel::LocationRole: return QString::fromStdString(d->get_location());
+	case MobileListModel::LocationRole: return d->is_planned() ? planTitle : QString::fromStdString(d->get_location());
 	case MobileListModel::DepthRole: return get_depth_string(d->dcs[0].maxdepth.mm, true, true);
-	case MobileListModel::DurationRole: return formatDiveDuration(d);
+	case MobileListModel::DurationRole: return d->is_planned() ? neoPlanClock(planRuntime) : formatDiveDuration(d);
 	case MobileListModel::DepthDurationRole: return QStringLiteral("%1 / %2").arg(get_depth_string(d->dcs[0].maxdepth.mm, true, true),
 										      formatDiveDuration(d));
 	case MobileListModel::RatingRole: return d->rating;
@@ -312,6 +321,14 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::SelectedRole: return d->selected;
 	case MobileListModel::DiveInTripRole: return d->divetrip != NULL;
 	case MobileListModel::IsInvalidRole: return d->invalid;
+	case MobileListModel::IsPlannedRole: return d->is_planned();
+	case MobileListModel::PlanTitleRole: return planTitle;
+	case MobileListModel::PlanRuntimeSecondsRole: return planRuntime;
+	case MobileListModel::PlanBottomTimeSecondsRole: return planBottomTime;
+	case MobileListModel::PlanDecoTimeSecondsRole: return planDecoTime;
+	case MobileListModel::PlanTimelineRole: return planMetadata.value(QStringLiteral("timeline"));
+	case MobileListModel::PlanScheduleRole: return planMetadata.value(QStringLiteral("schedule"));
+	case MobileListModel::PlanProfileRole: return planMetadata.value(QStringLiteral("profile"));
 	}
 #endif
 	switch (role) {

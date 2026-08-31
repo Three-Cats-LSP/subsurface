@@ -64,7 +64,15 @@ public:
 		TripBelow,
 		TripLocationRole,
 		TripNotesRole,
-		IsInvalidRole
+		IsInvalidRole,
+		IsPlannedRole,
+		PlanTitleRole,
+		PlanRuntimeSecondsRole,
+		PlanBottomTimeSecondsRole,
+		PlanDecoTimeSecondsRole,
+		PlanTimelineRole,
+		PlanScheduleRole,
+		PlanProfileRole
 	};
 	QHash<int, QByteArray> roleNames() const override;
 protected:

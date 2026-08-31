@@ -70,6 +70,7 @@ Kirigami.ApplicationWindow {
 		accountText: PrefCloudStorage.cloud_storage_email
 		statusText: manager.syncState
 		onDivesRequested: showPageFromDrawer(modernDiveList)
+		onPlansRequested: showPageFromDrawer(modernPlansList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onMapRequested: showPageFromDrawer(mapPage)
 		onStatisticsRequested: showPageFromDrawer(neoStatisticsHub)
@@ -92,7 +93,7 @@ Kirigami.ApplicationWindow {
 	function neoPageUsesOwnHeader(page) {
 		if (!page)
 			return false
-		if (page === modernDiveList || page === neoMorePage ||
+		if (page === modernDiveList || page === modernPlansList || page === neoMorePage ||
 			page === neoSettingsHub || page === neoAboutPage || page === neoAccountSecurityPage ||
 			page === neoDiveComputerCenter || page === neoPlannerLab || page === neoOperationsHub ||
 			page === neoEquipmentLibrary || page === neoDataPortability || page === neoSitesHub ||
@@ -134,8 +135,12 @@ Kirigami.ApplicationWindow {
 	readonly property int neoContentWidth: Math.max(1, width - (neoDesktopShellActive ? neoSidebarWidth : 0))
 
 	function neoSectionForPage(page) {
+		if (page?.objectName === "ModernDiveDetails" && page.navigationSection === "plans")
+			return "plans"
 		if (page === modernDiveList || page?.objectName === "ModernDiveDetails" || page?.objectName === "ModernDiveEditor")
 			return "dives"
+		if (page === modernPlansList)
+			return "plans"
 		if (page === neoSitesHub)
 			return "sites"
 		if (page === mapPage)
@@ -156,7 +161,7 @@ Kirigami.ApplicationWindow {
 	}
 
 	function neoShowsBottomNavigation(page) {
-		return page === modernDiveList || page === neoSitesHub ||
+		return page === modernDiveList || page === modernPlansList || page === neoSitesHub ||
 			page === neoStatisticsHub || page === mapPage || page === statistics ||
 			page === neoMorePage || page === neoPlannerLab || page === cloudSyncPage ||
 			page === neoDiveComputerCenter || page === neoEquipmentLibrary || page === neoDataPortability ||
@@ -991,6 +996,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			manager.appendTextToLog("initialization completed - showing Subsurface Neo home")
 			diveList.diveListModel = diveModel
 			modernDiveList.diveListModel = diveModel
+			modernPlansList.diveListModel = swipeModel
 			showNeoHome()
 
 			if (Qt.platform.os === "android") {
@@ -1039,13 +1045,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		}
 	}
 
-	function openNeoDiveDetails(row, editOnReady) {
+	function openNeoDiveDetails(row, editOnReady, returnToPlans) {
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
 		if (component.status !== Component.Ready) {
 			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
 			return
 		}
-		var detailsPage = component.createObject(rootItem, { "initialRow": row, "editOnReady": editOnReady || false })
+		var detailsPage = component.createObject(rootItem, { "initialRow": row, "editOnReady": editOnReady || false,
+			"navigationSection": returnToPlans ? "plans" : "dives" })
 		if (detailsPage === null) {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
 			return
@@ -1066,7 +1073,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		})
 		detailsPage.deleteRequested.connect(function(diveId) {
 			manager.deleteDive(diveId)
-			showPageFromDrawer(modernDiveList)
+			showPageFromDrawer(returnToPlans ? modernPlansList : modernDiveList)
 		})
 		showPage(detailsPage)
 	}
@@ -1131,6 +1138,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			else
 				startAddDive()
 		}
+	}
+
+	NeoPages.ModernDiveList {
+		id: modernPlansList
+		visible: false
+		plansOnly: true
+		onOpenDive: function(row) { rootItem.openNeoDiveDetails(row, false, true) }
+		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 	}
 
 	NeoPages.ModernMorePage {

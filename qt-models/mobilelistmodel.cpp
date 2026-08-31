@@ -58,6 +58,14 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[TripLocationRole] = "tripLocation";
 	roles[TripNotesRole] = "tripNotes";
 	roles[IsInvalidRole] = "isInvalid";
+	roles[IsPlannedRole] = "isPlanned";
+	roles[PlanTitleRole] = "planTitle";
+	roles[PlanRuntimeSecondsRole] = "planRuntimeSeconds";
+	roles[PlanBottomTimeSecondsRole] = "planBottomTimeSeconds";
+	roles[PlanDecoTimeSecondsRole] = "planDecoTimeSeconds";
+	roles[PlanTimelineRole] = "planTimeline";
+	roles[PlanScheduleRole] = "planSchedule";
+	roles[PlanProfileRole] = "planProfile";
 	return roles;
 }
 

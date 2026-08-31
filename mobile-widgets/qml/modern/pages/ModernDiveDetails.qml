@@ -12,11 +12,12 @@ import "../components" as Components
 Kirigami.Page {
 	id: page
 	objectName: "ModernDiveDetails"
-	title: currentItem && currentItem.modelData && currentItem.modelData.location && currentItem.modelData.location.length > 0
-		   ? currentItem.modelData.location : qsTr("Dive details")
+	title: currentItem && currentItem.modelData ? (currentItem.modelData.isPlanned ? currentItem.modelData.planTitle :
+		(currentItem.modelData.location && currentItem.modelData.location.length > 0 ? currentItem.modelData.location : qsTr("Dive details"))) : qsTr("Dive details")
 	background: Rectangle { color: tokens.background }
 
 	property int initialRow: -1
+	property string navigationSection: "dives"
 	property bool editOnReady: false
 	property bool editOpened: false
 	property alias currentIndex: diveView.currentIndex
@@ -55,6 +56,10 @@ Kirigami.Page {
 	function refreshCurrentProfile() {
 		if (page.currentItem)
 			page.currentItem.refreshProfile()
+	}
+	function planClock(seconds) {
+		seconds = Math.max(0, Number(seconds || 0)); var remainder = seconds % 60
+		return Math.floor(seconds / 60) + ":" + (remainder < 10 ? "0" : "") + remainder
 	}
 
 	function confirmDiveDelete(dive) {
@@ -138,9 +143,17 @@ Kirigami.Page {
 				"rating": model.rating,
 				"viz": model.viz,
 				"visibilityDistance": model.visibilityDistance
+				,"isPlanned": model.isPlanned
+				,"planTitle": model.planTitle
+				,"planRuntimeSeconds": model.planRuntimeSeconds
+				,"planBottomTimeSeconds": model.planBottomTimeSeconds
+				,"planDecoTimeSeconds": model.planDecoTimeSeconds
+				,"planTimeline": model.planTimeline
+				,"planSchedule": model.planSchedule
+				,"planProfile": model.planProfile
 			})
 			Accessible.role: Accessible.Pane
-			Accessible.name: qsTr("Dive details for %1").arg(modelData.location || qsTr("Unnamed dive site"))
+			Accessible.name: qsTr("Dive details for %1").arg(modelData.isPlanned ? modelData.planTitle : (modelData.location || qsTr("Unnamed dive site")))
 			property bool panningProfile: false
 			// A graph gesture owns the pointer until it ends. This keeps inspection,
 			// pan/zoom, vertical page scroll and horizontal dive swiping separate.
@@ -283,8 +296,8 @@ Kirigami.Page {
 								spacing: 2
 								Text {
 									Layout.fillWidth: true
-									text: delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0
-										  ? delegateRoot.modelData.location : qsTr("Unnamed dive site")
+									text: delegateRoot.modelData.isPlanned ? delegateRoot.modelData.planTitle :
+										(delegateRoot.modelData.location && delegateRoot.modelData.location.length > 0 ? delegateRoot.modelData.location : qsTr("Unnamed dive site"))
 									color: tokens.textPrimary
 									font.pixelSize: page.width >= 760 ? 28 : 21
 									font.weight: Font.DemiBold
@@ -345,12 +358,14 @@ Kirigami.Page {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
-						columns: 3
+						columns: delegateRoot.modelData.isPlanned ? (page.width >= 760 ? 5 : 2) : 3
 						columnSpacing: tokens.space8
 						rowSpacing: tokens.space8
 
 						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Max depth"); value: delegateRoot.modelData.depth || "—"; iconName: "depth" }
-						Components.MetricCard { Layout.fillWidth: true; label: qsTr("Dive time"); value: delegateRoot.modelData.duration || "—"; iconName: "time" }
+						Components.MetricCard { Layout.fillWidth: true; label: delegateRoot.modelData.isPlanned ? qsTr("Run time") : qsTr("Dive time"); value: delegateRoot.modelData.isPlanned ? page.planClock(delegateRoot.modelData.planRuntimeSeconds) : (delegateRoot.modelData.duration || "—"); iconName: "time" }
+						Components.MetricCard { visible: delegateRoot.modelData.isPlanned; Layout.fillWidth: true; label: qsTr("Bottom time"); value: page.planClock(delegateRoot.modelData.planBottomTimeSeconds); iconName: "time" }
+						Components.MetricCard { visible: delegateRoot.modelData.isPlanned; Layout.fillWidth: true; label: qsTr("Deco time"); value: page.planClock(delegateRoot.modelData.planDecoTimeSeconds); iconName: "time" }
 						Components.MetricCard {
 							Layout.fillWidth: true
 							label: qsTr("Water temp")
@@ -360,6 +375,18 @@ Kirigami.Page {
 					}
 
 					Components.ModernCard {
+						visible: delegateRoot.modelData.isPlanned
+						Layout.fillWidth: true
+						Layout.leftMargin: tokens.space16
+						Layout.rightMargin: tokens.space16
+						Text { text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planTimeline || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120) }
+						Text { visible: delegateRoot.modelData.planSchedule && delegateRoot.modelData.planSchedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
+						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planSchedule || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120); decoOnly: true }
+					}
+
+					Components.ModernCard {
+						visible: !delegateRoot.modelData.isPlanned
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
