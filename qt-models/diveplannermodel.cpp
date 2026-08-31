@@ -1647,6 +1647,10 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	if (!d->dcs.empty())
 		d->dcs[0].duration.seconds = runtimeSeconds;
 	d->duration.seconds = runtimeSeconds;
+	// Planner samples commonly omit computer-reported CNS. Use Subsurface's
+	// established whole-dive oxygen-exposure calculation for this generated
+	// profile so Neo does not present an empty CNS card for an ordinary plan.
+	divelog.dives.calculate_cns(*d);
 	QString notes_qstr = QString::fromStdString(d->notes);
 	notes_qstr.replace("&#10138;", "&#8593;");
 	notes_qstr.replace("&#10136;", "&#8595;");
