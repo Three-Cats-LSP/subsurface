@@ -24,6 +24,7 @@
 #include "commands/command.h"
 #include "core/gettextfromc.h"
 #include "core/deco.h"
+#include "core/gas.h"
 #include <QApplication>
 #include <QTextDocument>
 #include <QtConcurrent>
@@ -43,8 +44,8 @@ static constexpr int decotimestep = 60; // seconds
 
 static QString neoPlannerGasLabel(const gasmix &mix)
 {
-	const int oxygen = (mix.o2.permille + 5) / 10;
-	const int helium = (mix.he.permille + 5) / 10;
+	const int oxygen = (get_o2(mix) + 5) / 10;
+	const int helium = (get_he(mix) + 5) / 10;
 	if (oxygen == 21 && helium == 0)
 		return QStringLiteral("Air");
 	if (oxygen == 100 && helium == 0)
