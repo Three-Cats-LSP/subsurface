@@ -24,7 +24,6 @@
 #include "commands/command.h"
 #include "core/gettextfromc.h"
 #include "core/deco.h"
-#include "core/gas.h"
 #include <QApplication>
 #include <QTextDocument>
 #include <QtConcurrent>
@@ -51,37 +50,6 @@ static QString neoPlannerGasLabel(const gasmix &mix)
 	if (oxygen == 100 && helium == 0)
 		return QStringLiteral("100%");
 	return QStringLiteral("%1/%2").arg(oxygen).arg(helium);
-}
-
-static double neoPlannerCns(const dive &plannedDive, const diveplan &plan)
-{
-	double cns = 0.0;
-	int previousTime = 0;
-	depth_t previousDepth = 0_m;
-	for (const divedatapoint &point : plan.dp) {
-		const int duration = point.time - previousTime;
-		if (duration <= 0 || point.cylinderid < 0 ||
-		    static_cast<size_t>(point.cylinderid) >= plannedDive.cylinders.size())
-			continue;
-		const gasmix mix = plannedDive.cylinders[point.cylinderid].gasmix;
-		int startPo2 = 0;
-		int endPo2 = 0;
-		if (point.divemode == CCR && point.setpoint > 0) {
-			startPo2 = std::min(point.setpoint, plannedDive.depth_to_mbar(previousDepth));
-			endPo2 = std::min(point.setpoint, plannedDive.depth_to_mbar(point.depth));
-		} else if (point.divemode == PSCR) {
-			startPo2 = pscr_o2(plannedDive.depth_to_bar(previousDepth), mix);
-			endPo2 = pscr_o2(plannedDive.depth_to_bar(point.depth), mix);
-		} else {
-			const int oxygen = get_o2(mix);
-			startPo2 = std::lround(oxygen * plannedDive.depth_to_bar(previousDepth));
-			endPo2 = std::lround(oxygen * plannedDive.depth_to_bar(point.depth));
-		}
-		cns += cns_for_segment(duration, (startPo2 + endPo2) / 2);
-		previousTime = point.time;
-		previousDepth = point.depth;
-	}
-	return cns;
 }
 
 static cylinder_t *real_cylinder_or_null(struct dive *d, int cylinderId)
@@ -1682,7 +1650,6 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	// Planner samples commonly omit computer-reported CNS. Preserve the
 	// unrounded result from Subsurface's established oxygen-exposure algorithm
 	// so shallow plans below one percent do not appear to have no CNS data.
-	const double calculatedCns = neoPlannerCns(*d, diveplan);
 	QString notes_qstr = QString::fromStdString(d->notes);
 	notes_qstr.replace("&#10138;", "&#8593;");
 	notes_qstr.replace("&#10136;", "&#8595;");
@@ -1871,6 +1838,9 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	QVariantList profileData;
 	QVariantMap analysis;
 	int closestAnalysisSample = std::numeric_limits<int>::max();
+	double calculatedCns = 0.0;
+	int previousProfileTime = -1;
+	int previousProfilePo2 = 0;
 	if (d->dcs.size() > 0) {
 		// Project the planner's established tissue/GF results for display only.
 		const bool oldCalcNdlTts = prefs.calcndltts;
@@ -1907,6 +1877,15 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 				point["po2"] = static_cast<int>(std::lround(plotIt->pressures.o2 * 1000.0));
 				point["tissueLoad"] = *std::max_element(plotIt->percentages.begin(), plotIt->percentages.end());
 			}
+			const int profilePo2 = point.value("po2").toInt();
+			if (previousProfileTime >= 0 && profilePo2 > 0 && previousProfilePo2 > 0)
+				calculatedCns += cns_for_segment(sample.time.seconds - previousProfileTime,
+									       (previousProfilePo2 + profilePo2) / 2);
+			if (profilePo2 > 0) {
+				previousProfileTime = sample.time.seconds;
+				previousProfilePo2 = profilePo2;
+			}
+			point["cns"] = calculatedCns;
 			const int analysisDistance = std::abs(sample.time.seconds - enteredProfileRuntime);
 			if (analysisDistance < closestAnalysisSample) {
 				closestAnalysisSample = analysisDistance;
@@ -1919,8 +1898,6 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 		const int calculatedTts = std::max(0, runtimeSeconds - enteredProfileRuntime);
 		if (analysis.value("tts").toInt() <= 0 && calculatedTts > 0)
 			analysis["tts"] = calculatedTts;
-		if (analysis.value("cns").toDouble() <= 0.0 && calculatedCns > 0.0)
-			analysis["cns"] = calculatedCns;
 	}
 	results["profile"] = profileData;
 	results["analysis"] = analysis;
