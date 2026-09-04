@@ -23,7 +23,7 @@ Kirigami.Page {
 	property var selectedDiveIds: []
 	property var pendingDeleteIds: []
 
-	signal openDive(int row)
+	signal openDive(int diveId)
 	signal downloadRequested()
 	signal addDiveRequested()
 	signal cloudRequested()
@@ -103,7 +103,7 @@ Kirigami.Page {
 
 	Components.DiveActionSheet {
 		id: diveActions
-		onOpenDive: function(row) { page.openDive(row) }
+		onOpenDive: function(diveId) { page.openDive(diveId) }
 		onAddToCollectionRequested: function(diveId) { page.openCollections(diveId) }
 	}
 
@@ -419,7 +419,7 @@ Kirigami.Page {
 					else if (page.selectionMode)
 						page.toggleDiveSelection(modelData.id)
 					else
-						page.openDive(modelData.row)
+						page.openDive(modelData.id)
 				}
 				activeFocusOnTab: height > 0
 				Keys.onReturnPressed: activateDelegate()
@@ -605,6 +605,7 @@ Kirigami.Page {
 						}
 
 						Rectangle {
+							visible: !delegateRoot.modelData.isPlanned
 							Layout.fillWidth: true
 							Layout.preferredHeight: page.wideLayout ? 112 : 132
 							color: tokens.background

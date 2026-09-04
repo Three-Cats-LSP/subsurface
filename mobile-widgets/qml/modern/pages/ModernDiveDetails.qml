@@ -86,7 +86,7 @@ Kirigami.Page {
 
 	Component.onCompleted: {
 		if (initialRow >= 0)
-			manager.selectRow(initialRow)
+			manager.selectSwipeRow(initialRow)
 		Qt.callLater(openEditorWhenReady)
 	}
 
@@ -421,7 +421,6 @@ Kirigami.Page {
 					}
 
 					Components.ModernCard {
-						visible: !delegateRoot.modelData.isPlanned
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16

@@ -1129,8 +1129,10 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	NeoPages.ModernDiveList {
 		id: modernDiveList
 		visible: false
-		onOpenDive: function(row) {
-			rootItem.openNeoDiveDetails(row)
+		onOpenDive: function(diveId) {
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				rootItem.openNeoDiveDetails(row)
 		}
 		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
 		onCloudRequested: showPageFromDrawer(cloudSyncPage)
@@ -1148,7 +1150,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		id: modernPlansList
 		visible: false
 		plansOnly: true
-		onOpenDive: function(row) { rootItem.openNeoDiveDetails(row, false, true) }
+		onOpenDive: function(diveId) {
+			var row = manager.swipeRowForDive(diveId)
+			if (row >= 0)
+				rootItem.openNeoDiveDetails(row, false, true)
+		}
 		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 	}
 

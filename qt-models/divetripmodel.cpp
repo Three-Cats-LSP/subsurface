@@ -9,6 +9,7 @@
 #include "core/gettextfromc.h"
 #include "core/metrics.h"
 #include "core/selection.h"
+#include "core/sample.h"
 #include "core/string-format.h"
 #include "core/trip.h"
 #include "core/pref.h"
@@ -25,6 +26,150 @@
 #include <QDateTime>
 #include <memory>
 #include <algorithm>
+
+#ifdef SUBSURFACE_MOBILE
+static QString neoSavedPlanGasLabel(const gasmix &mix)
+{
+	const int oxygen = (get_o2(mix) + 5) / 10;
+	const int helium = (get_he(mix) + 5) / 10;
+	if (oxygen == 21 && helium == 0)
+		return QStringLiteral("Air");
+	if (oxygen == 100 && helium == 0)
+		return QStringLiteral("100%");
+	return QStringLiteral("%1/%2").arg(oxygen).arg(helium);
+}
+
+// Plans saved by Neo before the metadata payload was introduced still contain
+// the canonical native-planner dive computer. Reconstruct the display-only
+// timing and schedule roles from those samples so old plans remain useful.
+static QVariantMap neoSavedPlanFallback(const struct dive *d)
+{
+	QVariantMap result;
+	if (!d || d->dcs.empty())
+		return result;
+
+	const divecomputer &dc = d->dcs[0];
+	const std::vector<struct sample> &samples = dc.samples;
+	int runtime = std::max(d->duration.seconds, dc.duration.seconds);
+	if (!samples.empty())
+		runtime = std::max(runtime, samples.back().time.seconds);
+	result[QStringLiteral("runtimeSeconds")] = runtime;
+	if (samples.size() < 2)
+		return result;
+
+	int maximumDepth = std::max(d->maxdepth.mm, dc.maxdepth.mm);
+	for (const struct sample &sample : samples)
+		maximumDepth = std::max(maximumDepth, sample.depth.mm);
+
+	int bottomTime = 0;
+	bool reachedBottom = false;
+	for (size_t i = 1; i < samples.size(); ++i) {
+		const struct sample &previous = samples[i - 1];
+		const struct sample &current = samples[i];
+		if (previous.depth.mm >= maximumDepth - 500)
+			reachedBottom = true;
+		if (reachedBottom && current.depth.mm < previous.depth.mm) {
+			bottomTime = previous.time.seconds;
+			break;
+		}
+	}
+	result[QStringLiteral("bottomTimeSeconds")] = bottomTime;
+
+	QVariantList timeline;
+	QVariantList schedule;
+	QVariantList profile;
+	int totalDeco = 0;
+	QString previousGas;
+	for (size_t i = 0; i < samples.size(); ++i) {
+		const struct sample &sample = samples[i];
+		const QString gas = neoSavedPlanGasLabel(d->get_gasmix_at_time(dc, sample.time));
+		QVariantMap point;
+		point[QStringLiteral("time")] = sample.time.seconds;
+		point[QStringLiteral("depth")] = sample.depth.mm;
+		point[QStringLiteral("ndl")] = sample.ndl.seconds;
+		point[QStringLiteral("tts")] = sample.tts.seconds;
+		point[QStringLiteral("reportedCeiling")] = sample.stopdepth.mm;
+		point[QStringLiteral("stopTime")] = sample.stoptime.seconds;
+		point[QStringLiteral("cns")] = sample.cns;
+		point[QStringLiteral("setpoint")] = sample.setpoint.mbar;
+		point[QStringLiteral("inDeco")] = sample.in_deco;
+		point[QStringLiteral("gas")] = gas;
+		point[QStringLiteral("gasSwitch")] = !previousGas.isEmpty() && gas != previousGas;
+		profile.append(point);
+		if (i == 0) {
+			previousGas = gas;
+			continue;
+		}
+
+		const struct sample &previous = samples[i - 1];
+		const int duration = sample.time.seconds - previous.time.seconds;
+		if (duration <= 0) {
+			previousGas = gas;
+			continue;
+		}
+		QVariantMap row;
+		row[QStringLiteral("depth")] = sample.depth.mm;
+		row[QStringLiteral("duration")] = duration;
+		row[QStringLiteral("runTime")] = sample.time.seconds;
+		row[QStringLiteral("gas")] = gas;
+		row[QStringLiteral("gasSwitch")] = !previousGas.isEmpty() && gas != previousGas;
+		row[QStringLiteral("tts")] = sample.tts.seconds > 0 ? sample.tts.seconds : std::max(0, runtime - sample.time.seconds);
+		row[QStringLiteral("cns")] = sample.cns;
+		row[QStringLiteral("setpoint")] = sample.setpoint.mbar;
+		if (sample.depth.mm > previous.depth.mm)
+			row[QStringLiteral("phase")] = QStringLiteral("descent");
+		else if (sample.depth.mm < previous.depth.mm)
+			row[QStringLiteral("phase")] = QStringLiteral("ascent");
+		else if (sample.depth.mm > SURFACE_THRESHOLD && sample.time.seconds > bottomTime)
+			row[QStringLiteral("phase")] = QStringLiteral("deco");
+		else if (sample.depth.mm > SURFACE_THRESHOLD)
+			row[QStringLiteral("phase")] = QStringLiteral("level");
+		else
+			row[QStringLiteral("phase")] = QStringLiteral("surface");
+
+		const QString phase = row.value(QStringLiteral("phase")).toString();
+		const QVariantMap previousRow = timeline.empty() ? QVariantMap() : timeline.back().toMap();
+		const bool samePhaseAndGas = !previousRow.isEmpty() && !row.value(QStringLiteral("gasSwitch")).toBool() &&
+			previousRow.value(QStringLiteral("phase")).toString() == phase &&
+			previousRow.value(QStringLiteral("gas")).toString() == gas;
+		const bool mergeTravel = samePhaseAndGas && (phase == QStringLiteral("descent") || phase == QStringLiteral("ascent"));
+		const bool mergeLevel = samePhaseAndGas && (phase == QStringLiteral("level") || phase == QStringLiteral("deco")) &&
+			previousRow.value(QStringLiteral("depth")).toInt() == sample.depth.mm;
+		if (mergeTravel || mergeLevel) {
+			QVariantMap merged = timeline.back().toMap();
+			merged[QStringLiteral("depth")] = sample.depth.mm;
+			merged[QStringLiteral("duration")] = merged.value(QStringLiteral("duration")).toInt() + duration;
+			merged[QStringLiteral("runTime")] = sample.time.seconds;
+			merged[QStringLiteral("tts")] = row.value(QStringLiteral("tts"));
+			timeline.back() = merged;
+		} else {
+			timeline.append(row);
+		}
+		if (phase == QStringLiteral("deco")) {
+			const QVariantMap previousStop = schedule.empty() ? QVariantMap() : schedule.back().toMap();
+			if (!previousStop.isEmpty() && !row.value(QStringLiteral("gasSwitch")).toBool() &&
+			    previousStop.value(QStringLiteral("depth")).toInt() == sample.depth.mm &&
+			    previousStop.value(QStringLiteral("gas")).toString() == gas) {
+				QVariantMap merged = previousStop;
+				merged[QStringLiteral("duration")] = merged.value(QStringLiteral("duration")).toInt() + duration;
+				merged[QStringLiteral("runTime")] = sample.time.seconds;
+				merged[QStringLiteral("tts")] = row.value(QStringLiteral("tts"));
+				schedule.back() = merged;
+			} else {
+				schedule.append(row);
+			}
+			totalDeco += duration;
+		}
+		previousGas = gas;
+	}
+
+	result[QStringLiteral("decoTimeSeconds")] = totalDeco;
+	result[QStringLiteral("timeline")] = timeline;
+	result[QStringLiteral("schedule")] = schedule;
+	result[QStringLiteral("profile")] = profile;
+	return result;
+}
+#endif
 
 // 1) Base functions
 
@@ -272,7 +417,9 @@ QString DiveTripModelBase::getDescription(int column)
 QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role) const
 {
 #ifdef SUBSURFACE_MOBILE
-	const QVariantMap planMetadata = d->is_planned() ? neoPlanMetadata(d->notes) : QVariantMap();
+	QVariantMap planMetadata = d->is_planned() ? neoPlanMetadata(d->notes) : QVariantMap();
+	if (d->is_planned() && planMetadata.isEmpty())
+		planMetadata = neoSavedPlanFallback(d);
 	const int planRuntime = planMetadata.value(QStringLiteral("runtimeSeconds"), d->duration.seconds).toInt();
 	const int planBottomTime = planMetadata.value(QStringLiteral("bottomTimeSeconds"), 0).toInt();
 	const int planDecoTime = planMetadata.value(QStringLiteral("decoTimeSeconds"), 0).toInt();

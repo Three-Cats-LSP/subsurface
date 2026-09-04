@@ -89,6 +89,8 @@ dive_list = source("mobile-widgets/qml/modern/pages/ModernDiveList.qml")
 require(
 	dive_list,
 	(
+		'signal openDive(int diveId)',
+		'page.openDive(modelData.id)',
 		'text: page.greeting()',
 		'value: String(NeoDashboard.diveCount)',
 		'value: NeoDashboard.totalTimeHours',
@@ -119,6 +121,7 @@ dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
 require(
 	dive_details,
 	(
+		'manager.selectSwipeRow(initialRow)',
 		'property var modelData: ({',
 		'"getCylinder": model.getCylinder',
 		'"cylinderList": model.cylinderList',

@@ -15,7 +15,7 @@ Dialog {
 	standardButtons: Dialog.NoButton
 
 	property var dive: null
-	signal openDive(int row)
+	signal openDive(int diveId)
 	signal addToCollectionRequested(int diveId)
 
 	Modern.DesignTokens { id: tokens }
@@ -64,7 +64,7 @@ Dialog {
 		Button {
 			Layout.fillWidth: true
 			text: qsTr("Open dive")
-			onClicked: sheet.closeAndRun(function() { sheet.openDive(sheet.dive.row) })
+			onClicked: sheet.closeAndRun(function() { sheet.openDive(sheet.dive.id) })
 		}
 
 		Button {
