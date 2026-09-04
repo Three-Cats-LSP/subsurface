@@ -1076,7 +1076,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			manager.deleteDive(diveId)
 			showPageFromDrawer(returnToPlans ? modernPlansList : modernDiveList)
 		})
-		detailsPage.backRequested.connect(function() {
+		detailsPage.returnToListRequested.connect(function() {
 			showPageFromDrawer(returnToPlans ? modernPlansList : modernDiveList)
 		})
 		showPage(detailsPage)

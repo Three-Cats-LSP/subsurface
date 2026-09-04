@@ -30,7 +30,7 @@ Kirigami.Page {
 
 	signal editRequested(var dive)
 	signal deleteRequested(int diveId)
-	signal backRequested()
+	signal returnToListRequested()
 	FolderDialog {
 		id: diveReportFolder
 		currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
@@ -287,7 +287,7 @@ Kirigami.Page {
 							text: qsTr("Back")
 							accessibleName: page.browsingPlans ? qsTr("Back to plans") : qsTr("Back to dives")
 							compact: true
-							onClicked: page.backRequested()
+							onClicked: page.returnToListRequested()
 						}
 						Item { Layout.fillWidth: true }
 						Components.NeoButton {

@@ -206,12 +206,14 @@ require(
 	details,
 	(
 		'text: qsTr("Back")',
+		'signal returnToListRequested()',
 		'qsTr("Previous plan")',
 		'qsTr("Next dive")',
 		'manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
 	),
 	"Neo scoped dive and plan navigation",
 )
+forbid(details, ('signal backRequested()',), "Kirigami detail-page signal compatibility")
 
 tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")
 require(tokens, ('lightTheme', '"#F0F4F8"', '"#0891B2"'), "Neo day theme palette")
