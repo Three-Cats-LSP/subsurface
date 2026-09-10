@@ -87,7 +87,19 @@ Kirigami.ScrollablePage {
 				ColumnLayout {
 					Layout.fillWidth: true; spacing: 4
 					Text { text: qsTr("CONNECTION"); color: tokens.textMuted; font.pixelSize: 9 }
-					Components.NeoComboBox { id: connectionBox; Layout.fillWidth: true; model: connectionListModel }
+					Components.NeoComboBox {
+						id: connectionBox
+						Layout.fillWidth: true
+						model: connectionListModel
+						onCountChanged: {
+							if (count === 0) {
+								currentIndex = -1
+								return
+							}
+							var detected = manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)
+							currentIndex = detected >= 0 ? detected : (currentIndex >= 0 ? currentIndex : 0)
+						}
+					}
 				}
 			}
 			GridLayout {

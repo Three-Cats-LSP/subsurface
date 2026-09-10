@@ -243,7 +243,12 @@ Kirigami.Page {
 				Layout.leftMargin: tokens.space16
 				Layout.rightMargin: tokens.space16
 				Text { text: qsTr("Notes"); color: tokens.textMuted; font.pixelSize: 10 }
-				Components.NeoTextArea { id: notesField; Layout.fillWidth: true; Layout.preferredHeight: 150; text: dive ? dive.notes || "" : "" }
+				ScrollView {
+					Layout.fillWidth: true
+					Layout.preferredHeight: 220
+					clip: true
+					Components.NeoTextArea { id: notesField; width: parent.width; height: Math.max(210, implicitHeight); text: dive ? dive.notes || "" : ""; textFormat: TextEdit.PlainText; wrapMode: TextEdit.Wrap }
+				}
 			}
 
 			Components.ModernCard {

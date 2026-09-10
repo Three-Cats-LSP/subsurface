@@ -533,9 +533,8 @@ Kirigami.ApplicationWindow {
 					onTriggered: {
 						globalDrawer.close()
 						var diveId = manager.addDive()
-						var row = manager.swipeRowForDive(diveId)
-						if (row >= 0)
-							rootItem.openNeoDiveDetails(row, true)
+						if (manager.swipeRowForDive(diveId) >= 0)
+							rootItem.openNeoDiveDetails(diveId, true)
 						else
 							startAddDive()
 					}
@@ -1046,13 +1045,13 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		}
 	}
 
-	function openNeoDiveDetails(row, editOnReady, returnToPlans) {
+	function openNeoDiveDetails(diveId, editOnReady, returnToPlans) {
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
 		if (component.status !== Component.Ready) {
 			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
 			return
 		}
-		var detailsPage = component.createObject(rootItem, { "initialRow": row, "editOnReady": editOnReady || false,
+		var detailsPage = component.createObject(rootItem, { "initialDiveId": diveId, "editOnReady": editOnReady || false,
 			"navigationSection": returnToPlans ? "plans" : "dives" })
 		if (detailsPage === null) {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
@@ -1130,17 +1129,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		id: modernDiveList
 		visible: false
 		onOpenDive: function(diveId) {
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				rootItem.openNeoDiveDetails(row)
+			rootItem.openNeoDiveDetails(diveId)
 		}
 		onDownloadRequested: showPageFromDrawer(neoDiveComputerCenter)
 		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 		onAddDiveRequested: {
 			var diveId = manager.addDive()
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				rootItem.openNeoDiveDetails(row, true)
+			if (manager.swipeRowForDive(diveId) >= 0)
+				rootItem.openNeoDiveDetails(diveId, true)
 			else
 				startAddDive()
 		}
@@ -1151,9 +1147,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		visible: false
 		plansOnly: true
 		onOpenDive: function(diveId) {
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				rootItem.openNeoDiveDetails(row, false, true)
+			rootItem.openNeoDiveDetails(diveId, false, true)
 		}
 		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 	}
@@ -1263,9 +1257,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 				mapPage.centerOnDiveSite(manager.siteObject(siteName))
 		}
 		onOpenDive: function(diveId) {
-			var row = manager.swipeRowForDive(diveId)
-			if (row >= 0)
-				rootItem.openNeoDiveDetails(row)
+			rootItem.openNeoDiveDetails(diveId)
 		}
 	}
 

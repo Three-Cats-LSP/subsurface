@@ -38,6 +38,7 @@ Kirigami.Page {
 		manager.DC_devName = address !== null ? address[0] : connection
 		if (address !== null)
 			manager.retrieveBluetoothName()
+		manager.appendTextToLog("Neo import configured " + vendor + " " + product + " on " + manager.DC_devName + (manager.DC_bluetoothMode ? " (Bluetooth)" : ""))
 	}
 
 	function startDownload() {
@@ -94,6 +95,8 @@ Kirigami.Page {
 			Layout.fillWidth: true
 			Text { text: qsTr("Connection needs attention"); color: tokens.accent; font.weight: Font.DemiBold }
 			Text { text: importError; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { visible: manager.DC_bluetoothMode; text: qsTr("For a Shearwater Perdix, open Dive Log → Upload on the computer, keep it close to this device, and retry. If Windows already paired it but download still fails, remove the pairing and let Subsurface discover it directly."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Components.NeoButton { text: qsTr("Copy diagnostic log"); compact: true; onClicked: manager.copyAppLogToClipboard() }
 		}
 		Text { visible: importsReady; text: qsTr("%1 downloaded dives — select the entries to add to your log.").arg(importModel.rowCount()); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 

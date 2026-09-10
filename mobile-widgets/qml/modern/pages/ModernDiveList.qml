@@ -373,6 +373,7 @@ Kirigami.Page {
 					"isTrip": model.isTrip,
 					"current": model.current,
 					"number": model.number,
+					"displayNumber": model.displayNumber,
 					"location": model.location,
 					"dateTime": model.dateTime,
 					"depth": model.depth,
@@ -427,7 +428,7 @@ Kirigami.Page {
 				Keys.onSpacePressed: activateDelegate()
 				Accessible.role: Accessible.ListItem
 				Accessible.name: modelData.isTrip ? qsTr("Dive trip: %1, %2 dives").arg(modelData.tripTitle || qsTr("Unnamed trip")).arg(modelData.tripNrDives || 0)
-					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.number > 0 ? "#" + modelData.number : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
+					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.displayNumber > 0 ? "#" + modelData.displayNumber : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
 				Accessible.onPressAction: activateDelegate()
 				width: listView.width
 				height: modelData.isTrip ? (page.plansOnly ? 0 : 64) : (collectionMatch ? diveCard.implicitHeight : 0)
@@ -500,14 +501,14 @@ Kirigami.Page {
 									onClicked: page.toggleDiveSelection(delegateRoot.modelData.id)
 								}
 								Rectangle {
-									visible: delegateRoot.modelData.number > 0
+									visible: delegateRoot.modelData.displayNumber > 0
 									Layout.preferredWidth: 54
 									Layout.preferredHeight: 42
 									color: "transparent"
 									radius: tokens.radiusSmall
 									border.width: 1
 									border.color: tokens.accentStrong
-									Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.number; color: tokens.accent; font.pixelSize: 15; font.weight: Font.DemiBold }
+									Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.displayNumber; color: tokens.accent; font.pixelSize: 15; font.weight: Font.DemiBold }
 								}
 								ColumnLayout {
 									Layout.fillWidth: true

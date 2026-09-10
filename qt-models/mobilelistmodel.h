@@ -28,6 +28,7 @@ public:
 		DateTimeRole,
 		IdRole,
 		NumberRole,
+		DisplayNumberRole,
 		LocationRole,
 		DepthRole,
 		DurationRole,
@@ -72,7 +73,9 @@ public:
 		PlanDecoTimeSecondsRole,
 		PlanTimelineRole,
 		PlanScheduleRole,
-		PlanProfileRole
+		PlanProfileRole,
+		PlanReportHeaderRole,
+		PlanReportFooterRole
 	};
 	QHash<int, QByteArray> roleNames() const override;
 protected:

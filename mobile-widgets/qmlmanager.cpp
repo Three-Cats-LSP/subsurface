@@ -43,6 +43,7 @@
 #include "qt-models/messagehandlermodel.h"
 #include "qt-models/tankinfomodel.h"
 #include "qt-models/mobilelistmodel.h"
+#include "qt-models/neoplanmetadata.h"
 #include "core/device.h"
 #include "core/errorhelper.h"
 #include "core/file.h"
@@ -1308,10 +1309,13 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 	dive *d = d_ptr.get();
 	copy_dive(orig, d);
 
-	// notes comes back as rich text - let's convert this into plain text
-	QTextDocument doc;
-	doc.setHtml(notes);
-	notes = doc.toPlainText();
+	// The legacy editor returns rich text. Neo plan notes are deliberately a
+	// separate plain-text field, so preserve characters such as '<' verbatim.
+	if (!orig->is_planned()) {
+		QTextDocument doc;
+		doc.setHtml(notes);
+		notes = doc.toPlainText();
+	}
 
 	bool diveChanged = false;
 
@@ -1475,7 +1479,14 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 		diveChanged = true;
 		d->visibility_distance.mm = requestedVisibilityMm;
 	}
-	if (formatNotes(d) != notes) {
+	if (d->is_planned()) {
+		QVariantMap metadata = neoPlanMetadata(d->notes);
+		if (metadata.value(QStringLiteral("userNotes")).toString() != notes) {
+			diveChanged = true;
+			metadata[QStringLiteral("userNotes")] = notes;
+			d->notes = (neoPlanNotesWithoutMetadata(d->notes) + neoPlanMetadataMarker(metadata)).toStdString();
+		}
+	} else if (formatNotes(d) != notes) {
 		diveChanged = true;
 		d->notes = notes.toStdString();
 	}

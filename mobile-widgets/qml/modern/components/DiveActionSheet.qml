@@ -45,7 +45,7 @@ Dialog {
 
 		Text {
 			Layout.fillWidth: true
-			text: sheet.dive && sheet.dive.number > 0 ? qsTr("Dive #%1").arg(sheet.dive.number) : qsTr("Dive actions")
+			text: sheet.dive && sheet.dive.displayNumber > 0 ? qsTr("Dive #%1").arg(sheet.dive.displayNumber) : qsTr("Dive actions")
 			color: tokens.textPrimary
 			font.pixelSize: 18
 			font.weight: Font.DemiBold

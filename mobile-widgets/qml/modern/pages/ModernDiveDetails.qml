@@ -17,6 +17,7 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property int initialRow: -1
+	property int initialDiveId: -1
 	property string navigationSection: "dives"
 	property bool editOnReady: false
 	property bool editOpened: false
@@ -48,10 +49,37 @@ Kirigami.Page {
 		}
 	}
 	function diveReportText(dive) {
-		var lines = [qsTr("SUBSURFACE NEO DIVE REPORT"), qsTr("Dive: %1").arg(dive.number > 0 ? "#" + dive.number : qsTr("Unnumbered")), qsTr("Date: %1").arg(dive.dateTime || "—"), qsTr("Site: %1").arg(dive.location || qsTr("Unnamed dive site")), qsTr("Maximum depth: %1").arg(dive.depth || "—"), qsTr("Duration: %1").arg(dive.duration || "—"), qsTr("Water temperature: %1").arg(dive.waterTemp || "—"), qsTr("Equipment: %1").arg(dive.suit || "—")]
+		if (dive.isPlanned)
+			return planReportText(dive)
+		var lines = [qsTr("SUBSURFACE NEO DIVE REPORT"), qsTr("Dive: %1").arg(dive.displayNumber > 0 ? "#" + dive.displayNumber : qsTr("Unnumbered")), qsTr("Date: %1").arg(dive.dateTime || "—"), qsTr("Site: %1").arg(dive.location || qsTr("Unnamed dive site")), qsTr("Maximum depth: %1").arg(dive.depth || "—"), qsTr("Duration: %1").arg(dive.duration || "—"), qsTr("Water temperature: %1").arg(dive.waterTemp || "—"), qsTr("Equipment: %1").arg(dive.suit || "—")]
 		if (dive.notes && dive.notes.length > 0)
 			lines.push("", qsTr("NOTES"), dive.notes)
 		lines.push("", qsTr("This report is generated from the current canonical Subsurface dive record."))
+		return lines.join("\n")
+	}
+	function scheduleLine(row, profileData) {
+		var divisor = Backend.length === Enums.METERS ? 1000 : 304.8
+		var unit = Backend.length === Enums.METERS ? qsTr("m") : qsTr("ft")
+		var symbol = row.phase === "descent" ? "↓" : row.phase === "ascent" ? "↑" : "●"
+		var gas = String(row.gas || "—").toUpperCase()
+		if (row.gasSwitch) gas = ">> " + gas
+		var nearest = null
+		for (var i = 0; profileData && i < profileData.length; ++i)
+			if (!nearest || Math.abs(profileData[i].time - row.runTime) < Math.abs(nearest.time - row.runTime)) nearest = profileData[i]
+		var po2Value = nearest && nearest.po2 > 0 ? nearest.po2 : row.po2
+		var eadValue = nearest && nearest.ead !== undefined && nearest.ead >= 0 ? nearest.ead : row.ead
+		return symbol + " " + (Number(row.depth || 0) / divisor).toFixed(1) + " " + unit + "  ·  " + planClock(row.duration) + "  ·  " + gas + "  ·  RT " + planClock(row.runTime) + "  ·  pO₂ " + (po2Value > 0 ? (po2Value / 1000).toFixed(2) : "—") + "  ·  EAD " + (eadValue !== undefined && eadValue >= 0 ? (eadValue / divisor).toFixed(1) + " " + unit : "—")
+	}
+	function planReportText(dive) {
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), dive.planTitle || dive.location || qsTr("Dive plan"), qsTr("Maximum depth: %1").arg(dive.depth || "—"), qsTr("Run time: %1").arg(planClock(dive.planRuntimeSeconds)), qsTr("Bottom time: %1").arg(planClock(dive.planBottomTimeSeconds)), qsTr("Deco time: %1").arg(planClock(dive.planDecoTimeSeconds))]
+		if (dive.planReportHeader) lines.push("", dive.planReportHeader)
+		lines.push("", qsTr("FULL PLAN"))
+		for (var i = 0; dive.planTimeline && i < dive.planTimeline.length; ++i) lines.push(scheduleLine(dive.planTimeline[i], dive.planProfile))
+		if (dive.planSchedule && dive.planSchedule.length > 0) {
+			lines.push("", qsTr("DECOMPRESSION SCHEDULE"))
+			for (var j = 0; j < dive.planSchedule.length; ++j) lines.push(scheduleLine(dive.planSchedule[j], dive.planProfile))
+		}
+		if (dive.planReportFooter) lines.push("", dive.planReportFooter)
 		return lines.join("\n")
 	}
 
@@ -62,8 +90,11 @@ Kirigami.Page {
 			page.currentItem.refreshProfile()
 	}
 	function navigateToRow(row) {
-		if (row >= 0)
+		if (row >= 0) {
+			diveView.currentIndex = row
+			diveView.contentX = diveView.originX + row * diveView.width
 			manager.selectSwipeRow(row)
+		}
 	}
 	function planClock(seconds) {
 		seconds = Math.max(0, Number(seconds || 0)); var remainder = seconds % 60
@@ -85,8 +116,15 @@ Kirigami.Page {
 	}
 
 	Component.onCompleted: {
-		if (initialRow >= 0)
+		if (initialDiveId >= 0) {
+			var requestedRow = manager.swipeRowForDive(initialDiveId)
+			if (requestedRow >= 0)
+				navigateToRow(requestedRow)
+		} else if (initialRow >= 0) {
+			diveView.currentIndex = initialRow
+			diveView.contentX = diveView.originX + initialRow * diveView.width
 			manager.selectSwipeRow(initialRow)
+		}
 		Qt.callLater(openEditorWhenReady)
 	}
 
@@ -126,6 +164,7 @@ Kirigami.Page {
 			property var modelData: ({
 				"id": model.id,
 				"number": model.number,
+				"displayNumber": model.displayNumber,
 				"location": model.location,
 				"dateTime": model.dateTime,
 				"isInvalid": model.isInvalid,
@@ -159,6 +198,8 @@ Kirigami.Page {
 				,"planTimeline": model.planTimeline
 				,"planSchedule": model.planSchedule
 				,"planProfile": model.planProfile
+				,"planReportHeader": model.planReportHeader
+				,"planReportFooter": model.planReportFooter
 			})
 			Accessible.role: Accessible.Pane
 			Accessible.name: qsTr("Dive details for %1").arg(modelData.isPlanned ? modelData.planTitle : (modelData.location || qsTr("Unnamed dive site")))
@@ -316,14 +357,14 @@ Kirigami.Page {
 							spacing: tokens.space8
 
 							Rectangle {
-								visible: delegateRoot.modelData.number > 0
+								visible: delegateRoot.modelData.displayNumber > 0
 								Layout.preferredWidth: 64
 								Layout.preferredHeight: 48
 								radius: tokens.radiusSmall
 								color: "transparent"
 								border.width: 1
 								border.color: tokens.accentStrong
-								Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.number; color: tokens.accent; font.pixelSize: 19; font.weight: Font.Medium }
+								Text { anchors.centerIn: parent; text: "#" + delegateRoot.modelData.displayNumber; color: tokens.accent; font.pixelSize: 19; font.weight: Font.Medium }
 							}
 
 							ColumnLayout {
@@ -407,17 +448,6 @@ Kirigami.Page {
 							value: delegateRoot.modelData.waterTemp && delegateRoot.modelData.waterTemp.length > 0 ? delegateRoot.modelData.waterTemp : "—"
 							iconName: "temperature"
 						}
-					}
-
-					Components.ModernCard {
-						visible: delegateRoot.modelData.isPlanned
-						Layout.fillWidth: true
-						Layout.leftMargin: tokens.space16
-						Layout.rightMargin: tokens.space16
-						Text { text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planTimeline || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120) }
-						Text { visible: delegateRoot.modelData.planSchedule && delegateRoot.modelData.planSchedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
-						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planSchedule || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120); decoOnly: true }
 					}
 
 					Components.ModernCard {
@@ -834,6 +864,25 @@ Kirigami.Page {
 					}
 
 					Components.ModernCard {
+						visible: delegateRoot.modelData.isPlanned
+						Layout.fillWidth: true
+						Layout.leftMargin: tokens.space16
+						Layout.rightMargin: tokens.space16
+						Text { text: qsTr("Full plan"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+						Text { visible: delegateRoot.modelData.planReportHeader.length > 0; Layout.fillWidth: true; text: delegateRoot.modelData.planReportHeader; color: tokens.warning; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planTimeline || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120) }
+						Text { visible: delegateRoot.modelData.planSchedule && delegateRoot.modelData.planSchedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
+						Components.PlanSchedule { Layout.fillWidth: true; rows: delegateRoot.modelData.planSchedule || []; profileData: delegateRoot.modelData.planProfile || []; maximumWidth: Math.min(page.width - 64, 1120); decoOnly: true }
+						Text { visible: delegateRoot.modelData.planReportFooter.length > 0; Layout.fillWidth: true; text: delegateRoot.modelData.planReportFooter; color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; textFormat: Text.PlainText }
+						Flow {
+							Layout.fillWidth: true; spacing: tokens.space8
+							Components.NeoButton { text: qsTr("Copy to clipboard"); onClicked: manager.copyToClipboard(page.planReportText(delegateRoot.modelData)) }
+							Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Export to TXT"); onClicked: diveReportTextFolder.open() }
+							Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Export to PDF"); onClicked: diveReportFolder.open() }
+						}
+					}
+
+					Components.ModernCard {
 						Layout.fillWidth: true
 						Layout.leftMargin: tokens.space16
 						Layout.rightMargin: tokens.space16
@@ -850,11 +899,11 @@ Kirigami.Page {
 								Text { text: qsTr("NOTES"); color: tokens.textMuted; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.7 }
 								Text {
 									Layout.fillWidth: true
-									text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0 ? delegateRoot.modelData.notes : qsTr("No notes for this dive.")
+									text: delegateRoot.modelData.notes && delegateRoot.modelData.notes.length > 0 ? delegateRoot.modelData.notes : qsTr("No personal notes yet.")
 									color: tokens.textPrimary
 									font.pixelSize: 13
 									wrapMode: Text.WordWrap
-									textFormat: Text.RichText
+									textFormat: Text.PlainText
 								}
 							}
 						}
@@ -890,13 +939,19 @@ Kirigami.Page {
 				} else if (diveView.swipeInProgress) {
 					var dx = lastTranslationX
 					var targetIndex = diveView.currentIndex
-					if (dx < -diveView.width / 4 && targetIndex < diveView.count - 1)
-						targetIndex++
-					else if (dx > diveView.width / 4 && targetIndex > 0)
-						targetIndex--
-					snapAnimation.to = diveView.originX + targetIndex * diveView.width
-					snapAnimation.start()
+					if (dx < -diveView.width / 4)
+						targetIndex = page.nextScopedRow >= 0 ? page.nextScopedRow : targetIndex
+					else if (dx > diveView.width / 4)
+						targetIndex = page.previousScopedRow >= 0 ? page.previousScopedRow : targetIndex
+					var previousIndex = diveView.currentIndex
 					diveView.currentIndex = targetIndex
+					if (Math.abs(targetIndex - previousIndex) === 1) {
+						snapAnimation.to = diveView.originX + targetIndex * diveView.width
+						snapAnimation.start()
+					} else {
+						diveView.contentX = diveView.originX + targetIndex * diveView.width
+						diveView.swipeInProgress = false
+					}
 					manager.selectSwipeRow(targetIndex)
 				}
 			}

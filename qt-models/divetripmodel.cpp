@@ -24,6 +24,8 @@
 #include <QIcon>
 #include <QDebug>
 #include <QDateTime>
+#include <QRegularExpression>
+#include <QTextDocument>
 #include <memory>
 #include <algorithm>
 
@@ -168,6 +170,30 @@ static QVariantMap neoSavedPlanFallback(const struct dive *d)
 	result[QStringLiteral("schedule")] = schedule;
 	result[QStringLiteral("profile")] = profile;
 	return result;
+}
+
+static int neoScopedDiveNumber(const struct dive *target)
+{
+	int number = 0;
+	for (const auto &candidate : divelog.dives) {
+		if (candidate->is_planned() == target->is_planned())
+			++number;
+		if (candidate.get() == target)
+			return number;
+	}
+	return target->number;
+}
+
+static QPair<QString, QString> neoPlanReportParts(const struct dive *d)
+{
+	QTextDocument document;
+	document.setHtml(neoPlanNotesWithoutMetadata(d->notes));
+	const QString report = document.toPlainText().trimmed();
+	const qsizetype schedule = report.indexOf(QStringLiteral("depth duration runtime gas"), 0, Qt::CaseInsensitive);
+	const qsizetype footer = report.indexOf(QRegularExpression(QStringLiteral("(?:^|\\n)CNS\\s*:"), QRegularExpression::CaseInsensitiveOption));
+	QString header = schedule >= 0 ? report.left(schedule).trimmed() : QString();
+	QString bottom = footer >= 0 ? report.mid(footer).trimmed() : QString();
+	return { header, bottom };
 }
 #endif
 
@@ -418,8 +444,13 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 {
 #ifdef SUBSURFACE_MOBILE
 	QVariantMap planMetadata = d->is_planned() ? neoPlanMetadata(d->notes) : QVariantMap();
-	if (d->is_planned() && planMetadata.isEmpty())
-		planMetadata = neoSavedPlanFallback(d);
+	if (d->is_planned()) {
+		const QVariantMap fallback = neoSavedPlanFallback(d);
+		for (auto it = fallback.cbegin(); it != fallback.cend(); ++it) {
+			if (!planMetadata.contains(it.key()))
+				planMetadata.insert(it.key(), it.value());
+		}
+	}
 	const int planRuntime = planMetadata.value(QStringLiteral("runtimeSeconds"), d->duration.seconds).toInt();
 	const int planBottomTime = planMetadata.value(QStringLiteral("bottomTimeSeconds"), 0).toInt();
 	const int planDecoTime = planMetadata.value(QStringLiteral("decoTimeSeconds"), 0).toInt();
@@ -436,6 +467,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::DateTimeRole: return formatDiveDateTime(d);
 	case MobileListModel::IdRole: return d->id;
 	case MobileListModel::NumberRole: return d->number;
+	case MobileListModel::DisplayNumberRole: return neoScopedDiveNumber(d);
 	case MobileListModel::LocationRole: return d->is_planned() ? planTitle : QString::fromStdString(d->get_location());
 	case MobileListModel::DepthRole: return get_depth_string(d->dcs[0].maxdepth.mm, true, true);
 	case MobileListModel::DurationRole: return d->is_planned() ? neoPlanClock(planRuntime) : formatDiveDuration(d);
@@ -452,7 +484,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::DiveGuideRole: return QString::fromStdString(d->diveguide);
 	case MobileListModel::BuddyRole: return QString::fromStdString(d->buddy);
 	case MobileListModel::TagsRole: return QString::fromStdString(taglist_get_tagstring(d->tags));
-	case MobileListModel::NotesRole: return formatNotes(d);
+	case MobileListModel::NotesRole: return d->is_planned() ? planMetadata.value(QStringLiteral("userNotes")) : formatNotes(d);
 	case MobileListModel::GpsRole: return formatDiveGPS(d);
 	case MobileListModel::GpsDecimalRole: return format_gps_decimal(d);
 	case MobileListModel::NoDiveRole: return d->duration.seconds == 0 && d->dcs[0].duration.seconds == 0;
@@ -476,6 +508,8 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::PlanTimelineRole: return planMetadata.value(QStringLiteral("timeline"));
 	case MobileListModel::PlanScheduleRole: return planMetadata.value(QStringLiteral("schedule"));
 	case MobileListModel::PlanProfileRole: return planMetadata.value(QStringLiteral("profile"));
+	case MobileListModel::PlanReportHeaderRole: return d->is_planned() ? neoPlanReportParts(d).first : QString();
+	case MobileListModel::PlanReportFooterRole: return d->is_planned() ? neoPlanReportParts(d).second : QString();
 	}
 #endif
 	switch (role) {

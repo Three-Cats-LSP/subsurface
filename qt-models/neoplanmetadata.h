@@ -36,6 +36,15 @@ inline QVariantMap neoPlanMetadata(const std::string &notes)
 	return document.isObject() ? document.toVariant().toMap() : QVariantMap();
 }
 
+inline QString neoPlanNotesWithoutMetadata(const std::string &notes)
+{
+	QString value = QString::fromStdString(notes);
+	const qsizetype begin = value.lastIndexOf(QStringLiteral("<!--NEO_PLAN:"));
+	if (begin >= 0)
+		value.truncate(begin);
+	return value.trimmed();
+}
+
 inline QString neoPlanClock(int seconds)
 {
 	seconds = std::max(0, seconds);

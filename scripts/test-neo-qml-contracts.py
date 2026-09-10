@@ -97,6 +97,7 @@ require(
 		'property var modelData: ({',
 		'"location": model.location',
 		'"tripTitle": model.tripTitle',
+		'"displayNumber": model.displayNumber',
 		'Accessible.role: Accessible.ListItem',
 		'activeFocusOnTab: height > 0',
 		'Keys.onReturnPressed: activateDelegate()',
@@ -213,10 +214,22 @@ require(
 		'qsTr("Previous plan")',
 		'qsTr("Next dive")',
 		'manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
+		'property int initialDiveId: -1',
+		'manager.swipeRowForDive(initialDiveId)',
+		'targetIndex = page.nextScopedRow',
+		'text: qsTr("Export to TXT")',
+		'text: qsTr("Export to PDF")',
+		'text: qsTr("Copy to clipboard")',
+		'textFormat: Text.PlainText',
 	),
 	"Neo scoped dive and plan navigation",
 )
 forbid(details, ('signal backRequested()',), "Kirigami detail-page signal compatibility")
+
+computer_center = source("mobile-widgets/qml/modern/pages/ModernDiveComputerCenter.qml")
+import_review = source("mobile-widgets/qml/modern/pages/ModernImportReview.qml")
+require(computer_center, ('onCountChanged:', 'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)'), "Neo asynchronous dive-computer discovery")
+require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLogToClipboard()'), "Neo dive-computer diagnostics")
 
 tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")
 require(tokens, ('lightTheme', '"#F0F4F8"', '"#0891B2"'), "Neo day theme palette")

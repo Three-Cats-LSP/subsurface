@@ -21,6 +21,7 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[DateTimeRole] = "dateTime";
 	roles[IdRole] = "id";
 	roles[NumberRole] = "number";
+	roles[DisplayNumberRole] = "displayNumber";
 	roles[LocationRole] = "location";
 	roles[DepthRole] = "depth";
 	roles[DurationRole] = "duration";
@@ -66,6 +67,8 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[PlanTimelineRole] = "planTimeline";
 	roles[PlanScheduleRole] = "planSchedule";
 	roles[PlanProfileRole] = "planProfile";
+	roles[PlanReportHeaderRole] = "planReportHeader";
+	roles[PlanReportFooterRole] = "planReportFooter";
 	return roles;
 }
 
