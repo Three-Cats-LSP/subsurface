@@ -252,15 +252,25 @@ require(
 
 qml_manager_h = source("mobile-widgets/qmlmanager.h")
 qml_manager_cpp = source("mobile-widgets/qmlmanager.cpp")
+btdiscovery_cpp = source("core/btdiscovery.cpp")
 require(qml_manager_h, ('Q_INVOKABLE void stopBluetoothDiscovery();',), "Neo Bluetooth discovery handoff")
 require(
 	qml_manager_cpp,
 	(
 		'BTDiscovery::instance()->stopAgent();',
+		'addRememberedBluetooth(qPrefDiveComputer::product1(), qPrefDiveComputer::device1());',
 		'/Subsurface/subsurface_err.log',
 		'---------- subsurface_err.log ----------',
 	),
 	"Neo Windows diagnostics",
+)
+require(
+	btdiscovery_cpp,
+	(
+		'if (discoveryAgent->isActive())',
+		'for (const QBluetoothDeviceInfo &device : discoveryAgent->discoveredDevices())',
+	),
+	"Neo Bluetooth rescan recovery",
 )
 
 tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")

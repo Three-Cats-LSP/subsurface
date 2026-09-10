@@ -263,6 +263,17 @@ void BTDiscovery::BTDiscoveryReDiscover()
 				});
 			report_info("discovery methods %d", (int)QBluetoothDeviceDiscoveryAgent::supportedDiscoveryMethods());
 		}
+		// A rescan can be requested while the original Windows discovery pass is
+		// still active. Calling start() again is a no-op, while the UI has just
+		// cleared its connection model. Replay the devices already found so the
+		// list does not become blank until another advertisement arrives.
+		if (discoveryAgent->isActive()) {
+			report_info("BT/BLE discovery already active; restoring discovered devices");
+			for (const QBluetoothDeviceInfo &device : discoveryAgent->discoveredDevices())
+				btDeviceDiscovered(device);
+			btMessages.clear();
+			return;
+		}
 #if defined(Q_OS_ANDROID)
 		// on Android, we cannot scan for classic devices - we just get the paired ones
 		report_info("starting BLE discovery");

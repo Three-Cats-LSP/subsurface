@@ -57,6 +57,7 @@
 #include "core/qt-gui.h"
 #include "core/git-access.h"
 #include "core/cloudstorage.h"
+#include "core/bluetoothaddress.h"
 #include "core/downloadfromdcthread.h"
 #include "core/subsurfacestartup.h" // for ignore_bt flag
 #include "core/subsurface-string.h"
@@ -67,6 +68,7 @@
 #include "core/selection.h"
 #include "core/save-profiledata.h"
 #include "core/settings/qPrefLog.h"
+#include "core/settings/qPrefDiveComputer.h"
 #include "core/settings/qPrefTechnicalDetails.h"
 #include "core/settings/qPrefPartialPressureGas.h"
 #include "core/settings/qPrefUnit.h"
@@ -211,6 +213,18 @@ void QMLManager::btRescan()
 void QMLManager::rescanConnections()
 {
 	connectionListModel.removeAllAddresses();
+	// Keep remembered Bluetooth computers selectable even when a paired device
+	// is not advertising during this particular Windows scan. Both Bluetooth
+	// transports can connect directly using the remembered address.
+	const auto addRememberedBluetooth = [](const QString &product, const QString &device) {
+		const QString address = extractBluetoothAddress(device);
+		if (!product.isEmpty() && !address.isEmpty())
+			connectionListModel.addAddress(product + QLatin1Char(' ') + address);
+	};
+	addRememberedBluetooth(qPrefDiveComputer::product1(), qPrefDiveComputer::device1());
+	addRememberedBluetooth(qPrefDiveComputer::product2(), qPrefDiveComputer::device2());
+	addRememberedBluetooth(qPrefDiveComputer::product3(), qPrefDiveComputer::device3());
+	addRememberedBluetooth(qPrefDiveComputer::product4(), qPrefDiveComputer::device4());
 	usbRescan();
 	btRescan();
 #if defined(SERIAL_FTDI)
