@@ -17,6 +17,7 @@ Kirigami.Page {
 	property string connection: ""
 	property bool downloading: false
 	property bool importsReady: false
+	property bool downloadFailed: false
 	property string importError: ""
 	signal finished()
 
@@ -27,6 +28,9 @@ Kirigami.Page {
 		onDownloadFinished: {
 			page.downloading = false
 			page.importsReady = rowCount() > 0
+			page.downloadFailed = !page.importsReady && /error|failed|timeout/i.test(manager.progressMessage)
+			if (page.downloadFailed)
+				page.importError = manager.progressMessage
 		}
 	}
 
@@ -34,16 +38,18 @@ Kirigami.Page {
 		manager.DC_vendor = vendor
 		manager.DC_product = product
 		var address = /((LE|BT):)?([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/i.exec(connection)
-		manager.DC_bluetoothMode = address !== null
-		manager.DC_devName = address !== null ? address[0] : connection
-		if (address !== null)
+		var serialPort = address !== null && Qt.platform.os === "windows" ? manager.pairedBluetoothSerialPort(address[0]) : ""
+		manager.DC_bluetoothMode = address !== null && serialPort.length === 0
+		manager.DC_devName = serialPort.length > 0 ? serialPort : (address !== null ? address[0] : connection)
+		if (address !== null && serialPort.length === 0)
 			manager.retrieveBluetoothName()
-		manager.appendTextToLog("Neo import configured " + vendor + " " + product + " on " + manager.DC_devName + (manager.DC_bluetoothMode ? " (Bluetooth)" : ""))
+		manager.appendTextToLog("Neo import configured " + vendor + " " + product + " on " + manager.DC_devName + (manager.DC_bluetoothMode ? " (Bluetooth)" : (serialPort.length > 0 ? " (paired Bluetooth serial port)" : "")))
 	}
 
 	function startDownload() {
 		configureConnection()
 		importsReady = false
+		downloadFailed = false
 		importError = ""
 		downloading = true
 		manager.progressMessage = ""
@@ -64,6 +70,7 @@ Kirigami.Page {
 		target: manager
 		function onErrorSignal() {
 			page.downloading = false
+			page.downloadFailed = true
 			page.importError = manager.progressMessage.length > 0 ? manager.progressMessage : qsTr("The dive computer did not complete the import. Check the connection and try again.")
 		}
 		function onRestartDownloadSignal() {
@@ -95,9 +102,9 @@ Kirigami.Page {
 			Layout.fillWidth: true
 			Text { text: qsTr("Connection needs attention"); color: tokens.accent; font.weight: Font.DemiBold }
 			Text { text: importError; color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Text { visible: manager.DC_bluetoothMode; text: qsTr("For a Shearwater Perdix, open Dive Log → Upload on the computer, keep it close to this device, and retry. If Windows already paired it but download still fails, remove the pairing and let Subsurface discover it directly."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoButton { text: qsTr("Copy diagnostic log"); compact: true; onClicked: manager.copyAppLogToClipboard() }
+			Text { visible: vendor === "Shearwater"; text: qsTr("For a classic Shearwater Perdix on Windows, pair it in Windows Bluetooth settings first and put the computer in Dive Log → Upload before retrying."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		}
+		Components.NeoButton { visible: !downloading && !importsReady; text: qsTr("Copy diagnostic log"); compact: true; Layout.alignment: Qt.AlignLeft; onClicked: manager.copyAppLogToClipboard() }
 		Text { visible: importsReady; text: qsTr("%1 downloaded dives — select the entries to add to your log.").arg(importModel.rowCount()); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
 		ListView {

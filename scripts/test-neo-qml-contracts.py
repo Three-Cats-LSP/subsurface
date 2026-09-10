@@ -217,6 +217,7 @@ require(
 		'property int initialDiveId: -1',
 		'manager.swipeRowForDive(initialDiveId)',
 		'targetIndex = page.nextScopedRow',
+		'MouseArea {',
 		'text: qsTr("Export to TXT")',
 		'text: qsTr("Export to PDF")',
 		'text: qsTr("Copy to clipboard")',
@@ -230,6 +231,7 @@ computer_center = source("mobile-widgets/qml/modern/pages/ModernDiveComputerCent
 import_review = source("mobile-widgets/qml/modern/pages/ModernImportReview.qml")
 require(computer_center, ('onCountChanged:', 'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)'), "Neo asynchronous dive-computer discovery")
 require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLogToClipboard()'), "Neo dive-computer diagnostics")
+require(import_review, ('manager.pairedBluetoothSerialPort(address[0])', 'page.downloadFailed = !page.importsReady'), "Neo Windows classic-Bluetooth import")
 
 tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")
 require(tokens, ('lightTheme', '"#F0F4F8"', '"#0891B2"'), "Neo day theme palette")

@@ -2759,6 +2759,38 @@ int QMLManager::getConnectionIndex(const QString &deviceSubstr)
 	return connectionListModel.indexOf(deviceSubstr);
 }
 
+QString QMLManager::pairedBluetoothSerialPort(const QString &address) const
+{
+#if defined(Q_OS_WIN)
+	QString compactAddress = address;
+	compactAddress.remove(QLatin1Char(':'));
+	compactAddress.remove(QLatin1Char('-'));
+	compactAddress = compactAddress.toUpper();
+	if (compactAddress.isEmpty())
+		return {};
+
+	const QString rootPath = QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\BTHENUM");
+	QSettings root(rootPath, QSettings::NativeFormat);
+	for (const QString &service : root.childGroups()) {
+		if (!service.startsWith(QStringLiteral("{00001101-0000-1000-8000-00805F9B34FB}"), Qt::CaseInsensitive))
+			continue;
+		QSettings serviceSettings(rootPath + QLatin1Char('\\') + service, QSettings::NativeFormat);
+		for (const QString &instance : serviceSettings.childGroups()) {
+			if (!instance.contains(compactAddress, Qt::CaseInsensitive))
+				continue;
+			QSettings parameters(rootPath + QLatin1Char('\\') + service + QLatin1Char('\\') + instance +
+					    QStringLiteral("\\Device Parameters"), QSettings::NativeFormat);
+			const QString port = parameters.value(QStringLiteral("PortName")).toString();
+			if (!port.isEmpty())
+				return port;
+		}
+	}
+#else
+	Q_UNUSED(address)
+#endif
+	return {};
+}
+
 void QMLManager::setGitLocalOnly(const bool &value)
 {
 	git_local_only = value;

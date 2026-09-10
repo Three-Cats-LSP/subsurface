@@ -618,6 +618,11 @@ Kirigami.Page {
 								diveId: delegateRoot.modelData.id
 								Component.onCompleted: setMargin(3)
 							}
+							MouseArea {
+								anchors.fill: parent
+								cursorShape: Qt.PointingHandCursor
+								onClicked: delegateRoot.activateDelegate()
+							}
 						}
 					}
 

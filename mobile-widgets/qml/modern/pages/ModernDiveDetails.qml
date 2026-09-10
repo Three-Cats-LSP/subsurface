@@ -128,16 +128,6 @@ Kirigami.Page {
 		Qt.callLater(openEditorWhenReady)
 	}
 
-	Connections {
-		target: swipeModel
-		function onCurrentDiveChanged(index) {
-			diveView.currentIndex = index.row
-			if (!diveView.swipeInProgress)
-				diveView.contentX = diveView.originX + index.row * diveView.width
-			Qt.callLater(page.openEditorWhenReady)
-		}
-	}
-
 	ListView {
 		id: diveView
 		anchors.fill: parent

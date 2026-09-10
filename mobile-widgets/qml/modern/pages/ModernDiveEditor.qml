@@ -244,10 +244,28 @@ Kirigami.Page {
 				Layout.rightMargin: tokens.space16
 				Text { text: qsTr("Notes"); color: tokens.textMuted; font.pixelSize: 10 }
 				ScrollView {
+					id: notesScroll
 					Layout.fillWidth: true
 					Layout.preferredHeight: 220
 					clip: true
-					Components.NeoTextArea { id: notesField; width: parent.width; height: Math.max(210, implicitHeight); text: dive ? dive.notes || "" : ""; textFormat: TextEdit.PlainText; wrapMode: TextEdit.Wrap }
+					ScrollBar.vertical.policy: ScrollBar.AsNeeded
+					Components.NeoTextArea {
+						id: notesField
+						width: notesScroll.availableWidth
+						height: Math.max(notesScroll.availableHeight, contentHeight + topPadding + bottomPadding)
+						text: dive ? dive.notes || "" : ""
+						textFormat: TextEdit.PlainText
+						wrapMode: TextEdit.Wrap
+						onCursorRectangleChanged: {
+							var viewport = notesScroll.contentItem
+							if (!viewport)
+								return
+							if (cursorRectangle.bottom > viewport.contentY + viewport.height)
+								viewport.contentY = Math.min(viewport.contentHeight - viewport.height, cursorRectangle.bottom - viewport.height)
+							else if (cursorRectangle.top < viewport.contentY)
+								viewport.contentY = cursorRectangle.top
+						}
+					}
 				}
 			}
 

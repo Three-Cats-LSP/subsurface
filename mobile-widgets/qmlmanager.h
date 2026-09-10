@@ -128,6 +128,7 @@ public:
 	Q_INVOKABLE int getDetectedVendorIndex();
 	Q_INVOKABLE int getDetectedProductIndex(const QString &currentVendorText);
 	Q_INVOKABLE int getConnectionIndex(const QString &deviceSubstr);
+	Q_INVOKABLE QString pairedBluetoothSerialPort(const QString &address) const;
 	Q_INVOKABLE void setGitLocalOnly(const bool &value);
 	Q_INVOKABLE void setFilter(const QString filterText, int mode);
 	Q_INVOKABLE void setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,
