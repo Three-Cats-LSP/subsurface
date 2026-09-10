@@ -216,7 +216,8 @@ require(
 		'signal returnToListRequested()',
 		'qsTr("Previous plan")',
 		'qsTr("Next dive")',
-		'manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
+		'previousScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, 1)',
+		'nextScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
 		'property var initialDiveId: null',
 		'initialDiveId !== null && initialDiveId !== undefined',
 		'manager.swipeRowForDive(initialDiveId)',
@@ -243,6 +244,8 @@ require(
 		'interval: 750',
 		'text: qsTr("Try Bluetooth directly")',
 		'page.downloadFailed = !page.importsReady',
+		'property bool automaticBluetoothFallbackUsed: false',
+		'Paired serial connection failed; retrying the Perdix through Bluetooth services',
 	),
 	"Neo Windows classic-Bluetooth import",
 )

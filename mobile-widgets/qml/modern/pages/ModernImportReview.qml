@@ -21,6 +21,7 @@ Kirigami.Page {
 	property string importError: ""
 	property bool forceBluetoothAddress: false
 	property string pairedSerialPort: ""
+	property bool automaticBluetoothFallbackUsed: false
 	signal finished()
 
 	Modern.DesignTokens { id: tokens }
@@ -31,8 +32,14 @@ Kirigami.Page {
 			page.downloading = false
 			page.importsReady = rowCount() > 0
 			page.downloadFailed = !page.importsReady && /error|failed|timeout/i.test(manager.progressMessage)
-			if (page.downloadFailed)
+			if (page.downloadFailed && page.pairedSerialPort.length > 0 && !page.forceBluetoothAddress && !page.automaticBluetoothFallbackUsed) {
+				page.automaticBluetoothFallbackUsed = true
+				manager.appendTextToLog("Paired serial connection failed; retrying the Perdix through Bluetooth services")
+				page.forceBluetoothAddress = true
+				page.startDownload(false)
+			} else if (page.downloadFailed) {
 				page.importError = manager.progressMessage
+			}
 		}
 	}
 
@@ -51,8 +58,10 @@ Kirigami.Page {
 	}
 
 	function startDownload(resetTransport) {
-		if (resetTransport === undefined || resetTransport)
+		if (resetTransport === undefined || resetTransport) {
 			forceBluetoothAddress = false
+			automaticBluetoothFallbackUsed = false
+		}
 		configureConnection()
 		importsReady = false
 		downloadFailed = false

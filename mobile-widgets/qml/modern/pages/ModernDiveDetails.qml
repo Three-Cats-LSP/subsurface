@@ -27,8 +27,11 @@ Kirigami.Page {
 	property alias currentIndex: diveView.currentIndex
 	property var currentItem: diveView.currentItem
 	readonly property bool browsingPlans: navigationSection === "plans"
-	readonly property int previousScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, -1) : -1
-	readonly property int nextScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, 1) : -1
+	// The swipe model is sorted newest/highest dive number first.  Therefore a
+	// lower model row is the next dive number and a higher row is the previous
+	// dive number, which is the direction users expect from these buttons.
+	readonly property int previousScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, 1) : -1
+	readonly property int nextScopedRow: currentIndex >= 0 ? manager.adjacentSwipeRow(currentIndex, browsingPlans, -1) : -1
 	property string diveReportPdfExport: ""
 	property string diveReportTextExport: ""
 

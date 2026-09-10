@@ -281,6 +281,15 @@ BLEObject::~BLEObject()
 {
 	report_info("Deleting BLE object");
 
+#if defined(Q_OS_WIN)
+	// Release the WinRT GATT session before destroying its service handlers.
+	// This is especially important when qt_ble_open() is about to retry with a
+	// fresh controller for the same device.
+	if (controller->state() != QLowEnergyController::UnconnectedState) {
+		controller->disconnectFromDevice();
+		WAITFOR(controller->state() == QLowEnergyController::UnconnectedState, 2000);
+	}
+#endif
 	qDeleteAll(services);
 
 	delete controller;
@@ -644,7 +653,7 @@ static int use_random_address(const device_data_t &user_device)
 }
 #endif
 
-dc_status_t qt_ble_open(void **io, dc_context_t *, const char *devaddr, device_data_t *user_device)
+static dc_status_t qt_ble_open_once(void **io, dc_context_t *, const char *devaddr, device_data_t *user_device)
 {
 	debugCounter = 0;
 	QLoggingCategory::setFilterRules(QStringLiteral("qt.bluetooth* = true"));
@@ -875,6 +884,33 @@ dc_status_t qt_ble_open(void **io, dc_context_t *, const char *devaddr, device_d
 	// Fill in info
 	*io = (void *)ble;
 	return DC_STATUS_SUCCESS;
+}
+
+dc_status_t qt_ble_open(void **io, dc_context_t *context, const char *devaddr, device_data_t *user_device)
+{
+	*io = nullptr;
+
+#if defined(Q_OS_WIN)
+	// Windows' GATT backend occasionally connects and enumerates the service,
+	// but never completes characteristic discovery.  A fresh controller is
+	// required in that state; calling discoverDetails() again on the same
+	// service object leaves it stuck in RemoteServiceDiscovering.  SeaBirds'
+	// Perdix transport uses the same full-connection retry strategy.
+	constexpr int maxAttempts = 3;
+	for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+		report_info("Windows BLE connection attempt %d/%d to %s", attempt, maxAttempts, devaddr);
+		const dc_status_t result = qt_ble_open_once(io, context, devaddr, user_device);
+		if (result == DC_STATUS_SUCCESS)
+			return result;
+		if (attempt < maxAttempts) {
+			report_info("Windows BLE attempt %d failed; recreating the GATT connection", attempt);
+			QThread::msleep(500);
+		}
+	}
+	return DC_STATUS_IO;
+#else
+	return qt_ble_open_once(io, context, devaddr, user_device);
+#endif
 }
 
 dc_status_t qt_ble_close(void *io)
