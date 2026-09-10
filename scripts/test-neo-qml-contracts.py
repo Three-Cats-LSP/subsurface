@@ -67,6 +67,9 @@ require(
 		'onPortabilityRequested: showPageFromDrawer(neoDataPortability)',
 		'if (neoDesktopShellActive) {',
 		'pageStack.push(page)',
+		'var requestedRow = manager.swipeRowForDive(diveId)',
+		'"initialRow": requestedRow',
+		'detailsPage.navigateToRow(requestedRow)',
 		'pageStack.lastItem?.objectName',
 		'function neoPageUsesOwnHeader(page)',
 		'pageStack.globalToolBar.preferredHeight: neoHeaderSuppressed ? 0',
@@ -89,7 +92,7 @@ dive_list = source("mobile-widgets/qml/modern/pages/ModernDiveList.qml")
 require(
 	dive_list,
 	(
-		'signal openDive(int diveId)',
+		'signal openDive(var diveId)',
 		'page.openDive(modelData.id)',
 		'text: page.greeting()',
 		'value: String(NeoDashboard.diveCount)',
@@ -122,7 +125,7 @@ dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
 require(
 	dive_details,
 	(
-		'manager.selectSwipeRow(initialRow)',
+		'navigateToRow(initialRow)',
 		'property var modelData: ({',
 		'"getCylinder": model.getCylinder',
 		'"cylinderList": model.cylinderList',
@@ -214,7 +217,8 @@ require(
 		'qsTr("Previous plan")',
 		'qsTr("Next dive")',
 		'manager.adjacentSwipeRow(currentIndex, browsingPlans, -1)',
-		'property int initialDiveId: -1',
+		'property var initialDiveId: null',
+		'initialDiveId !== null && initialDiveId !== undefined',
 		'manager.swipeRowForDive(initialDiveId)',
 		'targetIndex = page.nextScopedRow',
 		'MouseArea {',
@@ -231,7 +235,30 @@ computer_center = source("mobile-widgets/qml/modern/pages/ModernDiveComputerCent
 import_review = source("mobile-widgets/qml/modern/pages/ModernImportReview.qml")
 require(computer_center, ('onCountChanged:', 'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)'), "Neo asynchronous dive-computer discovery")
 require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLogToClipboard()'), "Neo dive-computer diagnostics")
-require(import_review, ('manager.pairedBluetoothSerialPort(address[0])', 'page.downloadFailed = !page.importsReady'), "Neo Windows classic-Bluetooth import")
+require(
+	import_review,
+	(
+		'manager.pairedBluetoothSerialPort(address[0])',
+		'manager.stopBluetoothDiscovery()',
+		'interval: 750',
+		'text: qsTr("Try Bluetooth directly")',
+		'page.downloadFailed = !page.importsReady',
+	),
+	"Neo Windows classic-Bluetooth import",
+)
+
+qml_manager_h = source("mobile-widgets/qmlmanager.h")
+qml_manager_cpp = source("mobile-widgets/qmlmanager.cpp")
+require(qml_manager_h, ('Q_INVOKABLE void stopBluetoothDiscovery();',), "Neo Bluetooth discovery handoff")
+require(
+	qml_manager_cpp,
+	(
+		'BTDiscovery::instance()->stopAgent();',
+		'/Subsurface/subsurface_err.log',
+		'---------- subsurface_err.log ----------',
+	),
+	"Neo Windows diagnostics",
+)
 
 tokens = source("mobile-widgets/qml/modern/DesignTokens.qml")
 require(tokens, ('lightTheme', '"#F0F4F8"', '"#0891B2"'), "Neo day theme palette")

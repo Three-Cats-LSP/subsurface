@@ -23,7 +23,7 @@ Kirigami.Page {
 	property var selectedDiveIds: []
 	property var pendingDeleteIds: []
 
-	signal openDive(int diveId)
+	signal openDive(var diveId)
 	signal downloadRequested()
 	signal addDiveRequested()
 	signal cloudRequested()

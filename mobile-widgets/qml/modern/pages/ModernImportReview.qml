@@ -19,6 +19,8 @@ Kirigami.Page {
 	property bool importsReady: false
 	property bool downloadFailed: false
 	property string importError: ""
+	property bool forceBluetoothAddress: false
+	property string pairedSerialPort: ""
 	signal finished()
 
 	Modern.DesignTokens { id: tokens }
@@ -38,23 +40,36 @@ Kirigami.Page {
 		manager.DC_vendor = vendor
 		manager.DC_product = product
 		var address = /((LE|BT):)?([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/i.exec(connection)
-		var serialPort = address !== null && Qt.platform.os === "windows" ? manager.pairedBluetoothSerialPort(address[0]) : ""
+		var serialPort = address !== null && Qt.platform.os === "windows" && !forceBluetoothAddress ? manager.pairedBluetoothSerialPort(address[0]) : ""
+		pairedSerialPort = serialPort
 		manager.DC_bluetoothMode = address !== null && serialPort.length === 0
 		manager.DC_devName = serialPort.length > 0 ? serialPort : (address !== null ? address[0] : connection)
 		if (address !== null && serialPort.length === 0)
 			manager.retrieveBluetoothName()
+		manager.stopBluetoothDiscovery()
 		manager.appendTextToLog("Neo import configured " + vendor + " " + product + " on " + manager.DC_devName + (manager.DC_bluetoothMode ? " (Bluetooth)" : (serialPort.length > 0 ? " (paired Bluetooth serial port)" : "")))
 	}
 
-	function startDownload() {
+	function startDownload(resetTransport) {
+		if (resetTransport === undefined || resetTransport)
+			forceBluetoothAddress = false
 		configureConnection()
 		importsReady = false
 		downloadFailed = false
 		importError = ""
 		downloading = true
-		manager.progressMessage = ""
+		manager.progressMessage = qsTr("Preparing Bluetooth connection…")
 		importModel.clearTable()
-		importModel.startDownload()
+		connectionDelay.restart()
+	}
+	Timer {
+		id: connectionDelay
+		interval: 750
+		repeat: false
+		onTriggered: {
+			manager.progressMessage = ""
+			importModel.startDownload()
+		}
 	}
 
 	function acceptSelected() {
@@ -64,7 +79,7 @@ Kirigami.Page {
 		finished()
 	}
 
-	Component.onCompleted: startDownload()
+	Component.onCompleted: startDownload(true)
 
 	Connections {
 		target: manager
@@ -75,7 +90,7 @@ Kirigami.Page {
 		}
 		function onRestartDownloadSignal() {
 			if (page.downloading)
-				page.startDownload()
+				page.startDownload(true)
 		}
 	}
 
@@ -134,7 +149,14 @@ Kirigami.Page {
 			columns: page.width >= 760 ? 4 : 2
 			columnSpacing: tokens.space8
 			rowSpacing: tokens.space8
-			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Retry"); enabled: !downloading; compact: true; onClicked: page.startDownload() }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Retry"); enabled: !downloading; compact: true; onClicked: page.startDownload(true) }
+			Components.NeoButton {
+				Layout.fillWidth: true; Layout.minimumWidth: 0
+				visible: !downloading && !importsReady && Qt.platform.os === "windows" && pairedSerialPort.length > 0
+				text: qsTr("Try Bluetooth directly")
+				compact: true
+				onClicked: { page.forceBluetoothAddress = true; page.startDownload(false) }
+			}
 			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select none"); visible: importsReady; compact: true; onClicked: importModel.selectNone() }
 			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select all"); visible: importsReady; compact: true; onClicked: importModel.selectAll() }
 			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Add selected dives"); variant: "primary"; enabled: importsReady; compact: true; onClicked: page.acceptSelected() }

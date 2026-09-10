@@ -628,6 +628,19 @@ QString QMLManager::getCombinedLogs()
 		copyString += in.readAll();
 	}
 
+#if defined(Q_OS_WIN)
+	// Windows writes Qt/libdivecomputer diagnostics to a separate stderr log.
+	// Include it in the clipboard report: serial/RFCOMM failures otherwise only
+	// appear there and the diagnostic button omits the useful failure reason.
+	const QString errorLogName = QDir::fromNativeSeparators(qEnvironmentVariable("APPDATA") + QStringLiteral("/Subsurface/subsurface_err.log"));
+	QFile errorLog(errorLogName);
+	if (errorLog.open(QFile::ReadOnly | QFile::Text)) {
+		copyString += QStringLiteral("\n\n\n---------- subsurface_err.log ----------\n");
+		QTextStream errorStream(&errorLog);
+		copyString += errorStream.readAll();
+	}
+#endif
+
 	copyString += "---------- finish ----------\n";
 
 #if defined(Q_OS_ANDROID)
@@ -2789,6 +2802,14 @@ QString QMLManager::pairedBluetoothSerialPort(const QString &address) const
 	Q_UNUSED(address)
 #endif
 	return {};
+}
+
+void QMLManager::stopBluetoothDiscovery()
+{
+#if defined(BT_SUPPORT)
+	BTDiscovery::instance()->stopAgent();
+	appendTextToLog(QStringLiteral("Bluetooth discovery stopped before dive-computer connection"));
+#endif
 }
 
 void QMLManager::setGitLocalOnly(const bool &value)

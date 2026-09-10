@@ -1046,17 +1046,30 @@ if you have network connectivity and want to sync your data to cloud storage."),
 	}
 
 	function openNeoDiveDetails(diveId, editOnReady, returnToPlans) {
+		var requestedRow = manager.swipeRowForDive(diveId)
+		manager.appendTextToLog("Neo detail request id " + diveId + " resolved to swipe row " + requestedRow)
+		if (requestedRow < 0) {
+			showPassiveNotification(qsTr("Unable to find the selected dive or plan."), 6000)
+			return
+		}
 		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
 		if (component.status !== Component.Ready) {
 			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
 			return
 		}
-		var detailsPage = component.createObject(rootItem, { "initialDiveId": diveId, "editOnReady": editOnReady || false,
+		var detailsPage = component.createObject(rootItem, { "initialDiveId": diveId, "initialRow": requestedRow, "editOnReady": editOnReady || false,
 			"navigationSection": returnToPlans ? "plans" : "dives" })
 		if (detailsPage === null) {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
 			return
 		}
+		// Reapply the resolved row after all ListView delegates and bindings have
+		// completed. This avoids the view restoring the globally selected dive
+		// while the newly created detail page is being mounted.
+		Qt.callLater(function() {
+			if (detailsPage)
+				detailsPage.navigateToRow(requestedRow)
+		})
 		detailsPage.editRequested.connect(function(diveData) {
 			var editorComponent = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveEditor.qml")
 			if (editorComponent.status !== Component.Ready) {

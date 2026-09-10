@@ -17,7 +17,10 @@ Kirigami.Page {
 	background: Rectangle { color: tokens.background }
 
 	property int initialRow: -1
-	property int initialDiveId: -1
+	// Dive ids are signed hashes and negative values are valid. Use null as the
+	// sentinel; treating every negative id as "not supplied" opened whichever
+	// dive happened to be selected globally instead of the clicked card.
+	property var initialDiveId: null
 	property string navigationSection: "dives"
 	property bool editOnReady: false
 	property bool editOpened: false
@@ -116,14 +119,12 @@ Kirigami.Page {
 	}
 
 	Component.onCompleted: {
-		if (initialDiveId >= 0) {
+		if (initialRow >= 0) {
+			navigateToRow(initialRow)
+		} else if (initialDiveId !== null && initialDiveId !== undefined) {
 			var requestedRow = manager.swipeRowForDive(initialDiveId)
 			if (requestedRow >= 0)
 				navigateToRow(requestedRow)
-		} else if (initialRow >= 0) {
-			diveView.currentIndex = initialRow
-			diveView.contentX = diveView.originX + initialRow * diveView.width
-			manager.selectSwipeRow(initialRow)
 		}
 		Qt.callLater(openEditorWhenReady)
 	}
