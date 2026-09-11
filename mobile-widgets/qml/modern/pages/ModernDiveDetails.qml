@@ -139,7 +139,9 @@ Kirigami.Page {
 		orientation: ListView.Horizontal
 		interactive: false
 		clip: true
-		currentIndex: -1
+		// Start on the requested row so ListView does not construct and render an
+		// unrelated profile before Component.onCompleted selects the clicked dive.
+		currentIndex: page.initialRow
 		highlightFollowsCurrentItem: false
 		property bool swipeInProgress: false
 

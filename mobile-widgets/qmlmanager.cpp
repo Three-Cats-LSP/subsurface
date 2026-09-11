@@ -2788,16 +2788,31 @@ int QMLManager::getConnectionIndex(const QString &deviceSubstr)
 
 QString QMLManager::pairedBluetoothSerialPort(const QString &address) const
 {
+	const QStringList ports = pairedBluetoothSerialPorts(address);
+	return ports.isEmpty() ? QString() : ports.first();
+}
+
+QStringList QMLManager::pairedBluetoothSerialPorts(const QString &address) const
+{
+	QStringList ports;
 #if defined(Q_OS_WIN)
 	QString compactAddress = address;
 	compactAddress.remove(QLatin1Char(':'));
 	compactAddress.remove(QLatin1Char('-'));
 	compactAddress = compactAddress.toUpper();
 	if (compactAddress.isEmpty())
-		return {};
+		return ports;
+
+	auto appendPort = [&ports](const QString &port) {
+		if (!port.isEmpty() && !ports.contains(port, Qt::CaseInsensitive))
+			ports.append(port);
+	};
 
 	const QString rootPath = QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\BTHENUM");
 	QSettings root(rootPath, QSettings::NativeFormat);
+	// Put the address-bound outgoing RFCOMM port first. Windows also creates an
+	// incoming Bluetooth serial port which some classic Perdix pairings require;
+	// collect that (and any other SPP port) in a second pass below.
 	for (const QString &service : root.childGroups()) {
 		if (!service.startsWith(QStringLiteral("{00001101-0000-1000-8000-00805F9B34FB}"), Qt::CaseInsensitive))
 			continue;
@@ -2807,15 +2822,23 @@ QString QMLManager::pairedBluetoothSerialPort(const QString &address) const
 				continue;
 			QSettings parameters(rootPath + QLatin1Char('\\') + service + QLatin1Char('\\') + instance +
 					    QStringLiteral("\\Device Parameters"), QSettings::NativeFormat);
-			const QString port = parameters.value(QStringLiteral("PortName")).toString();
-			if (!port.isEmpty())
-				return port;
+			appendPort(parameters.value(QStringLiteral("PortName")).toString());
+		}
+	}
+	for (const QString &service : root.childGroups()) {
+		if (!service.startsWith(QStringLiteral("{00001101-0000-1000-8000-00805F9B34FB}"), Qt::CaseInsensitive))
+			continue;
+		QSettings serviceSettings(rootPath + QLatin1Char('\\') + service, QSettings::NativeFormat);
+		for (const QString &instance : serviceSettings.childGroups()) {
+			QSettings parameters(rootPath + QLatin1Char('\\') + service + QLatin1Char('\\') + instance +
+					    QStringLiteral("\\Device Parameters"), QSettings::NativeFormat);
+			appendPort(parameters.value(QStringLiteral("PortName")).toString());
 		}
 	}
 #else
 	Q_UNUSED(address)
 #endif
-	return {};
+	return ports;
 }
 
 void QMLManager::stopBluetoothDiscovery()

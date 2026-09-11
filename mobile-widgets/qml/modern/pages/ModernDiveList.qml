@@ -380,6 +380,7 @@ Kirigami.Page {
 					"duration": model.duration,
 					"waterTemp": model.waterTemp,
 					"firstGas": model.firstGas,
+					"diveMode": model.diveMode,
 					"cylinder": model.cylinder,
 					"suit": model.suit,
 					"tags": model.tags,
@@ -482,7 +483,7 @@ Kirigami.Page {
 
 					GridLayout {
 						Layout.fillWidth: true
-						columns: delegateRoot.modelData.isPlanned ? 1 : (page.wideLayout ? 2 : 1)
+						columns: 1
 						columnSpacing: tokens.space16
 						rowSpacing: tokens.space12
 
@@ -526,8 +527,14 @@ Kirigami.Page {
 								}
 								ToolButton {
 									visible: !page.selectionMode
-									text: "⋯"
+									Layout.preferredWidth: 40
+									Layout.preferredHeight: 40
+									padding: 8
+									contentItem: Components.NeoDiveIcon { name: "more"; iconColor: tokens.textPrimary }
+									background: Rectangle { color: parent.hovered || parent.down ? tokens.surfaceRaised : tokens.background; radius: 20; border.width: 1; border.color: tokens.border }
 									Accessible.name: qsTr("Dive actions")
+									ToolTip.visible: hovered
+									ToolTip.text: qsTr("Dive actions")
 									onClicked: diveActions.openForDive(delegateRoot.modelData)
 								}
 							}
@@ -582,11 +589,11 @@ Kirigami.Page {
 									Text { Layout.fillWidth: true; text: delegateRoot.gasAndCylinderSummary(); color: tokens.accent; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 								RowLayout {
-									visible: miniProfile.diveMode.length > 0
+									visible: delegateRoot.modelData.diveMode && delegateRoot.modelData.diveMode.length > 0
 									Layout.fillWidth: true
 									spacing: tokens.space4
 									Components.NeoDiveIcon { name: "regulator"; iconColor: tokens.textSecondary; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
-									Text { Layout.fillWidth: true; text: miniProfile.diveMode; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
+									Text { Layout.fillWidth: true; text: delegateRoot.modelData.diveMode || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 								}
 								RowLayout {
 									visible: delegateRoot.modelData.suit && delegateRoot.modelData.suit.length > 0
@@ -605,25 +612,6 @@ Kirigami.Page {
 							}
 						}
 
-						Rectangle {
-							visible: !delegateRoot.modelData.isPlanned
-							Layout.fillWidth: true
-							Layout.preferredHeight: page.wideLayout ? 112 : 132
-							color: tokens.background
-							radius: tokens.radiusSmall
-							clip: true
-							QMLProfile {
-								id: miniProfile
-								anchors.fill: parent
-								diveId: delegateRoot.modelData.id
-								Component.onCompleted: setMargin(3)
-							}
-							MouseArea {
-								anchors.fill: parent
-								cursorShape: Qt.PointingHandCursor
-								onClicked: delegateRoot.activateDelegate()
-							}
-						}
 					}
 
 					TapHandler {

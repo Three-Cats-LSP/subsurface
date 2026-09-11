@@ -101,6 +101,9 @@ require(
 		'"location": model.location',
 		'"tripTitle": model.tripTitle',
 		'"displayNumber": model.displayNumber',
+		'"diveMode": model.diveMode',
+		'contentItem: Components.NeoDiveIcon { name: "more"',
+		'Layout.preferredWidth: 40',
 		'Accessible.role: Accessible.ListItem',
 		'activeFocusOnTab: height > 0',
 		'Keys.onReturnPressed: activateDelegate()',
@@ -112,6 +115,7 @@ require(
 	),
 	"Neo populated dive list",
 )
+forbid(dive_list, ('id: miniProfile',), "Neo lightweight responsive dive cards")
 
 dive_action_sheet = source("mobile-widgets/qml/modern/components/DiveActionSheet.qml")
 require(dive_action_sheet, ('text: qsTr("Delete dive")', 'manager.deleteDive(diveId)'), "Neo single-dive deletion")
@@ -239,13 +243,15 @@ require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLog
 require(
 	import_review,
 	(
-		'manager.pairedBluetoothSerialPort(address[0])',
+		'manager.pairedBluetoothSerialPorts(address[0])',
+		'property int pairedSerialPortIndex: 0',
+		'Paired serial connection failed; retrying the Perdix on',
 		'manager.stopBluetoothDiscovery()',
 		'interval: 750',
 		'text: qsTr("Try Bluetooth directly")',
 		'page.downloadFailed = !page.importsReady',
 		'property bool automaticBluetoothFallbackUsed: false',
-		'Paired serial connection failed; retrying the Perdix through Bluetooth services',
+		'All paired serial connections failed; retrying the Perdix through Bluetooth services',
 	),
 	"Neo Windows classic-Bluetooth import",
 )
@@ -253,7 +259,7 @@ require(
 qml_manager_h = source("mobile-widgets/qmlmanager.h")
 qml_manager_cpp = source("mobile-widgets/qmlmanager.cpp")
 btdiscovery_cpp = source("core/btdiscovery.cpp")
-require(qml_manager_h, ('Q_INVOKABLE void stopBluetoothDiscovery();',), "Neo Bluetooth discovery handoff")
+require(qml_manager_h, ('Q_INVOKABLE QStringList pairedBluetoothSerialPorts(const QString &address) const;', 'Q_INVOKABLE void stopBluetoothDiscovery();'), "Neo Bluetooth discovery handoff")
 require(
 	qml_manager_cpp,
 	(

@@ -21,6 +21,8 @@ Kirigami.Page {
 	property string importError: ""
 	property bool forceBluetoothAddress: false
 	property string pairedSerialPort: ""
+	property var pairedSerialPorts: []
+	property int pairedSerialPortIndex: 0
 	property bool automaticBluetoothFallbackUsed: false
 	signal finished()
 
@@ -32,9 +34,13 @@ Kirigami.Page {
 			page.downloading = false
 			page.importsReady = rowCount() > 0
 			page.downloadFailed = !page.importsReady && /error|failed|timeout/i.test(manager.progressMessage)
-			if (page.downloadFailed && page.pairedSerialPort.length > 0 && !page.forceBluetoothAddress && !page.automaticBluetoothFallbackUsed) {
+			if (page.downloadFailed && !page.forceBluetoothAddress && page.pairedSerialPortIndex + 1 < page.pairedSerialPorts.length) {
+				page.pairedSerialPortIndex += 1
+				manager.appendTextToLog("Paired serial connection failed; retrying the Perdix on " + page.pairedSerialPorts[page.pairedSerialPortIndex])
+				page.startDownload(false)
+			} else if (page.downloadFailed && page.pairedSerialPort.length > 0 && !page.forceBluetoothAddress && !page.automaticBluetoothFallbackUsed) {
 				page.automaticBluetoothFallbackUsed = true
-				manager.appendTextToLog("Paired serial connection failed; retrying the Perdix through Bluetooth services")
+				manager.appendTextToLog("All paired serial connections failed; retrying the Perdix through Bluetooth services")
 				page.forceBluetoothAddress = true
 				page.startDownload(false)
 			} else if (page.downloadFailed) {
@@ -47,7 +53,9 @@ Kirigami.Page {
 		manager.DC_vendor = vendor
 		manager.DC_product = product
 		var address = /((LE|BT):)?([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/i.exec(connection)
-		var serialPort = address !== null && Qt.platform.os === "windows" && !forceBluetoothAddress ? manager.pairedBluetoothSerialPort(address[0]) : ""
+		if (address !== null && Qt.platform.os === "windows" && !forceBluetoothAddress && pairedSerialPorts.length === 0)
+			pairedSerialPorts = manager.pairedBluetoothSerialPorts(address[0])
+		var serialPort = !forceBluetoothAddress && pairedSerialPortIndex < pairedSerialPorts.length ? pairedSerialPorts[pairedSerialPortIndex] : ""
 		pairedSerialPort = serialPort
 		manager.DC_bluetoothMode = address !== null && serialPort.length === 0
 		manager.DC_devName = serialPort.length > 0 ? serialPort : (address !== null ? address[0] : connection)
@@ -61,6 +69,8 @@ Kirigami.Page {
 		if (resetTransport === undefined || resetTransport) {
 			forceBluetoothAddress = false
 			automaticBluetoothFallbackUsed = false
+			pairedSerialPorts = []
+			pairedSerialPortIndex = 0
 		}
 		configureConnection()
 		importsReady = false

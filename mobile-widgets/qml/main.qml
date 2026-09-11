@@ -1045,6 +1045,11 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		}
 	}
 
+	Component {
+		id: modernDiveDetailsComponent
+		NeoPages.ModernDiveDetails { }
+	}
+
 	function openNeoDiveDetails(diveId, editOnReady, returnToPlans) {
 		var requestedRow = manager.swipeRowForDive(diveId)
 		manager.appendTextToLog("Neo detail request id " + diveId + " resolved to swipe row " + requestedRow)
@@ -1052,12 +1057,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			showPassiveNotification(qsTr("Unable to find the selected dive or plan."), 6000)
 			return
 		}
-		var component = Qt.createComponent("qrc:/qml/modern/pages/ModernDiveDetails.qml")
-		if (component.status !== Component.Ready) {
-			showPassiveNotification(qsTr("Unable to load Neo dive details: %1").arg(component.errorString()), 6000)
-			return
-		}
-		var detailsPage = component.createObject(rootItem, { "initialDiveId": diveId, "initialRow": requestedRow, "editOnReady": editOnReady || false,
+		var detailsPage = modernDiveDetailsComponent.createObject(rootItem, { "initialDiveId": diveId, "initialRow": requestedRow, "editOnReady": editOnReady || false,
 			"navigationSection": returnToPlans ? "plans" : "dives" })
 		if (detailsPage === null) {
 			showPassiveNotification(qsTr("Unable to create Neo dive details"), 6000)
