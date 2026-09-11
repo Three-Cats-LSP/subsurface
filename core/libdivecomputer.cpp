@@ -50,6 +50,7 @@
 #include "core/pref.h"
 #include "core/file.h"
 #include "core/bluetoothaddress.h"
+#include <QSettings>
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -1488,7 +1489,7 @@ static dc_status_t irda_device_open(dc_iostream_t **iostream, dc_context_t *cont
 }
 
 #if defined(BT_SUPPORT) && defined(_WIN32)
-static dc_status_t bluetooth_device_open(dc_context_t *context, device_data_t *data, const char *devname)
+static dc_status_t bluetooth_device_open(dc_context_t *context, device_data_t *data, const char *devname, unsigned int port = 0)
 {
 	dc_bluetooth_address_t address = dc_bluetooth_str2addr(devname);
 	dc_iterator_t *iterator = NULL;
@@ -1510,8 +1511,38 @@ static dc_status_t bluetooth_device_open(dc_context_t *context, device_data_t *d
 		return DC_STATUS_NODEVICE;
 	}
 
-	dev_info("Opening rfcomm address %llu", address);
-	return dc_bluetooth_open(&data->iostream, context, address, 0);
+	dev_info("Opening rfcomm address %llu%s", address, port ? qPrintable(QStringLiteral(" on cached channel %1").arg(port)) : "");
+	return dc_bluetooth_open(&data->iostream, context, address, port);
+}
+
+static unsigned int cached_windows_rfcomm_port(const char *devname)
+{
+	QString address = QString::fromUtf8(devname).toLower();
+	address.remove(QStringLiteral("le:"));
+	address.remove(QStringLiteral("bt:"));
+	address.remove(QLatin1Char(':'));
+	address.remove(QLatin1Char('-'));
+	if (address.size() != 12)
+		return 0;
+
+	QSettings services(QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters\\Devices\\%1\\DynamicCachedServices").arg(address),
+				   QSettings::NativeFormat);
+	for (const QString &key : services.childKeys()) {
+		const QByteArray record = services.value(key).toByteArray();
+		// SDP protocol descriptor: UUID16 RFCOMM (0x0003), followed by a
+		// UINT8 channel number. The original Perdix record currently reports 5.
+		for (qsizetype i = 0; i + 4 < record.size(); ++i) {
+			if (static_cast<unsigned char>(record.at(i)) == 0x19 &&
+			    static_cast<unsigned char>(record.at(i + 1)) == 0x00 &&
+			    static_cast<unsigned char>(record.at(i + 2)) == 0x03 &&
+			    static_cast<unsigned char>(record.at(i + 3)) == 0x08) {
+				const unsigned int port = static_cast<unsigned char>(record.at(i + 4));
+				if (port > 0 && port <= 30)
+					return port;
+			}
+		}
+	}
+	return 0;
 }
 #endif
 
@@ -1538,16 +1569,24 @@ dc_status_t divecomputer_device_open(device_data_t *data)
 	// and retry once because the first RFCOMM open can race the Wait PC screen.
 	if ((transports & DC_TRANSPORT_BLUETOOTH) && data->vendor == "Shearwater" && data->product == "Perdix") {
 		std::string address = bluetoothAddressWithoutPrefix(QString::fromStdString(data->devname)).toStdString();
+		const unsigned int cachedPort = cached_windows_rfcomm_port(address.c_str());
+		if (cachedPort)
+			dev_info("Using Windows cached Perdix RFCOMM channel %u", cachedPort);
+		else
+			dev_info("No cached Perdix RFCOMM channel found; using Windows Serial Port service lookup");
 		for (int attempt = 1; attempt <= 2; ++attempt) {
 			dev_info("Opening original Perdix through paired Bluetooth Classic (attempt %d/2)", attempt);
-			rc = bluetooth_device_open(context, data, address.c_str());
+			rc = bluetooth_device_open(context, data, address.c_str(), cachedPort);
 			if (rc == DC_STATUS_SUCCESS)
 				return rc;
 			if (attempt < 2)
 				std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 		}
-		transports &= ~DC_TRANSPORT_BLUETOOTH;
-		dev_info("Perdix Bluetooth Classic retries failed; trying BLE services");
+		// This model's Dive Log -> Upload mode is RFCOMM. Its advertised GATT
+		// service is consistently unusable through Qt/WinRT and only adds about
+		// 20 seconds before the same Classic attempt is repeated by the UI.
+		transports &= ~(DC_TRANSPORT_BLUETOOTH | DC_TRANSPORT_BLE);
+		dev_info("Perdix Bluetooth Classic retries failed; skipping incompatible BLE fallback");
 	}
 #endif
 

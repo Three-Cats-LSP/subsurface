@@ -496,8 +496,10 @@ require(
 	libdivecomputer,
 	(
 		'data->vendor == "Shearwater" && data->product == "Perdix"',
+		'cached_windows_rfcomm_port',
+		'Using Windows cached Perdix RFCOMM channel %u',
 		'Opening original Perdix through paired Bluetooth Classic (attempt %d/2)',
-		'Perdix Bluetooth Classic retries failed; trying BLE services',
+		'Perdix Bluetooth Classic retries failed; skipping incompatible BLE fallback',
 		'data->product != "Perdix"',
 		'Trying BLE first for Shearwater device',
 	),
