@@ -132,6 +132,7 @@ public:
 	Q_INVOKABLE QStringList pairedBluetoothSerialPorts(const QString &address) const;
 	Q_INVOKABLE void rememberBluetoothSerialPort(const QString &address, const QString &port);
 	Q_INVOKABLE void stopBluetoothDiscovery();
+	Q_INVOKABLE void restoreRememberedConnections();
 	Q_INVOKABLE void setGitLocalOnly(const bool &value);
 	Q_INVOKABLE void setFilter(const QString filterText, int mode);
 	Q_INVOKABLE void setModernDiveFilter(const QString &fullText, const QString &people, const QString &tags,

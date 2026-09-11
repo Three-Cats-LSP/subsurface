@@ -4,6 +4,7 @@
 #include "downloadfromdcthread.h"
 #include "libdivecomputer.h"
 #include "errorhelper.h"
+#include "settings/qPrefDiveComputer.h"
 #include <QTimer>
 #include <QLoggingCategory>
 #include <QRegularExpression>
@@ -222,7 +223,20 @@ BTDiscovery::BTDiscovery(QObject*) : m_btValid(false),
 	m_instance = this;
 #if defined(BT_SUPPORT)
 	QLoggingCategory::setFilterRules(QStringLiteral("qt.bluetooth* = true"));
+#if defined(Q_OS_WIN)
+	const bool hasRememberedComputer = !extractBluetoothAddress(qPrefDiveComputer::device1()).isEmpty() ||
+					   !extractBluetoothAddress(qPrefDiveComputer::device2()).isEmpty() ||
+					   !extractBluetoothAddress(qPrefDiveComputer::device3()).isEmpty() ||
+					   !extractBluetoothAddress(qPrefDiveComputer::device4()).isEmpty();
+	if (hasRememberedComputer) {
+		m_btValid = localBtDevice.isValid() && localBtDevice.hostMode() != QBluetoothLocalDevice::HostPoweredOff;
+		report_info("BT discovery deferred: a remembered dive computer is available");
+	} else {
+		BTDiscoveryReDiscover();
+	}
+#else
 	BTDiscoveryReDiscover();
+#endif
 #endif
 }
 

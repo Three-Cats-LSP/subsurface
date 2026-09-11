@@ -175,7 +175,7 @@ Kirigami.Page {
 			Components.MetricCard { label: qsTr("Dives"); value: String(NeoDashboard.diveCount); iconName: "dives"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 			Components.MetricCard { label: qsTr("Dive time"); value: NeoDashboard.totalTimeHours; suffix: qsTr("h"); iconName: "time"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 			Components.MetricCard { label: qsTr("Max depth"); value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"; suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""; iconName: "depth"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
-			Components.MetricCard { visible: page.wideLayout; label: qsTr("Water range"); value: NeoDashboard.waterTemperatureRange.length > 0 ? NeoDashboard.waterTemperatureRange : "—"; iconName: "temperature"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+			Components.MetricCard { visible: page.wideLayout; label: qsTr("Coldest / Warmest Temp"); value: NeoDashboard.waterTemperatureRange.length > 0 ? NeoDashboard.waterTemperatureRange : "—"; iconName: "temperature"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 		}
 
 		RowLayout {

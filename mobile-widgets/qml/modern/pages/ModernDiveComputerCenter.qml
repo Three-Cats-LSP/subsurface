@@ -51,6 +51,14 @@ Kirigami.ScrollablePage {
 		rescanStartTimer.restart()
 		rescanFinishTimer.restart()
 	}
+	function loadInitialConnections() {
+		if (PrefDiveComputer.vendor1 !== "" && PrefDiveComputer.product1 !== "" && PrefDiveComputer.device1 !== "") {
+			manager.restoreRememberedConnections()
+			page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1)
+		} else {
+			page.rescanDevices()
+		}
+	}
 	function deleteRecent(slot) {
 		var removedDevice = slot === 1 ? PrefDiveComputer.device1 : slot === 2 ? PrefDiveComputer.device2 : slot === 3 ? PrefDiveComputer.device3 : PrefDiveComputer.device4
 		if (slot <= 1) { PrefDiveComputer.vendor1 = PrefDiveComputer.vendor2; PrefDiveComputer.product1 = PrefDiveComputer.product2; PrefDiveComputer.device1 = PrefDiveComputer.device2; PrefDiveComputer.device_name1 = PrefDiveComputer.device_name2 }
@@ -58,17 +66,12 @@ Kirigami.ScrollablePage {
 		if (slot <= 3) { PrefDiveComputer.vendor3 = PrefDiveComputer.vendor4; PrefDiveComputer.product3 = PrefDiveComputer.product4; PrefDiveComputer.device3 = PrefDiveComputer.device4; PrefDiveComputer.device_name3 = PrefDiveComputer.device_name4 }
 		PrefDiveComputer.vendor4 = ""; PrefDiveComputer.product4 = ""; PrefDiveComputer.device4 = ""; PrefDiveComputer.device_name4 = ""
 		if (PrefDiveComputer.device === removedDevice) { PrefDiveComputer.vendor = ""; PrefDiveComputer.product = ""; PrefDiveComputer.device = ""; PrefDiveComputer.device_name = "" }
-		page.rescanDevices()
+		page.loadInitialConnections()
 	}
 	Timer { id: rescanStartTimer; interval: 250; repeat: false; onTriggered: manager.rescanConnections() }
 	Timer { id: rescanFinishTimer; interval: 2500; repeat: false; onTriggered: page.scanning = false }
 	Component.onCompleted: {
-		page.rescanDevices()
-		vendorBox.currentIndex = manager.getDetectedVendorIndex()
-		if (vendorBox.currentIndex >= 0)
-			productBox.currentIndex = manager.getDetectedProductIndex(vendorBox.currentText)
-		if (productBox.currentIndex >= 0)
-			connectionBox.currentIndex = manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)
+		page.loadInitialConnections()
 	}
 
 	ColumnLayout {

@@ -283,6 +283,9 @@ require(
 		'onCountChanged:',
 		'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)',
 		'function rescanDevices()',
+		'function loadInitialConnections()',
+		'manager.restoreRememberedConnections()',
+		'page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1)',
 		'manager.stopBluetoothDiscovery()',
 		'text: page.scanning ? qsTr("Scanning…")',
 		'function deleteRecent(slot)',
@@ -293,6 +296,7 @@ require(
 	),
 	"Neo asynchronous dive-computer discovery",
 )
+require(source("mobile-widgets/qml/modern/pages/ModernDiveList.qml"), ('qsTr("Coldest / Warmest Temp")',), "Neo dashboard temperature extrema label")
 require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLogToClipboard()'), "Neo dive-computer diagnostics")
 require(
 	import_review,

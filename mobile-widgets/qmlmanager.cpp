@@ -212,10 +212,16 @@ void QMLManager::btRescan()
 
 void QMLManager::rescanConnections()
 {
+	restoreRememberedConnections();
+	btRescan();
+}
+
+void QMLManager::restoreRememberedConnections()
+{
 	connectionListModel.removeAllAddresses();
 	// Keep remembered Bluetooth computers selectable even when a paired device
-	// is not advertising during this particular Windows scan. Both Bluetooth
-	// transports can connect directly using the remembered address.
+	// is not advertising. This also lets the import page avoid a broad Bluetooth
+	// scan when it can connect directly to a previously used computer.
 	const auto addRememberedBluetooth = [](const QString &product, const QString &device) {
 		const QString address = extractBluetoothAddress(device);
 		if (!product.isEmpty() && !address.isEmpty())
@@ -226,7 +232,6 @@ void QMLManager::rescanConnections()
 	addRememberedBluetooth(qPrefDiveComputer::product3(), qPrefDiveComputer::device3());
 	addRememberedBluetooth(qPrefDiveComputer::product4(), qPrefDiveComputer::device4());
 	usbRescan();
-	btRescan();
 #if defined(SERIAL_FTDI)
 	connectionListModel.addAddress("FTDI");
 #endif
