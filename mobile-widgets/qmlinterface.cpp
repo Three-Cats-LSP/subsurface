@@ -120,26 +120,28 @@ void QMLInterface::setup(QQmlContext *ct)
 	// QNetworkAccessManager, while keeping OAuth/provider state separate from
 	// the legacy Subsurface Cloud account backend.
 	static CloudSyncManager cloudSync(manager());
+	CloudSyncManager *cloudSyncPointer = &cloudSync;
 	neoCloudSync = &cloudSync;
 	ct->setContextProperty("CloudSync", &cloudSync);
 
 	// Delay automatic provider sync until the initial dive log is loaded. The
 	// manager also requires an established baseline, so first-sync and conflict
 	// choices always remain explicit user decisions.
-	auto schedulePrimarySync = [&cloudSync]() {
-		QTimer::singleShot(2500, &cloudSync, [&cloudSync]() { cloudSync.syncPrimaryIfReady(); });
+	auto schedulePrimarySync = [cloudSyncPointer]() {
+		QTimer::singleShot(2500, cloudSyncPointer,
+			[cloudSyncPointer]() { cloudSyncPointer->syncPrimaryIfReady(); });
 	};
 	if (QMLManager::instance()) {
 		connect(QMLManager::instance(), &QMLManager::initializedChanged,
-			&cloudSync, schedulePrimarySync);
+			cloudSyncPointer, schedulePrimarySync);
 	}
-	if (QGuiApplication::instance()) {
-		connect(QGuiApplication::instance(), &QGuiApplication::applicationStateChanged, &cloudSync,
-			[&cloudSync](Qt::ApplicationState state) {
+	if (qGuiApp) {
+		connect(qGuiApp, &QGuiApplication::applicationStateChanged, cloudSyncPointer,
+			[cloudSyncPointer](Qt::ApplicationState state) {
 				if (state == Qt::ApplicationActive && QMLManager::instance() &&
 				    QMLManager::instance()->property("initialized").toBool()) {
-					QTimer::singleShot(2500, &cloudSync,
-						[&cloudSync]() { cloudSync.syncPrimaryIfReady(); });
+					QTimer::singleShot(2500, cloudSyncPointer,
+						[cloudSyncPointer]() { cloudSyncPointer->syncPrimaryIfReady(); });
 				}
 			});
 	}
