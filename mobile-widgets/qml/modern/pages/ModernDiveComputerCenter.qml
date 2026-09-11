@@ -80,10 +80,30 @@ Kirigami.ScrollablePage {
 				Text { text: qsTr("RECENT COMPUTERS"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
 				Flow {
 					Layout.fillWidth: true; spacing: tokens.space8
-					RowLayout { visible: PrefDiveComputer.vendor1 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(1) } }
-					RowLayout { visible: PrefDiveComputer.vendor2 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(2) } }
-					RowLayout { visible: PrefDiveComputer.vendor3 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(3) } }
-					RowLayout { visible: PrefDiveComputer.vendor4 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(4) } }
+					RowLayout {
+						visible: PrefDiveComputer.vendor1 !== ""
+						spacing: 2
+						Components.NeoButton { text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
+						Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(1) }
+					}
+					RowLayout {
+						visible: PrefDiveComputer.vendor2 !== ""
+						spacing: 2
+						Components.NeoButton { text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
+						Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(2) }
+					}
+					RowLayout {
+						visible: PrefDiveComputer.vendor3 !== ""
+						spacing: 2
+						Components.NeoButton { text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
+						Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(3) }
+					}
+					RowLayout {
+						visible: PrefDiveComputer.vendor4 !== ""
+						spacing: 2
+						Components.NeoButton { text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
+						Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(4) }
+					}
 				}
 			}
 		}
