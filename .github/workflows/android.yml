@@ -5,12 +5,12 @@ on:
     paths-ignore:
     - scripts/docker/**
     branches:
-    - master
+    - modern-ui
   pull_request:
     paths-ignore:
     - scripts/docker/**
     branches:
-    - master
+    - modern-ui
   workflow_dispatch:
 
 env:

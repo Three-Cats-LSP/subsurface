@@ -1,14 +1,7 @@
 name: Upstream Subsurface Sync
 
 on:
-  schedule:
-    - cron: '23 */6 * * *'
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - .github/workflows/upstream-sync.yml
 
 permissions:
   actions: write

@@ -3,10 +3,10 @@ name: Windows MSVC
 on:
   push:
     branches:
-      - master
+      - modern-ui
   pull_request:
     branches:
-      - master
+      - modern-ui
   workflow_dispatch:
     # Manual trigger - allows running from GitHub Actions UI
 
