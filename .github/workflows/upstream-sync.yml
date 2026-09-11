@@ -76,18 +76,18 @@ jobs:
       - name: Refresh remote refs
         run: git fetch --prune origin master "${NEO_BRANCH}"
 
-      - name: Detect whether Neo needs fork master
+      - name: Detect whether Neo needs official upstream
         id: pending
         shell: bash
         run: |
           set -euo pipefail
-          if git merge-base --is-ancestor origin/master "origin/${NEO_BRANCH}"; then
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" "origin/${NEO_BRANCH}"; then
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
-            echo "Neo already contains current fork master." >> "$GITHUB_STEP_SUMMARY"
+            echo "Neo already contains official upstream ${UPSTREAM_SHA}." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "has_updates=true" >> "$GITHUB_OUTPUT"
-          echo "count=$(git rev-list --count "origin/${NEO_BRANCH}..origin/master" || true)" >> "$GITHUB_OUTPUT"
+          echo "count=$(git rev-list --count "origin/${NEO_BRANCH}..upstream/${UPSTREAM_BRANCH}" || true)" >> "$GITHUB_OUTPUT"
 
       - name: Build rolling Neo sync branch
         if: steps.pending.outputs.has_updates == 'true'
@@ -98,7 +98,7 @@ jobs:
           git checkout -B "${SYNC_BRANCH}" "origin/${NEO_BRANCH}"
 
           set +e
-          git merge --no-ff --no-edit origin/master
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"
           MERGE_STATUS=$?
           set -e
 
