@@ -286,8 +286,10 @@ require(
 		'manager.stopBluetoothDiscovery()',
 		'text: page.scanning ? qsTr("Scanning…")',
 		'function deleteRecent(slot)',
-		'Layout.preferredWidth: 22; Layout.preferredHeight: 22',
-		'onClicked: page.deleteRecent(1)',
+		'component RecentDeleteButton: ToolButton',
+		'Layout.preferredWidth: 22',
+		'onClicked: page.deleteRecent(recentSlot)',
+		'RecentDeleteButton { recentSlot: 1 }',
 	),
 	"Neo asynchronous dive-computer discovery",
 )
