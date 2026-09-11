@@ -130,6 +130,7 @@ dive_details = source("mobile-widgets/qml/modern/pages/ModernDiveDetails.qml")
 require(
 	dive_details,
 	(
+		'contentItem: Components.NeoDiveIcon { name: "edit";',
 		'navigateToRow(initialRow)',
 		'property var modelData: ({',
 		'"getCylinder": model.getCylinder',
@@ -157,6 +158,7 @@ require(
 forbid(
 	dive_details,
 	(
+		'text: qsTr("Edit")',
 		'\t\tdelegate: Item {\n\t\t\tid: delegateRoot\n\t\t\trequired property int index',
 		'onPinchCanceled:',
 	),
@@ -173,6 +175,30 @@ require(
 		'text: page.backupSummary()',
 	),
 	"Neo backup inspection summary",
+)
+
+settings = source("mobile-widgets/qml/modern/pages/ModernSettingsHub.qml")
+require(
+	settings,
+	(
+		'text: qsTr("Date format")',
+		'PrefLanguage.applyDatePreset',
+		'text: qsTr("Time format")',
+		'PrefLanguage.applyTimePreset',
+		'from: 10; to: 150; value: PrefTechnicalDetails.gflow',
+		'from: 10; to: 150; value: PrefTechnicalDetails.gfhigh',
+		'text: qsTr("Show developer menu")',
+	),
+	"Neo native settings",
+)
+forbid(
+	settings,
+	(
+		'openAdvancedSettings',
+		'Specialist compatibility settings',
+		'Compatibility panel',
+	),
+	"Neo native settings",
 )
 
 planner = source("mobile-widgets/qml/modern/pages/ModernPlannerLab.qml")

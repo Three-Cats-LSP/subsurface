@@ -16,7 +16,6 @@ Kirigami.ScrollablePage {
 	signal openSubsurfaceCloud()
 	signal openAccountSecurity()
 	signal openImport()
-	signal openAdvancedSettings()
 	signal openAbout()
 
 	Modern.DesignTokens { id: tokens }
@@ -49,6 +48,45 @@ Kirigami.ScrollablePage {
 		rootItem.setupUnits()
 	}
 
+	function datePresetIndex() {
+		if (!PrefLanguage.date_format_override)
+			return 0
+		var presets = PrefLanguage.dateFormatPresets
+		for (var i = 1; i < presets.length; ++i)
+			if (presets[i].longFormat === PrefLanguage.date_format && presets[i].shortFormat === PrefLanguage.date_format_short)
+				return i
+		return -1
+	}
+
+	function timePresetIndex() {
+		if (!PrefLanguage.time_format_override)
+			return 0
+		var presets = PrefLanguage.timeFormatPresets
+		for (var i = 1; i < presets.length; ++i)
+			if (presets[i].format === PrefLanguage.time_format)
+				return i
+		return -1
+	}
+
+	function datePresetLabel(preset) {
+		switch (preset.id) {
+		case "system": return qsTr("System default")
+		case "day-first": return qsTr("Day-month-year")
+		case "month-first": return qsTr("Month-day-year")
+		case "iso": return qsTr("Year-month-day (ISO)")
+		default: return preset.name
+		}
+	}
+
+	function timePresetLabel(preset) {
+		switch (preset.id) {
+		case "system": return qsTr("System default")
+		case "24-hour": return qsTr("24-hour")
+		case "12-hour": return qsTr("12-hour")
+		default: return preset.name
+		}
+	}
+
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
@@ -57,7 +95,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			spacing: 2
 			Text { text: qsTr("Settings"); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
-			Text { text: qsTr("Configure Neo while keeping advanced Subsurface options available"); color: tokens.textSecondary; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+			Text { text: qsTr("Configure Subsurface Neo"); color: tokens.textSecondary; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
 		}
 
 		GridLayout {
@@ -149,6 +187,28 @@ Kirigami.ScrollablePage {
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Units"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Choose the measurement system used throughout Neo"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				GridLayout {
+					Layout.fillWidth: true
+					columns: 2
+					columnSpacing: tokens.space12
+					rowSpacing: tokens.space8
+					Text { text: qsTr("Date format"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox {
+						Layout.fillWidth: true
+						model: PrefLanguage.dateFormatPresets.map(page.datePresetLabel)
+						currentIndex: page.datePresetIndex()
+						displayText: currentIndex >= 0 ? currentText : qsTr("Custom")
+						onActivated: function(index) { PrefLanguage.applyDatePreset(PrefLanguage.dateFormatPresets[index].id) }
+					}
+					Text { text: qsTr("Time format"); color: tokens.textSecondary; font.pixelSize: 12 }
+					Components.NeoComboBox {
+						Layout.fillWidth: true
+						model: PrefLanguage.timeFormatPresets.map(page.timePresetLabel)
+						currentIndex: page.timePresetIndex()
+						displayText: currentIndex >= 0 ? currentText : qsTr("Custom")
+						onActivated: function(index) { PrefLanguage.applyTimePreset(PrefLanguage.timeFormatPresets[index].id) }
+					}
+				}
 				ButtonGroup { id: unitSystemGroup }
 				GridLayout {
 					Layout.fillWidth: true
@@ -200,14 +260,15 @@ Kirigami.ScrollablePage {
 				ColumnLayout {
 					Layout.fillWidth: true
 					Text { text: qsTr("GF low"); color: tokens.textMuted; font.pixelSize: 10 }
-					Components.NeoSpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gflow; onValueModified: PrefTechnicalDetails.gflow = value }
+					Components.NeoSpinBox { Layout.fillWidth: true; accessibleName: qsTr("GF low"); from: 10; to: 150; value: PrefTechnicalDetails.gflow; onValueModified: { PrefTechnicalDetails.gflow = value; rootItem.settingsChanged() } }
 				}
 				ColumnLayout {
 					Layout.fillWidth: true
 					Text { text: qsTr("GF high"); color: tokens.textMuted; font.pixelSize: 10 }
-					Components.NeoSpinBox { Layout.fillWidth: true; from: 0; to: 100; value: PrefTechnicalDetails.gfhigh; onValueModified: PrefTechnicalDetails.gfhigh = value }
+					Components.NeoSpinBox { Layout.fillWidth: true; accessibleName: qsTr("GF high"); from: 10; to: 150; value: PrefTechnicalDetails.gfhigh; onValueModified: { PrefTechnicalDetails.gfhigh = value; rootItem.settingsChanged() } }
 				}
 			}
+			Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Show developer menu"); checked: PrefDisplay.show_developer; onToggled: PrefDisplay.show_developer = checked }
 		}
 
 		Components.ModernCard {
@@ -220,19 +281,6 @@ Kirigami.ScrollablePage {
 					Text { text: qsTr("Review provider connections, credential protection, data flow, and account deletion"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				}
 				Components.NeoButton { text: qsTr("Open"); variant: "ghost"; compact: true; onClicked: page.openAccountSecurity() }
-			}
-		}
-
-		Components.ModernCard {
-			Layout.fillWidth: true
-			RowLayout {
-				Layout.fillWidth: true
-				ColumnLayout {
-					Layout.fillWidth: true
-					Text { text: qsTr("Specialist compatibility settings"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
-					Text { text: qsTr("Legacy profile colors, diagnostics, and uncommon Subsurface controls"); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				}
-				Components.NeoButton { text: qsTr("Compatibility panel"); variant: "ghost"; compact: true; onClicked: page.openAdvancedSettings() }
 			}
 		}
 

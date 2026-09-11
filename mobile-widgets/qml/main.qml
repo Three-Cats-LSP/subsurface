@@ -1218,11 +1218,6 @@ if you have network connectivity and want to sync your data to cloud storage."),
 			rootItem.neoSubsurfaceCloudSetupRequested = true
 		}
 		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
-		onOpenAdvancedSettings: {
-			settingsWindow.defaultCylinderModel = manager.defaultCylinderListInit
-			PrefEquipment.default_cylinder === "" ? defaultCylinderIndex = "-1" : defaultCylinderIndex = settingsWindow.defaultCylinderModel.indexOf(PrefEquipment.default_cylinder)
-			showPageFromDrawer(settingsWindow)
-		}
 		onOpenAbout: showPageFromDrawer(neoAboutPage)
 	}
 

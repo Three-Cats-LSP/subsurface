@@ -539,9 +539,24 @@ Kirigami.Page {
 									Layout.minimumWidth: 190
 									columns: 3
 									columnSpacing: tokens.space8
-									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("MAX DEPTH"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.depth || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
-									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
-									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("WATER TEMP"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.waterTemp || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
+									ColumnLayout {
+										Layout.fillWidth: true
+										spacing: 1
+										Text { text: qsTr("MAX DEPTH"); color: tokens.textMuted; font.pixelSize: 8 }
+										Text { text: delegateRoot.modelData.depth || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+									}
+									ColumnLayout {
+										Layout.fillWidth: true
+										spacing: 1
+										Text { text: qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }
+										Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+									}
+									ColumnLayout {
+										Layout.fillWidth: true
+										spacing: 1
+										Text { text: qsTr("WATER TEMP"); color: tokens.textMuted; font.pixelSize: 8 }
+										Text { text: delegateRoot.modelData.waterTemp || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+									}
 								}
 								ToolButton {
 									visible: !page.selectionMode

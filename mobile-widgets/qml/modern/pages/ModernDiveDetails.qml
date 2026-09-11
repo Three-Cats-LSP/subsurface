@@ -398,18 +398,16 @@ Kirigami.Page {
 								Text { id: invalidLabel; anchors.centerIn: parent; text: qsTr("Invalid"); color: tokens.warning; font.pixelSize: 10; font.weight: Font.DemiBold }
 							}
 
-							Components.NeoButton {
-								visible: page.width >= 600
-								text: qsTr("Edit")
-								variant: "ghost"
-								compact: true
-								accessibleName: qsTr("Edit dive")
-								onClicked: page.editRequested(delegateRoot.modelData)
-							}
 							ToolButton {
 								id: diveMenuButton
-								text: "⋯"
+								Layout.preferredWidth: 40
+								Layout.preferredHeight: 40
+								padding: 7
+								contentItem: Components.NeoDiveIcon { name: "edit"; iconColor: tokens.textSecondary }
+								background: Rectangle { color: parent.hovered || parent.down ? tokens.surfaceRaised : "transparent"; radius: tokens.radiusSmall }
 								Accessible.name: qsTr("More dive actions")
+								ToolTip.visible: hovered
+								ToolTip.text: qsTr("More dive actions")
 								onClicked: diveActions.open()
 								Menu {
 									id: diveActions
