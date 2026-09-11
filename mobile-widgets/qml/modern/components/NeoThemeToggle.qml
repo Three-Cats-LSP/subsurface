@@ -7,33 +7,33 @@ import ".." as Modern
 Control {
 	id: control
 	Modern.DesignTokens { id: tokens }
-	implicitWidth: 70
-	implicitHeight: 34
-	padding: 3
+	implicitWidth: 44
+	implicitHeight: 22
+	padding: 2
 	Accessible.role: Accessible.Button
 	Accessible.name: qsTr("Switch between light and dark theme")
 
 	contentItem: RowLayout {
 		spacing: 2
 		ToolButton {
-			Layout.preferredWidth: 30
-			Layout.preferredHeight: 28
+			Layout.preferredWidth: 18
+			Layout.preferredHeight: 18
 			text: "☀"
-			font.pixelSize: 16
+			font.pixelSize: 11
 			Accessible.name: qsTr("Light theme")
 			onClicked: subsurfaceTheme.currentTheme = "Blue"
 			contentItem: Text { text: parent.text; color: subsurfaceTheme.currentTheme !== "Dark" ? "#FFFFFF" : tokens.textSecondary; font: parent.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-			background: Rectangle { radius: 14; color: subsurfaceTheme.currentTheme !== "Dark" ? "#F9C846" : "transparent" }
+			background: Rectangle { radius: 9; color: subsurfaceTheme.currentTheme !== "Dark" ? "#F9C846" : "transparent" }
 		}
 		ToolButton {
-			Layout.preferredWidth: 30
-			Layout.preferredHeight: 28
+			Layout.preferredWidth: 18
+			Layout.preferredHeight: 18
 			text: "☾"
-			font.pixelSize: 17
+			font.pixelSize: 12
 			Accessible.name: qsTr("Dark theme")
 			onClicked: subsurfaceTheme.currentTheme = "Dark"
 			contentItem: Text { text: parent.text; color: subsurfaceTheme.currentTheme === "Dark" ? "#FFFFFF" : tokens.textSecondary; font: parent.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-			background: Rectangle { radius: 14; color: subsurfaceTheme.currentTheme === "Dark" ? "#30445D" : "transparent" }
+			background: Rectangle { radius: 9; color: subsurfaceTheme.currentTheme === "Dark" ? "#30445D" : "transparent" }
 		}
 	}
 

@@ -904,7 +904,10 @@ dc_status_t qt_ble_open(void **io, dc_context_t *context, const char *devaddr, d
 			return result;
 		if (attempt < maxAttempts) {
 			report_info("Windows BLE attempt %d failed; recreating the GATT connection", attempt);
-			QThread::msleep(500);
+			// WinRT needs time to release the stale GATT service and its status
+			// tokens before a new controller is constructed.  An immediate retry
+			// repeatedly returns the same invalid-token service-discovery error.
+			QThread::msleep(1500 * attempt);
 		}
 	}
 	return DC_STATUS_IO;

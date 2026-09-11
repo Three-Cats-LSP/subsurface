@@ -156,7 +156,7 @@ Canvas {
 		id: editSource
 		anchors.fill: parent
 		visible: icon.name === "edit"
-		source: "qrc:/qml/edit-6707337.png"
+		source: "qrc:/qml/edit-1160515.png"
 		fillMode: Image.PreserveAspectFit
 		smooth: true
 		mipmap: true

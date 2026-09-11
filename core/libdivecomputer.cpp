@@ -1529,6 +1529,21 @@ dc_status_t divecomputer_device_open(device_data_t *data)
 		return DC_STATUS_UNSUPPORTED;
 	}
 
+#if defined(BLE_SUPPORT) && defined(_WIN32)
+	// Shearwater computers such as the Perdix advertise both RFCOMM and BLE.
+	// Windows can spend most of the computer's "Wait for PC" window timing out
+	// on RFCOMM before it ever tries the working BLE service.  Prefer BLE for
+	// these dual-mode devices, while retaining RFCOMM as a fallback.
+	if ((transports & DC_TRANSPORT_BLE) && data->vendor == "Shearwater") {
+		dev_info("Trying BLE first for Shearwater device %s", data->devname.c_str());
+		rc = ble_packet_open(&data->iostream, context, data->devname.c_str(), data);
+		if (rc == DC_STATUS_SUCCESS)
+			return rc;
+		transports &= ~DC_TRANSPORT_BLE;
+		dev_info("BLE-first connection failed; falling back to classic Bluetooth");
+	}
+#endif
+
 #ifdef BT_SUPPORT
 	if (transports & DC_TRANSPORT_BLUETOOTH) {
 		std::string address = bluetoothAddressWithoutPrefix(QString::fromStdString(data->devname)).toStdString();

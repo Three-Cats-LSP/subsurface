@@ -88,6 +88,18 @@ require(
 	"Neo desktop data navigation",
 )
 
+theme_toggle = source("mobile-widgets/qml/modern/components/NeoThemeToggle.qml")
+require(
+	theme_toggle,
+	(
+		'implicitWidth: 44',
+		'implicitHeight: 22',
+		'Layout.preferredWidth: 18',
+		'font.pixelSize: 11',
+	),
+	"Neo compact theme toggle",
+)
+
 dive_list = source("mobile-widgets/qml/modern/pages/ModernDiveList.qml")
 require(
 	dive_list,
@@ -274,6 +286,7 @@ require(
 		'manager.stopBluetoothDiscovery()',
 		'text: page.scanning ? qsTr("Scanning…")',
 		'function deleteRecent(slot)',
+		'Layout.preferredWidth: 22; Layout.preferredHeight: 22',
 		'onClicked: page.deleteRecent(1)',
 	),
 	"Neo asynchronous dive-computer discovery",
@@ -393,7 +406,7 @@ require(
 		'source: "qrc:/qml/dive-computer-1922948.png"',
 		'source: "qrc:/qml/air-tank-17916416.png"',
 		'source: "qrc:/qml/slate-7717132.png"',
-		'source: "qrc:/qml/edit-6707337.png"',
+		'source: "qrc:/qml/edit-1160515.png"',
 		'visible: icon.name === "dives" || icon.name === "tank"',
 		'source: "qrc:/qml/tank-14116551.png"',
 		'ColorOverlay {',
@@ -447,6 +460,7 @@ require(
 		'id: visibilityField',
 		'text: qsTr("Underwater visibility:")',
 		'dive.visibilityDistance',
+		'dive.displayNumber > 0 ? String(dive.displayNumber)',
 	),
 	"Neo dive classification editor",
 )
@@ -471,6 +485,19 @@ require(
 	"Neo dive mode persistence",
 )
 require(manager, ('void QMLManager::deleteDives(const QVariantList &ids)', 'Command::deleteDive(dives);'), "Neo bulk dive deletion")
+
+libdivecomputer = source("core/libdivecomputer.cpp")
+qt_ble = source("core/qt-ble.cpp")
+require(
+	libdivecomputer,
+	(
+		'data->vendor == "Shearwater"',
+		'Trying BLE first for Shearwater device',
+		'BLE-first connection failed; falling back to classic Bluetooth',
+	),
+	"Windows Shearwater BLE-first transport",
+)
+require(qt_ble, ('QThread::msleep(1500 * attempt)',), "Windows GATT retry backoff")
 
 profile_scene = source("profile-widget/profilescene.cpp")
 qml_profile = source("profile-widget/qmlprofile.cpp")

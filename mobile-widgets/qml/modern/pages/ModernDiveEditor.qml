@@ -166,7 +166,7 @@ Kirigami.Page {
 					columnSpacing: tokens.space12
 					rowSpacing: tokens.space8
 					Components.NeoTextField { id: dateField; Layout.fillWidth: true; placeholderText: qsTr("Date and time"); text: dive ? dive.dateTime || "" : "" }
-					Components.NeoTextField { id: numberField; Layout.fillWidth: true; placeholderText: qsTr("Dive number"); inputMethodHints: Qt.ImhDigitsOnly; text: dive ? dive.number || "" : "" }
+					Components.NeoTextField { id: numberField; Layout.fillWidth: true; placeholderText: qsTr("Dive number"); inputMethodHints: Qt.ImhDigitsOnly; text: dive ? ((dive.number !== undefined && dive.number !== null && String(dive.number).length > 0) ? String(dive.number) : (dive.displayNumber > 0 ? String(dive.displayNumber) : "")) : "" }
 					Components.NeoTextField { id: depthField; Layout.fillWidth: true; placeholderText: qsTr("Maximum depth"); text: dive ? dive.depth || "" : "" }
 					Components.NeoTextField { id: durationField; Layout.fillWidth: true; placeholderText: qsTr("Duration"); text: dive ? dive.duration || "" : "" }
 					Components.NeoTextField { id: waterTempField; Layout.fillWidth: true; placeholderText: qsTr("Water temperature"); text: dive ? dive.waterTemp || "" : "" }
