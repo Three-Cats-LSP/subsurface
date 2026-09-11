@@ -1507,6 +1507,21 @@ void DivePlannerPointsModel::createPlan(bool saveAsNew)
 
 QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersData, const QVariantList &segmentsData, const QString &date, const QString &time, int diveMode, int waterType, int surfacePressureMbar, bool shouldSave)
 {
+	// AI-generated (Claude): Reject malformed UI input before replacing the last valid plan state.
+	QDateTime plannedDateTime = QDateTime::fromString(date + " " + time, "yyyy-MM-dd hh:mm:ss");
+	if (!plannedDateTime.isValid()) {
+		return {
+			{ QStringLiteral("dateTimeValid"), false },
+			{ QStringLiteral("notes"), tr("Enter a valid planned start date and time.") },
+			{ QStringLiteral("exceedsNDL"), false },
+			{ QStringLiteral("planSaveAllowed"), false },
+			{ QStringLiteral("otu"), 0 },
+			{ QStringLiteral("schedule"), QVariantList() },
+			{ QStringLiteral("profile"), QVariantList() },
+			{ QStringLiteral("newDiveId"), -1 }
+		};
+	}
+
 	if (d) {
 		delete d;
 	}
@@ -1521,20 +1536,6 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	make_planner_dc(&d->dcs[dcNr]);
 
 	// Set Date, Time, and Dive Mode from parameters
-	QString dateTimeString = date + " " + time;
-	QDateTime plannedDateTime = QDateTime::fromString(dateTimeString, "yyyy-MM-dd hh:mm:ss");
-	if (!plannedDateTime.isValid()) {
-		QVariantMap results;
-		results["notes"] = tr("Enter a valid planned start date and time.");
-		results["exceedsNDL"] = false;
-		results["planSaveAllowed"] = false;
-		results["otu"] = 0;
-		results["schedule"] = QVariantList();
-		results["profile"] = QVariantList();
-		results["newDiveId"] = -1;
-		emit planPreviewChanged();
-		return results;
-	}
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 	plannedDateTime = QDateTime(plannedDateTime.date(), plannedDateTime.time(), QTimeZone(QTimeZone::UTC));
 #else
@@ -1661,6 +1662,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	d->notes = notes_qstr.toStdString();
 	// Build the results map
 	QVariantMap results;
+	results["dateTimeValid"] = true;
 	QTextDocument notesDocument;
 	notesDocument.setHtml(QString::fromStdString(d->notes));
 	results["notes"] = notesDocument.toPlainText().trimmed();

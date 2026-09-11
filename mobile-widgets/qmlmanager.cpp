@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "qmlmanager.h"
 #include <QUrl>
-#include <QSettings>
 #include <QNetworkAccessManager>
 #include <QAuthenticator>
 #include <QDesktopServices>
@@ -375,12 +374,6 @@ QMLManager::QMLManager() :
 	progress_callback = &progressCallback;
 	set_git_update_cb(&gitProgressCB);
 
-	// present dive site lists sorted by name
-	locationModel.sort(LocationInformationModel::NAME);
-
-	// make sure we know if the current cloud repo has been successfully synced
-	syncLoadFromCloud();
-
 	// Let's set some defaults to be copied so users don't necessarily need
 	// to know how to configure this
 	m_pasteDiveSite = false;
@@ -483,12 +476,17 @@ void QMLManager::openLocalThenRemote(QString url)
 		// if we can load from the cache, we know that we have a valid cloud account
 		// and we know that there was at least one successful sync with the cloud when
 		// that local cache was created - so there is a common ancestor
-		setLoadFromCloud(true);
 		if (qPrefCloudStorage::cloud_verification_status() == qPrefCloudStorage::CS_UNKNOWN) {
 			qPrefCloudStorage::set_cloud_verification_status(qPrefCloudStorage::CS_VERIFIED);
 			emit passwordStateChanged();
 		}
-		qPrefUnits::set_unit_system(git_prefs.unit_system);
+		/* Only apply the unit system from git_prefs when the loaded file
+		 * actually contained a "units" line.  If the file had no units
+		 * line, git_prefs.unit_system holds its default value (METRIC)
+		 * and applying it would silently clobber the preference already
+		 * loaded from Qt/Android settings by qPref::load() at startup. */
+		if (git_prefs_units_set)
+			qPrefUnits::set_unit_system(git_prefs.unit_system);
 		qPrefTechnicalDetails::set_tankbar(git_prefs.tankbar);
 		qPrefTechnicalDetails::set_show_ccr_setpoint(git_prefs.show_ccr_setpoint);
 		qPrefTechnicalDetails::set_show_ccr_sensors(git_prefs.show_ccr_sensors);
@@ -776,6 +774,13 @@ void QMLManager::saveCloudCredentials(const QString &newEmail, const QString &ne
 		appendTextToLog("saveCloudCredentials: given cloud credentials didn't verify");
 		return;
 	}
+	// AI-generated (Claude): Do not discard unsaved data while switching accounts
+	// if the current log cannot be saved to the repository it was loaded from.
+	if (cloudCredentialsChanged && unsavedChanges() && !saveChangesLocal()) {
+		qPrefCloudStorage::set_cloud_verification_status(m_oldStatus);
+		emit passwordStateChanged();
+		return;
+	}
 	qPrefCloudStorage::set_cloud_storage_email(email);
 	qPrefCloudStorage::set_cloud_storage_password(newPassword);
 
@@ -789,9 +794,6 @@ void QMLManager::saveCloudCredentials(const QString &newEmail, const QString &ne
 		qPrefCloudStorage::cloud_storage_password().isEmpty()) {
 		setStartPageText(RED_FONT + tr("Please enter valid cloud credentials.") + END_FONT);
 	} else if (cloudCredentialsChanged) {
-		// let's make sure there are no unsaved changes
-		saveChangesLocal();
-		syncLoadFromCloud();
 		manager()->clearAccessCache(); // remove any chached credentials
 		clear_git_id(); // invalidate our remembered GIT SHA
 		clear_dive_file_data();
@@ -930,8 +932,6 @@ void QMLManager::loadDivesWithValidCredentials()
 		consumeFinishedLoad();
 	}
 
-	setLoadFromCloud(true);
-
 	// if we came from local storage mode, let's merge the local data into the local cache
 	// for the remote data - which then later gets merged with the remote data if necessary
 	if (noCloudToCloud) {
@@ -986,12 +986,17 @@ void QMLManager::revertToNoCloudIfNeeded()
 
 void QMLManager::consumeFinishedLoad()
 {
-	prefs.unit_system = git_prefs.unit_system;
-	if (git_prefs.unit_system == IMPERIAL)
-		git_prefs.units = IMPERIAL_units;
-	else if (git_prefs.unit_system == METRIC)
-		git_prefs.units = SI_units;
-	prefs.units = git_prefs.units;
+	/* Only apply unit system when the loaded file contained a "units" line.
+	 * Without this guard, git_prefs.unit_system defaults to METRIC and would
+	 * clobber the correct preference already loaded from Qt/Android settings. */
+	if (git_prefs_units_set) {
+		prefs.unit_system = git_prefs.unit_system;
+		if (git_prefs.unit_system == IMPERIAL)
+			git_prefs.units = IMPERIAL_units;
+		else if (git_prefs.unit_system == METRIC)
+			git_prefs.units = SI_units;
+		prefs.units = git_prefs.units;
+	}
 	prefs.tankbar = git_prefs.tankbar;
 	prefs.show_ccr_setpoint = git_prefs.show_ccr_setpoint;
 	prefs.show_ccr_sensors = git_prefs.show_ccr_sensors;
@@ -1209,18 +1214,19 @@ bool QMLManager::checkLocation(DiveSiteChange &res, struct dive *d, QString loca
 bool QMLManager::checkDuration(struct dive *d, QString duration)
 {
 	if (formatDiveDuration(d) != duration) {
+		// AI-generated (Claude): Reject incomplete input rather than interpreting missing fields as zero.
 		int h = 0, m = 0, s = 0;
-		QRegularExpression r1(QStringLiteral("(\\d*)\\s*%1[\\s,:]*(\\d*)\\s*%2[\\s,:]*(\\d*)\\s*%3").arg(tr("h")).arg(tr("min")).arg(tr("sec")), QRegularExpression::CaseInsensitiveOption);
+		QRegularExpression r1(QStringLiteral("^(\\d+)\\s*%1[\\s,:]*(\\d+)\\s*%2[\\s,:]*(\\d+)\\s*%3$").arg(QRegularExpression::escape(tr("h"))).arg(QRegularExpression::escape(tr("min"))).arg(QRegularExpression::escape(tr("sec"))), QRegularExpression::CaseInsensitiveOption);
 		QRegularExpressionMatch m1 = r1.match(duration);
-		QRegularExpression r2(QStringLiteral("(\\d*)\\s*%1[\\s,:]*(\\d*)\\s*%2").arg(tr("h")).arg(tr("min")), QRegularExpression::CaseInsensitiveOption);
+		QRegularExpression r2(QStringLiteral("^(\\d+)\\s*%1[\\s,:]*(\\d+)\\s*%2$").arg(QRegularExpression::escape(tr("h"))).arg(QRegularExpression::escape(tr("min"))), QRegularExpression::CaseInsensitiveOption);
 		QRegularExpressionMatch m2 = r2.match(duration);
-		QRegularExpression r3(QStringLiteral("(\\d*)\\s*%1").arg(tr("min")), QRegularExpression::CaseInsensitiveOption);
+		QRegularExpression r3(QStringLiteral("^(\\d+)\\s*%1$").arg(QRegularExpression::escape(tr("min"))), QRegularExpression::CaseInsensitiveOption);
 		QRegularExpressionMatch m3 = r3.match(duration);
-		QRegularExpression r4(QStringLiteral("(\\d*):(\\d*):(\\d*)"));
+		QRegularExpression r4(QStringLiteral("^(\\d+):(\\d{1,2}):(\\d{1,2})$"));
 		QRegularExpressionMatch m4 = r4.match(duration);
-		QRegularExpression r5(QStringLiteral("(\\d*):(\\d*)"));
+		QRegularExpression r5(QStringLiteral("^(\\d+):(\\d{2})\\s*(?:%1)?$").arg(QRegularExpression::escape(tr("h"))), QRegularExpression::CaseInsensitiveOption);
 		QRegularExpressionMatch m5 = r5.match(duration);
-		QRegularExpression r6(QStringLiteral("(\\d*)"));
+		QRegularExpression r6(QStringLiteral("^(\\d+)$"));
 		QRegularExpressionMatch m6 = r6.match(duration);
 		if (m1.hasMatch()) {
 			h = m1.captured(1).toInt();
@@ -1240,7 +1246,11 @@ bool QMLManager::checkDuration(struct dive *d, QString duration)
 			m = m5.captured(2).toInt();
 		} else if (m6.hasMatch()) {
 			m = m6.captured(1).toInt();
+		} else {
+			return false;
 		}
+		if ((m >= 60 && (m4.hasMatch() || m5.hasMatch())) || s >= 60)
+			return false;
 		d->dcs[0].duration = d->duration = duration_t { .seconds = h * 3600 + m * 60 + s };
 		if (is_dc_manually_added_dive(&d->dcs[0]))
 			d->dcs[0].samples.clear();
@@ -1389,29 +1399,55 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 		startpressure = QStringList();
 	if (endpressure == QStringList(QString()))
 		endpressure = QStringList();
+	if (gasmix == QStringList(QString()))
+		gasmix = QStringList();
+	if (usedCylinder == QStringList(QString()))
+		usedCylinder = QStringList();
 	for (QString &mix : gasmix)
 		mix = normalizeGasMixAlias(mix);
+	// Determine whether any cylinder in the dive is currently "used".
+	// A dive with no used cylinders (e.g. downloaded without pressure
+	// integration, or a zero-cylinder manual-import dive) must not have its
+	// incoming data filtered by is_cylinder_used, so we write positionally.
+	// A dive that has at least one used cylinder (normal multi-cylinder case)
+	// uses the used-cylinder filter so that gaps (unused cylinders in the
+	// middle of the array) are skipped and the QML compressed list index
+	// maps to the correct physical cylinder.
+	bool anyUsed = false;
+	for (size_t idx = 0; idx < d->cylinders.size(); idx++) {
+		if (d->is_cylinder_used(idx)) {
+			anyUsed = true;
+			break;
+		}
+	}
 	if (formatStartPressure(d) != startpressure || formatEndPressure(d) != endpressure) {
 		diveChanged = true;
-		for ( int i = 0, j = 0 ; j < startpressure.length() && j < endpressure.length() ; i++ ) {
-			if (state != "add" && !d->is_cylinder_used(i))
+		for (int i = 0, j = 0; j < startpressure.length() && j < endpressure.length(); i++) {
+			if (anyUsed && !d->is_cylinder_used(i)) {
+				if (anyUsed && (size_t)i >= d->cylinders.size())
+					break;
 				continue;
-
+			}
 			cylinder_t *cyl = d->get_or_create_cylinder(i);
 			cyl->start.mbar = parsePressureToMbar(startpressure[j]);
 			cyl->end.mbar = parsePressureToMbar(endpressure[j]);
 			if (cyl->end.mbar > cyl->start.mbar)
 				cyl->end.mbar = cyl->start.mbar;
-
 			j++;
 		}
 	}
 	// gasmix for first cylinder
 	if (formatFirstGas(d) != gasmix) {
-		for ( int i = 0, j = 0 ; j < gasmix.length() ; i++ ) {
-			if (state != "add" && !d->is_cylinder_used(i))
+		for (int i = 0, j = 0; j < gasmix.length(); i++) {
+			if (anyUsed && !d->is_cylinder_used(i)) {
+				if (anyUsed && (size_t)i >= d->cylinders.size())
+					break;
 				continue;
-
+			}
+			if (gasmix[j].isEmpty()) {
+				j++;
+				continue;
+			}
 			int o2 = parseGasMixO2(gasmix[j]);
 			int he = parseGasMixHE(gasmix[j]);
 			// the QML code SHOULD only accept valid gas mixes, but just to make sure
@@ -1428,11 +1464,17 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 	// info for first cylinder
 	if (formatGetCylinder(d) != usedCylinder) {
 		diveChanged = true;
-		int size = 0, wp = 0, j = 0, k = 0;
-		for (j = 0; k < usedCylinder.length(); j++) {
-			if (state != "add" && !d->is_cylinder_used(j))
+		for (int i = 0, k = 0; k < usedCylinder.length(); i++) {
+			if (anyUsed && !d->is_cylinder_used(i)) {
+				if (anyUsed && (size_t)i >= d->cylinders.size())
+					break;
 				continue;
-
+			}
+			if (usedCylinder[k].isEmpty()) {
+				k++;
+				continue;
+			}
+			int size = 0, wp = 0;
 			for (const tank_info &ti: tank_info_table) {
 				if (ti.name == usedCylinder[k].toStdString()) {
 					if (ti.ml > 0){
@@ -1445,9 +1487,9 @@ void QMLManager::commitChanges(QString diveId, QString number, QString date, QSt
 					break;
 				}
 			}
-			d->get_or_create_cylinder(j)->type.description = usedCylinder[k].toStdString();
-			d->get_cylinder(j)->type.size.mliter = size;
-			d->get_cylinder(j)->type.workingpressure.mbar = wp;
+			d->get_or_create_cylinder(i)->type.description = usedCylinder[k].toStdString();
+			d->get_cylinder(i)->type.size.mliter = size;
+			d->get_cylinder(i)->type.workingpressure.mbar = wp;
 			k++;
 		}
 	}
@@ -1712,8 +1754,32 @@ void QMLManager::openNoCloudRepo()
 	openLocalThenRemote(filename);
 }
 
-void QMLManager::saveChangesLocal()
+// AI-generated (Claude)
+// Authorise a mobile cloud save only when the current cache is a safe target:
+// either local-only mode, or the shared classifier confirms a save would not
+// overwrite an unrelated cloud log. Mobile never prompts; it refuses.
+bool QMLManager::cloudDestinationIsSafe() const
 {
+	if (qPrefCloudStorage::cloud_verification_status() == qPrefCloudStorage::CS_NOCLOUD)
+		return true;
+	if (existing_filename.empty())
+		return false;
+	git_info info;
+	if (!is_git_repository(existing_filename.c_str(), &info))
+		return false;
+	return classify_git_save(&info) == git_save_kind::normal;
+}
+
+bool QMLManager::saveChangesLocal()
+{
+	if (!cloudDestinationIsSafe()) {
+		setNotificationText(tr("This dive log was not opened from your cloud account, so saving it "
+				       "would overwrite unrelated dives in cloud storage. Your changes are kept. "
+				       "Open your cloud log first, then save."));
+		appendTextToLog("Refusing to save cloud data without provenance for the current repository and branch.");
+		return false;
+	}
+
 	if (unsavedChanges()) {
 		if (qPrefCloudStorage::cloud_verification_status() == qPrefCloudStorage::CS_NOCLOUD) {
 			if (existing_filename.empty()) {
@@ -1724,11 +1790,6 @@ void QMLManager::saveChangesLocal()
 				s->set_default_filename(qPrintable(filename));
 				s->set_default_file_behavior(LOCAL_DEFAULT_FILE);
 			}
-		} else if (!m_loadFromCloud) {
-			// this seems silly, but you need a common ancestor in the repository in
-			// order to be able to merge che changes later
-			appendTextToLog("Don't save dives without loading from the cloud, first.");
-			return;
 		}
 		bool glo = git_local_only;
 		git_local_only = true;
@@ -1737,7 +1798,7 @@ void QMLManager::saveChangesLocal()
 		if (error) {
 			setNotificationText(consumeError());
 			existing_filename.clear();
-			return;
+			return false;
 		}
 		mark_divelist_changed(false);
 		Command::setClean();
@@ -1745,31 +1806,28 @@ void QMLManager::saveChangesLocal()
 	} else {
 		appendTextToLog("local save requested with no unsaved changes");
 	}
+	return true;
 }
 
-void QMLManager::saveChangesCloud(bool forceRemoteSync)
+bool QMLManager::saveChangesCloud(bool forceRemoteSync)
 {
 	if (!unsavedChanges() && !forceRemoteSync) {
 		appendTextToLog("asked to save changes but no unsaved changes");
-		return;
+		return true;
 	}
 	// first we need to store any unsaved changes to the local repo
 	gitProgressCB("Save changes to local cache");
-	saveChangesLocal();
+	if (!saveChangesLocal())
+		return false;
 	// if the user asked not to push to the cloud we are done
 	if (git_local_only && !forceRemoteSync)
-		return;
-
-	if (!m_loadFromCloud) {
-		setNotificationText(tr("Fatal error: cannot save data file. Please copy log file and report."));
-		appendTextToLog("Don't save dives without loading from the cloud, first.");
-		return;
-	}
+		return true;
 
 	bool glo = git_local_only;
 	git_local_only = false;
 	loadDivesWithValidCredentials();
 	git_local_only = glo;
+	return git_remote_sync_successful;
 }
 
 void QMLManager::undo()
@@ -1905,22 +1963,6 @@ void QMLManager::setVerboseEnabled(bool verboseMode)
 	verbose = verboseMode;
 	appendTextToLog(QStringLiteral("verbose is ") + (verbose ? QStringLiteral("on") : QStringLiteral("off")));
 	emit verboseEnabledChanged();
-}
-
-void QMLManager::syncLoadFromCloud()
-{
-	QSettings s;
-	QString cloudMarker = QLatin1String("loadFromCloud") + QString::fromStdString(prefs.cloud_storage_email);
-	m_loadFromCloud = s.contains(cloudMarker) && s.value(cloudMarker).toBool();
-}
-
-void QMLManager::setLoadFromCloud(bool done)
-{
-	QSettings s;
-	QString cloudMarker = QLatin1String("loadFromCloud") + QString::fromStdString(prefs.cloud_storage_email);
-	s.setValue(cloudMarker, done);
-	m_loadFromCloud = done;
-	emit loadFromCloudChanged();
 }
 
 void QMLManager::setStartPageText(const QString& text)

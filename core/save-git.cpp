@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <git2.h>
 #include <memory>
+#include <unordered_set>
 
 #include "commands/command.h"
 #include "dive.h"
@@ -848,11 +849,18 @@ static void save_divesites(git_repository *repo, struct dir *tree)
 {
 	struct dir *subdir;
 	membuffer dirname;
+	// AI-generated (Claude): An empty site still carries referential data when a dive uses its UUID.
+	std::unordered_set<const dive_site *> referenced_sites;
+	for (const auto &dive: divelog.dives) {
+		if (dive->dive_site)
+			referenced_sites.insert(dive->dive_site);
+	}
 	put_format(&dirname, "01-Divesites");
 	subdir = new_directory(repo, tree, &dirname);
 
-	divelog.sites.purge_empty();
 	for (const auto &ds: divelog.sites) {
+		if (ds->is_empty() && !referenced_sites.count(ds.get()))
+			continue;
 		membuffer b;
 		membuffer site_file_name;
 		put_format(&site_file_name, "Site-%08x", ds->uuid);
@@ -942,14 +950,13 @@ static void save_filter_presets(git_repository *repo, struct dir *tree)
 
 static int create_git_tree(git_repository *repo, struct dir *root, bool select_only, bool cached_ok)
 {
+	// AI-generated (Claude): Track serialized trips locally so failed saves do not mutate the log.
+	std::unordered_set<const dive_trip *> saved_trips;
 	git_storage_update_progress(translate("gettextFromC", "Start saving data"));
 	save_settings(repo, root);
 
 	save_divesites(repo, root);
 	save_filter_presets(repo, root);
-
-	for (auto &trip: divelog.trips)
-		trip->saved = false;
 
 	/* save the dives */
 	git_storage_update_progress(translate("gettextFromC", "Start saving dives"));
@@ -973,9 +980,9 @@ static int create_git_tree(git_repository *repo, struct dir *root, bool select_o
 
 		if (trip) {
 			/* Did we already save this trip? */
-			if (trip->saved)
+			if (saved_trips.count(trip))
 				continue;
-			trip->saved = 1;
+			saved_trips.insert(trip);
 
 			/* Pass that new subdirectory in for save-trip */
 			save_one_trip(repo, tree, trip, &tm, cached_ok);
@@ -1003,6 +1010,79 @@ static git_object *try_to_find_parent(const char *hex_id, git_repository *repo)
 	if (git_commit_lookup(&commit, repo, &object_id))
 		return NULL;
 	return (git_object *)commit;
+}
+
+// AI-generated (Claude)
+// Decide, without touching the repository, whether an ordinary save to this
+// git destination would REPLACE data the in-memory log is not based on.
+git_save_kind classify_git_save(const struct git_info *info)
+{
+	git_repository *repo = info->repo;
+	git_repository *opened = nullptr;
+	if (!repo) {
+		int ret = git_repository_open(&opened, info->localdir.c_str());
+		if (ret == GIT_ENOTFOUND)
+			return git_save_kind::normal; // first save / initial population
+		if (ret)
+			return git_save_kind::error;
+		repo = opened;
+	}
+
+	git_reference *branch_ref = nullptr;
+	int ret = git_branch_lookup(&branch_ref, repo, info->branch.c_str(), GIT_BRANCH_LOCAL);
+	if (ret == GIT_ENOTFOUND) {
+		if (opened)
+			git_repository_free(opened);
+		return git_save_kind::normal; // new branch
+	}
+	if (ret) {
+		if (opened)
+			git_repository_free(opened);
+		return git_save_kind::error;
+	}
+
+	git_commit *tip_commit = nullptr;
+	git_tree *tree = nullptr;
+	ret = git_reference_peel(reinterpret_cast<git_object **>(&tip_commit), branch_ref, GIT_OBJ_COMMIT);
+	if (!ret)
+		ret = git_commit_tree(&tree, tip_commit);
+	git_reference_free(branch_ref);
+	if (ret) {
+		git_commit_free(tip_commit);
+		if (opened)
+			git_repository_free(opened);
+		return git_save_kind::error;
+	}
+
+	bool empty_branch = git_tree_entrycount(tree) == 0;
+	git_tree_free(tree);
+	if (empty_branch) {
+		git_commit_free(tip_commit);
+		if (opened)
+			git_repository_free(opened);
+		return git_save_kind::normal; // empty branch, safe initial population
+	}
+
+	const git_oid *tip_oid = git_commit_id(tip_commit);
+	git_save_kind result = git_save_kind::replacement; // default: unrelated
+
+	if (!loaded_git_commit.empty()) {
+		git_oid loaded_oid;
+		git_commit *loaded_commit = nullptr;
+		if (!git_oid_fromstr(&loaded_oid, loaded_git_commit.c_str()) &&
+		    !git_commit_lookup(&loaded_commit, repo, &loaded_oid)) {
+			// same-source: loaded commit is the tip, or tip is a descendant of it
+			if (git_oid_equal(tip_oid, &loaded_oid) ||
+			    git_graph_descendant_of(repo, tip_oid, &loaded_oid) == 1)
+				result = git_save_kind::normal;
+		}
+		git_commit_free(loaded_commit);
+	}
+
+	git_commit_free(tip_commit);
+	if (opened)
+		git_repository_free(opened);
+	return result;
 }
 
 static int notify_cb(git_checkout_notify_t,
@@ -1106,19 +1186,19 @@ static int create_new_commit(struct git_info *info, git_oid *tree_id, bool creat
 		return report_error("Invalid branch name '%s'", info->branch.c_str());
 	case GIT_ENOTFOUND: /* We'll happily create it */
 		ref = NULL;
-		parent = try_to_find_parent(saved_git_id.c_str(), info->repo);
+		parent = try_to_find_parent(loaded_git_commit.c_str(), info->repo);
 		break;
 	case 0:
 		if (git_reference_peel(&parent, ref, GIT_OBJ_COMMIT))
 			return report_error("Unable to look up parent in branch '%s'", info->branch.c_str());
 
-		if (!saved_git_id.empty()) {
+		if (!loaded_git_commit.empty()) {
 			if (!existing_filename.empty() && verbose)
 				report_info("existing filename %s\n", existing_filename.c_str());
 			const git_oid *id = git_commit_id((const git_commit *) parent);
 			/* if we are saving to the same git tree we got this from, let's make
 			 * sure there is no confusion */
-			if (existing_filename == info->url && git_oid_strcmp(id, saved_git_id.c_str()))
+			if (git_oid_strcmp(id, loaded_git_commit.c_str()))
 				return report_error("The git branch does not match the git parent of the source");
 		}
 
@@ -1234,7 +1314,7 @@ int do_git_save(struct git_info *info, bool select_only, bool create_empty)
 	 * Check if we can do the cached writes - we need to
 	 * have the original git commit we loaded in the repo
 	 */
-	cached_ok = try_to_find_parent(saved_git_id.c_str(), info->repo);
+	cached_ok = try_to_find_parent(loaded_git_commit.c_str(), info->repo);
 
 	/* Start with an empty tree: no subdirectories, no files */
 	if (git_treebuilder_new(&tree.files, info->repo, NULL))
@@ -1263,6 +1343,14 @@ int do_git_save(struct git_info *info, bool select_only, bool create_empty)
 
 int git_save_dives(struct git_info *info, bool select_only)
 {
+	// AI-generated (Claude): Classify before opening the repo so an absent local
+	// cache is correctly treated as a new/initial save rather than a replacement.
+	git_save_kind kind = classify_git_save(info);
+	if (kind == git_save_kind::replacement)
+		return report_error("%s", translate("gettextFromC", "Saving this log would overwrite unrelated dives in cloud storage. It was not opened from this cloud account; open the cloud log first, then save."));
+	if (kind == git_save_kind::error)
+		return report_error("%s", translate("gettextFromC", "Unable to inspect cloud storage destination"));
+
 	/*
 	 * First, just try to open the local git repo without
 	 * doing any remote updates at all. If networking is
@@ -1291,6 +1379,14 @@ int git_save_dives(struct git_info *info, bool select_only)
 	 */
 	if (!open_git_repository(info))
 		return report_error(translate("gettextFromC", "Failed to save dives to %s[%s] (%s)"), info->url.c_str(), info->branch.c_str(), strerror(errno));
+
+	// AI-generated (Claude): A missing cache may have been populated from an existing remote. Inspect
+	// that branch before allowing the save to replace its newly fetched tree.
+	kind = classify_git_save(info);
+	if (kind == git_save_kind::replacement)
+		return report_error("%s", translate("gettextFromC", "Saving this log would overwrite unrelated dives in cloud storage. It was not opened from this cloud account; open the cloud log first, then save."));
+	if (kind == git_save_kind::error)
+		return report_error("%s", translate("gettextFromC", "Unable to inspect cloud storage destination"));
 
 	return do_git_save(info, select_only, false);
 }

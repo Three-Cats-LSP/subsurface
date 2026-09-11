@@ -29,7 +29,9 @@ jobs:
       BUILDROOT: '/android'
     runs-on: ubuntu-24.04
     container:
-      image: subsurface/android-build:6.10.3-2
+      # Keep Neo's development-signing workflow, but build against the current
+      # official Subsurface Qt 6.10.3 container.
+      image: subsurface/android-build:6.10.3-6
 
     steps:
     - name: checkout sources
