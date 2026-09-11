@@ -130,6 +130,7 @@ public:
 	Q_INVOKABLE int getConnectionIndex(const QString &deviceSubstr);
 	Q_INVOKABLE QString pairedBluetoothSerialPort(const QString &address) const;
 	Q_INVOKABLE QStringList pairedBluetoothSerialPorts(const QString &address) const;
+	Q_INVOKABLE void rememberBluetoothSerialPort(const QString &address, const QString &port);
 	Q_INVOKABLE void stopBluetoothDiscovery();
 	Q_INVOKABLE void setGitLocalOnly(const bool &value);
 	Q_INVOKABLE void setFilter(const QString filterText, int mode);

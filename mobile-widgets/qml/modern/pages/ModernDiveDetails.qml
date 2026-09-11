@@ -302,12 +302,14 @@ Kirigami.Page {
 			}
 
 			Flickable {
+				id: detailsFlickable
 				anchors.fill: parent
 				contentWidth: width
 				contentHeight: contentColumn.implicitHeight + tokens.space24 * 2
 				flickableDirection: Flickable.VerticalFlick
 				boundsBehavior: Flickable.StopAtBounds
 				clip: true
+				ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
 
 				ColumnLayout {
 					id: contentColumn

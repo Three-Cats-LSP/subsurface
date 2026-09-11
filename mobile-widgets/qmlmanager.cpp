@@ -2807,6 +2807,9 @@ QStringList QMLManager::pairedBluetoothSerialPorts(const QString &address) const
 		if (!port.isEmpty() && !ports.contains(port, Qt::CaseInsensitive))
 			ports.append(port);
 	};
+	QSettings preferences;
+	const QString preferredPort = preferences.value(QStringLiteral("subsurface-neo/import/preferred-bluetooth-serial/%1").arg(compactAddress)).toString();
+	appendPort(preferredPort);
 
 	const QString rootPath = QStringLiteral("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\BTHENUM");
 	QSettings root(rootPath, QSettings::NativeFormat);
@@ -2839,6 +2842,28 @@ QStringList QMLManager::pairedBluetoothSerialPorts(const QString &address) const
 	Q_UNUSED(address)
 #endif
 	return ports;
+}
+
+void QMLManager::rememberBluetoothSerialPort(const QString &address, const QString &port)
+{
+#if defined(Q_OS_WIN)
+	QString compactAddress = address;
+	const QRegularExpression match(QStringLiteral("(?:LE:|BT:)?((?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"));
+	const QRegularExpressionMatch addressMatch = match.match(compactAddress);
+	if (addressMatch.hasMatch())
+		compactAddress = addressMatch.captured(1);
+	compactAddress.remove(QLatin1Char(':'));
+	compactAddress.remove(QLatin1Char('-'));
+	compactAddress = compactAddress.toUpper();
+	if (compactAddress.isEmpty() || port.isEmpty())
+		return;
+	QSettings settings;
+	settings.setValue(QStringLiteral("subsurface-neo/import/preferred-bluetooth-serial/%1").arg(compactAddress), port);
+	appendTextToLog(QStringLiteral("Remembering %1 as the working Bluetooth serial port for %2").arg(port, compactAddress));
+#else
+	Q_UNUSED(address)
+	Q_UNUSED(port)
+#endif
 }
 
 void QMLManager::stopBluetoothDiscovery()

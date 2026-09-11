@@ -24,6 +24,7 @@ Kirigami.Page {
 	property var pairedSerialPorts: []
 	property int pairedSerialPortIndex: 0
 	property bool automaticBluetoothFallbackUsed: false
+	property int selectedImportCount: 0
 	signal finished()
 
 	Modern.DesignTokens { id: tokens }
@@ -33,6 +34,9 @@ Kirigami.Page {
 		onDownloadFinished: {
 			page.downloading = false
 			page.importsReady = rowCount() > 0
+			page.selectedImportCount = page.importsReady ? rowCount() : 0
+			if (page.importsReady && page.pairedSerialPort.length > 0)
+				manager.rememberBluetoothSerialPort(page.connection, page.pairedSerialPort)
 			page.downloadFailed = !page.importsReady && /error|failed|timeout/i.test(manager.progressMessage)
 			if (page.downloadFailed && !page.forceBluetoothAddress && page.pairedSerialPortIndex + 1 < page.pairedSerialPorts.length) {
 				page.pairedSerialPortIndex += 1
@@ -92,6 +96,8 @@ Kirigami.Page {
 	}
 
 	function acceptSelected() {
+		if (selectedImportCount <= 0)
+			return
 		importModel.recordDives()
 		manager.changesNeedSaving()
 		importsReady = false
@@ -139,26 +145,41 @@ Kirigami.Page {
 			Text { visible: vendor === "Shearwater"; text: qsTr("For a classic Shearwater Perdix on Windows, pair it in Windows Bluetooth settings first and put the computer in Dive Log → Upload before retrying."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		}
 		Components.NeoButton { visible: !downloading && !importsReady; text: qsTr("Copy diagnostic log"); compact: true; Layout.alignment: Qt.AlignLeft; onClicked: manager.copyAppLogToClipboard() }
-		Text { visible: importsReady; text: qsTr("%1 downloaded dives — select the entries to add to your log.").arg(importModel.rowCount()); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Text { visible: importsReady; text: qsTr("%1 downloaded dives — %2 selected.").arg(importModel.rowCount()).arg(selectedImportCount); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
 		ListView {
+			id: importList
 			Layout.fillWidth: true
 			Layout.fillHeight: true
 			visible: importsReady
 			clip: true
 			model: importModel
 			spacing: tokens.space8
+			ScrollBar.vertical: ScrollBar {
+				id: importScrollBar
+				policy: ScrollBar.AlwaysOn
+			}
 			delegate: Components.ModernCard {
 				required property int index
-				Layout.fillWidth: true
-				width: ListView.view.width
-				border.width: model.selected ? 1 : 0
+				required property string datetime
+				required property string duration
+				required property string depth
+				required property bool selected
+				width: Math.max(0, importList.width - importScrollBar.width - tokens.space4)
+				border.width: selected ? 1 : 0
 				border.color: tokens.accent
 				RowLayout {
 					Layout.fillWidth: true
-					CheckBox { checked: model.selected; onToggled: importModel.selectRow(index) }
-					ColumnLayout { Layout.fillWidth: true; Text { text: model.datetime || ""; color: tokens.textPrimary; font.weight: Font.Medium }
- Text { text: (model.depth || "") + " · " + (model.duration || ""); color: tokens.textSecondary; font.pixelSize: 12 } }
+					Layout.minimumWidth: 0
+					CheckBox {
+						checked: selected
+						onClicked: {
+							importModel.selectRow(index)
+							page.selectedImportCount += checked ? 1 : -1
+						}
+					}
+					ColumnLayout { Layout.fillWidth: true; Layout.minimumWidth: 0; Text { Layout.fillWidth: true; text: datetime; color: tokens.textPrimary; font.weight: Font.Medium; elide: Text.ElideRight }
+ Text { Layout.fillWidth: true; text: depth + " · " + duration; color: tokens.textSecondary; font.pixelSize: 12; elide: Text.ElideRight } }
 				}
 			}
 		}
@@ -176,9 +197,9 @@ Kirigami.Page {
 				compact: true
 				onClicked: { page.forceBluetoothAddress = true; page.startDownload(false) }
 			}
-			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select none"); visible: importsReady; compact: true; onClicked: importModel.selectNone() }
-			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select all"); visible: importsReady; compact: true; onClicked: importModel.selectAll() }
-			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Add selected dives"); variant: "primary"; enabled: importsReady; compact: true; onClicked: page.acceptSelected() }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select none"); visible: importsReady; compact: true; onClicked: { importModel.selectNone(); page.selectedImportCount = 0 } }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Select all"); visible: importsReady; compact: true; onClicked: { importModel.selectAll(); page.selectedImportCount = importModel.rowCount() } }
+			Components.NeoButton { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTr("Add selected dives (%1)").arg(selectedImportCount); variant: "primary"; enabled: importsReady && selectedImportCount > 0; compact: true; onClicked: page.acceptSelected() }
 		}
 	}
 }

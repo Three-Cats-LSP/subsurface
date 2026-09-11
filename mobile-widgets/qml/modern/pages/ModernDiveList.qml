@@ -14,7 +14,10 @@ Kirigami.Page {
 
 	property QtObject diveListModel: null
 	property bool plansOnly: false
-	property bool wideLayout: width >= 760
+	// An 800 px desktop window still needs the compact toolbar and card layout.
+	// Keeping the previous 760 px breakpoint made the right-hand actions wider
+	// than the viewport and pushed the card border off screen.
+	property bool wideLayout: width >= 960
 	property bool filterVisible: false
 	property bool advancedFiltersVisible: false
 	property string activeCollection: ""
@@ -358,6 +361,10 @@ Kirigami.Page {
 			clip: true
 			boundsBehavior: Flickable.DragOverBounds
 			maximumFlickVelocity: height * 5
+			ScrollBar.vertical: ScrollBar {
+				id: diveListScrollBar
+				policy: ScrollBar.AlwaysOn
+			}
 
 			delegate: Item {
 				id: delegateRoot
@@ -431,7 +438,7 @@ Kirigami.Page {
 				Accessible.name: modelData.isTrip ? qsTr("Dive trip: %1, %2 dives").arg(modelData.tripTitle || qsTr("Unnamed trip")).arg(modelData.tripNrDives || 0)
 					: qsTr("Dive %1: %2, %3, %4, %5").arg(modelData.displayNumber > 0 ? "#" + modelData.displayNumber : qsTr("unnumbered")).arg(modelData.location || qsTr("Unnamed dive site")).arg(modelData.dateTime || qsTr("date unknown")).arg(modelData.depth || qsTr("depth unknown")).arg(modelData.duration || qsTr("duration unknown"))
 				Accessible.onPressAction: activateDelegate()
-				width: listView.width
+				width: Math.max(0, listView.width - diveListScrollBar.width - tokens.space4)
 				height: modelData.isTrip ? (page.plansOnly ? 0 : 64) : (collectionMatch ? diveCard.implicitHeight : 0)
 
 				Rectangle {
@@ -490,10 +497,12 @@ Kirigami.Page {
 						ColumnLayout {
 							Layout.preferredWidth: page.wideLayout && !delegateRoot.modelData.isPlanned ? 310 : -1
 							Layout.fillWidth: true
+							Layout.minimumWidth: 0
 							spacing: tokens.space8
 
 							RowLayout {
 								Layout.fillWidth: true
+								Layout.minimumWidth: 0
 								spacing: tokens.space8
 								CheckBox {
 									visible: page.selectionMode
@@ -527,11 +536,11 @@ Kirigami.Page {
 								}
 								ToolButton {
 									visible: !page.selectionMode
-									Layout.preferredWidth: 40
-									Layout.preferredHeight: 40
-									padding: 8
-									contentItem: Components.NeoDiveIcon { name: "more"; iconColor: tokens.textPrimary }
-									background: Rectangle { color: parent.hovered || parent.down ? tokens.surfaceRaised : tokens.background; radius: 20; border.width: 1; border.color: tokens.border }
+									Layout.preferredWidth: 36
+									Layout.preferredHeight: 36
+									padding: 6
+									contentItem: Components.NeoDiveIcon { name: "slate"; iconColor: tokens.textSecondary }
+									background: Rectangle { color: parent.hovered || parent.down ? tokens.surfaceRaised : "transparent"; radius: tokens.radiusSmall }
 									Accessible.name: qsTr("Dive actions")
 									ToolTip.visible: hovered
 									ToolTip.text: qsTr("Dive actions")

@@ -102,8 +102,9 @@ require(
 		'"tripTitle": model.tripTitle',
 		'"displayNumber": model.displayNumber',
 		'"diveMode": model.diveMode',
-		'contentItem: Components.NeoDiveIcon { name: "more"',
-		'Layout.preferredWidth: 40',
+		'contentItem: Components.NeoDiveIcon { name: "slate"',
+		'property bool wideLayout: width >= 960',
+		'policy: ScrollBar.AlwaysOn',
 		'Accessible.role: Accessible.ListItem',
 		'activeFocusOnTab: height > 0',
 		'Keys.onReturnPressed: activateDelegate()',
@@ -243,6 +244,18 @@ require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLog
 require(
 	import_review,
 	(
+		'required property string datetime',
+		'required property bool selected',
+		'onClicked: {\n\t\t\t\t\t\t\timportModel.selectRow(index)',
+		'importModel.selectNone(); page.selectedImportCount = 0',
+		'importModel.selectAll(); page.selectedImportCount = importModel.rowCount()',
+		'text: qsTr("Add selected dives (%1)").arg(selectedImportCount)',
+	),
+	"Neo populated import review and selection",
+)
+require(
+	import_review,
+	(
 		'manager.pairedBluetoothSerialPorts(address[0])',
 		'property int pairedSerialPortIndex: 0',
 		'Paired serial connection failed; retrying the Perdix on',
@@ -259,7 +272,7 @@ require(
 qml_manager_h = source("mobile-widgets/qmlmanager.h")
 qml_manager_cpp = source("mobile-widgets/qmlmanager.cpp")
 btdiscovery_cpp = source("core/btdiscovery.cpp")
-require(qml_manager_h, ('Q_INVOKABLE QStringList pairedBluetoothSerialPorts(const QString &address) const;', 'Q_INVOKABLE void stopBluetoothDiscovery();'), "Neo Bluetooth discovery handoff")
+require(qml_manager_h, ('Q_INVOKABLE QStringList pairedBluetoothSerialPorts(const QString &address) const;', 'Q_INVOKABLE void rememberBluetoothSerialPort(const QString &address, const QString &port);', 'Q_INVOKABLE void stopBluetoothDiscovery();'), "Neo Bluetooth discovery handoff")
 require(
 	qml_manager_cpp,
 	(
