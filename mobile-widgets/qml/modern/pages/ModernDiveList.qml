@@ -175,7 +175,7 @@ Kirigami.Page {
 			Components.MetricCard { label: qsTr("Dives"); value: String(NeoDashboard.diveCount); iconName: "dives"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 			Components.MetricCard { label: qsTr("Dive time"); value: NeoDashboard.totalTimeHours; suffix: qsTr("h"); iconName: "time"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 			Components.MetricCard { label: qsTr("Max depth"); value: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepth : "—"; suffix: NeoDashboard.maxDepth.length > 0 ? NeoDashboard.maxDepthUnit : ""; iconName: "depth"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
-			Components.MetricCard { visible: page.wideLayout; label: qsTr("Avg water"); value: NeoDashboard.averageWaterTemp.length > 0 ? NeoDashboard.averageWaterTemp : "—"; iconName: "temperature"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
+			Components.MetricCard { visible: page.wideLayout; label: qsTr("Water range"); value: NeoDashboard.waterTemperatureRange.length > 0 ? NeoDashboard.waterTemperatureRange : "—"; iconName: "temperature"; Layout.fillWidth: true; Layout.minimumWidth: 0 }
 		}
 
 		RowLayout {
@@ -495,7 +495,6 @@ Kirigami.Page {
 						rowSpacing: tokens.space12
 
 						ColumnLayout {
-							Layout.preferredWidth: page.wideLayout && !delegateRoot.modelData.isPlanned ? 310 : -1
 							Layout.fillWidth: true
 							Layout.minimumWidth: 0
 							spacing: tokens.space8
@@ -534,12 +533,22 @@ Kirigami.Page {
 									}
 									Text { Layout.fillWidth: true; text: delegateRoot.modelData.dateTime || ""; color: tokens.textSecondary; font.pixelSize: 11; elide: Text.ElideRight }
 								}
+								GridLayout {
+									visible: !delegateRoot.modelData.isPlanned && page.width >= 600
+									Layout.preferredWidth: page.wideLayout ? 260 : 220
+									Layout.minimumWidth: 190
+									columns: 3
+									columnSpacing: tokens.space8
+									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("MAX DEPTH"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.depth || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
+									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("DURATION"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.duration || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
+									ColumnLayout { Layout.fillWidth: true; spacing: 1; Text { text: qsTr("WATER TEMP"); color: tokens.textMuted; font.pixelSize: 8 }; Text { text: delegateRoot.modelData.waterTemp || "—"; color: tokens.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold } }
+								}
 								ToolButton {
 									visible: !page.selectionMode
 									Layout.preferredWidth: 36
 									Layout.preferredHeight: 36
 									padding: 6
-									contentItem: Components.NeoDiveIcon { name: "slate"; iconColor: tokens.textSecondary }
+									contentItem: Components.NeoDiveIcon { name: "edit"; iconColor: tokens.textSecondary }
 									background: Rectangle { color: parent.hovered || parent.down ? tokens.surfaceRaised : "transparent"; radius: tokens.radiusSmall }
 									Accessible.name: qsTr("Dive actions")
 									ToolTip.visible: hovered
@@ -549,6 +558,7 @@ Kirigami.Page {
 							}
 
 							GridLayout {
+								visible: delegateRoot.modelData.isPlanned || page.width < 600
 								Layout.fillWidth: true
 								columns: delegateRoot.modelData.isPlanned ? 5 : 3
 								columnSpacing: tokens.space8

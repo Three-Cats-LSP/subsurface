@@ -15,6 +15,7 @@ class NeoDashboardModel : public QObject
 	Q_PROPERTY(QString maxDepth READ maxDepth NOTIFY changed)
 	Q_PROPERTY(QString maxDepthUnit READ maxDepthUnit NOTIFY changed)
 	Q_PROPERTY(QString averageWaterTemp READ averageWaterTemp NOTIFY changed)
+	Q_PROPERTY(QString waterTemperatureRange READ waterTemperatureRange NOTIFY changed)
 	Q_PROPERTY(QVariantList recentDives READ recentDives NOTIFY changed)
 	Q_PROPERTY(QVariantList recentPlans READ recentPlans NOTIFY changed)
 
@@ -27,6 +28,7 @@ public:
 	QString maxDepth() const { return m_maxDepth; }
 	QString maxDepthUnit() const { return m_maxDepthUnit; }
 	QString averageWaterTemp() const { return m_averageWaterTemp; }
+	QString waterTemperatureRange() const { return m_waterTemperatureRange; }
 	QVariantList recentDives() const { return m_recentDives; }
 	QVariantList recentPlans() const { return m_recentPlans; }
 
@@ -43,6 +45,7 @@ private:
 	QString m_maxDepth;
 	QString m_maxDepthUnit;
 	QString m_averageWaterTemp;
+	QString m_waterTemperatureRange;
 	QVariantList m_recentDives;
 	QVariantList m_recentPlans;
 };

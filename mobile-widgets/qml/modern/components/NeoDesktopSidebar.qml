@@ -47,42 +47,50 @@ Control {
 			id: brandButton
 			objectName: "neoSidebarDashboardBrand"
 			Layout.fillWidth: true
-			Layout.preferredHeight: 84
+			Layout.preferredHeight: 126
 			leftPadding: 22
 			rightPadding: 18
 			hoverEnabled: true
 			activeFocusOnTab: true
 			Accessible.name: qsTr("Open dives")
 
-			contentItem: RowLayout {
-				spacing: 12
+			contentItem: ColumnLayout {
+				spacing: 8
 
-				Image {
-					Layout.preferredWidth: 38
-					Layout.preferredHeight: 38
-					source: "qrc:/qml/subsurface-neo-icon.svg"
-					fillMode: Image.PreserveAspectFit
-				}
+				RowLayout {
+					Layout.fillWidth: true
+					spacing: 12
 
-				ColumnLayout {
-					spacing: 1
-
-					Text {
-						text: "SUBSURFACE"
-						color: tokens.textPrimary
-						font.pixelSize: 13
-						font.weight: Font.DemiBold
-						font.letterSpacing: 2.8
+					Image {
+						Layout.preferredWidth: 38
+						Layout.preferredHeight: 38
+						source: "qrc:/qml/subsurface-neo-icon.svg"
+						fillMode: Image.PreserveAspectFit
 					}
 
-					Text {
-						text: "NEO"
-						color: tokens.accent
-						font.pixelSize: 10
-						font.weight: Font.DemiBold
-						font.letterSpacing: 2.2
+					ColumnLayout {
+						Layout.fillWidth: true
+						spacing: 1
+
+						Text {
+							text: "SUBSURFACE"
+							color: tokens.textPrimary
+							font.pixelSize: 13
+							font.weight: Font.DemiBold
+							font.letterSpacing: 2.8
+						}
+
+						Text {
+							text: "NEO"
+							color: tokens.accent
+							font.pixelSize: 10
+							font.weight: Font.DemiBold
+							font.letterSpacing: 2.2
+						}
 					}
 				}
+
+				NeoThemeToggle { Layout.alignment: Qt.AlignLeft }
 			}
 
 			background: Rectangle {

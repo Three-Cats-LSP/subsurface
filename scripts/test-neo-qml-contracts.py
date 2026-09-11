@@ -102,7 +102,7 @@ require(
 		'"tripTitle": model.tripTitle',
 		'"displayNumber": model.displayNumber',
 		'"diveMode": model.diveMode',
-		'contentItem: Components.NeoDiveIcon { name: "slate"',
+		'contentItem: Components.NeoDiveIcon { name: "edit"',
 		'property bool wideLayout: width >= 960',
 		'policy: ScrollBar.AlwaysOn',
 		'Accessible.role: Accessible.ListItem',
@@ -239,7 +239,19 @@ forbid(details, ('signal backRequested()',), "Kirigami detail-page signal compat
 
 computer_center = source("mobile-widgets/qml/modern/pages/ModernDiveComputerCenter.qml")
 import_review = source("mobile-widgets/qml/modern/pages/ModernImportReview.qml")
-require(computer_center, ('onCountChanged:', 'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)'), "Neo asynchronous dive-computer discovery")
+require(
+	computer_center,
+	(
+		'onCountChanged:',
+		'manager.getMatchingAddress(vendorBox.currentText, productBox.currentText)',
+		'function rescanDevices()',
+		'manager.stopBluetoothDiscovery()',
+		'text: page.scanning ? qsTr("Scanning…")',
+		'function deleteRecent(slot)',
+		'onClicked: page.deleteRecent(1)',
+	),
+	"Neo asynchronous dive-computer discovery",
+)
 require(import_review, ('text: qsTr("Copy diagnostic log")', 'manager.copyAppLogToClipboard()'), "Neo dive-computer diagnostics")
 require(
 	import_review,
@@ -355,6 +367,7 @@ require(
 		'source: "qrc:/qml/dive-computer-1922948.png"',
 		'source: "qrc:/qml/air-tank-17916416.png"',
 		'source: "qrc:/qml/slate-7717132.png"',
+		'source: "qrc:/qml/edit-6707337.png"',
 		'visible: icon.name === "dives" || icon.name === "tank"',
 		'source: "qrc:/qml/tank-14116551.png"',
 		'ColorOverlay {',

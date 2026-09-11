@@ -57,6 +57,7 @@
 		<file>modern/components/DiveInfoCard.qml</file>
 		<file>modern/components/NeoBottomNavigation.qml</file>
 		<file>modern/components/NeoDesktopSidebar.qml</file>
+		<file>modern/components/NeoThemeToggle.qml</file>
 		<file>modern/components/DiveActionSheet.qml</file>
 		<file>modern/components/PlanSchedule.qml</file>
 		<file>modern/pages/ModernDiveList.qml</file>
@@ -100,6 +101,7 @@
 		<file alias="water-14053108.png">../../icons/water-14053108.png</file>
 		<file alias="dive-computer-1922948.png">../../icons/dive-computer-1922948.png</file>
 		<file alias="slate-7717132.png">../../icons/slate-7717132.png</file>
+		<file alias="edit-6707337.png">../../icons/edit-6707337.png</file>
 	</qresource>
 
 	<qresource prefix="/">

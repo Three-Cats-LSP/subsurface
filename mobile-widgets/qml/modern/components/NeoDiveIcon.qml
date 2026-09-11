@@ -65,6 +65,8 @@ Canvas {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "slate") {
 			// Rendered by the attributed Flaticon source below.
+		} else if (name === "edit") {
+			// Rendered by the attributed Flaticon source below.
 		} else if (name === "diveComputer") {
 			// Rendered by the attributed Flaticon source below.
 		} else if (name === "regulator") {
@@ -148,6 +150,16 @@ Canvas {
 		source: gasContainerSource
 		color: icon.iconColor
 		cached: true
+	}
+
+	Image {
+		id: editSource
+		anchors.fill: parent
+		visible: icon.name === "edit"
+		source: "qrc:/qml/edit-6707337.png"
+		fillMode: Image.PreserveAspectFit
+		smooth: true
+		mipmap: true
 	}
 
 	Image {

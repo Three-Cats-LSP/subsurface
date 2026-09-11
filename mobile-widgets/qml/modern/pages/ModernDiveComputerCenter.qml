@@ -12,6 +12,7 @@ Kirigami.ScrollablePage {
 	title: qsTr("Import dives")
 	background: Rectangle { color: tokens.background }
 	property bool wideLayout: width >= 760
+	property bool scanning: false
 	signal openNativeImport(string vendor, string product, string connection)
 	Modern.DesignTokens { id: tokens }
 
@@ -20,8 +21,26 @@ Kirigami.ScrollablePage {
 		productBox.currentIndex = productBox.find(product)
 		connectionBox.currentIndex = manager.getConnectionIndex(connection)
 	}
+	function rescanDevices() {
+		scanning = true
+		connectionBox.currentIndex = -1
+		manager.stopBluetoothDiscovery()
+		rescanStartTimer.restart()
+		rescanFinishTimer.restart()
+	}
+	function deleteRecent(slot) {
+		var removedDevice = slot === 1 ? PrefDiveComputer.device1 : slot === 2 ? PrefDiveComputer.device2 : slot === 3 ? PrefDiveComputer.device3 : PrefDiveComputer.device4
+		if (slot <= 1) { PrefDiveComputer.vendor1 = PrefDiveComputer.vendor2; PrefDiveComputer.product1 = PrefDiveComputer.product2; PrefDiveComputer.device1 = PrefDiveComputer.device2; PrefDiveComputer.device_name1 = PrefDiveComputer.device_name2 }
+		if (slot <= 2) { PrefDiveComputer.vendor2 = PrefDiveComputer.vendor3; PrefDiveComputer.product2 = PrefDiveComputer.product3; PrefDiveComputer.device2 = PrefDiveComputer.device3; PrefDiveComputer.device_name2 = PrefDiveComputer.device_name3 }
+		if (slot <= 3) { PrefDiveComputer.vendor3 = PrefDiveComputer.vendor4; PrefDiveComputer.product3 = PrefDiveComputer.product4; PrefDiveComputer.device3 = PrefDiveComputer.device4; PrefDiveComputer.device_name3 = PrefDiveComputer.device_name4 }
+		PrefDiveComputer.vendor4 = ""; PrefDiveComputer.product4 = ""; PrefDiveComputer.device4 = ""; PrefDiveComputer.device_name4 = ""
+		if (PrefDiveComputer.device === removedDevice) { PrefDiveComputer.vendor = ""; PrefDiveComputer.product = ""; PrefDiveComputer.device = ""; PrefDiveComputer.device_name = "" }
+		page.rescanDevices()
+	}
+	Timer { id: rescanStartTimer; interval: 250; repeat: false; onTriggered: manager.rescanConnections() }
+	Timer { id: rescanFinishTimer; interval: 2500; repeat: false; onTriggered: page.scanning = false }
 	Component.onCompleted: {
-		manager.rescanConnections()
+		page.rescanDevices()
 		vendorBox.currentIndex = manager.getDetectedVendorIndex()
 		if (vendorBox.currentIndex >= 0)
 			productBox.currentIndex = manager.getDetectedProductIndex(vendorBox.currentText)
@@ -54,17 +73,17 @@ Kirigami.ScrollablePage {
 					}
 				}
 				Text { text: manager.btEnabled ? qsTr("Nearby Bluetooth devices can be detected.") : qsTr("Enable Bluetooth, or choose an available USB or serial connection below."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				Components.NeoButton { text: qsTr("Rescan devices"); Layout.alignment: Qt.AlignLeft; onClicked: manager.rescanConnections() }
+				Components.NeoButton { text: page.scanning ? qsTr("Scanning…") : qsTr("Rescan devices"); enabled: !page.scanning; Layout.alignment: Qt.AlignLeft; onClicked: page.rescanDevices() }
 			}
 			Components.ModernCard {
 				visible: PrefDiveComputer.vendor1 !== ""; Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("RECENT COMPUTERS"); color: tokens.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
 				Flow {
 					Layout.fillWidth: true; spacing: tokens.space8
-					Components.NeoButton { visible: PrefDiveComputer.vendor1 !== ""; text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }
-					Components.NeoButton { visible: PrefDiveComputer.vendor2 !== ""; text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }
-					Components.NeoButton { visible: PrefDiveComputer.vendor3 !== ""; text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }
-					Components.NeoButton { visible: PrefDiveComputer.vendor4 !== ""; text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }
+					RowLayout { visible: PrefDiveComputer.vendor1 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor1 + "  •  " + PrefDiveComputer.product1; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor1, PrefDiveComputer.product1, PrefDiveComputer.device1) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(1) } }
+					RowLayout { visible: PrefDiveComputer.vendor2 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor2 + "  •  " + PrefDiveComputer.product2; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor2, PrefDiveComputer.product2, PrefDiveComputer.device2) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(2) } }
+					RowLayout { visible: PrefDiveComputer.vendor3 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor3 + "  •  " + PrefDiveComputer.product3; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor3, PrefDiveComputer.product3, PrefDiveComputer.device3) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(3) } }
+					RowLayout { visible: PrefDiveComputer.vendor4 !== ""; spacing: 2; Components.NeoButton { text: PrefDiveComputer.vendor4 + "  •  " + PrefDiveComputer.product4; compact: true; onClicked: page.selectDevice(PrefDiveComputer.vendor4, PrefDiveComputer.product4, PrefDiveComputer.device4) }; Components.NeoButton { text: "×"; accessibleName: qsTr("Delete recent computer"); compact: true; variant: "danger"; onClicked: page.deleteRecent(4) } }
 				}
 			}
 		}

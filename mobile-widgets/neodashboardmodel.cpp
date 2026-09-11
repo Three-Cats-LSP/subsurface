@@ -29,6 +29,8 @@ void NeoDashboardModel::refresh()
 	qint64 totalSeconds = 0;
 	qint64 totalWaterTemperature = 0;
 	int waterTemperatureCount = 0;
+	temperature_t coldest {};
+	temperature_t warmest {};
 	depth_t deepest {};
 	QVector<const dive *> validDives;
 	QVector<const dive *> savedPlans;
@@ -47,6 +49,10 @@ void NeoDashboardModel::refresh()
 		if (d->watertemp.mkelvin) {
 			totalWaterTemperature += d->watertemp.mkelvin;
 			++waterTemperatureCount;
+			if (!coldest.mkelvin || d->watertemp.mkelvin < coldest.mkelvin)
+				coldest = d->watertemp;
+			if (d->watertemp.mkelvin > warmest.mkelvin)
+				warmest = d->watertemp;
 		}
 		if (d->maxdepth.mm > deepest.mm)
 			deepest = d->maxdepth;
@@ -87,8 +93,12 @@ void NeoDashboardModel::refresh()
 		temperature_t average {};
 		average.mkelvin = static_cast<uint32_t>(totalWaterTemperature / waterTemperatureCount);
 		m_averageWaterTemp = get_temperature_string(average, true);
+		m_waterTemperatureRange = coldest.mkelvin == warmest.mkelvin
+			? get_temperature_string(coldest, true)
+			: get_temperature_string(coldest, true) + QStringLiteral(" — ") + get_temperature_string(warmest, true);
 	} else {
 		m_averageWaterTemp.clear();
+		m_waterTemperatureRange.clear();
 	}
 	m_recentDives = recent;
 	m_recentPlans = recentPlans;

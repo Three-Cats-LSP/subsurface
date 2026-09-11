@@ -83,6 +83,33 @@ Kirigami.ApplicationWindow {
 		onCloudRequested: showPageFromDrawer(cloudSyncPage)
 	}
 
+	Rectangle {
+		id: neoCompactHeader
+		visible: initialized && !neoDesktopShellActive && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible
+		anchors.left: parent.left
+		anchors.right: parent.right
+		anchors.top: parent.top
+		height: 46
+		color: rootItem.neoLightTheme ? "#FFFFFF" : "#0A1E2F"
+		border.width: 1
+		border.color: rootItem.neoLightTheme ? "#D8E0E8" : "#1E3B50"
+		z: 9999
+		Text {
+			anchors.left: parent.left
+			anchors.leftMargin: 14
+			anchors.verticalCenter: parent.verticalCenter
+			text: pageStack.currentItem && pageStack.currentItem.title ? pageStack.currentItem.title : qsTr("Subsurface Neo")
+			color: rootItem.headerTextColor
+			font.pixelSize: 15
+			font.weight: Font.DemiBold
+		}
+		NeoComponents.NeoThemeToggle {
+			anchors.right: parent.right
+			anchors.rightMargin: 10
+			anchors.verticalCenter: parent.verticalCenter
+		}
+	}
+
 	// we want to use our own colors for Kirigami, so let's define our colorset
 	Kirigami.Theme.inherit: false
 	Kirigami.Theme.colorSet: Kirigami.Theme.Button
@@ -114,6 +141,7 @@ Kirigami.ApplicationWindow {
 	pageStack.globalToolBar.preferredHeight: neoHeaderSuppressed ? 0 : Math.round(Kirigami.Units.gridUnit * (Qt.platform.os == "ios" ? 2.5 : 2))
 	pageStack.globalToolBar.maximumHeight: pageStack.globalToolBar.preferredHeight
 	pageStack.anchors.leftMargin: neoDesktopShellActive ? neoSidebarWidth : 0
+	pageStack.anchors.topMargin: neoCompactHeader.visible ? neoCompactHeader.height : 0
 
 	// expose header colors so Kirigami's AbstractApplicationHeader can read them
 	// (on iOS, items with inherit:false get system palette colors instead of app theme)
