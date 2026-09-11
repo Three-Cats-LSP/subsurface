@@ -53,6 +53,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <thread>
 
 std::string dumpfile_name;
 std::string logfile_name;
@@ -1529,12 +1530,33 @@ dc_status_t divecomputer_device_open(device_data_t *data)
 		return DC_STATUS_UNSUPPORTED;
 	}
 
+#if defined(BT_SUPPORT) && defined(_WIN32)
+	// The original Perdix uses its paired RFCOMM serial service for Dive Log ->
+	// Upload. It also advertises a Shearwater BLE service, but Windows often
+	// exposes that service with stale WinRT characteristic tokens. Sea Birds
+	// therefore uses Bluetooth Classic for this model. Try it first here too,
+	// and retry once because the first RFCOMM open can race the Wait PC screen.
+	if ((transports & DC_TRANSPORT_BLUETOOTH) && data->vendor == "Shearwater" && data->product == "Perdix") {
+		std::string address = bluetoothAddressWithoutPrefix(QString::fromStdString(data->devname)).toStdString();
+		for (int attempt = 1; attempt <= 2; ++attempt) {
+			dev_info("Opening original Perdix through paired Bluetooth Classic (attempt %d/2)", attempt);
+			rc = bluetooth_device_open(context, data, address.c_str());
+			if (rc == DC_STATUS_SUCCESS)
+				return rc;
+			if (attempt < 2)
+				std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+		}
+		transports &= ~DC_TRANSPORT_BLUETOOTH;
+		dev_info("Perdix Bluetooth Classic retries failed; trying BLE services");
+	}
+#endif
+
 #if defined(BLE_SUPPORT) && defined(_WIN32)
-	// Shearwater computers such as the Perdix advertise both RFCOMM and BLE.
+	// Newer Shearwater computers can advertise both RFCOMM and BLE.
 	// Windows can spend most of the computer's "Wait for PC" window timing out
 	// on RFCOMM before it ever tries the working BLE service.  Prefer BLE for
 	// these dual-mode devices, while retaining RFCOMM as a fallback.
-	if ((transports & DC_TRANSPORT_BLE) && data->vendor == "Shearwater") {
+	if ((transports & DC_TRANSPORT_BLE) && data->vendor == "Shearwater" && data->product != "Perdix") {
 		dev_info("Trying BLE first for Shearwater device %s", data->devname.c_str());
 		rc = ble_packet_open(&data->iostream, context, data->devname.c_str(), data);
 		if (rc == DC_STATUS_SUCCESS)

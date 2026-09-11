@@ -317,7 +317,9 @@ require(
 		'text: qsTr("Try Bluetooth directly")',
 		'page.downloadFailed = !page.importsReady',
 		'property bool automaticBluetoothFallbackUsed: false',
+		'property int directBluetoothRetryCount: 0',
 		'All paired serial connections failed; retrying the Perdix through Bluetooth services',
+		'Bluetooth connection failed; automatically retrying the Perdix',
 	),
 	"Neo Windows classic-Bluetooth import",
 )
@@ -493,11 +495,13 @@ qt_ble = source("core/qt-ble.cpp")
 require(
 	libdivecomputer,
 	(
-		'data->vendor == "Shearwater"',
+		'data->vendor == "Shearwater" && data->product == "Perdix"',
+		'Opening original Perdix through paired Bluetooth Classic (attempt %d/2)',
+		'Perdix Bluetooth Classic retries failed; trying BLE services',
+		'data->product != "Perdix"',
 		'Trying BLE first for Shearwater device',
-		'BLE-first connection failed; falling back to classic Bluetooth',
 	),
-	"Windows Shearwater BLE-first transport",
+	"Windows model-specific Shearwater transport priority",
 )
 require(qt_ble, ('QThread::msleep(1500 * attempt)',), "Windows GATT retry backoff")
 

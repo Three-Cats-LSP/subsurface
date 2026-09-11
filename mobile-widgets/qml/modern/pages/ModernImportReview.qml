@@ -24,6 +24,7 @@ Kirigami.Page {
 	property var pairedSerialPorts: []
 	property int pairedSerialPortIndex: 0
 	property bool automaticBluetoothFallbackUsed: false
+	property int directBluetoothRetryCount: 0
 	property int selectedImportCount: 0
 	signal finished()
 
@@ -46,6 +47,10 @@ Kirigami.Page {
 				page.automaticBluetoothFallbackUsed = true
 				manager.appendTextToLog("All paired serial connections failed; retrying the Perdix through Bluetooth services")
 				page.forceBluetoothAddress = true
+				page.startDownload(false)
+			} else if (page.downloadFailed && manager.DC_bluetoothMode && page.directBluetoothRetryCount < 1) {
+				page.directBluetoothRetryCount += 1
+				manager.appendTextToLog("Bluetooth connection failed; automatically retrying the Perdix")
 				page.startDownload(false)
 			} else if (page.downloadFailed) {
 				page.importError = manager.progressMessage
@@ -73,6 +78,7 @@ Kirigami.Page {
 		if (resetTransport === undefined || resetTransport) {
 			forceBluetoothAddress = false
 			automaticBluetoothFallbackUsed = false
+			directBluetoothRetryCount = 0
 			pairedSerialPorts = []
 			pairedSerialPortIndex = 0
 		}
