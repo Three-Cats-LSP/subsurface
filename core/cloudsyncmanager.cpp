@@ -32,6 +32,7 @@ constexpr quint16 DROPBOX_DESKTOP_CALLBACK_PORT = 53682;
 constexpr auto DROPBOX_MOBILE_REDIRECT = "subsurface-neo://oauth/callback";
 constexpr auto NEO_DIVELOG_FILENAME = "subsurface-neo.xml";
 constexpr auto NEO_MANIFEST_FILENAME = "subsurface-neo-sync.json";
+constexpr auto AUTO_SYNC_SETTING = "subsurface-neo/cloud/auto-sync";
 
 QString connectionState(bool configured, bool connected)
 {
@@ -138,6 +139,8 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			    (syncOperation == SyncOperation::BackupUploadManifest || syncOperation == SyncOperation::SyncUploadManifest)) {
 				const bool backupOnly = syncOperation == SyncOperation::BackupUploadManifest;
 				saveLastSyncManifest(providerId, syncUploadManifest);
+				if (!backupOnly)
+					recordSuccessfulSync(providerId);
 				clearSyncOperation();
 				if (backupOnly)
 					emit diveLogBackupFinished(providerId);
@@ -193,6 +196,8 @@ QVariantList CloudSyncManager::providers() const
 		row.insert(QStringLiteral("scope"), provider.scopes.join(QLatin1Char(' ')));
 		row.insert(QStringLiteral("primary"), provider.id == primary);
 		row.insert(QStringLiteral("backup"), provider.id == backup);
+		row.insert(QStringLiteral("lastSyncAt"), QSettings().value(
+			QStringLiteral("subsurface-neo/cloud/last-sync/%1").arg(provider.id)).toString());
 		result.append(row);
 	}
 	return result;
@@ -208,6 +213,39 @@ QString CloudSyncManager::backupProviderId() const
 {
 	QSettings settings;
 	return settings.value(QStringLiteral("subsurface-neo/cloud/backup-provider")).toString();
+}
+
+bool CloudSyncManager::autoSyncEnabled() const
+{
+	return QSettings().value(QString::fromLatin1(AUTO_SYNC_SETTING), false).toBool();
+}
+
+void CloudSyncManager::setAutoSyncEnabled(bool enabled)
+{
+	if (autoSyncEnabled() == enabled)
+		return;
+	QSettings().setValue(QString::fromLatin1(AUTO_SYNC_SETTING), enabled);
+	emit autoSyncEnabledChanged();
+}
+
+bool CloudSyncManager::syncPrimaryIfReady()
+{
+	if (!autoSyncEnabled() || authorizationInProgress() || syncInProgress())
+		return false;
+
+	const QString providerId = primaryProviderId();
+	if (providerId.isEmpty() || !descriptorForId(providerId) || !lastSyncManifest(providerId).isValid())
+		return false;
+
+	// Automatic synchronization must remain silent. In particular, do not
+	// launch Android's Google account chooser when its short-lived token has
+	// expired; a manual Sync now can renew that authorization explicitly.
+	const OAuth2TokenSet current = tokens.value(providerId);
+	if ((!current.hasAccessToken() || current.isExpired()) && !current.canRefresh())
+		return false;
+
+	syncDiveLog(providerId);
+	return syncInProgress();
 }
 
 void CloudSyncManager::setPrimaryProvider(const QString &providerId)
@@ -524,6 +562,7 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 	}
 	CloudCredentialStore::remove(providerId);
 	CloudCredentialStore::remove(syncStateCredentialKey(providerId));
+	QSettings().remove(QStringLiteral("subsurface-neo/cloud/last-sync/%1").arg(providerId));
 	if (providerId == syncProviderId)
 		clearSyncOperation();
 	if (hadToken) {
@@ -668,6 +707,13 @@ void CloudSyncManager::saveLastSyncManifest(const QString &providerId, const Clo
 		CloudCredentialStore::save(syncStateCredentialKey(providerId), manifest.toJson());
 }
 
+void CloudSyncManager::recordSuccessfulSync(const QString &providerId)
+{
+	QSettings().setValue(QStringLiteral("subsurface-neo/cloud/last-sync/%1").arg(providerId),
+		QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+	emit providersChanged();
+}
+
 bool CloudSyncManager::isNotFoundError(const QString &message)
 {
 	const QString lower = message.toLower();
@@ -796,6 +842,7 @@ void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const
 	switch (relation) {
 	case CloudSyncRelation::Identical:
 		saveLastSyncManifest(providerId, remote);
+		recordSuccessfulSync(providerId);
 		clearSyncOperation();
 		emit diveLogSyncFinished(providerId, QStringLiteral("up-to-date"));
 		break;
@@ -839,6 +886,7 @@ void CloudSyncManager::handleDownloadedDiveLog(const QString &providerId, const 
 
 	const CloudSyncManifest appliedManifest = syncRemoteManifest;
 	saveLastSyncManifest(providerId, appliedManifest);
+	recordSuccessfulSync(providerId);
 	clearSyncOperation();
 	emit diveLogSyncFinished(providerId, QStringLiteral("downloaded"));
 }

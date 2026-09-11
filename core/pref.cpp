@@ -2,7 +2,6 @@
 #include "pref.h"
 #include "subsurface-string.h"
 #include "cloud-hosts.h"
-#include "git-access.h" // for CLOUD_HOST
 #include <cstring>
 
 struct preferences prefs, git_prefs, default_prefs;

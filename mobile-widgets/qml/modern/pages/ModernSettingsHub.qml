@@ -109,6 +109,13 @@ Kirigami.ScrollablePage {
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Cloud & Sync"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("Google Drive, Dropbox, conflicts, and backups"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Components.NeoSwitch {
+					Layout.fillWidth: true
+					text: qsTr("Automatic primary sync")
+					checked: CloudSync.autoSyncEnabled
+					enabled: CloudSync.primaryProviderId.length > 0
+					onToggled: CloudSync.autoSyncEnabled = checked
+				}
 				Components.NeoButton { text: qsTr("Manage cloud providers"); Layout.fillWidth: true; variant: "primary"; onClicked: page.openCloudSync() }
 				Components.NeoButton {
 					text: Backend.cloud_verification_status === Enums.CS_VERIFIED ? qsTr("Subsurface Cloud: connected") : qsTr("Subsurface Cloud compatibility")

@@ -28,6 +28,7 @@ class CloudSyncManager : public QObject {
 	Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 	Q_PROPERTY(QString primaryProviderId READ primaryProviderId NOTIFY providerAssignmentsChanged)
 	Q_PROPERTY(QString backupProviderId READ backupProviderId NOTIFY providerAssignmentsChanged)
+	Q_PROPERTY(bool autoSyncEnabled READ autoSyncEnabled WRITE setAutoSyncEnabled NOTIFY autoSyncEnabledChanged)
 public:
 	explicit CloudSyncManager(QNetworkAccessManager *networkManager, QObject *parent = nullptr);
 	~CloudSyncManager() override;
@@ -38,6 +39,7 @@ public:
 	QString lastError() const { return errorText; }
 	QString primaryProviderId() const;
 	QString backupProviderId() const;
+	bool autoSyncEnabled() const;
 
 	Q_INVOKABLE void beginAuthorization(const QString &providerId);
 	Q_INVOKABLE void handleAuthorizationRedirect(const QUrl &url);
@@ -49,12 +51,15 @@ public:
 	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
 	Q_INVOKABLE void setPrimaryProvider(const QString &providerId);
 	Q_INVOKABLE void setBackupProvider(const QString &providerId);
+	Q_INVOKABLE void setAutoSyncEnabled(bool enabled);
+	Q_INVOKABLE bool syncPrimaryIfReady();
 	void handleAndroidGoogleAccessToken(const QString &accessToken);
 	void handleAndroidGoogleAuthorizationError(const QString &message);
 
 signals:
 	void providersChanged();
 	void providerAssignmentsChanged();
+	void autoSyncEnabledChanged();
 	void authorizationInProgressChanged();
 	void syncInProgressChanged();
 	void lastErrorChanged();
@@ -95,6 +100,7 @@ private:
 	bool applyCloudDiveLog(const QByteArray &payload);
 	CloudSyncManifest lastSyncManifest(const QString &providerId) const;
 	void saveLastSyncManifest(const QString &providerId, const CloudSyncManifest &manifest);
+	void recordSuccessfulSync(const QString &providerId);
 	void startUploadSequence(const QString &providerId, const QByteArray &payload,
 				 const QString &parentSha256, bool backupOnly);
 	void handleDownloadedManifest(const QString &providerId, const QByteArray &data);

@@ -27,6 +27,13 @@ Kirigami.ScrollablePage {
 		return result
 	}
 
+	function lastSyncText(value) {
+		if (!value)
+			return ""
+		var when = new Date(value)
+		return isNaN(when.getTime()) ? "" : qsTr("Last synced %1").arg(Qt.locale().toLocaleString(when, Locale.ShortFormat))
+	}
+
 	Connections {
 		target: CloudSync
 		function onDiveLogBackupFinished(providerId) {
@@ -72,6 +79,26 @@ Kirigami.ScrollablePage {
 			}
 		}
 
+		Components.ModernCard {
+			Layout.fillWidth: true
+			RowLayout {
+				Layout.fillWidth: true
+				ColumnLayout {
+					Layout.fillWidth: true
+					Text { text: qsTr("Automatic primary sync"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
+					Text {
+						text: qsTr("Sync an established primary provider after startup and when Neo returns to the foreground.")
+						color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+					}
+				}
+				Components.NeoSwitch {
+					checked: CloudSync.autoSyncEnabled
+					enabled: CloudSync.primaryProviderId.length > 0
+					onToggled: CloudSync.autoSyncEnabled = checked
+				}
+			}
+		}
+
 		Repeater {
 			model: CloudSync.providers
 			delegate: Components.ModernCard {
@@ -110,6 +137,12 @@ Kirigami.ScrollablePage {
 								visible: modelData.primary || modelData.backup
 								text: modelData.primary ? qsTr("Primary sync provider") : qsTr("Backup provider")
 								color: tokens.accent
+								font.pixelSize: 12
+							}
+							Text {
+								visible: modelData.connected && modelData.lastSyncAt.length > 0
+								text: page.lastSyncText(modelData.lastSyncAt)
+								color: tokens.textSecondary
 								font.pixelSize: 12
 							}
 							Text {

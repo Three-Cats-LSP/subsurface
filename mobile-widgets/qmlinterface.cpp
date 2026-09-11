@@ -7,6 +7,7 @@
 #include "core/cloudstorage.h"
 #include "core/cloudsyncmanager.h"
 #include "core/neoupdatemanager.h"
+#include <QGuiApplication>
 #include <QQmlEngine>
 #include <QMetaObject>
 #include <QTimer>
@@ -121,6 +122,27 @@ void QMLInterface::setup(QQmlContext *ct)
 	static CloudSyncManager cloudSync(manager());
 	neoCloudSync = &cloudSync;
 	ct->setContextProperty("CloudSync", &cloudSync);
+
+	// Delay automatic provider sync until the initial dive log is loaded. The
+	// manager also requires an established baseline, so first-sync and conflict
+	// choices always remain explicit user decisions.
+	auto schedulePrimarySync = [&cloudSync]() {
+		QTimer::singleShot(2500, &cloudSync, [&cloudSync]() { cloudSync.syncPrimaryIfReady(); });
+	};
+	if (QMLManager::instance()) {
+		connect(QMLManager::instance(), &QMLManager::initializedChanged,
+			&cloudSync, schedulePrimarySync);
+	}
+	if (QGuiApplication::instance()) {
+		connect(QGuiApplication::instance(), &QGuiApplication::applicationStateChanged, &cloudSync,
+			[&cloudSync](Qt::ApplicationState state) {
+				if (state == Qt::ApplicationActive && QMLManager::instance() &&
+				    QMLManager::instance()->property("initialized").toBool()) {
+					QTimer::singleShot(2500, &cloudSync,
+						[&cloudSync]() { cloudSync.syncPrimaryIfReady(); });
+				}
+			});
+	}
 
 	// Shared Neo release/update service. The desktop client has a QWidget
 	// presentation for the same manifest; mobile exposes the state to QML and

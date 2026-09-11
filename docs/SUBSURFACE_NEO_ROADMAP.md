@@ -118,6 +118,8 @@ Preferred architecture: a small versioned **Neo update manifest** generated from
 
 **Exit:** a new upstream Subsurface change can become a reviewable Neo sync PR, and a new Neo release can notify installed Android/Windows users that an update is available.
 
+**Status:** In progress on `modern-ui`. The scheduled conflict-safe sync workflow is active, and official upstream through `bb47bfa2` has been integrated while preserving Neo-specific Android signing, planner, Bluetooth, and UI behavior. Update checks and release-candidate artifact assembly are implemented. Stable versioning, production signing, and the first public Neo release remain Milestone 15 work.
+
 ---
 
 ## Milestone 2 — Modern application shell & design system
@@ -676,7 +678,7 @@ Also complete settings polish, release/update preferences, privacy/terms links a
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
 
-**Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration (including automatic migration of legacy Subsurface Cloud passwords), personalized units and text sizing, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, and the full multi-device/offline security matrix remain release-hardening work.
+**Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, an opt-in automatic primary-provider sync lifecycle for established baselines, persistent last-success status, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration (including automatic migration of legacy Subsurface Cloud passwords), personalized units and text sizing, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, and the full multi-device/offline security matrix remain release-hardening work.
 
 ---
 
