@@ -129,7 +129,7 @@ Kirigami.ScrollablePage {
 							}
 							Text {
 								text: modelData.connected ? (CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
-									  modelData.configured ? qsTr("Ready to connect") : qsTr("Not available on this platform yet")
+									  modelData.configured ? qsTr("Ready to connect") : qsTr("Setup required")
 								color: modelData.connected ? tokens.accent : tokens.textSecondary
 								font.pixelSize: 14
 							}
@@ -174,8 +174,8 @@ Kirigami.ScrollablePage {
 								Layout.fillWidth: true
 							}
 							Text {
-								visible: modelData.id === "google-drive" && !modelData.configured
-								text: qsTr("Google requires a platform-specific Android OAuth client. Desktop and web clients are already configured.")
+								visible: !modelData.configured
+								text: modelData.configurationError || qsTr("This provider needs OAuth configuration for this platform before it can connect.")
 								color: tokens.textSecondary
 								font.pixelSize: 12
 								wrapMode: Text.WordWrap

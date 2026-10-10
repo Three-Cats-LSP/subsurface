@@ -213,13 +213,20 @@ QVariantList CloudSyncManager::providers() const
 		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
 			continue;
 		const QString clientId = configuredClientId(provider);
+		QString configurationError;
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS) && !defined(__EMSCRIPTEN__)
+		if (provider.type == CloudSyncProviderType::GoogleDrive)
+			configurationError = googleDesktopOAuthClient().error;
+#endif
+		const bool configured = !clientId.isEmpty() && configurationError.isEmpty();
 		const OAuth2TokenSet tokenSet = tokens.value(provider.id);
 		QVariantMap row;
 		row.insert(QStringLiteral("id"), provider.id);
 		row.insert(QStringLiteral("name"), provider.displayName);
-		row.insert(QStringLiteral("configured"), !clientId.isEmpty());
+		row.insert(QStringLiteral("configured"), configured);
+		row.insert(QStringLiteral("configurationError"), configurationError);
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
-		row.insert(QStringLiteral("state"), connectionState(!clientId.isEmpty(), tokenSet.hasAccessToken() || tokenSet.canRefresh()));
+		row.insert(QStringLiteral("state"), connectionState(configured, tokenSet.hasAccessToken() || tokenSet.canRefresh()));
 		row.insert(QStringLiteral("scope"), provider.scopes.join(QLatin1Char(' ')));
 		row.insert(QStringLiteral("primary"), provider.id == primary);
 		row.insert(QStringLiteral("backup"), provider.id == backup);

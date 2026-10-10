@@ -111,6 +111,18 @@ void TestCloudSyncManager::testGoogleDesktopCredentials()
 	qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID");
 	const auto client = googleDesktopOAuthClient();
 	QCOMPARE(client.error.isEmpty(), valid);
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS) && !defined(__EMSCRIPTEN__)
+	FakeNetwork network;
+	CloudSyncManager manager(&network);
+	manager.tokens.clear();
+	for (const auto &entry : manager.providers()) {
+		const auto row = entry.toMap();
+		if (row.value("id").toString() == "google-drive") {
+			QCOMPARE(row.value("configured").toBool(), valid);
+			QCOMPARE(row.value("configurationError").toString().isEmpty(), valid);
+		}
+	}
+#endif
 	if (valid) {
 		QCOMPARE(client.clientId, QString("test-client"));
 		QCOMPARE(client.clientSecret, QString("test-secret"));
