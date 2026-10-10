@@ -692,6 +692,8 @@ Cloud replacement now requires a complete canonical XML document in addition to 
 
 If the manifest is missing, sync checks for an orphaned XML payload before creating an initial baseline. An existing payload is preserved and reported for recovery instead of being silently overwritten. This guards interrupted first uploads; it does not provide compare-and-swap protection against concurrent remote writers.
 
+Windows live Google testing on 2026-10-10 reached browser consent but token exchange failed with `client_secret is missing`; no live cloud round trip was completed. The desktop development flow now reads an external Desktop OAuth JSON through `SUBSURFACE_NEO_GOOGLE_CLIENT_FILE`, supplies its client credential to both exchange and refresh, rejects mismatched client IDs, and reports missing configuration before opening the browser. This is a developer test setup, not the final public onboarding experience. Credentials are not committed, embedded in binaries, or copied into application settings. Android continues to use its native authorization flow. See [Google desktop test setup](NEO_GOOGLE_DESKTOP_TESTING.md). Public OAuth configuration and release credential provisioning remain open.
+
 ---
 
 ## Milestone 14 — Web / WebAssembly & Deployment

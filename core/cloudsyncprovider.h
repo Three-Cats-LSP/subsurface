@@ -31,4 +31,12 @@ struct CloudSyncProviderDescriptor {
 const CloudSyncProviderDescriptor &cloudSyncProviderDescriptor(CloudSyncProviderType type);
 QList<CloudSyncProviderDescriptor> cloudSyncProviderDescriptors();
 
+// Desktop Google OAuth credentials are loaded locally, never from user settings.
+struct GoogleDesktopOAuthClient {
+	QString clientId;
+	QString clientSecret;
+	QString error;
+};
+GoogleDesktopOAuthClient googleDesktopOAuthClient();
+
 #endif // CLOUD_SYNC_PROVIDER_H

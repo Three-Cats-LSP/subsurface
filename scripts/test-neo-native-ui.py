@@ -25,7 +25,27 @@ DRIVER = r'''
     function smokeCheck(value, message) {
         if (!value) throw new Error(message)
     }
+    function smokeFind(item, name) {
+        if (item.objectName === name) return item
+        var children = item.children || []
+        for (var i = 0; i < children.length; ++i) {
+            var found = smokeFind(children[i], name)
+            if (found) return found
+        }
+        return null
+    }
+    function smokeCheckCleanWidth() {
+        var layout = smokeFind(modernDiveList, "NeoDiveListContent")
+        smokeCheck(layout !== null, "Clean content layout")
+        for (var i = 0; i < layout.children.length; ++i) {
+            var child = layout.children[i]
+            if (child.visible)
+                smokeCheck(child.x >= -1 && child.x + child.width <= layout.width + 1,
+                           "Clean child exceeds viewport: " + child)
+        }
+    }
     function smokeCapture(name) {
+        if (pageStack.currentItem === modernDiveList) smokeCheckCleanWidth()
         if (smokeLastCapture === name) return true
         smokeLastCapture = name
         smokeCapturePending = true
@@ -198,10 +218,11 @@ def main():
                       expectedStyle="Modern" if restart else "Clean", restartOnly=restart)
         driver = DRIVER.replace("CONFIG", json.dumps(config))
         (qml / "main.qml").write_text(source.rstrip()[:-1] + driver + "\n}\n", encoding="utf-8")
-        result = subprocess.run(base + ["--testqml=" + qml.as_uri()], cwd=executable.parent, env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120, creationflags=flags)
-        text = result.stdout.decode("utf-8", errors="replace")
-        (output / ("restart.log" if restart else "runtime.log")).write_text(text, encoding="utf-8")
+        log_path = output / ("restart.log" if restart else "runtime.log")
+        with log_path.open("w", encoding="utf-8") as log:
+            result = subprocess.run(base + ["--testqml=" + qml.as_uri()], cwd=executable.parent, env=env,
+                                    stdout=log, stderr=subprocess.STDOUT, timeout=120, creationflags=flags)
+        text = log_path.read_text(encoding="utf-8", errors="replace")
         if result.returncode or "NEO_UI_PASS" not in text or "NEO_UI_FAIL" in text:
             raise RuntimeError(text[-12000:])
     if len(list(output.glob("*.png"))) != 8:

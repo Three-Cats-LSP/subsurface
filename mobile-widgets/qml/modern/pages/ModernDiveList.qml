@@ -143,6 +143,7 @@ Kirigami.Page {
 	}
 
 	ColumnLayout {
+		objectName: "NeoDiveListContent"
 		anchors.fill: parent
 		anchors.margins: tokens.space12
 		spacing: tokens.space12
@@ -153,10 +154,11 @@ Kirigami.Page {
 			spacing: tokens.space12
 			ColumnLayout {
 				Layout.fillWidth: true
+				Layout.minimumWidth: 0
 				spacing: 2
-				Text { visible: !page.plansOnly; text: page.greeting(); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
-				Text { visible: page.plansOnly; text: qsTr("Plans"); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
-				Text { text: page.plansOnly ? qsTr("Saved decompression and dive plans") : qsTr("Here’s your diving summary"); color: tokens.textSecondary; font.pixelSize: 13 }
+				Text { Layout.fillWidth: true; elide: Text.ElideRight; visible: !page.plansOnly; text: page.greeting(); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+				Text { Layout.fillWidth: true; elide: Text.ElideRight; visible: page.plansOnly; text: qsTr("Plans"); color: tokens.textPrimary; font.pixelSize: page.wideLayout ? 30 : 25; font.weight: Font.DemiBold }
+				Text { Layout.fillWidth: true; elide: Text.ElideRight; text: page.plansOnly ? qsTr("Saved decompression and dive plans") : qsTr("Here’s your diving summary"); color: tokens.textSecondary; font.pixelSize: 13 }
 			}
 			ToolButton {
 				Accessible.name: qsTr("Cloud & Sync")
@@ -185,14 +187,19 @@ Kirigami.Page {
 
 			ColumnLayout {
 				Layout.fillWidth: true
+				Layout.minimumWidth: 0
 				spacing: 2
 				Text {
+					Layout.fillWidth: true
+					elide: Text.ElideRight
 					text: page.plansOnly ? qsTr("Saved plans") : qsTr("Dives")
 					color: tokens.textPrimary
 					font.pixelSize: 26
 					font.weight: Font.DemiBold
 				}
 				Text {
+					Layout.fillWidth: true
+					elide: Text.ElideRight
 					text: page.plansOnly ? qsTr("Plans are kept separate from completed and imported dives") :
 						(page.activeCollection.length > 0 ? qsTr("Collection: %1").arg(page.activeCollection) : qsTr("Completed, imported and manually entered dives"))
 					color: tokens.textSecondary
@@ -202,6 +209,7 @@ Kirigami.Page {
 
 			Components.NeoButton {
 				visible: !page.selectionMode
+				compact: !page.wideLayout
 				text: page.filterVisible ? qsTr("Close") : qsTr("Filter")
 				onClicked: page.filterVisible = !page.filterVisible
 			}
@@ -213,6 +221,7 @@ Kirigami.Page {
 			Components.NeoButton { visible: page.selectionMode; compact: true; variant: "danger"; enabled: page.selectedDiveIds.length > 0; text: qsTr("Delete (%1)").arg(page.selectedDiveIds.length); onClicked: page.confirmDelete(page.selectedDiveIds) }
 			Components.NeoButton {
 				visible: !page.selectionMode && !page.plansOnly
+				compact: !page.wideLayout
 				variant: "primary"
 				text: page.wideLayout ? qsTr("+ New dive") : "+"
 				accessibleName: qsTr("Add a new dive")

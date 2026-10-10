@@ -9,6 +9,9 @@
 #include <QNetworkReply>
 #include <QSignalSpy>
 #include <QTimer>
+#include <QTemporaryFile>
+#include <QUrlQuery>
+#include <QScopeGuard>
 #include <cstring>
 
 namespace {
@@ -48,10 +51,12 @@ public:
 	int status = 200;
 	int requests = 0;
 	int timeout = 0;
+	QByteArray posted;
 protected:
-	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *) override
+	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *outgoing) override
 	{
 		++requests;
+		posted = outgoing ? outgoing->readAll() : QByteArray();
 		timeout = request.transferTimeout();
 		return new FakeReply(request, body, status, this);
 	}
@@ -75,6 +80,94 @@ void TestCloudSyncManager::init()
 void TestCloudSyncManager::cleanup()
 {
 	::divelog.clear();
+}
+
+void TestCloudSyncManager::testGoogleDesktopCredentials_data()
+{
+	QTest::addColumn<QByteArray>("json");
+	QTest::addColumn<bool>("valid");
+	QTest::newRow("desktop") << QByteArray(R"({"installed":{"client_id":"test-client","client_secret":"test-secret"}})") << true;
+	QTest::newRow("web client") << QByteArray(R"({"web":{"client_id":"test-client","client_secret":"test-secret"}})") << false;
+	QTest::newRow("missing secret") << QByteArray(R"({"installed":{"client_id":"test-client"}})") << false;
+	QTest::newRow("invalid JSON") << QByteArray("{broken") << false;
+	QTest::newRow("oversize") << QByteArray(65537, ' ') << false;
+}
+
+void TestCloudSyncManager::testGoogleDesktopCredentials()
+{
+	QFETCH(QByteArray, json);
+	QFETCH(bool, valid);
+	const auto oldFile = qgetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE");
+	const auto oldId = qgetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID");
+	const auto restore = qScopeGuard([&] {
+		oldFile.isNull() ? qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE") : qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE", oldFile);
+		oldId.isNull() ? qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID") : qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID", oldId);
+	});
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	QCOMPARE(file.write(json), qint64(json.size()));
+	file.close();
+	qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE", file.fileName().toUtf8());
+	qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID");
+	const auto client = googleDesktopOAuthClient();
+	QCOMPARE(client.error.isEmpty(), valid);
+	if (valid) {
+		QCOMPARE(client.clientId, QString("test-client"));
+		QCOMPARE(client.clientSecret, QString("test-secret"));
+		qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID", "other-client");
+		QVERIFY(!googleDesktopOAuthClient().error.isEmpty());
+	}
+	qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE");
+	QVERIFY(!googleDesktopOAuthClient().error.isEmpty());
+}
+
+void TestCloudSyncManager::testGoogleDesktopTokenRequests()
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS) || defined(__EMSCRIPTEN__)
+	QSKIP("Desktop OAuth flow only");
+#else
+	const auto oldFile = qgetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE");
+	const auto oldId = qgetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID");
+	const auto restore = qScopeGuard([&] {
+		oldFile.isNull() ? qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE") : qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE", oldFile);
+		oldId.isNull() ? qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID") : qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID", oldId);
+	});
+	QTemporaryFile file;
+	QVERIFY(file.open());
+	file.write(R"({"installed":{"client_id":"test-client","client_secret":"test-secret"}})");
+	file.close();
+	qputenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE", file.fileName().toUtf8());
+	qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_ID");
+	FakeNetwork network;
+	network.body = R"({"access_token":"new-access","expires_in":3600})";
+	OAuth2TokenClient tokenClient(&network);
+	QSignalSpy received(&tokenClient, &OAuth2TokenClient::tokenReceived);
+	QSignalSpy errors(&tokenClient, &OAuth2TokenClient::tokenError);
+	const auto &provider = cloudSyncProviderDescriptor(CloudSyncProviderType::GoogleDrive);
+	tokenClient.exchangeAuthorizationCode(provider, "test-client", "code", "verifier", QUrl("http://127.0.0.1:1234/oauth/callback"));
+	QTRY_COMPARE(received.count(), 1);
+	QUrlQuery form(QString::fromUtf8(network.posted));
+	QCOMPARE(form.queryItemValue("client_secret"), QString("test-secret"));
+	QCOMPARE(form.queryItemValue("code_verifier"), QString("verifier"));
+	tokenClient.refreshAccessToken(provider, "test-client", "existing-refresh");
+	QTRY_COMPARE(received.count(), 2);
+	form.setQuery(QString::fromUtf8(network.posted));
+	QCOMPARE(form.queryItemValue("client_secret"), QString("test-secret"));
+	QCOMPARE(form.queryItemValue("grant_type"), QString("refresh_token"));
+	QCOMPARE(qvariant_cast<OAuth2TokenSet>(received.at(1).at(0)).refreshToken, QString("existing-refresh"));
+	tokenClient.refreshAccessToken(provider, "different-client", "existing-refresh");
+	QCOMPARE(errors.count(), 1);
+	QCOMPARE(network.requests, 2);
+	qunsetenv("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE");
+	tokenClient.refreshAccessToken(provider, "test-client", "existing-refresh");
+	QCOMPARE(errors.count(), 2);
+	QCOMPARE(network.requests, 2);
+	// Google configuration must never affect Dropbox's public-client exchange.
+	tokenClient.refreshAccessToken(cloudSyncProviderDescriptor(CloudSyncProviderType::Dropbox), "dropbox-client", "dropbox-refresh");
+	QTRY_COMPARE(received.count(), 3);
+	form.setQuery(QString::fromUtf8(network.posted));
+	QVERIFY(!form.hasQueryItem("client_secret"));
+#endif
 }
 
 void TestCloudSyncManager::testFileLookup_data()

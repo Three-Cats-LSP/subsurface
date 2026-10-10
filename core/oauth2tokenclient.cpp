@@ -62,6 +62,20 @@ void OAuth2TokenClient::postTokenRequest(const CloudSyncProviderDescriptor &prov
 	QUrlQuery form;
 	for (const auto &parameter : parameters)
 		form.addQueryItem(parameter.first, parameter.second);
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS) && !defined(__EMSCRIPTEN__)
+	if (provider.type == CloudSyncProviderType::GoogleDrive) {
+		const auto client = googleDesktopOAuthClient();
+		if (!client.error.isEmpty()) {
+			emit tokenError(client.error);
+			return;
+		}
+		if (client.clientId != form.queryItemValue(QStringLiteral("client_id"))) {
+			emit tokenError(tr("Google OAuth client configuration changed. Please reconnect Google Drive."));
+			return;
+		}
+		form.addQueryItem(QStringLiteral("client_secret"), client.clientSecret);
+	}
+#endif
 
 	QNetworkRequest request(provider.tokenEndpoint);
 	request.setTransferTimeout(30000);

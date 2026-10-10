@@ -315,6 +315,10 @@ const CloudSyncProviderDescriptor *CloudSyncManager::descriptorForId(const QStri
 
 QString CloudSyncManager::configuredClientId(const CloudSyncProviderDescriptor &provider) const
 {
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS) && !defined(__EMSCRIPTEN__)
+	if (provider.type == CloudSyncProviderType::GoogleDrive && qEnvironmentVariableIsSet("SUBSURFACE_NEO_GOOGLE_CLIENT_FILE"))
+		return googleDesktopOAuthClient().clientId;
+#endif
 	if (!provider.clientIdEnvironmentVariable.isEmpty()) {
 		const QString overrideId = qEnvironmentVariable(provider.clientIdEnvironmentVariable.toUtf8().constData()).trimmed();
 		if (!overrideId.isEmpty())
@@ -453,6 +457,15 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 	}
 
 	const QString clientId = configuredClientId(*provider);
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS) && !defined(__EMSCRIPTEN__)
+	if (provider->type == CloudSyncProviderType::GoogleDrive) {
+		const auto client = googleDesktopOAuthClient();
+		if (!client.error.isEmpty()) {
+			setError(client.error);
+			return;
+		}
+	}
+#endif
 	if (clientId.isEmpty()) {
 		setError(tr("%1 OAuth client is not available on this platform yet.").arg(provider->displayName));
 		return;

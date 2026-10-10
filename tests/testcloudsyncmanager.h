@@ -22,5 +22,8 @@ private slots:
 	void testCorruptDownload();
 	void testCanonicalCloudLog();
 	void testOrphanCloudLog();
+	void testGoogleDesktopCredentials_data();
+	void testGoogleDesktopCredentials();
+	void testGoogleDesktopTokenRequests();
 };
 #endif
