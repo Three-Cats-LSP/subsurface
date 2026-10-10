@@ -688,6 +688,8 @@ Cloud data scope is currently canonical Subsurface XML plus its revision/hash ma
 
 Cloud replacement now requires a complete canonical XML document in addition to a matching checksum, rejecting truncated XML, unrelated documents, trailing corruption, and DTDs before the import parser can change the local log. Regression cases verify preservation and retry after rejection. Windows `--user` profiles use separate secure credential keys for disposable live tests. Simultaneous remote writers and interruption between the payload and manifest writes remain protocol-level validation gaps; current transfers are not an atomic multi-file transaction.
 
+If the manifest is missing, sync checks for an orphaned XML payload before creating an initial baseline. An existing payload is preserved and reported for recovery instead of being silently overwritten. This guards interrupted first uploads; it does not provide compare-and-swap protection against concurrent remote writers.
+
 ---
 
 ## Milestone 14 — Web / WebAssembly & Deployment

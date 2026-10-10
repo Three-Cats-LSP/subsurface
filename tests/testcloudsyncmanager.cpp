@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testcloudsyncmanager.h"
 #include "core/cloudsyncmanager.h"
+#include "core/divelog.h"
+#include "core/parse.h"
+#include "core/pref.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSignalSpy>
@@ -52,6 +55,25 @@ protected:
 		return new FakeReply(request, body, status, this);
 	}
 };
+}
+
+void TestCloudSyncManager::init()
+{
+	prefs = default_prefs;
+	::divelog.clear();
+	const QByteArray local("<divelog program='subsurface' version='3'><dives>"
+		"<dive number='17' date='2026-01-02' time='10:00:00' duration='20:00 min'>"
+		"<notes>Local notes must survive cloud failures.</notes>"
+		"<divecomputer model='manually added dive'><depth max='18.0 m'/></divecomputer>"
+		"</dive></dives></divelog>");
+	QCOMPARE(parse_xml_buffer("cloud-regression", local.constData(), local.size(), &::divelog, nullptr), 0);
+	::divelog.process_loaded_dives();
+	QCOMPARE(::divelog.dives.size(), 1);
+}
+
+void TestCloudSyncManager::cleanup()
+{
+	::divelog.clear();
 }
 
 void TestCloudSyncManager::testFileLookup_data()
@@ -250,6 +272,31 @@ void TestCloudSyncManager::testCanonicalCloudLog()
 	const QByteArray original = manager.serializeCurrentDiveLog();
 	QVERIFY(!original.isEmpty());
 	QVERIFY(manager.applyCloudDiveLog(original));
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+}
+
+void TestCloudSyncManager::testOrphanCloudLog()
+{
+	FakeNetwork network;
+	network.body = "orphaned cloud log";
+	CloudSyncManager manager(&network);
+	manager.tokens.clear();
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	manager.tokens.insert("dropbox", token);
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	manager.syncProviderId = "dropbox";
+	manager.syncOperation = CloudSyncManager::SyncOperation::SyncDownloadManifest;
+	manager.syncLocalPayload = original;
+	manager.syncLocalSha256 = CloudSyncManifest::sha256(original);
+	QSignalSpy success(&manager, &CloudSyncManager::diveLogSyncFinished);
+	QSignalSpy uploads(&manager, &CloudSyncManager::uploadFinished);
+	manager.fileStore.fileNotFound(CloudSyncProviderType::Dropbox, "subsurface-neo-sync.json");
+	QTRY_VERIFY(!manager.syncInProgress());
+	QVERIFY(manager.lastError().contains("without its sync manifest"));
+	QCOMPARE(network.requests, 1); // Only download the orphan; never upload over it.
+	QCOMPARE(success.count(), 0);
+	QCOMPARE(uploads.count(), 0);
 	QCOMPARE(manager.serializeCurrentDiveLog(), original);
 }
 

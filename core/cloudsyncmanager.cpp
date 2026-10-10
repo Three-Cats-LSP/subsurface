@@ -160,6 +160,10 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 				handleDownloadedManifest(providerId, data);
 			else if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) && syncOperation == SyncOperation::SyncDownloadPayload)
 				handleDownloadedDiveLog(providerId, data);
+			else if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) && syncOperation == SyncOperation::SyncCheckOrphanPayload) {
+				setError(tr("A cloud dive log exists without its sync manifest. No data was overwritten. Recover the cloud files before syncing again."));
+				clearSyncOperation();
+			}
 		});
 
 	connect(&fileStore, &CloudSyncFileStore::fileNotFound, this,
@@ -167,6 +171,18 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
 			if (!forceCloudDownload && providerId == syncProviderId && syncOperation == SyncOperation::SyncDownloadManifest &&
 			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME)) {
+				if (localDiveLogUnchanged()) {
+					// An interrupted upload may have left a log but no manifest.
+					// Confirm both files are absent before creating a baseline.
+					syncOperation = SyncOperation::SyncCheckOrphanPayload;
+					downloadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME));
+				} else {
+					clearSyncOperation();
+				}
+				return;
+			}
+			if (providerId == syncProviderId && syncOperation == SyncOperation::SyncCheckOrphanPayload &&
+			    fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME)) {
 				if (localDiveLogUnchanged())
 					startUploadSequence(providerId, syncLocalPayload, QString(), false);
 				else

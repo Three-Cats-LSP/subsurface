@@ -80,6 +80,7 @@ private:
 		BackupUploadPayload,
 		BackupUploadManifest,
 		SyncDownloadManifest,
+		SyncCheckOrphanPayload,
 		SyncUploadPayload,
 		SyncUploadManifest,
 		SyncDownloadPayload,

@@ -6,6 +6,8 @@
 class TestCloudSyncManager : public TestBase {
 	Q_OBJECT
 private slots:
+	void init();
+	void cleanup();
 	void testFileLookup_data();
 	void testFileLookup();
 	void testDropboxMissingFile_data();
@@ -19,5 +21,6 @@ private slots:
 	void testCorruptDownload_data();
 	void testCorruptDownload();
 	void testCanonicalCloudLog();
+	void testOrphanCloudLog();
 };
 #endif
