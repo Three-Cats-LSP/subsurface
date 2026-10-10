@@ -9,6 +9,7 @@ ToolBar {
 
 	property string currentSection: "dives"
 	signal divesRequested()
+	signal homeRequested()
 	signal sitesRequested()
 	signal statsRequested()
 	signal moreRequested()
@@ -32,12 +33,12 @@ ToolBar {
 		spacing: 0
 
 		Repeater {
-			model: [
+			model: (tokens.modernStyle ? [{ key: "home", label: qsTr("Home"), icon: "home" }] : []).concat([
 				{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 				{ key: "sites", label: qsTr("Sites"), icon: "site" },
 				{ key: "stats", label: qsTr("Stats"), icon: "stats" },
 				{ key: "more", label: qsTr("More"), icon: "more" }
-			]
+			])
 
 			delegate: ItemDelegate {
 				required property var modelData
@@ -86,6 +87,7 @@ ToolBar {
 
 				onClicked: {
 					switch (modelData.key) {
+					case "home": bar.homeRequested(); break
 					case "dives": bar.divesRequested(); break
 					case "sites": bar.sitesRequested(); break
 					case "stats": bar.statsRequested(); break

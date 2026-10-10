@@ -370,8 +370,13 @@ forbid(
 
 desktop_sidebar = source("mobile-widgets/qml/modern/components/NeoDesktopSidebar.qml")
 bottom_navigation = source("mobile-widgets/qml/modern/components/NeoBottomNavigation.qml")
-forbid(desktop_sidebar, ('label: qsTr("Dashboard")',), "Neo merged dashboard navigation")
-forbid(bottom_navigation, ('label: qsTr("Home")',), "Neo merged dashboard navigation")
+require(desktop_sidebar, ('tokens.modernStyle ? [{ key: "home"', 'case "home": sidebar.homeRequested()',), "Optional Modern dashboard navigation")
+require(bottom_navigation, ('tokens.modernStyle ? [{ key: "home"', 'case "home": bar.homeRequested()',), "Optional Modern mobile Home")
+require(main_qml, ('property string style: "Clean"', 'neoInterfaceStyle === "Modern"', 'pageStack.push(neoModernStyle ? neoModernDashboard : modernDiveList)',), "Persisted Clean / Modern selection")
+modern_dashboard = source("mobile-widgets/qml/modern/pages/ModernDashboard.qml")
+require(modern_dashboard, ('NeoDashboard.recentDives', 'Components.MiniDiveProfile', 'NeoDashboard.monthlyActivity', 'qsTr("Coldest / Warmest Temp")', 'rootItem.openNeoDiveDetails(modelData.id, false, true)',), "Modern dashboard uses real data")
+forbid(modern_dashboard, ('QMLProfile {', 'Izu Oceanic Park', 'Mikomoto Island', 'qsTr("Avg water")',), "Modern dashboard does not use fabricated preview data or heavyweight profiles")
+require(source("mobile-widgets/qml/modern/components/MetricCard.qml"), ('NeoDiveIcon', 'property bool showcase: false',), "Clean and Modern share the updated icon registry")
 
 neo_spin_box = source("mobile-widgets/qml/modern/components/NeoSpinBox.qml")
 neo_combo_box = source("mobile-widgets/qml/modern/components/NeoComboBox.qml")

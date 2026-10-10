@@ -167,6 +167,15 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Interface"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Text { text: qsTr("Interface style"); color: tokens.textSecondary; font.pixelSize: 12 }
+				Components.NeoComboBox {
+					objectName: "neoInterfaceStyleSelector"
+					Layout.fillWidth: true
+					model: [qsTr("Clean"), qsTr("Modern")]
+					currentIndex: rootItem.neoModernStyle ? 1 : 0
+					onActivated: rootItem.neoInterfaceStyle = currentIndex === 1 ? "Modern" : "Clean"
+				}
+				Text { text: qsTr("Clean: compact logbook. Modern: ocean-inspired dashboard and cards. Both support light and dark mode."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Single-column portrait layout"); checked: PrefDisplay.singleColumnPortrait; onToggled: PrefDisplay.singleColumnPortrait = checked }
 				Components.NeoSwitch { Layout.fillWidth: true; text: qsTr("Three-metre profile grid"); checked: PrefDisplay.three_m_based_grid; onToggled: PrefDisplay.three_m_based_grid = checked }
 				GridLayout {

@@ -5,13 +5,14 @@ QtObject {
 	// Neo's day palette deliberately mirrors LSP+: a low-glare blue-gray page,
 	// white surfaces, dark text and a deeper cyan accent that remains legible in sun.
 	readonly property bool lightTheme: subsurfaceTheme.currentTheme !== "Dark"
-	readonly property color background: lightTheme ? "#F0F4F8" : "#06111E"
-	readonly property color surface: lightTheme ? "#FFFFFF" : "#0A1E2F"
-	readonly property color surfaceRaised: lightTheme ? "#F7F9FC" : "#0D263C"
+	readonly property bool modernStyle: typeof rootItem !== "undefined" && rootItem.neoModernStyle === true
+	readonly property color background: modernStyle ? (lightTheme ? "#EAF4F7" : "#05131E") : (lightTheme ? "#F0F4F8" : "#06111E")
+	readonly property color surface: modernStyle ? (lightTheme ? "#F7FCFE" : "#0A2231") : (lightTheme ? "#FFFFFF" : "#0A1E2F")
+	readonly property color surfaceRaised: modernStyle ? (lightTheme ? "#DDEFF4" : "#0E2C3E") : (lightTheme ? "#F7F9FC" : "#0D263C")
 	readonly property color textPrimary: lightTheme ? "#1A202C" : "#F2F8FB"
 	readonly property color textSecondary: lightTheme ? "#4A5568" : "#A9BAC8"
 	readonly property color textMuted: lightTheme ? "#718096" : "#718CA1"
-	readonly property color accent: lightTheme ? "#0891B2" : "#22D4EB"
+	readonly property color accent: modernStyle ? (lightTheme ? "#007E98" : "#25D6E8") : (lightTheme ? "#0891B2" : "#22D4EB")
 	readonly property color accentStrong: lightTheme ? "#0E7490" : "#0EAAC7"
 	readonly property color border: lightTheme ? "#D8E0E8" : "#1E3B50"
 	readonly property color success: "#43D17A"

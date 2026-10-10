@@ -18,6 +18,8 @@ class NeoDashboardModel : public QObject
 	Q_PROPERTY(QString waterTemperatureRange READ waterTemperatureRange NOTIFY changed)
 	Q_PROPERTY(QVariantList recentDives READ recentDives NOTIFY changed)
 	Q_PROPERTY(QVariantList recentPlans READ recentPlans NOTIFY changed)
+	Q_PROPERTY(QVariantList monthlyActivity READ monthlyActivity NOTIFY changed)
+	Q_PROPERTY(int activityYear READ activityYear NOTIFY changed)
 
 public:
 	explicit NeoDashboardModel(QObject *parent = nullptr);
@@ -31,6 +33,8 @@ public:
 	QString waterTemperatureRange() const { return m_waterTemperatureRange; }
 	QVariantList recentDives() const { return m_recentDives; }
 	QVariantList recentPlans() const { return m_recentPlans; }
+	QVariantList monthlyActivity() const { return m_monthlyActivity; }
+	int activityYear() const { return m_activityYear; }
 
 public slots:
 	void refresh();
@@ -48,6 +52,8 @@ private:
 	QString m_waterTemperatureRange;
 	QVariantList m_recentDives;
 	QVariantList m_recentPlans;
+	QVariantList m_monthlyActivity;
+	int m_activityYear = 0;
 };
 
 #endif // NEODASHBOARDMODEL_H

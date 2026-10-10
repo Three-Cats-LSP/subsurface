@@ -5,6 +5,8 @@ import QtQuick.Controls.Material
 import QtQuick.Window
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtCore
+import "modern" as NeoDesign
 import org.subsurfacedivelog.mobile 1.0
 import org.kde.kirigami as Kirigami
 import QtQuick.Templates as QtQuickTemplates
@@ -19,8 +21,17 @@ Kirigami.ApplicationWindow {
 	// the documentation claims that the ApplicationWindow should pick up the font set on
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
+	Settings {
+		id: neoAppearance
+		category: "subsurface-neo/interface"
+		property string style: "Clean"
+	}
+	property alias neoInterfaceStyle: neoAppearance.style
+	readonly property bool neoModernStyle: neoInterfaceStyle === "Modern"
+	NeoDesign.DesignTokens { id: shellTokens }
+	onNeoInterfaceStyleChanged: { if (initialized) Qt.callLater(showNeoHome) }
 	readonly property bool neoLightTheme: subsurfaceTheme.currentTheme !== "Dark"
-	background: Rectangle { color: rootItem.neoLightTheme ? "#F0F4F8" : "#0B1220" }
+	background: Rectangle { color: shellTokens.background }
 	readonly property int neoAvailableWidth: Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : Screen.width
 	readonly property int neoAvailableHeight: Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : Screen.height
 	// Keep Qt Quick Controls in step with the Neo shell. Several mature pages
@@ -53,6 +64,7 @@ Kirigami.ApplicationWindow {
 		visible: initialized && !neoDesktopShellActive && !neoSubsurfaceCloudSetup.visible && !neoOnboarding.visible &&
 			rootItem.neoShowsBottomNavigation(pageStack.currentItem)
 		currentSection: rootItem.neoBottomSectionForPage(pageStack.currentItem)
+		onHomeRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
 		onStatsRequested: showPageFromDrawer(neoStatisticsHub)
@@ -70,6 +82,7 @@ Kirigami.ApplicationWindow {
 		currentSection: rootItem.neoSectionForPage(pageStack.currentItem)
 		accountText: PrefCloudStorage.cloud_storage_email
 		statusText: manager.syncState
+		onHomeRequested: showNeoHome()
 		onDivesRequested: showPageFromDrawer(modernDiveList)
 		onPlansRequested: showPageFromDrawer(modernPlansList)
 		onSitesRequested: showPageFromDrawer(neoSitesHub)
@@ -90,9 +103,9 @@ Kirigami.ApplicationWindow {
 		anchors.right: parent.right
 		anchors.top: parent.top
 		height: 46
-		color: rootItem.neoLightTheme ? "#FFFFFF" : "#0A1E2F"
+		color: shellTokens.surface
 		border.width: 1
-		border.color: rootItem.neoLightTheme ? "#D8E0E8" : "#1E3B50"
+		border.color: shellTokens.border
 		z: 9999
 		Text {
 			anchors.left: parent.left
@@ -113,7 +126,7 @@ Kirigami.ApplicationWindow {
 	// we want to use our own colors for Kirigami, so let's define our colorset
 	Kirigami.Theme.inherit: false
 	Kirigami.Theme.colorSet: Kirigami.Theme.Button
-	Kirigami.Theme.backgroundColor: neoLightTheme ? "#F0F4F8" : "#0B1220"
+	Kirigami.Theme.backgroundColor: shellTokens.background
 	Kirigami.Theme.textColor: neoLightTheme ? "#1A202C" : "#F7FAFC"
 	Kirigami.Theme.highlightColor: neoLightTheme ? "#0891B2" : "#169DD0"
 	Kirigami.Theme.highlightedTextColor: "#FFFFFF"
@@ -121,7 +134,7 @@ Kirigami.ApplicationWindow {
 	function neoPageUsesOwnHeader(page) {
 		if (!page)
 			return false
-		if (page === modernDiveList || page === modernPlansList || page === neoMorePage ||
+		if (page === neoModernDashboard || page === modernDiveList || page === modernPlansList || page === neoMorePage ||
 			page === neoSettingsHub || page === neoAboutPage || page === neoAccountSecurityPage ||
 			page === neoDiveComputerCenter || page === neoPlannerLab || page === neoOperationsHub ||
 			page === neoEquipmentLibrary || page === neoDataPortability || page === neoSitesHub ||
@@ -145,8 +158,8 @@ Kirigami.ApplicationWindow {
 
 	// expose header colors so Kirigami's AbstractApplicationHeader can read them
 	// (on iOS, items with inherit:false get system palette colors instead of app theme)
-	property color headerBackgroundColor: neoLightTheme ? "#FFFFFF" : "#111B2E"
-	property color headerTextColor: neoLightTheme ? "#1A202C" : "#F7FAFC"
+	property color headerBackgroundColor: shellTokens.surface
+	property color headerTextColor: shellTokens.textPrimary
 
 	property alias notificationText: manager.notificationText
 	property alias pluggedInDeviceName: manager.pluggedInDeviceName
@@ -164,6 +177,8 @@ Kirigami.ApplicationWindow {
 	readonly property int neoContentWidth: Math.max(1, width - (neoDesktopShellActive ? neoSidebarWidth : 0))
 
 	function neoSectionForPage(page) {
+		if (page === neoModernDashboard)
+			return "home"
 		if (page?.objectName === "ModernDiveDetails" && page.navigationSection === "plans")
 			return "plans"
 		if (page === modernDiveList || page?.objectName === "ModernDiveDetails" || page?.objectName === "ModernDiveEditor")
@@ -190,7 +205,7 @@ Kirigami.ApplicationWindow {
 	}
 
 	function neoShowsBottomNavigation(page) {
-		return page === modernDiveList || page === modernPlansList || page === neoSitesHub ||
+		return page === neoModernDashboard || page === modernDiveList || page === modernPlansList || page === neoSitesHub ||
 			page === neoStatisticsHub || page === mapPage || page === statistics ||
 			page === neoMorePage || page === neoPlannerLab || page === cloudSyncPage ||
 			page === neoDiveComputerCenter || page === neoEquipmentLibrary || page === neoDataPortability ||
@@ -198,6 +213,8 @@ Kirigami.ApplicationWindow {
 	}
 
 	function neoBottomSectionForPage(page) {
+		if (page === neoModernDashboard)
+			return "home"
 		if (page === modernDiveList)
 			return "dives"
 		if (page === neoSitesHub || page === mapPage)
@@ -297,15 +314,16 @@ Kirigami.ApplicationWindow {
 			pageStack.push(page)
 			return
 		}
-		pageStack.push(modernDiveList)
-		if (page !== modernDiveList)
+		var home = neoModernStyle ? neoModernDashboard : modernDiveList
+		pageStack.push(home)
+		if (page !== home)
 			showPage(page)
 	}
 
 	function showNeoHome() {
 		detailsWindow.endEditMode()
 		pageStack.clear()
-		pageStack.push(modernDiveList)
+		pageStack.push(neoModernStyle ? neoModernDashboard : modernDiveList)
 	}
 
 	function showPage(page) {
@@ -1204,6 +1222,14 @@ if you have network connectivity and want to sync your data to cloud storage."),
 		onOpenPortability: showPageFromDrawer(neoDataPortability)
 		onOpenSettings: showPageFromDrawer(neoSettingsHub)
 		onOpenAbout: showPageFromDrawer(neoAboutPage)
+	}
+
+	NeoPages.ModernDashboard {
+		id: neoModernDashboard
+		onOpenDive: function(diveId) { rootItem.openNeoDiveDetails(diveId, false, false) }
+		onOpenDiveList: showPageFromDrawer(modernDiveList)
+		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)
+		onOpenCloudSync: showPageFromDrawer(cloudSyncPage)
 	}
 
 	NeoPages.ModernSettingsHub {

@@ -13,6 +13,7 @@ Control {
 	property string statusText: ""
 
 	signal divesRequested()
+	signal homeRequested()
 	signal plansRequested()
 	signal sitesRequested()
 	signal mapRequested()
@@ -52,7 +53,7 @@ Control {
 			rightPadding: 18
 			hoverEnabled: true
 			activeFocusOnTab: true
-			Accessible.name: qsTr("Open dives")
+			Accessible.name: tokens.modernStyle ? qsTr("Open dashboard") : qsTr("Open dives")
 
 			contentItem: ColumnLayout {
 				spacing: 8
@@ -98,7 +99,7 @@ Control {
 					(brandButton.hovered ? tokens.surface : "transparent")
 			}
 
-			onClicked: sidebar.divesRequested()
+			onClicked: tokens.modernStyle ? sidebar.homeRequested() : sidebar.divesRequested()
 		}
 
 		ColumnLayout {
@@ -108,7 +109,7 @@ Control {
 			spacing: 4
 
 			Repeater {
-				model: [
+				model: (tokens.modernStyle ? [{ key: "home", label: qsTr("Dashboard"), icon: "home" }] : []).concat([
 					{ key: "dives", label: qsTr("Dives"), icon: "dives" },
 					{ key: "plans", label: qsTr("Plans"), icon: "slate" },
 					{ key: "sites", label: qsTr("Dive Sites"), icon: "site" },
@@ -119,7 +120,7 @@ Control {
 					{ key: "import", label: qsTr("Import"), icon: "diveComputer" },
 					{ key: "portability", label: qsTr("Data & Backup"), icon: "export" },
 					{ key: "settings", label: qsTr("Settings"), icon: "settings" }
-				]
+				])
 
 				delegate: ItemDelegate {
 					id: navigationButton
@@ -173,6 +174,7 @@ Control {
 
 					onClicked: {
 						switch (modelData.key) {
+						case "home": sidebar.homeRequested(); break
 						case "dives": sidebar.divesRequested(); break
 						case "plans": sidebar.plansRequested(); break
 						case "sites": sidebar.sitesRequested(); break

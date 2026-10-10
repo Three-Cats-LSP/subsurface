@@ -135,6 +135,8 @@ Preferred architecture: a small versioned **Neo update manifest** generated from
 
 **Exit:** Neo launches into a coherent responsive modern shell on Android and Windows.
 
+Two native interface styles are available in Settings → Interface: **Clean** preserves the compact combined dive-summary/logbook workspace; **Modern** adds a separate ocean-inspired Dashboard/Home with summary cards, recent-dive depth previews, date badges, and current-year monthly activity. Both styles share the updated Neo icon registry, canonical dive data, and light/dark selection. Clean remains the default. The preview at `https://threecats-lsp.com/subsurface-neo/preview/#dashboard` is the visual reference, not a source of sample data for the application.
+
 ---
 
 ## Milestone 3 — Dashboard with real data

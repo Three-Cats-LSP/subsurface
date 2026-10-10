@@ -148,6 +148,7 @@ Kirigami.Page {
 		spacing: tokens.space12
 
 		RowLayout {
+			visible: page.plansOnly || !tokens.modernStyle
 			Layout.fillWidth: true
 			spacing: tokens.space12
 			ColumnLayout {
@@ -167,7 +168,7 @@ Kirigami.Page {
 		}
 
 		GridLayout {
-			visible: !page.plansOnly
+			visible: !page.plansOnly && !tokens.modernStyle
 			Layout.fillWidth: true
 			columns: page.wideLayout ? 4 : 3
 			columnSpacing: page.wideLayout ? tokens.space16 : tokens.space8

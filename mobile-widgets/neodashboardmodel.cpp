@@ -2,12 +2,16 @@
 #include "neodashboardmodel.h"
 
 #include "core/dive.h"
+#include "core/divecomputer.h"
+#include "core/sample.h"
 #include "core/divelog.h"
 #include "core/qthelper.h"
 #include "core/string-format.h"
 #include "core/subsurface-qt/divelistnotifier.h"
 
 #include <QVariantMap>
+#include <QDateTime>
+#include <algorithm>
 
 NeoDashboardModel::NeoDashboardModel(QObject *parent) : QObject(parent)
 {
@@ -34,6 +38,8 @@ void NeoDashboardModel::refresh()
 	depth_t deepest {};
 	QVector<const dive *> validDives;
 	QVector<const dive *> savedPlans;
+	m_activityYear = QDate::currentDate().year();
+	int monthlyCounts[12] = {};
 
 	for (const auto &divePtr : divelog.dives) {
 		if (!divePtr || divePtr->invalid)
@@ -45,6 +51,9 @@ void NeoDashboardModel::refresh()
 			continue;
 		}
 		++count;
+		const QDate date = QDateTime::fromSecsSinceEpoch(d->when, Qt::UTC).date();
+		if (date.year() == m_activityYear)
+			++monthlyCounts[date.month() - 1];
 		totalSeconds += d->duration.seconds;
 		if (d->watertemp.mkelvin) {
 			totalWaterTemperature += d->watertemp.mkelvin;
@@ -81,6 +90,22 @@ void NeoDashboardModel::refresh()
 		item.insert(QStringLiteral("date"), formatDiveDate(d));
 		item.insert(QStringLiteral("depth"), get_depth_string(d->maxdepth, true, true));
 		item.insert(QStringLiteral("duration"), formatDiveDuration(d));
+		const QDate date = QDateTime::fromSecsSinceEpoch(d->when, Qt::UTC).date();
+		item.insert(QStringLiteral("day"), date.day());
+		item.insert(QStringLiteral("month"), date.toString(QStringLiteral("MMM")).toUpper());
+		item.insert(QStringLiteral("year"), date.year());
+		// Lightweight previews use real depth samples, not the full decompression
+		// renderer. Bound the number of points to keep the dashboard inexpensive.
+		QVariantList profile;
+		const auto &samples = d->dc.samples;
+		const size_t stride = std::max(size_t(1), (samples.size() + 159) / 160);
+		for (size_t s = 0; s < samples.size(); s += stride)
+			profile.append(QVariantMap{{QStringLiteral("time"), samples[s].time.seconds},
+				{QStringLiteral("depth"), samples[s].depth.mm}});
+		if (!samples.empty() && (samples.size() - 1) % stride != 0)
+			profile.append(QVariantMap{{QStringLiteral("time"), samples.back().time.seconds},
+				{QStringLiteral("depth"), samples.back().depth.mm}});
+		item.insert(QStringLiteral("profile"), profile);
 		recentPlans.push_back(item);
 	}
 
@@ -102,5 +127,8 @@ void NeoDashboardModel::refresh()
 	}
 	m_recentDives = recent;
 	m_recentPlans = recentPlans;
+	m_monthlyActivity.clear();
+	for (int monthCount : monthlyCounts)
+		m_monthlyActivity.append(monthCount);
 	emit changed();
 }

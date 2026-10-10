@@ -11,6 +11,11 @@ Rectangle {
 	property int contentPadding: tokens.space16
 
 	color: tokens.surface
+	property Gradient oceanGradient: Gradient {
+		GradientStop { position: 0; color: tokens.surfaceRaised }
+		GradientStop { position: 1; color: tokens.surface }
+	}
+	gradient: tokens.modernStyle ? oceanGradient : null
 	radius: tokens.radiusMedium
 	border.width: 1
 	border.color: tokens.border

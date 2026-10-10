@@ -45,6 +45,7 @@
 		<file>modern/DesignTokens.qml</file>
 		<file>modern/components/ModernCard.qml</file>
 		<file>modern/components/MetricCard.qml</file>
+		<file>modern/components/MiniDiveProfile.qml</file>
 		<file>modern/components/NeoButton.qml</file>
 		<file>modern/components/NeoCheckBox.qml</file>
 		<file>modern/components/NeoComboBox.qml</file>
@@ -61,6 +62,7 @@
 		<file>modern/components/DiveActionSheet.qml</file>
 		<file>modern/components/PlanSchedule.qml</file>
 		<file>modern/pages/ModernDiveList.qml</file>
+		<file>modern/pages/ModernDashboard.qml</file>
 		<file>modern/pages/ModernDiveDetails.qml</file>
 		<file>modern/pages/ModernDiveEditor.qml</file>
 		<file>modern/pages/ModernDiveComputerCenter.qml</file>
