@@ -5,7 +5,7 @@ import QtQuick.Controls.Material
 import QtQuick.Window
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtCore
+import QtCore as QtCore
 import "modern" as NeoDesign
 import org.subsurfacedivelog.mobile 1.0
 import org.kde.kirigami as Kirigami
@@ -21,7 +21,7 @@ Kirigami.ApplicationWindow {
 	// the documentation claims that the ApplicationWindow should pick up the font set on
 	// the C++ side. But as a matter of fact, it doesn't, unless you add this line:
 	font: Qt.application.font
-	Settings {
+	QtCore.Settings {
 		id: neoAppearance
 		category: "subsurface-neo/interface"
 		property string style: "Clean"

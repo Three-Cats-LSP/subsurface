@@ -58,6 +58,8 @@ require(
 )
 
 main_qml = source("mobile-widgets/qml/main.qml")
+require(main_qml, ('import QtCore as QtCore', 'QtCore.Settings {'), "Qualified appearance preferences")
+forbid(main_qml, ('import QtCore\n',), "Legacy Settings page type resolution")
 require(
 	main_qml,
 	(

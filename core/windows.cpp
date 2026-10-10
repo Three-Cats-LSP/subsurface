@@ -457,6 +457,15 @@ void subsurface_console_init()
 	/* just in case of multiple calls */
 	memset((void *)&console_desc, 0, sizeof(console_desc));
 
+	// Keep redirected streams intact so CI and diagnostic launches can capture
+	// Qt/QML errors instead of losing them when we reopen the parent console.
+	const auto redirected = [](DWORD stream) {
+		const DWORD type = GetFileType(GetStdHandle(stream));
+		return type == FILE_TYPE_PIPE || type == FILE_TYPE_DISK;
+	};
+	if (redirected(STD_OUTPUT_HANDLE) && redirected(STD_ERROR_HANDLE))
+		return;
+
 	/* if AttachConsole(ATTACH_PARENT_PROCESS) returns true the parent process
 	 * is a terminal. based on the result, either redirect to that terminal or
 	 * to log files.
