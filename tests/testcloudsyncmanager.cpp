@@ -199,4 +199,58 @@ void TestCloudSyncManager::testMissingTextDoesNotStartUpload()
 	QCOMPARE(network.requests, 0);
 }
 
+void TestCloudSyncManager::testCorruptDownload_data()
+{
+	QTest::addColumn<QByteArray>("payload");
+	QTest::addColumn<bool>("matchingChecksum");
+	QTest::newRow("checksum mismatch") << QByteArray("<divelog/>") << false;
+	QTest::newRow("truncated XML with matching hash") << QByteArray("<divelog><dives><dive number='1'>") << true;
+	QTest::newRow("unrelated XML with matching hash") << QByteArray("<html><body>Service unavailable</body></html>") << true;
+	QTest::newRow("trailing corruption") << QByteArray("<divelog/>garbage") << true;
+	QTest::newRow("DTD") << QByteArray("<!DOCTYPE divelog [<!ENTITY note 'external'>]><divelog/>") << true;
+	QTest::newRow("empty") << QByteArray() << true;
+}
+
+void TestCloudSyncManager::testCorruptDownload()
+{
+	QFETCH(QByteArray, payload);
+	QFETCH(bool, matchingChecksum);
+	FakeNetwork network;
+	CloudSyncManager manager(&network);
+	manager.tokens.clear();
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	QVERIFY(!original.isEmpty());
+	manager.syncProviderId = "dropbox";
+	manager.syncOperation = CloudSyncManager::SyncOperation::SyncDownloadPayload;
+	manager.syncLocalSha256 = CloudSyncManifest::sha256(original);
+	manager.syncRemoteManifest = CloudSyncManifest::forPayload(matchingChecksum ? payload : "other bytes");
+	manager.forceCloudDownload = true;
+	QSignalSpy success(&manager, &CloudSyncManager::diveLogSyncFinished);
+	manager.handleDownloadedDiveLog("dropbox", payload);
+	QVERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.lastError().isEmpty());
+	QCOMPARE(success.count(), 0);
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+	QCOMPARE(network.requests, 0);
+	// A rejected replacement must not leave the next manual retry stuck busy.
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	manager.tokens.insert("dropbox", token);
+	network.status = 503;
+	manager.syncDiveLog("dropbox");
+	QVERIFY(manager.syncInProgress());
+	QTRY_VERIFY(!manager.syncInProgress());
+	QCOMPARE(network.requests, 1);
+}
+
+void TestCloudSyncManager::testCanonicalCloudLog()
+{
+	FakeNetwork network;
+	CloudSyncManager manager(&network);
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	QVERIFY(!original.isEmpty());
+	QVERIFY(manager.applyCloudDiveLog(original));
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+}
+
 QTEST_GUILESS_MAIN(TestCloudSyncManager)

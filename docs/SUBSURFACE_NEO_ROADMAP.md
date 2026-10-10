@@ -684,6 +684,10 @@ Reliability implementation now includes bounded network inactivity waits, releas
 
 **Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, an opt-in automatic primary-provider sync lifecycle for established baselines, persistent last-success status, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration (including automatic migration of legacy Subsurface Cloud passwords), personalized units and text sizing, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, and the full multi-device/offline security matrix remain release-hardening work.
 
+Cloud data scope is currently canonical Subsurface XML plus its revision/hash manifest. The Cloud & Sync page explicitly excludes the separate equipment library, manual collections, and planner presets; portable `.subsurface-neo` backups preserve those. Metadata synchronization remains open and needs a versioned merge/conflict design before expanding the provider payload.
+
+Cloud replacement now requires a complete canonical XML document in addition to a matching checksum, rejecting truncated XML, unrelated documents, trailing corruption, and DTDs before the import parser can change the local log. Regression cases verify preservation and retry after rejection. Windows `--user` profiles use separate secure credential keys for disposable live tests. Simultaneous remote writers and interruption between the payload and manifest writes remain protocol-level validation gaps; current transfers are not an atomic multi-file transaction.
+
 ---
 
 ## Milestone 14 — Web / WebAssembly & Deployment

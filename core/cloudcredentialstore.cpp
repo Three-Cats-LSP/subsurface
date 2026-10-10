@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudcredentialstore.h"
+#include "subsurfacestartup.h"
 
 #if defined(Q_OS_WIN)
 #include <windows.h>
@@ -12,6 +13,11 @@ namespace {
 
 QString credentialName(const QString &providerId)
 {
+	// --user profiles must not load, replace, or disconnect the real account.
+	// Keep the existing key unchanged for the normal application profile.
+	if (!settings_suffix.empty())
+		return QStringLiteral("SubsurfaceNeo/Cloud/profile/%1/%2")
+			.arg(QString::fromStdString(settings_suffix), providerId);
 	return QStringLiteral("SubsurfaceNeo/Cloud/%1").arg(providerId);
 }
 

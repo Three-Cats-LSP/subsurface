@@ -44,8 +44,6 @@ int main(int argc, char **argv)
 	// and get comand line arguments
 	QStringList arguments = QCoreApplication::arguments();
 
-	subsurface_console_init();
-
 	for (int i = 1; i < arguments.length(); i++) {
 		QString a = arguments.at(i);
 		if (!a.isEmpty() && a.at(0) == '-') {
@@ -53,6 +51,8 @@ int main(int argc, char **argv)
 			continue;
 		}
 	}
+	// Parse --user before choosing the native diagnostic-log directory.
+	subsurface_console_init();
 	git_libgit2_init();
 	setup_system_prefs();
 	if (QLocale().measurementSystem() == QLocale::MetricSystem)

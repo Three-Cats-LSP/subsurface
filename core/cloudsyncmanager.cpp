@@ -17,6 +17,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUrlQuery>
+#include <QXmlStreamReader>
 
 #if defined(Q_OS_ANDROID)
 #include <QJniObject>
@@ -678,6 +679,30 @@ bool CloudSyncManager::applyCloudDiveLog(const QByteArray &payload)
 {
 	if (payload.isEmpty()) {
 		setError(tr("The downloaded dive log is empty."));
+		return false;
+	}
+
+	// The general import parser accepts other XML formats and can recover a
+	// partial document. Cloud replacement must accept only a complete canonical
+	// log, even when the damaged bytes have a matching manifest checksum.
+	QXmlStreamReader xml(payload);
+	bool canonicalRoot = false;
+	while (!xml.atEnd()) {
+		xml.readNext();
+		if (xml.isDTD()) {
+			xml.raiseError(QStringLiteral("Cloud logs must not contain a DTD."));
+			break;
+		}
+		if (xml.isStartElement() && !canonicalRoot) {
+			if (xml.name() != QLatin1String("divelog") || !xml.namespaceUri().isEmpty()) {
+				xml.raiseError(QStringLiteral("Expected a Subsurface divelog."));
+				break;
+			}
+			canonicalRoot = true;
+		}
+	}
+	if (!canonicalRoot || xml.hasError()) {
+		setError(tr("The downloaded cloud dive log is not a complete Subsurface XML document. No local data was changed."));
 		return false;
 	}
 

@@ -302,6 +302,13 @@ Kirigami.ScrollablePage {
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
 		}
+		Text {
+			text: qsTr("Cloud sync and Backup now transfer the Subsurface XML dive log. Equipment library, manual collections, and planner presets are not included. Use a portable .subsurface-neo backup to preserve those separately.")
+			color: tokens.textSecondary
+			font.pixelSize: 12
+			wrapMode: Text.WordWrap
+			Layout.fillWidth: true
+		}
 	}
 
 	Dialog {

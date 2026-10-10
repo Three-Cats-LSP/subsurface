@@ -16,5 +16,8 @@ private slots:
 	void testManifestKeepsConcurrentEdits();
 	void testNetworkFailureAllowsRetry();
 	void testMissingTextDoesNotStartUpload();
+	void testCorruptDownload_data();
+	void testCorruptDownload();
+	void testCanonicalCloudLog();
 };
 #endif
