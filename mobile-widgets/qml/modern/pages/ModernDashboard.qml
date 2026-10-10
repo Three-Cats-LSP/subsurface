@@ -47,7 +47,6 @@ Kirigami.ScrollablePage {
 
 	ColumnLayout {
 		width: Math.min(page.availableWidth, 1450)
-		anchors.horizontalCenter: parent.horizontalCenter
 		spacing: tokens.space24
 
 		RowLayout {

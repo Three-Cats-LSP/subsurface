@@ -137,6 +137,8 @@ Preferred architecture: a small versioned **Neo update manifest** generated from
 
 Two native interface styles are available in Settings → Interface: **Clean** preserves the compact combined dive-summary/logbook workspace; **Modern** adds a separate ocean-inspired Dashboard/Home with summary cards, recent-dive depth previews, date badges, and current-year monthly activity. Both styles share the updated Neo icon registry, canonical dive data, and light/dark selection. Clean remains the default. The preview at `https://threecats-lsp.com/subsurface-neo/preview/#dashboard` is the visual reference, not a source of sample data for the application.
 
+Windows runtime validation on 10 October 2026 reproduced and fixed the QtCore/legacy `Settings` type collision, an inactive dashboard remaining visible over Clean, and conflicting dashboard anchors. `scripts/test-neo-native-ui.py` exercises the native Qt 6 shell with an isolated profile: empty/populated Clean → Modern → Clean, light/dark and narrow/wide layouts, real date/depth/monthly data, scoped dive/plan navigation, and restart persistence. It saves eight rendered page screenshots; Android device validation remains open. Windows packaging checks now use the deployed Windows platform plugin with development Qt paths removed and require a created QML window, not merely a live process.
+
 ---
 
 ## Milestone 3 — Dashboard with real data

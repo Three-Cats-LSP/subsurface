@@ -280,6 +280,19 @@ jobs:
           name: Neo-Windows-launch-diagnostics
           path: build/smoke-logs
 
+      - name: Validate native Clean and Modern workflows
+        shell: pwsh
+        run: python scripts/test-neo-native-ui.py build/staging/subsurface-mobile.exe build/native-ui
+
+      - name: Preserve native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Neo-Windows-native-UI-evidence
+          path: |
+            build/native-ui/*.log
+            build/native-ui/*.png
+
       - name: Create portable Neo archive
         id: archive-name
         shell: pwsh

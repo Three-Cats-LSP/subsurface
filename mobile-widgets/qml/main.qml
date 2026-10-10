@@ -1226,6 +1226,7 @@ if you have network connectivity and want to sync your data to cloud storage."),
 
 	NeoPages.ModernDashboard {
 		id: neoModernDashboard
+		visible: false
 		onOpenDive: function(diveId) { rootItem.openNeoDiveDetails(diveId, false, false) }
 		onOpenDiveList: showPageFromDrawer(modernDiveList)
 		onOpenImport: showPageFromDrawer(neoDiveComputerCenter)

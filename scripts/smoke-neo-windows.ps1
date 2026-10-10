@@ -6,8 +6,11 @@ $ErrorActionPreference = 'Stop'
 $StagingDir = (Resolve-Path -LiteralPath $StagingDir).Path
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $OutputDir = (Resolve-Path -LiteralPath $OutputDir).Path
-$env:QT_QPA_PLATFORM = 'offscreen'
+$env:QT_QPA_PLATFORM = 'windows'
 $env:QT_QUICK_BACKEND = 'software'
+# Validate only deployed Qt modules, not the runner's development installation.
+Remove-Item Env:QT_PLUGIN_PATH,Env:QML2_IMPORT_PATH,Env:QML_IMPORT_PATH -ErrorAction SilentlyContinue
+$env:PATH = "$StagingDir;$env:SystemRoot\System32;$env:SystemRoot"
 # A unique --user profile isolates both QSettings and the native dive-log path.
 $profileName = 'neo-smoke-' + [guid]::NewGuid().ToString('N')
 $settingsPath = "HKCU:\Software\Subsurface\Subsurface-$profileName"
@@ -26,8 +29,20 @@ foreach ($style in @('Clean', 'Modern')) {
             -ArgumentList "--user=$profileName" -WorkingDirectory $StagingDir `
             -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
         try {
-            if ($process.WaitForExit(15000)) {
-                throw "$style/$theme exited during launch with code $($process.ExitCode)"
+            $deadline = [DateTime]::UtcNow.AddSeconds(60)
+            while ([DateTime]::UtcNow -lt $deadline) {
+                if ($process.WaitForExit(1000)) {
+                    throw "$style/$theme exited during launch with code $($process.ExitCode)"
+                }
+                if (Select-String -LiteralPath $stderr -Pattern 'qqwindow devicePixelRatio' -Quiet) { break }
+            }
+            # Hidden windows need not receive ApplicationActive (which triggers
+            # finishSetup), but the real QML root must have been instantiated.
+            if (-not (Select-String -LiteralPath $stderr -Pattern 'qqwindow devicePixelRatio' -Quiet)) {
+                throw "$style/$theme did not create the QML window; check diagnostics and startup dialogs"
+            }
+            if ($process.WaitForExit(3000)) {
+                throw "$style/$theme exited after initialization with code $($process.ExitCode)"
             }
             Write-Output "$style/$theme launch passed at width $env:SUBSURFACE_MOBILE_WIDTH"
         } finally {
