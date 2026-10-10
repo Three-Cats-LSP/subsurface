@@ -73,4 +73,24 @@ for relative_path, fragment in visibility_contracts.items():
 	if fragment not in contents:
 		raise SystemExit(f"Neo visibility-distance persistence contract is missing from {relative_path}: {fragment}")
 
-print("Neo populated-log and transactional site-edit contracts validated")
+dashboard = (ROOT / "mobile-widgets" / "neodashboardmodel.cpp").read_text(encoding="utf-8")
+recent_start = dashboard.index("QVariantList recent;")
+recent_end = dashboard.index("QVariantList recentPlans;", recent_start)
+recent = dashboard[recent_start:recent_end]
+for fragment in (
+	'item.insert(QStringLiteral("day"), date.day())',
+	'item.insert(QStringLiteral("month"), date.toString',
+	'item.insert(QStringLiteral("year"), date.year())',
+	'if (const divecomputer *dc = d->get_dc(0))',
+	'const auto &samples = dc->samples',
+	'item.insert(QStringLiteral("profile"), profile)',
+	'timestampToDateTime(d->when).date()',
+):
+	if fragment not in recent:
+		raise SystemExit(f"Recent-dive dashboard preview contract is missing: {fragment}")
+if "d->dc" in dashboard:
+	raise SystemExit("Dashboard must use the current dive-computer API, not the removed single dc field")
+if '(samples.size() + 159) / 160' not in recent or 'samples.back()' not in recent:
+	raise SystemExit("Dashboard profiles must bound sampling cost and preserve the final sample")
+
+print("Neo populated-log, transactional site-edit and dashboard data contracts validated")

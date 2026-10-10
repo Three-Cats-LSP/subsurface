@@ -51,7 +51,7 @@ void NeoDashboardModel::refresh()
 			continue;
 		}
 		++count;
-		const QDate date = QDateTime::fromSecsSinceEpoch(d->when, Qt::UTC).date();
+		const QDate date = timestampToDateTime(d->when).date();
 		if (date.year() == m_activityYear)
 			++monthlyCounts[date.month() - 1];
 		totalSeconds += d->duration.seconds;
@@ -80,6 +80,24 @@ void NeoDashboardModel::refresh()
 		item.insert(QStringLiteral("duration"), formatDiveDuration(d));
 		if (d->watertemp.mkelvin)
 			item.insert(QStringLiteral("waterTemp"), get_temperature_string(d->watertemp, true));
+		const QDate date = timestampToDateTime(d->when).date();
+		item.insert(QStringLiteral("day"), date.day());
+		item.insert(QStringLiteral("month"), date.toString(QStringLiteral("MMM")).toUpper());
+		item.insert(QStringLiteral("year"), date.year());
+		// Lightweight previews use real depth samples, not the full decompression
+		// renderer. Bound the number of points to keep the dashboard inexpensive.
+		QVariantList profile;
+		if (const divecomputer *dc = d->get_dc(0)) {
+			const auto &samples = dc->samples;
+			const size_t stride = std::max(size_t(1), (samples.size() + 159) / 160);
+			for (size_t s = 0; s < samples.size(); s += stride)
+				profile.append(QVariantMap{{QStringLiteral("time"), samples[s].time.seconds},
+					{QStringLiteral("depth"), samples[s].depth.mm}});
+			if (!samples.empty() && (samples.size() - 1) % stride != 0)
+				profile.append(QVariantMap{{QStringLiteral("time"), samples.back().time.seconds},
+					{QStringLiteral("depth"), samples.back().depth.mm}});
+		}
+		item.insert(QStringLiteral("profile"), profile);
 		recent.push_back(item);
 	}
 	QVariantList recentPlans;
@@ -90,22 +108,6 @@ void NeoDashboardModel::refresh()
 		item.insert(QStringLiteral("date"), formatDiveDate(d));
 		item.insert(QStringLiteral("depth"), get_depth_string(d->maxdepth, true, true));
 		item.insert(QStringLiteral("duration"), formatDiveDuration(d));
-		const QDate date = QDateTime::fromSecsSinceEpoch(d->when, Qt::UTC).date();
-		item.insert(QStringLiteral("day"), date.day());
-		item.insert(QStringLiteral("month"), date.toString(QStringLiteral("MMM")).toUpper());
-		item.insert(QStringLiteral("year"), date.year());
-		// Lightweight previews use real depth samples, not the full decompression
-		// renderer. Bound the number of points to keep the dashboard inexpensive.
-		QVariantList profile;
-		const auto &samples = d->dc.samples;
-		const size_t stride = std::max(size_t(1), (samples.size() + 159) / 160);
-		for (size_t s = 0; s < samples.size(); s += stride)
-			profile.append(QVariantMap{{QStringLiteral("time"), samples[s].time.seconds},
-				{QStringLiteral("depth"), samples[s].depth.mm}});
-		if (!samples.empty() && (samples.size() - 1) % stride != 0)
-			profile.append(QVariantMap{{QStringLiteral("time"), samples.back().time.seconds},
-				{QStringLiteral("depth"), samples.back().depth.mm}});
-		item.insert(QStringLiteral("profile"), profile);
 		recentPlans.push_back(item);
 	}
 
