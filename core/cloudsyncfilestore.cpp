@@ -72,6 +72,7 @@ void CloudSyncFileStore::download(CloudSyncProviderType provider, const QString 
 QNetworkRequest CloudSyncFileStore::authorizedRequest(const QUrl &url, const QString &accessToken) const
 {
 	QNetworkRequest request(url);
+	request.setTransferTimeout(30000);
 	request.setRawHeader("Authorization", QByteArray("Bearer ") + accessToken.toUtf8());
 	request.setRawHeader("Accept", "application/json");
 	return request;
@@ -116,7 +117,7 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 	escapedName.replace(QLatin1Char('\''), QStringLiteral("\\'"));
 	query.addQueryItem(QStringLiteral("spaces"), QStringLiteral("appDataFolder"));
 	query.addQueryItem(QStringLiteral("q"), QStringLiteral("name='%1' and trashed=false").arg(escapedName));
-	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("files(id,name)"));
+	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("nextPageToken,files(id,name)"));
 	url.setQuery(query);
 
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
@@ -129,7 +130,22 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error);
 			return;
 		}
-		const QJsonArray files = QJsonDocument::fromJson(payload).object().value(QStringLiteral("files")).toArray();
+		QJsonParseError parseError;
+		const QJsonDocument document = QJsonDocument::fromJson(payload, &parseError);
+		const QJsonObject object = document.object();
+		if (parseError.error != QJsonParseError::NoError || !document.isObject() ||
+		    !object.value(QStringLiteral("files")).isArray()) {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+				tr("Google Drive returned an invalid file-list response."));
+			return;
+		}
+		const QJsonArray files = object.value(QStringLiteral("files")).toArray();
+		if (files.size() > 1 || !object.value(QStringLiteral("nextPageToken")).toString().isEmpty() ||
+		    (!files.isEmpty() && files.first().toObject().value(QStringLiteral("id")).toString().isEmpty())) {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+				tr("Google Drive returned an ambiguous or invalid cloud file. No data was changed."));
+			return;
+		}
 		continuation(files.isEmpty() ? QString() : files.first().toObject().value(QStringLiteral("id")).toString());
 	});
 }
@@ -184,7 +200,7 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 {
 	googleFindFile(accessToken, fileName, [this, accessToken, fileName](const QString &fileId) {
 		if (fileId.isEmpty()) {
-			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Cloud file was not found."));
+			emit fileNotFound(CloudSyncProviderType::GoogleDrive, fileName);
 			return;
 		}
 		QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files/%1").arg(fileId));
@@ -237,9 +253,15 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
+		const QJsonObject providerError = QJsonDocument::fromJson(payload).object().value(QStringLiteral("error")).toObject();
+		const bool missing = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 409 &&
+			providerError.value(QStringLiteral(".tag")).toString() == QStringLiteral("path") &&
+			providerError.value(QStringLiteral("path")).toObject().value(QStringLiteral(".tag")).toString() == QStringLiteral("not_found");
 		reply->deleteLater();
 		if (ok)
 			emit downloadFinished(CloudSyncProviderType::Dropbox, fileName, payload);
+		else if (missing)
+			emit fileNotFound(CloudSyncProviderType::Dropbox, fileName);
 		else
 			emit operationError(CloudSyncProviderType::Dropbox, fileName, error);
 	});

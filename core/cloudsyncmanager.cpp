@@ -161,14 +161,24 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 				handleDownloadedDiveLog(providerId, data);
 		});
 
-	connect(&fileStore, &CloudSyncFileStore::operationError, this,
-		[this](CloudSyncProviderType type, const QString &fileName, const QString &message) {
+	connect(&fileStore, &CloudSyncFileStore::fileNotFound, this,
+		[this](CloudSyncProviderType type, const QString &fileName) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
 			if (!forceCloudDownload && providerId == syncProviderId && syncOperation == SyncOperation::SyncDownloadManifest &&
-			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && isNotFoundError(message)) {
-				startUploadSequence(providerId, syncLocalPayload, QString(), false);
+			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME)) {
+				if (localDiveLogUnchanged())
+					startUploadSequence(providerId, syncLocalPayload, QString(), false);
+				else
+					clearSyncOperation();
 				return;
 			}
+			setError(tr("Cloud file was not found. No local data was changed."));
+			if (providerId == syncProviderId)
+				clearSyncOperation();
+		});
+	connect(&fileStore, &CloudSyncFileStore::operationError, this,
+		[this](CloudSyncProviderType type, const QString &, const QString &message) {
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
 			setError(message);
 			if (providerId == syncProviderId)
 				clearSyncOperation();
@@ -582,6 +592,8 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 	const OAuth2TokenSet current = tokens.value(providerId);
 	if (!current.hasAccessToken() && !current.canRefresh()) {
 		setError(tr("%1 is not connected.").arg(provider.displayName));
+		if (providerId == syncProviderId)
+			clearSyncOperation();
 		return;
 	}
 	if (current.hasAccessToken() && !current.isExpired()) {
@@ -598,11 +610,15 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 		}
 #endif
 		setError(tr("%1 authorization expired. Please reconnect it.").arg(provider.displayName));
+		if (providerId == syncProviderId)
+			clearSyncOperation();
 		return;
 	}
 	const QString clientId = configuredClientId(provider);
 	if (clientId.isEmpty()) {
 		setError(tr("%1 OAuth client is not available on this platform.").arg(provider.displayName));
+		if (providerId == syncProviderId)
+			clearSyncOperation();
 		return;
 	}
 	refreshProviderId = providerId;
@@ -714,11 +730,15 @@ void CloudSyncManager::recordSuccessfulSync(const QString &providerId)
 	emit providersChanged();
 }
 
-bool CloudSyncManager::isNotFoundError(const QString &message)
+bool CloudSyncManager::localDiveLogUnchanged()
 {
-	const QString lower = message.toLower();
-	return lower.contains(QStringLiteral("not found")) || lower.contains(QStringLiteral("not_found")) ||
-	       lower.contains(QStringLiteral("path/not_found"));
+	const QByteArray current = serializeCurrentDiveLog();
+	if (current.isEmpty())
+		return false;
+	if (CloudSyncManifest::sha256(current) == syncLocalSha256)
+		return true;
+	setError(tr("The local dive log changed during synchronization. Your edits were kept. Please sync again."));
+	return false;
 }
 
 void CloudSyncManager::clearSyncOperation()
@@ -810,9 +830,14 @@ void CloudSyncManager::useCloudDiveLog(const QString &providerId)
 		return;
 	}
 
+	const QByteArray payload = serializeCurrentDiveLog();
+	if (payload.isEmpty())
+		return;
 	setError(QString());
 	forceCloudDownload = true;
 	syncProviderId = providerId;
+	syncLocalPayload = payload;
+	syncLocalSha256 = CloudSyncManifest::sha256(payload);
 	syncOperation = SyncOperation::SyncDownloadManifest;
 	emit syncInProgressChanged();
 	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
@@ -820,6 +845,10 @@ void CloudSyncManager::useCloudDiveLog(const QString &providerId)
 
 void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const QByteArray &data)
 {
+	if (!localDiveLogUnchanged()) {
+		clearSyncOperation();
+		return;
+	}
 	QString error;
 	const CloudSyncManifest remote = CloudSyncManifest::fromJson(data, &error);
 	if (!remote.isValid()) {
@@ -879,7 +908,9 @@ void CloudSyncManager::handleDownloadedDiveLog(const QString &providerId, const 
 		return;
 	}
 
-	if (!applyCloudDiveLog(data)) {
+	// Even an explicitly chosen cloud replacement must not discard edits made
+	// after the user confirmed that choice.
+	if (!localDiveLogUnchanged() || !applyCloudDiveLog(data)) {
 		clearSyncOperation();
 		return;
 	}

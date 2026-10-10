@@ -64,6 +64,7 @@ void OAuth2TokenClient::postTokenRequest(const CloudSyncProviderDescriptor &prov
 		form.addQueryItem(parameter.first, parameter.second);
 
 	QNetworkRequest request(provider.tokenEndpoint);
+	request.setTransferTimeout(30000);
 	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
 	request.setRawHeader("Accept", "application/json");
 

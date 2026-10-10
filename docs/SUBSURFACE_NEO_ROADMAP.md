@@ -678,6 +678,8 @@ Also complete settings polish, release/update preferences, privacy/terms links a
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
 
+Reliability implementation now includes bounded network inactivity waits, release of the busy state after missing/expired authorization, structured missing-file detection (invalid or ambiguous Google Drive responses cannot start a replacement upload), and local-snapshot checks before using a remote manifest or applying a download. The checks preserve edits made during a sync, including after choosing an explicit cloud replacement. `TestCloudSyncManager` covers these failure paths and retry availability using simulated provider responses; live account, offline/reconnect, and multi-device tests are still required before this milestone can be closed.
+
 **Status:** In progress on `modern-ui`. Google Drive and Dropbox provider workflows, conflict-safe manifests, an opt-in automatic primary-provider sync lifecycle for established baselines, persistent last-success status, the Neo Settings hub, modern Subsurface Cloud compatibility onboarding, secure native credential-store integration (including automatic migration of legacy Subsurface Cloud passwords), personalized units and text sizing, update preferences, diagnostics, licensing, artwork attribution, provider-disconnect confirmation, privacy/data-flow disclosure, and guarded Subsurface Cloud account deletion are implemented. Production OAuth publication, formal privacy/terms approval, and the full multi-device/offline security matrix remain release-hardening work.
 
 ---

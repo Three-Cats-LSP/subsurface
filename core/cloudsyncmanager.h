@@ -74,6 +74,7 @@ signals:
 	void diveLogInitialChoiceRequired(const QString &providerId);
 
 private:
+	friend class TestCloudSyncManager;
 	enum class SyncOperation {
 		None,
 		BackupUploadPayload,
@@ -107,7 +108,7 @@ private:
 	void handleDownloadedDiveLog(const QString &providerId, const QByteArray &data);
 	void clearSyncOperation();
 	static QString syncStateCredentialKey(const QString &providerId);
-	static bool isNotFoundError(const QString &message);
+	bool localDiveLogUnchanged();
 
 	QNetworkAccessManager *networkManager;
 	OAuth2TokenClient tokenClient;

@@ -12,6 +12,7 @@ on:
       - 'android-mobile/src/org/subsurfacedivelog/mobile/CloudCredentialStore.java'
       - 'mobile-widgets/qml/modern/pages/CloudSyncPage.qml'
       - 'tests/testcloudsyncmanifest.*'
+      - 'tests/testcloudsyncmanager.*'
       - 'tests/testqPrefCloudStorage.*'
       - 'tests/CMakeLists.txt'
   workflow_dispatch:
