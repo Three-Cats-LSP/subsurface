@@ -120,31 +120,8 @@ void QMLInterface::setup(QQmlContext *ct)
 	// QNetworkAccessManager, while keeping OAuth/provider state separate from
 	// the legacy Subsurface Cloud account backend.
 	static CloudSyncManager cloudSync(manager());
-	CloudSyncManager *cloudSyncPointer = &cloudSync;
 	neoCloudSync = &cloudSync;
 	ct->setContextProperty("CloudSync", &cloudSync);
-
-	// Delay automatic provider sync until the initial dive log is loaded. The
-	// manager also requires an established baseline, so first-sync and conflict
-	// choices always remain explicit user decisions.
-	auto schedulePrimarySync = [cloudSyncPointer]() {
-		QTimer::singleShot(2500, cloudSyncPointer,
-			[cloudSyncPointer]() { cloudSyncPointer->syncPrimaryIfReady(); });
-	};
-	if (QMLManager::instance()) {
-		connect(QMLManager::instance(), &QMLManager::initializedChanged,
-			cloudSyncPointer, schedulePrimarySync);
-	}
-	if (qGuiApp) {
-		connect(qGuiApp, &QGuiApplication::applicationStateChanged, cloudSyncPointer,
-			[cloudSyncPointer](Qt::ApplicationState state) {
-				if (state == Qt::ApplicationActive && QMLManager::instance() &&
-				    QMLManager::instance()->property("initialized").toBool()) {
-					QTimer::singleShot(2500, cloudSyncPointer,
-						[cloudSyncPointer]() { cloudSyncPointer->syncPrimaryIfReady(); });
-				}
-			});
-	}
 
 	// Shared Neo release/update service. The desktop client has a QWidget
 	// presentation for the same manifest; mobile exposes the state to QML and
@@ -165,6 +142,34 @@ void QMLInterface::setup(QQmlContext *ct)
 
 	qmlRegisterUncreatableType<DivePlannerPointsModel>("org.subsurfacedivelog.mobile", 1, 0, "DivePlannerPointsModel", "Planner model cannot be created in QML.");
 	qmlRegisterUncreatableType<CylindersModel>("org.subsurfacedivelog.mobile", 1, 0, "CylindersModel", "Cylinder model cannot be created in QML.");
+}
+
+void QMLInterface::setupCloudSyncLifecycle(QMLManager *qmlManager)
+{
+	if (!qmlManager || !neoCloudSync)
+		return;
+
+	// QML creates its manager during engine.load(), after setup(). Attach here
+	// so startup does not depend on a later application activation event.
+	// Bind timers and connections to that manager's lifetime.
+	auto schedulePrimarySync = [qmlManager]() {
+		if (!qmlManager->property("initialized").toBool())
+			return;
+		QTimer::singleShot(2500, qmlManager, [qmlManager]() {
+			if (qmlManager->property("initialized").toBool() && neoCloudSync)
+				neoCloudSync->syncPrimaryIfReady();
+		});
+	};
+	connect(qmlManager, &QMLManager::initializedChanged, qmlManager, schedulePrimarySync);
+	if (qGuiApp) {
+		connect(qGuiApp, &QGuiApplication::applicationStateChanged, qmlManager,
+			[schedulePrimarySync](Qt::ApplicationState state) {
+				if (state == Qt::ApplicationActive)
+					schedulePrimarySync();
+			});
+	}
+	// Also cover logs that finished loading while engine.load() was running.
+	schedulePrimarySync();
 }
 
 #if defined(Q_OS_ANDROID)

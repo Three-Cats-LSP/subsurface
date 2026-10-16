@@ -284,6 +284,10 @@ jobs:
         shell: pwsh
         run: python scripts/test-neo-native-ui.py build/staging/subsurface-mobile.exe build/native-ui
 
+      - name: Validate native automatic cloud sync lifecycle
+        shell: pwsh
+        run: python scripts/test-neo-cloud-lifecycle.py build/staging/subsurface-mobile.exe build/cloud-lifecycle
+
       - name: Preserve native UI evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -292,6 +296,7 @@ jobs:
           path: |
             build/native-ui/*.log
             build/native-ui/*.png
+            build/cloud-lifecycle/*.log
 
       - name: Create portable Neo archive
         id: archive-name

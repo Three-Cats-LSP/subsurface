@@ -183,6 +183,7 @@ void run_mobile_ui(double initial_font_size)
 	report_info("qml_window reports width as %d associated screen width %d Qt screen reports width as %d", qmlWW, qmlSW, availableScreenWidth);
 	QObject::connect(qml_window, &QQuickWindow::screenChanged, QMLManager::instance(), &QMLManager::screenChanged);
 	QMLManager *manager = QMLManager::instance();
+	QMLInterface::setupCloudSyncLifecycle(manager);
 
 	manager->setDevicePixelRatio(qml_window->devicePixelRatio(), qml_window->screen());
 	manager->qmlWindow = qqWindowObject;

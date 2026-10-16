@@ -16,6 +16,8 @@
 #include <QQmlContext>
 #include <QStringList>
 
+class QMLManager;
+
 // This class is a pure interface class and may not contain any implementation code
 // Allowed are:
 //     header
@@ -90,6 +92,7 @@ class QMLInterface : public QObject {
 public:
 	// function to do the needed setup
 	static void setup(QQmlContext *ct);
+	static void setupCloudSyncLifecycle(QMLManager *qmlManager);
 
 	// Duplicated enums, these enums are properly defined in the C/C++ structure
 	// but duplicated here to make them available to QML.
