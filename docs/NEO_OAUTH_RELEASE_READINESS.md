@@ -6,8 +6,8 @@ Engineering review on 2026-10-16. Windows live testing is the current scope; the
 
 | Provider | Observed configuration | Remaining public-release work |
 | --- | --- | --- |
-| Google Drive | External audience in Testing with named test users; Windows Desktop OAuth JSON loaded locally; live authorization, refresh and XML round trip verified. | Production project/client provisioning, domain ownership and brand verification, production consent configuration, ordinary-user onboarding without a developer JSON file, account identity and revocation testing. |
-| Dropbox | Development app, App Folder access, public clients/PKCE allowed, owner account authorized. | Additional-user testing, production approval when applicable, account identity and revocation testing. |
+| Google Drive | External audience in Testing with named test users; Windows Desktop OAuth JSON loaded locally; live authorization, refresh and XML round trip verified. | Production project/client provisioning, domain ownership and brand verification, production consent configuration, ordinary-user onboarding without a developer JSON file, two-live-account switching and revocation testing. |
+| Dropbox | Development app, App Folder access, public clients/PKCE allowed, owner account authorized. | Additional-user testing, production approval when applicable, two-live-account switching and revocation testing. |
 
 The home page, privacy policy and terms below returned HTTP 200 on the review date. The home page links to both policies. The privacy text describes Google `drive.appdata`, Dropbox App Folder, platform credential storage, local disconnection, and revocation through provider account settings. Reachability does not establish verified domain ownership or formal approval of the policy text.
 
@@ -28,7 +28,7 @@ Retain App Folder access and exact registered callbacks. The native code uses au
 ## Engineering gates before publication
 
 - Windows automatic startup sync, refused-connection recovery, rejected-refresh-grant cleanup, recovery from HTTP 401 with a future local expiry, and local disconnect/reconnect with restart persistence passed for both providers. Dropbox foreground sync, fresh-profile download/restart and sequential two-profile conflict resolution also passed. Both providers also passed the Windows transaction/interruption checks described below. Continue actual provider-account revocation and Google foreground sync. See the provider testing documents for exact build revisions and scope.
-- Implement and test clear connected-account identity. Current `disconnectProvider()` removes local credentials and sync assignments; it does not remotely revoke the provider grant.
+- Connected-account identity and mismatch protection passed Windows validation at `fcfc5fbf2`; see [account identity and evidence](NEO_CLOUD_ACCOUNT_IDENTITY.md). Continue switching between two different live accounts and actual provider-account revocation. Current `disconnectProvider()` removes local credentials, identity and sync assignments; it does not remotely revoke the provider grant.
 - Conditional manifest publication and interrupted-upload recovery passed on Windows for established logs. Automatic recovery for duplicate initial Google manifests also passed Windows validation at `74c9a3f1b`. Define snapshot retention and require upgraded clients before wider rollout; see the [commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md).
 - Keep the advertised sync scope accurate: canonical XML and a manifest are synchronized; the separate equipment library, manual collections and planner presets are not.
 - Complete physical Android validation when resumed, formal policy approval and the repository's release checklist before public publication.

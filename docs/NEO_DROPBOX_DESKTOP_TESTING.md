@@ -69,4 +69,9 @@ Checks used the complete dive model and exported canonical XML, including expect
 
 [Windows build, launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378239), [36 desktop and 33 mobile-target regression tests](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378266), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378290) passed at `ed8a15fd4`.
 
-See the [commit protocol and compatibility limits](NEO_CLOUD_COMMIT_PROTOCOL.md). All syncing clients must be upgraded for schema 2. Simultaneous first-time Google initialization can create duplicate manifests and is blocked safely pending manual recovery; automated consolidation and snapshot retention policy remain open. Physical Android validation remains deferred at the owner's request.
+See the [commit protocol and compatibility limits](NEO_CLOUD_COMMIT_PROTOCOL.md). All syncing clients must be upgraded for schema 2. The later `74c9a3f1b` change added automatic first-time Google manifest recovery; see [Google evidence](NEO_GOOGLE_DESKTOP_TESTING.md). Snapshot retention policy remains open. Physical Android validation remains deferred at the owner's request.
+
+
+## Connected-account identity, 2026-10-17
+
+The `fcfc5fbf2` Windows package passed ten native identity/recovery stages for this provider, including persisted account details, token refresh, same-account label changes, refused-connection recovery, a seeded previous-account mismatch, explicit recovery, and local Disconnect/restart. The mismatch stopped sync and cleared the previous baseline/assignments while retaining the disposable dive. Original profile credentials and cloud manifests were unchanged; temporary credential entries and proxy overrides were removed. See [account identity behavior, exact evidence and remaining limits](NEO_CLOUD_ACCOUNT_IDENTITY.md). The mismatch was injected locally; switching between two different live provider accounts and actual grant revocation remain separate tests.
