@@ -694,6 +694,8 @@ If the manifest is missing, sync checks for an orphaned XML payload before creat
 
 Windows live Google testing on 2026-10-10 reached browser consent but token exchange failed with `client_secret is missing`; no live cloud round trip was completed. The desktop development flow now reads an external Desktop OAuth JSON through `SUBSURFACE_NEO_GOOGLE_CLIENT_FILE`, supplies its client credential to both exchange and refresh, rejects mismatched client IDs, and reports missing configuration before opening the browser. This is a developer test setup, not the final public onboarding experience. Credentials are not committed, embedded in binaries, or copied into application settings. Android continues to use its native authorization flow. See [Google desktop test setup](NEO_GOOGLE_DESKTOP_TESTING.md). Public OAuth configuration and release credential provisioning remain open.
 
+On 2026-10-16 the supplied Desktop client was accepted by the Windows configuration check and browser consent completed, but the application failed with a callback state mismatch. The loopback listener has been hardened against incomplete requests, unrelated browser traffic, and duplicate callbacks in `3bd491365`; its new regression and rebuilt executable are awaiting CI. GitHub rejects workflow dispatch with `Actions has been disabled for this repository` despite enabled repository permissions and active workflows. The prior `02c496ba8` Windows, Android, cloud, planner, and QML runs are green. A live connected state or Drive round trip has not yet been verified.
+
 ---
 
 ## Milestone 14 — Web / WebAssembly & Deployment
