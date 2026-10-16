@@ -117,6 +117,7 @@ private:
 	QHash<QString, OAuth2TokenSet> tokens;
 	QString activeProviderId;
 	QString activeClientId;
+	bool codeExchangeInProgress = false;
 	QUrl activeRedirectUri;
 	std::unique_ptr<OAuth2PkceSession> activePkce;
 	QPointer<QTcpServer> loopbackServer;

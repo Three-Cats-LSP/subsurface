@@ -25,5 +25,6 @@ private slots:
 	void testGoogleDesktopCredentials_data();
 	void testGoogleDesktopCredentials();
 	void testGoogleDesktopTokenRequests();
+	void testLoopbackIgnoresBrowserRequests();
 };
 #endif

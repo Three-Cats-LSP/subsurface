@@ -12,12 +12,14 @@
 #include <QTemporaryFile>
 #include <QUrlQuery>
 #include <QScopeGuard>
+#include <QTcpSocket>
+#include <QHostAddress>
 #include <cstring>
 
 namespace {
 class FakeReply : public QNetworkReply {
 public:
-	FakeReply(const QNetworkRequest &request, const QByteArray &body, int status, QObject *parent) :
+	FakeReply(const QNetworkRequest &request, const QByteArray &body, int status, QObject *parent, bool deferred = false) :
 		QNetworkReply(parent), body(body)
 	{
 		setRequest(request);
@@ -26,8 +28,10 @@ public:
 		if (status >= 400)
 			setError(QNetworkReply::ContentNotFoundError, "Request failed");
 		open(QIODevice::ReadOnly);
-		QTimer::singleShot(0, this, [this] { setFinished(true); emit finished(); });
+		if (!deferred)
+			QTimer::singleShot(0, this, [this] { complete(); });
 	}
+	void complete() { setFinished(true); emit finished(); }
 	void abort() override {}
 	qint64 bytesAvailable() const override { return body.size() - offset + QNetworkReply::bytesAvailable(); }
 protected:
@@ -52,13 +56,16 @@ public:
 	int requests = 0;
 	int timeout = 0;
 	QByteArray posted;
+	bool deferred = false;
+	FakeReply *lastReply = nullptr;
 protected:
 	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *outgoing) override
 	{
 		++requests;
 		posted = outgoing ? outgoing->readAll() : QByteArray();
 		timeout = request.transferTimeout();
-		return new FakeReply(request, body, status, this);
+		lastReply = new FakeReply(request, body, status, this, deferred);
+		return lastReply;
 	}
 };
 }
@@ -80,6 +87,63 @@ void TestCloudSyncManager::init()
 void TestCloudSyncManager::cleanup()
 {
 	::divelog.clear();
+}
+
+void TestCloudSyncManager::testLoopbackIgnoresBrowserRequests()
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+	QSKIP("Desktop loopback flow only");
+#else
+	FakeNetwork network;
+	network.deferred = true;
+	// Avoid writing credentials; complete with a provider rejection after the
+	// browser requests, then verify that authorization can be retried.
+	network.status = 400;
+	network.body = R"({"error_description":"Synthetic token rejection"})";
+	CloudSyncManager manager(&network);
+	manager.tokens.clear();
+	manager.activeProviderId = "dropbox";
+	manager.activeClientId = "test-client";
+	manager.activePkce = std::make_unique<OAuth2PkceSession>();
+	// Google uses an ephemeral port, avoiding the fixed Dropbox callback port.
+	manager.activeRedirectUri = manager.startLoopbackListener(cloudSyncProviderDescriptor(CloudSyncProviderType::GoogleDrive));
+	QVERIFY(manager.activeRedirectUri.isValid());
+	const quint16 port = manager.activeRedirectUri.port();
+	const QByteArray state = manager.activePkce->parameters().state.toUtf8();
+	const QByteArray target = "/oauth/callback?code=test-code&state=" + state;
+	QTcpSocket callback;
+	callback.connectToHost(QHostAddress::LocalHost, port);
+	QTRY_COMPARE(callback.state(), QAbstractSocket::ConnectedState);
+	callback.write("GET /oauth/callback?code=test-code&state=");
+	callback.flush();
+	QTest::qWait(30);
+	QCOMPARE(network.requests, 0);
+	QVERIFY(manager.authorizationInProgress());
+	callback.write(state + " HTTP/1.1\r\nHost: localhost\r\n\r\n");
+	callback.flush();
+	QTRY_COMPARE(network.requests, 1);
+	QVERIFY(manager.codeExchangeInProgress);
+	QTRY_VERIFY(callback.bytesAvailable() > 0);
+	const QByteArray response = callback.readAll();
+	QVERIFY(response.contains("authorization received"));
+	QVERIFY(!response.contains("Neo connected"));
+
+	for (const QByteArray &path : {QByteArray("/favicon.ico"), QByteArray("/oauth/callback?code=stale&state=wrong"), target}) {
+		QTcpSocket extra;
+		extra.connectToHost(QHostAddress::LocalHost, port);
+		QTRY_COMPARE(extra.state(), QAbstractSocket::ConnectedState);
+		extra.write("GET " + path + " HTTP/1.1\r\nHost: localhost\r\n\r\n");
+		extra.flush();
+		QTRY_VERIFY(extra.bytesAvailable() > 0);
+		QVERIFY(manager.authorizationInProgress());
+		QVERIFY(manager.lastError().isEmpty());
+		QCOMPARE(network.requests, 1);
+	}
+	network.lastReply->complete();
+	QVERIFY(!manager.authorizationInProgress());
+	QVERIFY(!manager.codeExchangeInProgress);
+	QCOMPARE(manager.lastError(), QString("Synthetic token rejection"));
+#endif
 }
 
 void TestCloudSyncManager::testGoogleDesktopCredentials_data()

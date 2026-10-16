@@ -16,6 +16,7 @@
 #include <QTemporaryFile>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QUrlQuery>
 #include <QXmlStreamReader>
 
@@ -425,6 +426,7 @@ void CloudSyncManager::clearAuthorization()
 	const bool wasActive = authorizationInProgress();
 	activeProviderId.clear();
 	activeClientId.clear();
+	codeExchangeInProgress = false;
 	activeRedirectUri.clear();
 	activePkce.reset();
 	if (loopbackServer) {
@@ -519,6 +521,9 @@ void CloudSyncManager::beginAuthorization(const QString &providerId)
 
 void CloudSyncManager::handleAuthorizationRedirect(const QUrl &url)
 {
+	// A browser can repeat the redirect while the first token exchange is pending.
+	if (codeExchangeInProgress)
+		return;
 	if (!authorizationInProgress() || !activePkce) {
 		setError(tr("Received an OAuth callback without an active authorization request."));
 		return;
@@ -556,6 +561,7 @@ void CloudSyncManager::exchangeCode(const QString &code)
 	const CloudSyncProviderDescriptor *provider = descriptorForId(activeProviderId);
 	if (!provider || !activePkce)
 		return;
+	codeExchangeInProgress = true;
 	tokenClient.exchangeAuthorizationCode(*provider, activeClientId, code,
 		activePkce->parameters().verifier, activeRedirectUri);
 }
@@ -565,20 +571,40 @@ void CloudSyncManager::handleLoopbackConnection()
 	if (!loopbackServer)
 		return;
 	while (QTcpSocket *socket = loopbackServer->nextPendingConnection()) {
-		connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-			const QByteArray request = socket->readAll();
+		connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+		QTimer::singleShot(15000, socket, [socket] { socket->abort(); socket->deleteLater(); });
+		socket->setReadBufferSize(16385);
+		connect(socket, &QTcpSocket::readyRead, this, [this, socket, request = QByteArray(), handled = false]() mutable {
+			if (handled)
+				return;
+			request += socket->readAll();
+			if (request.size() > 16384) {
+				handled = true;
+				finishLoopbackSocket(socket, false, tr("Invalid OAuth callback request."));
+				return;
+			}
+			// TCP may deliver the request line and headers in separate reads.
+			if (!request.contains("\r\n\r\n"))
+				return;
+			handled = true;
 			const int lineEnd = request.indexOf("\r\n");
 			const QList<QByteArray> parts = request.left(lineEnd).split(' ');
-			if (parts.size() < 2) {
+			if (parts.size() != 3 || parts.at(0) != "GET" || !parts.at(1).startsWith('/')) {
 				finishLoopbackSocket(socket, false, tr("Invalid OAuth callback request."));
 				return;
 			}
 			QUrl callback(QStringLiteral("http://127.0.0.1") + QString::fromUtf8(parts.at(1)));
 			const QUrlQuery query(callback);
 			const bool stateMatches = activePkce && activePkce->matchesState(query.queryItemValue(QStringLiteral("state")));
+			// Favicon requests, probes and stale callbacks must not cancel the
+			// current authorization or discard its in-flight token response.
+			if (callback.path() != activeRedirectUri.path() || !stateMatches) {
+				finishLoopbackSocket(socket, false, tr("This request is not the active OAuth callback."));
+				return;
+			}
 			const bool hasCode = !query.queryItemValue(QStringLiteral("code")).isEmpty();
 			finishLoopbackSocket(socket, stateMatches && hasCode,
-				stateMatches && hasCode ? tr("Authorization complete. You can return to Subsurface Neo.")
+				stateMatches && hasCode ? tr("Authorization received. Return to Subsurface Neo to check the connection result.")
 							 : tr("Authorization failed. Return to Subsurface Neo for details."));
 			handleAuthorizationRedirect(callback);
 		});
@@ -588,7 +614,7 @@ void CloudSyncManager::handleLoopbackConnection()
 void CloudSyncManager::finishLoopbackSocket(QTcpSocket *socket, bool success, const QString &message)
 {
 	const QByteArray body = QStringLiteral("<!doctype html><html><body><h2>%1</h2><p>%2</p></body></html>")
-		.arg(success ? tr("Subsurface Neo connected") : tr("Subsurface Neo authorization error"), message)
+		.arg(success ? tr("Subsurface Neo authorization received") : tr("Subsurface Neo authorization error"), message.toHtmlEscaped())
 		.toUtf8();
 	QByteArray response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: ";
 	response += QByteArray::number(body.size()) + "\r\n\r\n" + body;
