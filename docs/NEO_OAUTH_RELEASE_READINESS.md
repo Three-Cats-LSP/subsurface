@@ -1,6 +1,6 @@
 # OAuth release readiness
 
-Engineering review on 2026-10-16, with Windows identity and real grant-revocation evidence updated on 2026-10-17. Windows live testing is the current scope; the owner deferred physical Android tests. No production provider settings were changed by this review.
+Engineering review on 2026-10-16, with Windows identity, real grant-revocation and Google foreground-sync evidence updated on 2026-10-17. Windows live testing is the current scope; the owner deferred physical Android tests. No production provider settings were changed by this review.
 
 ## Current development configuration
 
@@ -27,7 +27,7 @@ Retain App Folder access and exact registered callbacks. The native code uses au
 
 ## Engineering gates before publication
 
-- Windows automatic startup sync, refused-connection recovery, rejected-refresh-grant cleanup, recovery from HTTP 401 with a future local expiry, and local disconnect/reconnect with restart persistence passed for both providers. Dropbox foreground sync, fresh-profile download/restart and sequential two-profile conflict resolution also passed. Both providers also passed the Windows transaction/interruption checks described below. [Actual grant revocation through each provider's API, local cleanup and reconnection](NEO_CLOUD_REVOCATION_TESTING.md) passed on `fcfc5fbf2`, preserving the local and remote dive log. Continue Google foreground sync and provider account-settings UI validation. See the provider testing documents for exact build revisions and scope.
+- Windows automatic startup sync, refused-connection recovery, rejected-refresh-grant cleanup, recovery from HTTP 401 with a future local expiry, and local disconnect/reconnect with restart persistence passed for both providers. Dropbox foreground sync, fresh-profile download/restart and sequential two-profile conflict resolution also passed. [Google foreground sync](NEO_GOOGLE_DESKTOP_TESTING.md#automatic-foreground-sync-2026-10-17) passed in Clean and Modern at `fcfc5fbf2`, including the disabled setting and automatic recovery on return after a controlled connection failure. Both providers also passed the Windows transaction/interruption checks described below. [Actual grant revocation through each provider's API, local cleanup and reconnection](NEO_CLOUD_REVOCATION_TESTING.md) passed on `fcfc5fbf2`, preserving the local and remote dive log. Continue provider account-settings UI validation. See the provider testing documents for exact build revisions and scope.
 - Connected-account identity and mismatch protection passed Windows validation at `fcfc5fbf2`; see [account identity and evidence](NEO_CLOUD_ACCOUNT_IDENTITY.md). Continue switching between two different live accounts. Current `disconnectProvider()` removes local credentials, identity and sync assignments; it does not remotely revoke the provider grant.
 - Conditional manifest publication and interrupted-upload recovery passed on Windows for established logs. Automatic recovery for duplicate initial Google manifests also passed Windows validation at `74c9a3f1b`. Define snapshot retention and require upgraded clients before wider rollout; see the [commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md).
 - Keep the advertised sync scope accurate: canonical XML and a manifest are synchronized; the separate equipment library, manual collections and planner presets are not.

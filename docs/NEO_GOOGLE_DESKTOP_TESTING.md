@@ -48,7 +48,7 @@ These tests use the rebuilt native executable with a QML test driver to isolate 
 
 The final `d9b4122ea` Windows package also passed automatic startup sync after the Google test access token expired naturally. No manual sync or browser sign-in was invoked. Neo reported up to date with the original synthetic dive, and the isolated secure credential retained its refresh token and acquired a future access-token expiry. [Windows launch/Clean/Modern/lifecycle validation](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38895503177) and [both native cloud regression targets](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38895503195) passed at that code revision.
 
-Google foreground sync, actual adapter disconnection, stalled transfers, account revocation, cross-device conflicts, and physical Android runtime tests remain open. Dropbox evidence is recorded separately in [Dropbox desktop testing](NEO_DROPBOX_DESKTOP_TESTING.md). The owner requested Windows-only live tests for now. Public credential provisioning and consent-screen production readiness remain open; see [OAuth release readiness](NEO_OAUTH_RELEASE_READINESS.md). Milestone 13 is not complete. No ordinary user log or unrelated local file was changed.
+At that stage, Google foreground sync, actual adapter disconnection, stalled transfers, account revocation, cross-device conflicts, and physical Android runtime tests remained open. Later Windows foreground, revocation and transaction evidence is recorded below. Dropbox evidence is recorded separately in [Dropbox desktop testing](NEO_DROPBOX_DESKTOP_TESTING.md). The owner requested Windows-only live tests for now. Public credential provisioning and consent-screen production readiness remain open; see [OAuth release readiness](NEO_OAUTH_RELEASE_READINESS.md). Milestone 13 is not complete. No ordinary user log or unrelated local file was changed.
 
 ## Rejected-token recovery, 2026-10-16
 
@@ -107,3 +107,26 @@ The `fcfc5fbf2` Windows package passed ten native identity/recovery stages for t
 The same `fcfc5fbf2` Windows package passed real provider-side grant revocation through the provider's API, rejection of the revoked access and refresh tokens, local credential/identity/baseline cleanup, and restart while disconnected. The owner then completed fresh browser consent. An explicit cloud download restored the baseline; another restart verified the account and returned `up-to-date`.
 
 All five native stages retained byte-identical canonical local XML. A final read-only comparison confirmed the same stable account, manifest ID/content and immutable XML snapshot ID/content. The original disposable profile ended connected with its provider as primary and automatic sync off; all test processes exited. No code change was required. See [exact revocation method, results and limits](NEO_CLOUD_REVOCATION_TESTING.md). Provider account-settings UI and switching between two different live accounts remain untested; physical Android validation remains deferred.
+
+## Automatic foreground sync, 2026-10-17
+
+The same `fcfc5fbf2` Windows package passed the following live checks in both Clean and Modern, using the existing authorized disposable Google profile. The QML driver minimized and restored the real native window, observed actual application activation, and never called a sync method.
+
+| Check | Clean | Modern |
+| --- | --- | --- |
+| Hidden startup with automatic sync disabled stayed idle | Passed | Passed |
+| Enabling automatic sync and returning to Neo synced the established primary provider | Passed | Passed |
+| Returning with automatic sync disabled made no sync request | Passed | Passed |
+| Re-enabling it and returning again synced successfully | Passed | Passed |
+| Temporary Google connection failure released the busy state and retained the connection/local log | Passed | Passed |
+| Restoring connectivity and returning again recovered automatically | Passed | Passed |
+
+Each enabled activation produced one sync attempt approximately 2.5 seconds after the observed activation event. Each style produced three `up-to-date` results and one expected connection error; the disabled foreground phase remained idle for six seconds. Recovery required no manual Sync now, app restart or new browser consent. Both styles retained the verified account and established baseline.
+
+A loopback CONNECT proxy applied only to this test profile forwarded encrypted Google traffic, temporarily rejected connections, then resumed forwarding within the same app process. It did not decrypt TLS or change system networking. This is controlled connection-failure evidence, not physical adapter-disconnection or stalled-transfer coverage. The cloud log was unchanged during the pass, so it tests activation and retry of an established log rather than arrival of a new remote revision.
+
+Canonical XML exports before and after each style were byte-identical to the original disposable dive export. The saved sync baseline and stable account ID were unchanged. Read-only comparisons confirmed the original cloud manifest and referenced XML snapshot retained their IDs and contents. The exact previous automatic-sync, interface-style and proxy settings were restored; the profile ended connected with Google as primary and automatic sync off. All test processes exited. No native QML ReferenceError, TypeError or SyntaxError occurred in either successful run.
+
+Evidence is retained locally under `work/google-foreground-fcfc5f-clean-retry/` and `work/google-foreground-fcfc5f-modern/`, with final `result.json` reports. The helper is `work/test-google-foreground.py`. An initial harness attempt used an unsupported Windows export-path representation; it was stopped, its settings were restored, and the corrected harness completed both styles. That attempt is retained under `work/google-foreground-fcfc5f-clean/`; it is not counted as a successful application check.
+
+No application fix or new binary was needed. The existing [Windows build, packaged launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358118) and [native cloud regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358189) apply to the tested code. This follow-up adds twelve live lifecycle checks and does not rerun those CI suites. Two-live-account switching, provider account-settings UI, physical network/device tests, snapshot retention and public OAuth remain separate gates. Physical Android validation remains deferred.
