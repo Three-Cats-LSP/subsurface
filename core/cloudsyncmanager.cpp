@@ -785,9 +785,10 @@ bool CloudSyncManager::applyCloudDiveLog(const QByteArray &payload)
 		setError(tr("The downloaded cloud dive log could not be parsed."));
 		return false;
 	}
-	replacement.process_loaded_dives();
 	::divelog = std::move(replacement);
-	emit_reset_signal();
+	// Processing also rebuilds the global search index and current selection.
+	// Install the replacement first so neither retains the discarded log.
+	::divelog.process_loaded_dives();
 	return true;
 }
 

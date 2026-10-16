@@ -3,8 +3,10 @@
 #include "core/cloudsyncmanager.h"
 #include "core/divelog.h"
 #include "core/dive.h"
+#include "core/fulltext.h"
 #include "core/parse.h"
 #include "core/pref.h"
+#include "core/selection.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSignalSpy>
@@ -439,16 +441,25 @@ void TestCloudSyncManager::testCanonicalCloudLog()
 {
 	FakeNetwork network;
 	CloudSyncManager manager(&network);
-	const QByteArray original = manager.serializeCurrentDiveLog();
-	QVERIFY(!original.isEmpty());
-	QVERIFY(manager.applyCloudDiveLog(original));
+	QByteArray replacement = manager.serializeCurrentDiveLog();
+	QVERIFY(!replacement.isEmpty());
+	replacement.replace("Local notes must survive cloud failures.", "Downloaded replacement notes.");
+	QVERIFY(manager.applyCloudDiveLog(replacement));
 	// The canonical importer normalizes its serialized representation; verify
 	// the dive contents rather than requiring byte-identical XML after import.
 	QCOMPARE(::divelog.dives.size(), 1);
 	QCOMPARE(::divelog.dives[0]->number, 17);
-	QCOMPARE(QString::fromStdString(::divelog.dives[0]->notes), QString("Local notes must survive cloud failures."));
+	QCOMPARE(QString::fromStdString(::divelog.dives[0]->notes), QString("Downloaded replacement notes."));
 	QCOMPARE(::divelog.dives[0]->duration.seconds, 1200);
 	QCOMPARE(::divelog.dives[0]->maxdepth.mm, 18000);
+	QCOMPARE(current_dive, ::divelog.dives[0].get());
+	FullTextQuery query;
+	query = QStringLiteral("replacement");
+	const auto found = fulltext_find_dives(query, StringFilterMode::EXACT);
+	QCOMPARE(found.dives.size(), size_t(1));
+	QVERIFY(found.dive_matches(::divelog.dives[0].get()));
+	query = QStringLiteral("survive");
+	QVERIFY(fulltext_find_dives(query, StringFilterMode::EXACT).dives.empty());
 }
 
 void TestCloudSyncManager::testOrphanCloudLog()
