@@ -1426,4 +1426,47 @@ void TestCloudSyncManager::testStorageReview()
 	}
 }
 
+void TestCloudSyncManager::testHistoryGuard_data()
+{
+	QTest::addColumn<int>("mode");
+	for (int i = 0; i < 7; ++i) QTest::newRow(qPrintable(QString::number(i))) << i;
+}
+
+void TestCloudSyncManager::testHistoryGuard()
+{
+	QFETCH(int, mode);
+	const auto previous = qgetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	const auto restore = qScopeGuard([&] { if (previous.isNull()) qunsetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH"); else qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", previous); });
+	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", mode == 0 ? QByteArray() : QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
+	FakeNetwork network; network.accountDeferred = true;
+	if (mode == 5) network.accountBody = accountResponse("changed-account");
+	if (mode == 6) network.accountStatus = 503;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account";
+	manager.tokens.insert("dropbox", token);
+	manager.verifiedAccountTokens.insert("dropbox", token.accessToken);
+	if (mode == 1) manager.setPrimaryProvider("dropbox");
+	if (mode == 2) manager.setAutoSyncEnabled(true);
+	const auto local = manager.serializeCurrentDiveLog();
+	manager.saveLastSyncManifest("dropbox", CloudSyncManifest::forPayload(local));
+	const auto baseline = CloudCredentialStore::load(manager.syncStateCredentialKey("dropbox"));
+	manager.runHistory("dropbox", "migrate");
+	if (mode <= 2) { QCOMPARE(network.accountRequests, 0); QVERIFY(!manager.syncInProgress()); }
+	else {
+		QVERIFY(manager.historyInProgress()); QCOMPARE(network.accountRequests, 1);
+		QVERIFY(!manager.syncPrimaryIfReady());
+		manager.uploadBytes("dropbox", "unexpected.xml", "bad");
+		manager.downloadBytes("dropbox", "unexpected.xml");
+		QCOMPARE(network.requests, 0);
+		auto *late = network.lastAccountReply;
+		if (mode == 3) manager.cancelHistory();
+		if (mode == 4) manager.disconnectProvider("dropbox");
+		late->complete();
+		QTRY_VERIFY(!manager.syncInProgress());
+		QVERIFY(!manager.accountCheckInProgress()); QCOMPARE(network.requests, 0);
+	}
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	if (mode != 4 && mode != 5) QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey("dropbox")), baseline);
+}
+
 QTEST_GUILESS_MAIN(TestCloudSyncManager)

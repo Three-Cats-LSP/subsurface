@@ -14,6 +14,7 @@ on:
       - 'tests/testcloudsyncmanifest.*'
       - 'tests/testcloudsyncmanager.*'
       - 'tests/testcloudsyncreview.*'
+      - 'tests/testcloudsynchistory.*'
       - 'tests/testqPrefCloudStorage.*'
       - 'tests/CMakeLists.txt'
   workflow_dispatch:

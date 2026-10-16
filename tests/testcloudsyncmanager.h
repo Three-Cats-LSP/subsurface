@@ -14,6 +14,8 @@ private slots:
 	void init();
 	void testStorageReview_data();
 	void testStorageReview();
+	void testHistoryGuard_data();
+	void testHistoryGuard();
 	void testAccountIdentity_data();
 	void testAccountIdentity();
 	void testAccountLookupFailure_data();

@@ -30,6 +30,11 @@ public:
 	void uploadConditional(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId = {});
 	void downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName);
+	// History uses strict reads: duplicate legacy names must never trigger a rename.
+	void setStrictReads(bool enabled) { strictReads = enabled; }
+	void setResponseLimit(qint64 bytes) { responseLimit = bytes; }
+	void downloadExact(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QString &fileId, const QString &version);
 
 signals:
 	void uploadFinished(CloudSyncProviderType provider, const QString &fileName);
@@ -56,7 +61,8 @@ private:
 	void googleDownload(const QString &accessToken, const QString &fileName);
 	void dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
 		bool conditional = false, const QString &version = {});
-	void dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned = false);
+	void dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned = false,
+		const QString &expectedId = {}, const QString &expectedVersion = {});
 	void googleDownloadVersioned(const QString &accessToken, const QString &fileName, int attempt = 0);
 	void googleReadVersion(const QString &accessToken, const QString &fileName, const QString &fileId,
 		const std::function<void(const QString &)> &continuation, const std::function<void()> &changed = {});
@@ -70,6 +76,8 @@ private:
 
 	QNetworkAccessManager *networkManager;
 	QMap<CloudSyncProviderType, QSet<QNetworkReply *>> pendingReplies;
+	bool strictReads = false;
+	qint64 responseLimit = 0;
 };
 
 Q_DECLARE_METATYPE(CloudSyncProviderType)

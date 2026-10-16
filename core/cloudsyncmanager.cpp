@@ -87,9 +87,31 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	networkManager(networkManager),
 	tokenClient(networkManager, this),
 	fileStore(networkManager, this),
-	storageReviewClient(networkManager, this)
+	storageReviewClient(networkManager, this),
+	historyClient(networkManager, this)
 {
 	Q_ASSERT(networkManager);
+	connect(&historyClient, &CloudSyncHistory::finished, this, [this](const QVariantMap &report, const QByteArray &restored) {
+		if (!historyInProgress()) return;
+		const QString providerId = syncProviderId;
+		if (!restored.isEmpty() && (autoSyncEnabled() || !primaryProviderId().isEmpty() || !backupProviderId().isEmpty())) {
+			setError(tr("Provider assignments changed during restore. The new history version was kept; the local log was not replaced."));
+			clearSyncOperation(); return;
+		}
+		if (!restored.isEmpty() && (!localDiveLogUnchanged() || !applyCloudDiveLog(restored))) {
+			clearSyncOperation(); return;
+		}
+		historyReports.insert(providerId, report);
+		clearSyncOperation(); emit providersChanged(); emit historyFinished(providerId);
+		// Refresh/persist the canonical model through the established download path,
+		// but do not advance a schema 1/2 baseline or schedule legacy sync.
+		if (!restored.isEmpty()) emit diveLogSyncFinished(providerId, QStringLiteral("downloaded"));
+	});
+	connect(&historyClient, &CloudSyncHistory::failed, this, [this](const QString &message, bool rejected) {
+		if (!historyInProgress()) return;
+		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
+		else { setError(message); clearSyncOperation(); }
+	});
 	connect(&storageReviewClient, &CloudStorageReview::finished, this, [this](QVariantMap report) {
 		if (!storageReviewInProgress()) return;
 		const QString providerId = syncProviderId;
@@ -335,6 +357,7 @@ QVariantList CloudSyncManager::providers() const
 		row.insert(QStringLiteral("accountVerified"), !tokenSet.accessToken.isEmpty() && verifiedAccountTokens.value(provider.id) == tokenSet.accessToken);
 		row.insert(QStringLiteral("checkingAccount"), accountProviderId == provider.id);
 		row.insert(QStringLiteral("storageReview"), storageReviews.value(provider.id));
+		row.insert(QStringLiteral("history"), historyReports.value(provider.id));
 		row.insert(QStringLiteral("configured"), configured);
 		row.insert(QStringLiteral("configurationError"), configurationError);
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
@@ -844,7 +867,38 @@ void CloudSyncManager::checkAccount(const QString &providerId)
 
 void CloudSyncManager::clearStorageReview(const QString &providerId)
 {
+	if (historyReports.remove(providerId)) emit providersChanged();
 	if (storageReviews.remove(providerId)) emit providersChanged();
+}
+
+void CloudSyncManager::runHistory(const QString &providerId, const QString &action, const QString &revision)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!historyEnabled() || !provider || provider->type == CloudSyncProviderType::SubsurfaceCloud || syncInProgress() ||
+	    authorizationInProgress() || accountCheckInProgress() || pendingTokenContinuation) return;
+	if (autoSyncEnabled() || !primaryProviderId().isEmpty() || !backupProviderId().isEmpty()) {
+		setError(tr("Experimental history requires automatic sync off and no primary or backup assignment. Use an isolated test profile.")); return;
+	}
+	clearStorageReview(providerId); setError({});
+	syncLocalPayload = serializeCurrentDiveLog();
+	if (syncLocalPayload.isEmpty()) return;
+	syncLocalSha256 = CloudSyncManifest::sha256(syncLocalPayload);
+	syncProviderId = providerId; syncOperation = SyncOperation::History;
+	emit syncInProgressChanged(); verifiedAccountTokens.remove(providerId);
+	refreshThen(*provider, providerId, [this, providerId, action, revision, type = provider->type](const QString &token) {
+		if (!historyInProgress() || syncProviderId != providerId) return;
+		historyClient.start(type, token, CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8()), historyEpoch,
+			action, revision, syncLocalPayload, [this] {
+				return historyInProgress() && !autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty() && localDiveLogUnchanged();
+			});
+	});
+}
+
+void CloudSyncManager::cancelHistory()
+{
+	if (!historyInProgress()) return;
+	cancelAccountCheck(); tokenClient.cancel(); pendingTokenContinuation = {}; refreshProviderId.clear();
+	clearSyncOperation(); setError({}); emit providersChanged();
 }
 
 void CloudSyncManager::reviewStorage(const QString &providerId)
@@ -1011,7 +1065,7 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 
 void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data)
 {
-	if (storageReviewInProgress()) return;
+	if (storageReviewInProgress() || historyInProgress()) return;
 	clearStorageReview(providerId);
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
@@ -1023,7 +1077,7 @@ void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fil
 
 void CloudSyncManager::downloadBytes(const QString &providerId, const QString &fileName)
 {
-	if (storageReviewInProgress()) return;
+	if (storageReviewInProgress() || historyInProgress()) return;
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
@@ -1157,6 +1211,7 @@ bool CloudSyncManager::localDiveLogUnchanged()
 void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
+	if (historyInProgress()) historyClient.cancel();
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

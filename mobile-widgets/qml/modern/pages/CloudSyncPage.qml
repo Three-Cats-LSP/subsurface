@@ -17,6 +17,8 @@ Kirigami.ScrollablePage {
 	property string initialChoiceProvider: ""
 	property string pendingDisconnectProvider: ""
 	property string pendingDisconnectName: ""
+	property string historyProvider: ""
+	property string historyRevision: ""
 
 	Modern.DesignTokens { id: tokens }
 
@@ -76,6 +78,10 @@ Kirigami.ScrollablePage {
 			page.initialChoiceProvider = providerId
 			page.lastSyncProvider = ""
 		}
+		function onHistoryFinished(providerId) {
+			page.lastSyncProvider = ""
+			page.lastBackupProvider = ""
+		}
 	}
 
 	ColumnLayout {
@@ -123,6 +129,7 @@ Kirigami.ScrollablePage {
 		Repeater {
 			model: CloudSync.providers
 			delegate: Components.ModernCard {
+				id: providerCard
 				required property var modelData
 				Layout.fillWidth: true
 
@@ -149,7 +156,7 @@ Kirigami.ScrollablePage {
 								font.weight: Font.DemiBold
 							}
 							Text {
-								text: modelData.connected ? (CloudSync.storageReviewInProgress ? qsTr("Connected") : CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
+								text: modelData.connected ? (CloudSync.storageReviewInProgress || CloudSync.historyInProgress ? qsTr("Connected") : CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
 									  modelData.configured ? qsTr("Ready to connect") : qsTr("Setup required")
 								color: modelData.connected ? tokens.accent : tokens.textSecondary
 								font.pixelSize: 14
@@ -380,6 +387,74 @@ Kirigami.ScrollablePage {
 						}
 					}
 
+					ColumnLayout {
+						visible: CloudSync.historyEnabled && modelData.connected
+						Layout.fillWidth: true
+						spacing: tokens.space8
+						Text {
+							text: qsTr("Experimental history")
+							color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold
+						}
+						Text {
+							text: qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Initialization copies the current cloud log into a separate history. Save version adds the local log. Existing sync files stay unchanged; cleanup is disabled.")
+							color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+						}
+						GridLayout {
+							columns: page.width >= 600 ? 3 : 1
+							Layout.fillWidth: true
+							Components.NeoButton {
+								objectName: "loadHistory-" + modelData.id
+								text: qsTr("Load history"); compact: true; Layout.fillWidth: true
+								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+								onClicked: CloudSync.runHistory(modelData.id, "list")
+							}
+							Components.NeoButton {
+								objectName: "initializeHistory-" + modelData.id
+								text: qsTr("Initialize history"); compact: true; Layout.fillWidth: true
+								visible: !modelData.history.initialized
+								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+								onClicked: CloudSync.runHistory(modelData.id, "migrate")
+							}
+							Components.NeoButton {
+								objectName: "saveHistory-" + modelData.id
+								text: qsTr("Save version"); compact: true; Layout.fillWidth: true
+								visible: !!modelData.history.initialized
+								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress && !modelData.history.legacyChanged
+								onClicked: CloudSync.runHistory(modelData.id, "save")
+							}
+							Components.NeoButton {
+								text: qsTr("Cancel"); compact: true; variant: "ghost"
+								visible: CloudSync.historyInProgress
+								onClicked: CloudSync.cancelHistory()
+							}
+						}
+						Text {
+							visible: !!modelData.history.legacyChanged
+							text: qsTr("The existing sync log has changed since initialization. Both branches are kept; history writes are paused.")
+							color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true
+						}
+						Repeater {
+							model: modelData.history.versions || []
+							delegate: RowLayout {
+								required property var modelData
+								Layout.fillWidth: true
+								Text {
+									text: qsTr("%1 · %2%3").arg(Qt.locale().toLocaleString(new Date(modelData.createdAt), Locale.ShortFormat)).arg(page.storageSize(modelData.bytes)).arg(modelData.current ? qsTr(" · Current") : "")
+									color: tokens.textPrimary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+								}
+								Components.NeoButton {
+									text: qsTr("Restore"); compact: true
+									enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+									onClicked: {
+										page.historyProvider = providerCard.modelData.id
+										page.historyRevision = modelData.id
+										historyRestoreDialog.open()
+									}
+								}
+							}
+						}
+					}
+
 					Components.NeoButton {
 						visible: !modelData.connected
 						text: qsTr("Connect")
@@ -416,6 +491,25 @@ Kirigami.ScrollablePage {
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
+		}
+	}
+
+	Dialog {
+		id: historyRestoreDialog
+		parent: Overlay.overlay
+		anchors.centerIn: parent
+		modal: true
+		width: Math.min(page.width - tokens.space32, 500)
+		title: qsTr("Restore this history version?")
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Text {
+			text: qsTr("This creates a new history version and replaces the local dive log. Save your current local log as a version first. Earlier versions and existing sync files are kept.")
+			color: tokens.textSecondary; wrapMode: Text.WordWrap
+		}
+		footer: RowLayout {
+			Item { Layout.fillWidth: true }
+			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyRestoreDialog.close() }
+			Components.NeoButton { text: qsTr("Restore"); onClicked: { CloudSync.runHistory(page.historyProvider, "restore", page.historyRevision); historyRestoreDialog.close() } }
 		}
 	}
 

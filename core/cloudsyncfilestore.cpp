@@ -32,6 +32,16 @@ CloudSyncFileStore::CloudSyncFileStore(QNetworkAccessManager *networkManager, QO
 void CloudSyncFileStore::trackReply(CloudSyncProviderType provider, QNetworkReply *reply)
 {
 	pendingReplies[provider].insert(reply);
+	if (responseLimit > 0) {
+		const auto checkSize = [this, provider, reply] {
+			if (reply->bytesAvailable() <= responseLimit) return;
+			pendingReplies[provider].remove(reply);
+			reply->disconnect(this); reply->abort(); reply->deleteLater();
+			emit operationError(provider, {}, tr("Cloud response exceeded the history safety limit."));
+		};
+		connect(reply, &QNetworkReply::readyRead, this, checkSize);
+		connect(reply, &QNetworkReply::finished, this, checkSize);
+	}
 	connect(reply, &QNetworkReply::finished, this, [this, provider, reply]() {
 		pendingReplies[provider].remove(reply);
 	});
@@ -139,7 +149,7 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 	escapedName.replace(QLatin1Char('\''), QStringLiteral("\\'"));
 	query.addQueryItem(QStringLiteral("spaces"), QStringLiteral("appDataFolder"));
 	query.addQueryItem(QStringLiteral("q"), QStringLiteral("name='%1' and trashed=false").arg(escapedName));
-	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("nextPageToken,files(id,name,createdTime)"));
+	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("nextPageToken,incompleteSearch,files(id,name,createdTime)"));
 	url.setQuery(query);
 
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
@@ -164,7 +174,7 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			return;
 		}
 		const QJsonArray files = object.value(QStringLiteral("files")).toArray();
-		if (!object.value(QStringLiteral("nextPageToken")).toString().isEmpty() ||
+		if (object.value(QStringLiteral("incompleteSearch")).toBool() || !object.value(QStringLiteral("nextPageToken")).toString().isEmpty() ||
 		    (!files.isEmpty() && files.first().toObject().value(QStringLiteral("id")).toString().isEmpty())) {
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
 				tr("Google Drive returned an ambiguous or invalid cloud file. No data was changed."));
@@ -173,7 +183,7 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 		if (files.size() > 1) {
 			// Only the known sync manifest has a recovery protocol. Never elect a
 			// winner for an ambiguous XML payload or an arbitrary caller's file.
-			if (fileName != QStringLiteral("subsurface-neo-sync.json") || recoveryAttempt >= 8) {
+			if (strictReads || fileName != QStringLiteral("subsurface-neo-sync.json") || recoveryAttempt >= 8) {
 				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
 					tr("Google Drive has competing cloud files. Sync again to retry recovery. No logs were deleted."));
 				return;
@@ -201,6 +211,13 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			for (const auto &entry : order) candidates.append({entry.second, {}});
 			googleRecoverInitialManifests(accessToken, fileName, candidates, 0, recoveryAttempt, continuation);
 			return;
+		}
+		if (strictReads && !files.isEmpty()) {
+			const auto file = files.first().toObject();
+			if (file.value("name").toString() != fileName ||
+			    !QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(file.value("id").toString()).hasMatch()) {
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Cloud file identity is invalid.")); return;
+			}
 		}
 		continuation(files.isEmpty() ? QString() : files.first().toObject().value(QStringLiteral("id")).toString());
 	});
@@ -374,13 +391,14 @@ void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString
 	});
 }
 
-void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned)
+void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned,
+	const QString &expectedId, const QString &expectedVersion)
 {
 	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/download")), accessToken);
-	request.setRawHeader("Dropbox-API-Arg", compactJson({{QStringLiteral("path"), QStringLiteral("/") + fileName}}));
+	request.setRawHeader("Dropbox-API-Arg", compactJson({{QStringLiteral("path"), expectedId.isEmpty() ? QStringLiteral("/") + fileName : expectedId}}));
 	QNetworkReply *reply = networkManager->post(request, QByteArray());
 	trackReply(CloudSyncProviderType::Dropbox, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, versioned]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, versioned, expectedId, expectedVersion]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
@@ -390,11 +408,14 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 			providerError.value(QStringLiteral("path")).toObject().value(QStringLiteral(".tag")).toString() == QStringLiteral("not_found");
 		reply->deleteLater();
 		if (ok && versioned) {
-			const QString version = QJsonDocument::fromJson(reply->rawHeader("Dropbox-API-Result")).object().value(QStringLiteral("rev")).toString();
-			if (version.isEmpty())
+			const auto metadata = QJsonDocument::fromJson(reply->rawHeader("Dropbox-API-Result")).object();
+			const QString version = metadata.value(QStringLiteral("rev")).toString();
+			const QString id = metadata.value(QStringLiteral("id")).toString();
+			if (version.isEmpty() || (strictReads && (id.isEmpty() || metadata.value("name").toString() != fileName)) ||
+			    (!expectedId.isEmpty() && (id != expectedId || version != expectedVersion)))
 				emit operationError(CloudSyncProviderType::Dropbox, fileName, tr("Dropbox did not return a file revision. No data was changed."));
 			else
-				emit versionedDownloadFinished(CloudSyncProviderType::Dropbox, fileName, payload, version, QString());
+				emit versionedDownloadFinished(CloudSyncProviderType::Dropbox, fileName, payload, version, id);
 		} else if (ok)
 			emit downloadFinished(CloudSyncProviderType::Dropbox, fileName, payload);
 		else if (missing)
@@ -463,7 +484,7 @@ void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QSt
 	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1?fields=id,etag,title").arg(fileId));
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
 	trackReply(CloudSyncProviderType::GoogleDrive, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation, changed]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, fileId, continuation, changed]() {
 		const QByteArray payload = reply->readAll();
 		reply->deleteLater();
 		if (reply->error() != QNetworkReply::NoError) {
@@ -477,7 +498,7 @@ void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QSt
 		}
 		const auto metadata = QJsonDocument::fromJson(payload).object();
 		const QString version = metadata.value(QStringLiteral("etag")).toString();
-		if (version.isEmpty()) {
+		if (version.isEmpty() || (strictReads && metadata.value("id").toString() != fileId)) {
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Google Drive did not return a file revision. No data was changed."));
 			return;
 		}
@@ -488,6 +509,22 @@ void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QSt
 		}
 		continuation(version);
 	});
+}
+
+void CloudSyncFileStore::downloadExact(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QString &fileId, const QString &version)
+{
+	if (accessToken.isEmpty() || safeRemoteName(fileName) != fileName || fileId.isEmpty() || version.isEmpty()) {
+		emit operationError(provider, fileName, tr("Cloud snapshot identity is incomplete.")); return;
+	}
+	if (provider == CloudSyncProviderType::Dropbox && fileId.startsWith("id:")) {
+		dropboxDownload(accessToken, fileName, true, fileId, version);
+	} else if (provider == CloudSyncProviderType::GoogleDrive && QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(fileId).hasMatch()) {
+		googleReadFileVersioned(accessToken, fileName, fileId, [this, fileName, fileId, version](const QByteArray &data, const QString &actual) {
+			if (actual != version) emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
+			else emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, data, actual, fileId);
+		});
+	} else emit operationError(provider, fileName, tr("Cloud snapshot identity is invalid."));
 }
 
 void CloudSyncFileStore::googleReadFileVersioned(const QString &accessToken, const QString &fileName, const QString &fileId,

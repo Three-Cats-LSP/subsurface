@@ -5,6 +5,7 @@
 #include "cloudsyncfilestore.h"
 #include "cloudsyncmanifest.h"
 #include "cloudsyncreview.h"
+#include "cloudsynchistory.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -29,6 +30,8 @@ class CloudSyncManager : public QObject {
 	Q_PROPERTY(bool accountCheckInProgress READ accountCheckInProgress NOTIFY providersChanged)
 	Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
 	Q_PROPERTY(bool storageReviewInProgress READ storageReviewInProgress NOTIFY syncInProgressChanged)
+	Q_PROPERTY(bool historyEnabled READ historyEnabled CONSTANT)
+	Q_PROPERTY(bool historyInProgress READ historyInProgress NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString storageReviewProviderId READ storageReviewProviderId NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 	Q_PROPERTY(QString primaryProviderId READ primaryProviderId NOTIFY providerAssignmentsChanged)
@@ -44,6 +47,8 @@ public:
 	bool syncInProgress() const { return !syncProviderId.isEmpty(); }
 	bool storageReviewInProgress() const { return syncOperation == SyncOperation::StorageReview; }
 	QString storageReviewProviderId() const { return storageReviewInProgress() ? syncProviderId : QString(); }
+	bool historyEnabled() const { return CloudHistoryRecord::validEpoch(historyEpoch); }
+	bool historyInProgress() const { return syncOperation == SyncOperation::History; }
 	QString lastError() const { return errorText; }
 	QString primaryProviderId() const;
 	QString backupProviderId() const;
@@ -54,6 +59,8 @@ public:
 	Q_INVOKABLE void checkAccount(const QString &providerId);
 	Q_INVOKABLE void reviewStorage(const QString &providerId);
 	Q_INVOKABLE void cancelStorageReview();
+	Q_INVOKABLE void runHistory(const QString &providerId, const QString &action, const QString &revision = {});
+	Q_INVOKABLE void cancelHistory();
 	Q_INVOKABLE void disconnectProvider(const QString &providerId);
 	Q_INVOKABLE void uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data);
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
@@ -85,12 +92,14 @@ signals:
 	void diveLogSyncConflict(const QString &providerId);
 	void diveLogInitialChoiceRequired(const QString &providerId);
 	void storageReviewFinished(const QString &providerId);
+	void historyFinished(const QString &providerId);
 
 private:
 	friend class TestCloudSyncManager;
 	enum class SyncOperation {
 		None,
 		StorageReview,
+		History,
 		BackupUploadPayload,
 		BackupUploadManifest,
 		SyncDownloadManifest,
@@ -140,6 +149,9 @@ private:
 	OAuth2TokenClient tokenClient;
 	CloudSyncFileStore fileStore;
 	CloudStorageReview storageReviewClient;
+	CloudSyncHistory historyClient;
+	const QString historyEpoch = qEnvironmentVariable("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	QHash<QString, QVariantMap> historyReports;
 	QHash<QString, QVariantMap> storageReviews;
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;
