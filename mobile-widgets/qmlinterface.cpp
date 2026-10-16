@@ -149,6 +149,12 @@ void QMLInterface::setupCloudSyncLifecycle(QMLManager *qmlManager)
 	if (!qmlManager || !neoCloudSync)
 		return;
 
+	connect(neoCloudSync, &CloudSyncManager::diveLogSyncFinished, qmlManager,
+		[qmlManager](const QString &, const QString &result) {
+			if (result == QLatin1String("downloaded"))
+				qmlManager->saveCloudDiveLog();
+		});
+
 	// QML creates its manager during engine.load(), after setup(). Attach here
 	// so startup does not depend on a later application activation event.
 	// Bind timers and connections to that manager's lifetime.

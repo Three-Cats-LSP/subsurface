@@ -1809,6 +1809,17 @@ bool QMLManager::saveChangesLocal()
 	return true;
 }
 
+void QMLManager::saveCloudDiveLog()
+{
+	// Provider downloads replace the canonical log outside the undo system.
+	// Persist them even when the previously opened local log was clean. Use
+	// only the local cache here; this is not a legacy Subsurface Cloud upload.
+	mark_divelist_changed(true);
+	emit syncStateChanged();
+	updateAllGlobalLists();
+	saveChangesLocal();
+}
+
 bool QMLManager::saveChangesCloud(bool forceRemoteSync)
 {
 	if (!unsavedChanges() && !forceRemoteSync) {

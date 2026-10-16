@@ -216,6 +216,7 @@ public slots:
 	void mergeDives(int diveId, int mergeIntoDiveId);
 	void changesNeedSaving(bool fromUndo = false);
 	void openNoCloudRepo();
+	void saveCloudDiveLog();
 	bool saveChangesCloud(bool forceRemoteSync);
 	void selectDive(int id);
 	Q_INVOKABLE int swipeRowForDive(int id) const;
