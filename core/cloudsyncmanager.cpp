@@ -3,8 +3,10 @@
 #include "cloudcredentialstore.h"
 #include "divelog.h"
 #include "file.h"
+#include "fulltext.h"
 #include "qthelper.h"
 #include "save-xml.h"
+#include "selection.h"
 
 #include <QDesktopServices>
 #include <QFile>
@@ -785,6 +787,8 @@ bool CloudSyncManager::applyCloudDiveLog(const QByteArray &payload)
 		setError(tr("The downloaded cloud dive log could not be parsed."));
 		return false;
 	}
+	fulltext_unregister_all();
+	select_single_dive(nullptr);
 	::divelog = std::move(replacement);
 	// Processing also rebuilds the global search index and current selection.
 	// Install the replacement first so neither retains the discarded log.
