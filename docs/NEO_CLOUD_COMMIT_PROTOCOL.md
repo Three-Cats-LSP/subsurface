@@ -1,6 +1,6 @@
 # Neo cloud commit protocol
 
-Milestone 13 implementation, Windows live validation in progress (2026-10-16).
+Implemented and live-validated on Windows for both providers at `ed8a15fd4` (2026-10-16). Milestone 13 remains open for the remaining release gates.
 
 Google Drive and Dropbox now publish schema 2 manifests. XML remains the canonical dive-log format. Each attempt creates `subsurface-neo-<revision UUID>.xml`; the fixed `subsurface-neo-sync.json` manifest names that immutable payload and its SHA-256. The previous XML remains readable until the manifest commit succeeds. Readers follow the manifest's exact payload name and validate the checksum and complete canonical XML before replacement.
 
@@ -26,6 +26,8 @@ These changes do not include equipment-library, manual-collection, or planner-pr
 
 ## Validation
 
-The native regression suite models both providers and covers concurrent writers, initial creation races, rejected payloads, failed manifest commits, lost commit responses, changes during upload, missing revisions, and a cloud update during a Google manifest read. Windows live validation results are recorded in the provider testing documents after the new package is built.
+The native regression suite models both providers and covers concurrent writers, initial creation races, rejected payloads, failed manifest commits, lost commit responses, changes during upload, missing revisions, and a cloud update during a Google manifest read. Live Windows checks passed migration, a controlled two-writer race, a connection cut during a large upload, process termination before manifest publication, restart/retry, and process termination after remote commit but before local confirmation. Separate readers verified the old log during interrupted attempts and the new log after recovery. Both disposable cloud logs were restored to one dive. See [Google evidence](NEO_GOOGLE_DESKTOP_TESTING.md) and [Dropbox evidence](NEO_DROPBOX_DESKTOP_TESTING.md).
+
+[Windows build, launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378239), [36 desktop and 33 mobile-target regression tests](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378266), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378290) passed at `ed8a15fd4`.
 
 Provider references: [Google v2 File resource](https://developers.google.com/workspace/drive/api/reference/rest/v2/files), [Google v2 update](https://developers.google.com/workspace/drive/api/reference/rest/v2/files/update), [Dropbox SDK file-write contract](https://dropbox-sdk-python.readthedocs.io/en/latest/api/files.html).
