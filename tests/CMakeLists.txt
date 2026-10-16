@@ -154,6 +154,7 @@ endif()
 TEST(TestQPrefCloudStorage testqPrefCloudStorage.cpp)
 TEST(TestCloudSyncManifest testcloudsyncmanifest.cpp)
 TEST(TestCloudSyncManager testcloudsyncmanager.cpp)
+TEST(TestCloudSyncReview testcloudsyncreview.cpp)
 TEST(TestQPrefDisplay testqPrefDisplay.cpp)
 TEST(TestQPrefDiveComputer testqPrefDiveComputer.cpp)
 TEST(TestQPrefDivePlanner testqPrefDivePlanner.cpp)
@@ -197,6 +198,7 @@ add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND}
 	TestQPrefCloudStorage
 	TestCloudSyncManifest
 	TestCloudSyncManager
+	TestCloudSyncReview
 	TestQPrefDisplay
 	TestQPrefDiveComputer
 	TestQPrefDivePlanner

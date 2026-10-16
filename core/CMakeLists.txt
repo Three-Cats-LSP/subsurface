@@ -66,6 +66,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncmanifest.h
 	cloudsyncprovider.cpp
 	cloudsyncprovider.h
+	cloudsyncreview.cpp
+	cloudsyncreview.h
 	oauth2pkce.cpp
 	oauth2pkce.h
 	oauth2tokenclient.cpp

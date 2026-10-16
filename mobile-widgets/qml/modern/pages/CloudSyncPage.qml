@@ -20,6 +20,20 @@ Kirigami.ScrollablePage {
 
 	Modern.DesignTokens { id: tokens }
 
+	function storageSize(bytes) {
+		if (bytes >= 1048576) return qsTr("%1 MiB").arg((bytes / 1048576).toFixed(1))
+		if (bytes >= 1024) return qsTr("%1 KiB").arg((bytes / 1024).toFixed(1))
+		return qsTr("%1 bytes").arg(bytes)
+	}
+
+	function storageCategory(id) {
+		if (id === "current") return qsTr("Current log files")
+		if (id === "recovery") return qsTr("Recovery files")
+		if (id === "legacy") return qsTr("Legacy log")
+		if (id === "unknown") return qsTr("Other snapshots")
+		return qsTr("Other items")
+	}
+
 	function resultText(result) {
 		if (result === "up-to-date") return qsTr("Up to date")
 		if (result === "uploaded") return qsTr("Local changes uploaded")
@@ -135,7 +149,7 @@ Kirigami.ScrollablePage {
 								font.weight: Font.DemiBold
 							}
 							Text {
-								text: modelData.connected ? (CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
+								text: modelData.connected ? (CloudSync.storageReviewInProgress ? qsTr("Connected") : CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
 									  modelData.configured ? qsTr("Ready to connect") : qsTr("Setup required")
 								color: modelData.connected ? tokens.accent : tokens.textSecondary
 								font.pixelSize: 14
@@ -303,6 +317,67 @@ Kirigami.ScrollablePage {
 						compact: true
 						enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 						onClicked: CloudSync.checkAccount(modelData.id)
+					}
+
+					ColumnLayout {
+						visible: modelData.connected
+						Layout.fillWidth: true
+						spacing: tokens.space8
+						Text {
+							text: qsTr("Cloud storage")
+							color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold
+						}
+						Text {
+							text: qsTr("Review the space used by your cloud log and recovery files. This keeps every file and does not change your dive log.")
+							color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+						}
+						RowLayout {
+							Layout.fillWidth: true
+							Components.NeoButton {
+								objectName: "reviewStorage-" + modelData.id
+								text: CloudSync.storageReviewProviderId === modelData.id ? qsTr("Reviewing…") : qsTr("Review storage")
+								compact: true
+								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+								onClicked: CloudSync.reviewStorage(modelData.id)
+							}
+							Components.NeoButton {
+								objectName: "cancelStorageReview-" + modelData.id
+								visible: CloudSync.storageReviewProviderId === modelData.id
+								text: qsTr("Cancel"); compact: true; variant: "ghost"
+								onClicked: CloudSync.cancelStorageReview()
+							}
+							Item { Layout.fillWidth: true }
+						}
+						ColumnLayout {
+							objectName: "storageReviewResult-" + modelData.id
+							property var report: modelData.storageReview
+							visible: !!report.reviewedAt
+							Layout.fillWidth: true
+							Text {
+								text: parent.report.reviewedAt ? qsTr("Reviewed %1 · %2 items · %3")
+									.arg(Qt.locale().toLocaleString(new Date(parent.report.reviewedAt), Locale.ShortFormat))
+									.arg(parent.report.entryCount).arg(page.storageSize(parent.report.bytes)) : ""
+								textFormat: Text.PlainText
+								color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+							}
+							Repeater {
+								model: parent.report.categories || []
+								delegate: Text {
+									required property var modelData
+									text: qsTr("%1: %2 items · %3").arg(page.storageCategory(modelData.id)).arg(modelData.count).arg(page.storageSize(modelData.bytes))
+									color: tokens.textPrimary; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true
+								}
+							}
+							Text {
+								text: qsTr("All files are kept. Other snapshots may contain older versions or unfinished uploads. Sizes describe stored files; this review does not check the contents of each dive log.")
+								color: tokens.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+							}
+							Text {
+								visible: modelData.id === "dropbox" && parent.report.folders > 0
+								text: qsTr("Folder contents are not included in this review.")
+								color: tokens.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+							}
+						}
 					}
 
 					Components.NeoButton {

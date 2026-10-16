@@ -84,6 +84,7 @@ public:
 	QByteArray posted;
 	bool deferred = false;
 	FakeReply *lastReply = nullptr;
+	QStringList routes;
 protected:
 	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *outgoing) override
 	{
@@ -93,6 +94,7 @@ protected:
 			return lastAccountReply;
 		}
 		++requests;
+		routes.append(request.url().path());
 		posted = outgoing ? outgoing->readAll() : QByteArray();
 		timeout = request.transferTimeout();
 		lastReply = new FakeReply(request, body, status, this, deferred);
@@ -1349,6 +1351,79 @@ void TestCloudSyncManager::testAccountChangeDuringRefresh()
 	QTRY_COMPARE(choice.count(), 1);
 	QCOMPARE(network.accountRequests, 1); // Same verified access token reused.
 	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+}
+
+void TestCloudSyncManager::testStorageReview_data()
+{
+	QTest::addColumn<QString>("providerId"); QTest::addColumn<int>("mode");
+	for (const QString &provider : {QString("google-drive"), QString("dropbox")})
+		for (int mode = 0; mode < 8; ++mode)
+			QTest::newRow(qPrintable(provider + QString::number(mode))) << provider << mode;
+}
+
+void TestCloudSyncManager::testStorageReview()
+{
+	QFETCH(QString, providerId); QFETCH(int, mode);
+	FakeNetwork network;
+	network.body = providerId == "google-drive" ? QByteArray(R"({"files":[],"incompleteSearch":false})")
+		: QByteArray(R"({"entries":[],"has_more":false,"cursor":"complete"})");
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "synthetic"; token.refreshToken = "synthetic-refresh";
+	token.accountId = mode == 1 ? "previous-account" : "test-account";
+	manager.tokens.insert(providerId, token);
+	manager.verifiedAccountTokens.insert(providerId, token.accessToken); // Review must verify afresh.
+	manager.setPrimaryProvider(providerId); manager.setAutoSyncEnabled(true);
+	const auto local = manager.serializeCurrentDiveLog();
+	manager.saveLastSyncManifest(providerId, CloudSyncManifest::forPayload(local));
+	const auto baseline = CloudCredentialStore::load(manager.syncStateCredentialKey(providerId));
+	manager.storageReviews.insert(providerId, {{"reviewedAt", "old review"}});
+	if (mode == 2) network.accountStatus = 503;
+	if (mode == 3) network.accountDeferred = true;
+	if (mode == 4 || mode == 5) network.deferred = true;
+	if (mode == 6) network.status = 503;
+	if (mode == 7) network.status = 401;
+	QSignalSpy completed(&manager, &CloudSyncManager::storageReviewFinished);
+	manager.reviewStorage(providerId);
+	QVERIFY(manager.storageReviewInProgress());
+	QVERIFY(manager.storageReviews.value(providerId).isEmpty());
+	QVERIFY(!manager.syncPrimaryIfReady());
+	QCOMPARE(network.accountRequests, 1);
+	if (mode == 3) {
+		auto *late = network.lastAccountReply;
+		manager.cancelStorageReview(); late->complete();
+	} else if (mode == 4 || mode == 5) {
+		QTRY_COMPARE(network.requests, 1);
+		auto *late = network.lastReply;
+		if (mode == 4) manager.disconnectProvider(providerId); else manager.cancelStorageReview();
+		late->complete();
+	}
+	QTRY_VERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.storageReviewInProgress());
+	QVERIFY(!manager.accountCheckInProgress());
+	QCOMPARE(completed.count(), mode == 0 ? 1 : 0);
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	if (mode != 1 && mode != 4) QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(providerId)), baseline);
+	if (mode >= 1 && mode <= 3) QCOMPARE(network.requests, 0);
+	for (const auto &route : network.routes)
+		QVERIFY(route == "/drive/v3/files" || route == "/2/files/list_folder");
+	if (mode == 0) {
+		QCOMPARE(manager.storageReviews.value(providerId).value("entryCount").toInt(), 0);
+		QVERIFY(!manager.storageReviews.value(providerId).value("reviewedAt").toString().isEmpty());
+		manager.disconnectProvider(providerId);
+		QVERIFY(manager.storageReviews.value(providerId).isEmpty());
+	} else {
+		QVERIFY(manager.storageReviews.value(providerId).isEmpty());
+	}
+	if (mode == 6) {
+		network.status = 200;
+		manager.reviewStorage(providerId);
+		QTRY_COMPARE(completed.count(), 1);
+		QVERIFY(manager.lastError().isEmpty());
+	} else if (mode == 7) {
+		QVERIFY(manager.tokens.value(providerId).accessToken.isEmpty());
+		QVERIFY(manager.tokens.value(providerId).canRefresh());
+	}
 }
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)

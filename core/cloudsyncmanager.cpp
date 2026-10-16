@@ -86,9 +86,28 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	QObject(parent),
 	networkManager(networkManager),
 	tokenClient(networkManager, this),
-	fileStore(networkManager, this)
+	fileStore(networkManager, this),
+	storageReviewClient(networkManager, this)
 {
 	Q_ASSERT(networkManager);
+	connect(&storageReviewClient, &CloudStorageReview::finished, this, [this](QVariantMap report) {
+		if (!storageReviewInProgress()) return;
+		const QString providerId = syncProviderId;
+		report.insert(QStringLiteral("reviewedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+		storageReviews.insert(providerId, report);
+		clearSyncOperation();
+		emit providersChanged();
+		emit storageReviewFinished(providerId);
+	});
+	connect(&storageReviewClient, &CloudStorageReview::failed, this, [this](const QString &message, bool rejected) {
+		if (!storageReviewInProgress()) return;
+		if (rejected)
+			fileStore.operationError(descriptorForId(syncProviderId)->type, QString(), message, true);
+		else {
+			setError(message);
+			clearSyncOperation();
+		}
+	});
 
 	for (const auto &provider : cloudSyncProviderDescriptors()) {
 		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
@@ -315,6 +334,7 @@ QVariantList CloudSyncManager::providers() const
 		row.insert(QStringLiteral("accountEmail"), tokenSet.accountEmail);
 		row.insert(QStringLiteral("accountVerified"), !tokenSet.accessToken.isEmpty() && verifiedAccountTokens.value(provider.id) == tokenSet.accessToken);
 		row.insert(QStringLiteral("checkingAccount"), accountProviderId == provider.id);
+		row.insert(QStringLiteral("storageReview"), storageReviews.value(provider.id));
 		row.insert(QStringLiteral("configured"), configured);
 		row.insert(QStringLiteral("configurationError"), configurationError);
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
@@ -729,6 +749,7 @@ void CloudSyncManager::finishLoopbackSocket(QTcpSocket *socket, bool success, co
 
 void CloudSyncManager::disconnectProvider(const QString &providerId)
 {
+	clearStorageReview(providerId);
 	const auto *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
@@ -770,6 +791,7 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 
 void CloudSyncManager::storeUpdatedTokens(const QString &providerId, OAuth2TokenSet updated)
 {
+	clearStorageReview(providerId);
 	const auto previous = tokens.value(providerId);
 	updated.accountId = previous.accountId;
 	updated.accountName = previous.accountName;
@@ -781,6 +803,7 @@ void CloudSyncManager::storeUpdatedTokens(const QString &providerId, OAuth2Token
 
 bool CloudSyncManager::resetAccountSyncState(const QString &providerId)
 {
+	clearStorageReview(providerId);
 	// Remove the old baseline before saving a different account identity. If
 	// removal fails, retain the old identity so a restart also refuses to reuse it.
 	if (!CloudCredentialStore::remove(syncStateCredentialKey(providerId))) {
@@ -817,6 +840,41 @@ void CloudSyncManager::checkAccount(const QString &providerId)
 	setError(QString());
 	verifiedAccountTokens.remove(providerId);
 	refreshThen(*provider, providerId, [](const QString &) {});
+}
+
+void CloudSyncManager::clearStorageReview(const QString &providerId)
+{
+	if (storageReviews.remove(providerId)) emit providersChanged();
+}
+
+void CloudSyncManager::reviewStorage(const QString &providerId)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider || provider->type == CloudSyncProviderType::SubsurfaceCloud || syncInProgress() ||
+	    authorizationInProgress() || accountCheckInProgress() || pendingTokenContinuation)
+		return;
+	clearStorageReview(providerId);
+	setError(QString());
+	syncProviderId = providerId;
+	syncOperation = SyncOperation::StorageReview;
+	emit syncInProgressChanged();
+	verifiedAccountTokens.remove(providerId);
+	refreshThen(*provider, providerId, [this, providerId, type = provider->type](const QString &token) {
+		if (storageReviewInProgress() && syncProviderId == providerId)
+			storageReviewClient.start(type, token);
+	});
+}
+
+void CloudSyncManager::cancelStorageReview()
+{
+	if (!storageReviewInProgress()) return;
+	cancelAccountCheck();
+	tokenClient.cancel();
+	pendingTokenContinuation = {};
+	refreshProviderId.clear();
+	clearSyncOperation();
+	setError(QString());
+	emit providersChanged();
 }
 
 void CloudSyncManager::verifyAccountThen(const QString &providerId, const QString &accessToken,
@@ -953,6 +1011,8 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 
 void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data)
 {
+	if (storageReviewInProgress()) return;
+	clearStorageReview(providerId);
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
@@ -963,6 +1023,7 @@ void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fil
 
 void CloudSyncManager::downloadBytes(const QString &providerId, const QString &fileName)
 {
+	if (storageReviewInProgress()) return;
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
@@ -1095,6 +1156,7 @@ bool CloudSyncManager::localDiveLogUnchanged()
 
 void CloudSyncManager::clearSyncOperation()
 {
+	if (storageReviewInProgress()) storageReviewClient.cancel();
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();
@@ -1114,6 +1176,7 @@ void CloudSyncManager::clearSyncOperation()
 void CloudSyncManager::startUploadSequence(const QString &providerId, const QByteArray &payload,
 					   const QString &parentSha256, bool backupOnly)
 {
+	clearStorageReview(providerId);
 	if (payload.isEmpty()) {
 		setError(tr("Cannot upload an empty dive log."));
 		clearSyncOperation();
