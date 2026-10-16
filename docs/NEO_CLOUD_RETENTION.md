@@ -1,6 +1,6 @@
 # Cloud snapshot retention and cleanup design
 
-Design and read-only Windows audit, 2026-10-17. The application still uses the [schema 2 commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md); this document does not enable deletion, migrate a cloud log, or implement a new manifest schema. Milestone 13 remains in progress. Physical Android validation and two-live-account Dropbox testing remain deferred.
+Design and read-only Windows audit, 2026-10-17. [Native storage review](NEO_CLOUD_STORAGE_REVIEW.md) is now implemented and validated in Windows Clean and Modern at `ebaf24069`. The application still uses the [schema 2 commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md); this document does not enable deletion, migrate a cloud log, or implement a new manifest schema. Milestone 13 remains in progress. Physical Android validation and two-live-account Dropbox testing remain deferred.
 
 ## Decision for existing logs
 
@@ -89,11 +89,11 @@ The two existing authorized disposable profiles were audited without launching N
 
 Each provider returned one inventory page on both scans. No recognized recovery manifest was malformed, and each referenced payload resolved to one inventory object. Recovery payload bodies were not downloaded or validated; reference resolution is not a restore test. Google unknown-status snapshots occupied 3,521,075 bytes and Dropbox unknown-status snapshots 3,518,307 bytes. Those totals are not estimates of safely reclaimable space. All files were retained.
 
-The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is in `work/cloud-retention-20261017-google.json` and `work/cloud-retention-20261017-dropbox.json`; these are untracked local files. This pass is source review and a read-only provider audit, not native cleanup validation. There is no application change or new Windows binary, and no need to repeat the existing Clean/Modern launch suites for this documentation change.
+The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is in `work/cloud-retention-20261017-google.json` and `work/cloud-retention-20261017-dropbox.json`; these are untracked local files. That initial design pass involved source review and a read-only provider audit, with no application change or new Windows binary. The subsequent [native storage review validation](NEO_CLOUD_STORAGE_REVIEW.md#windows-validation-2026-10-17) used a rebuilt Windows package and confirmed the same inventories. Neither pass enables cleanup.
 
 ## Implementation and validation sequence
 
-1. Implement native read-only storage review and a pure classification component. Cover complete/paginated listings, shared references, malformed/unknown manifests, duplicate names/IDs, account change, cancellation and preserving original data. Validate the review in Windows Clean and Modern against disposable accounts.
+1. **Complete at `ebaf24069`:** native read-only storage review and a pure classification component. Regression coverage includes complete/paginated listings, shared references, malformed/unknown manifests, duplicate names/IDs, account change, cancellation and preserving original data. Both providers passed review in Windows Clean and Modern against disposable accounts, plus cancellation/retry. See [implementation and evidence](NEO_CLOUD_STORAGE_REVIEW.md).
 2. Implement the coordinated format behind an opt-in development gate, with migration, history/restore, upload tickets and reader reservations. Preserve schema 1/2 reads and current local conflict behavior. Do not add deletion yet.
 3. Test conditional deletion on uniquely created disposable provider objects, including stale revisions and lost replies. Then implement retirement preview, durable state and bounded deletion batches. Enable opt-in cleanup only after the matrix below passes on the exact Windows build. Physical Android remains a separate gate; do not imply it has been covered by Windows results.
 
@@ -112,4 +112,4 @@ The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is
 | Age/count boundary, clock skew or lost time evidence | Latest 20 and entire 30-day window retained; uncertainty extends retention |
 | Quota exhaustion or safety-metadata limit | Clear error and intact local/remote log; no emergency sweep |
 
-Retention design is now recorded. Native storage review, the coordinated format, migration/restore, provider deletion probes and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.
+Retention design and native read-only storage review are complete. The coordinated format, migration/restore, provider deletion probes and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.
