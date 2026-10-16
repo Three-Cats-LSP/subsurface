@@ -23,6 +23,16 @@ void TestCloudSyncManifest::testRoundTrip()
 	QCOMPARE(decoded.payloadSha256, original.payloadSha256);
 	QCOMPARE(decoded.parentSha256, original.parentSha256);
 	QCOMPARE(decoded.createdAtUtc.toUTC(), original.createdAtUtc.toUTC());
+	QCOMPARE(decoded.payloadFileName(), QString("subsurface-neo.xml"));
+	CloudSyncManifest versioned = original;
+	versioned.schemaVersion = 2;
+	versioned.payloadFile = QString("subsurface-neo-%1.xml").arg(versioned.revisionId);
+	QVERIFY(versioned.isValid());
+	QCOMPARE(CloudSyncManifest::fromJson(versioned.toJson()).payloadFileName(), versioned.payloadFile);
+	versioned.payloadFile = "../other.xml";
+	QVERIFY(!versioned.isValid());
+	versioned.payloadFile = "subsurface-neo.xml";
+	QVERIFY(!versioned.isValid());
 }
 
 void TestCloudSyncManifest::testRejectsInvalidManifest()

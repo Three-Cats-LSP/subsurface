@@ -140,25 +140,24 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			if (providerId != syncProviderId)
 				return;
 
-			if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) &&
+			if (fileName == syncUploadManifest.payloadFileName() &&
 			    (syncOperation == SyncOperation::BackupUploadPayload || syncOperation == SyncOperation::SyncUploadPayload)) {
+				if (!localDiveLogUnchanged()) {
+					clearSyncOperation();
+					return;
+				}
 				syncOperation = syncOperation == SyncOperation::BackupUploadPayload
 					? SyncOperation::BackupUploadManifest : SyncOperation::SyncUploadManifest;
-				uploadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME), syncUploadManifest.toJson());
+				uploadSyncFile(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME), syncUploadManifest.toJson(), syncRemoteVersion, syncRemoteFileId);
 				return;
 			}
 
 			if (fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) &&
 			    (syncOperation == SyncOperation::BackupUploadManifest || syncOperation == SyncOperation::SyncUploadManifest)) {
-				const bool backupOnly = syncOperation == SyncOperation::BackupUploadManifest;
-				saveLastSyncManifest(providerId, syncUploadManifest);
-				if (!backupOnly)
-					recordSuccessfulSync(providerId);
-				clearSyncOperation();
-				if (backupOnly)
-					emit diveLogBackupFinished(providerId);
-				else
-					emit diveLogSyncFinished(providerId, QStringLiteral("uploaded"));
+				// Re-read by name: Drive permits simultaneous first creates with
+				// duplicate names. Never pick one arbitrarily or report success.
+				syncOperation = SyncOperation::SyncVerifyCommit;
+				downloadSyncManifest(providerId);
 			}
 		});
 
@@ -170,11 +169,40 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 				return;
 			if (fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && syncOperation == SyncOperation::SyncDownloadManifest)
 				handleDownloadedManifest(providerId, data);
-			else if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) && syncOperation == SyncOperation::SyncDownloadPayload)
+			else if (fileName == syncRemoteManifest.payloadFileName() && syncOperation == SyncOperation::SyncDownloadPayload)
 				handleDownloadedDiveLog(providerId, data);
 			else if (fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME) && syncOperation == SyncOperation::SyncCheckOrphanPayload) {
 				setError(tr("A cloud dive log exists without its sync manifest. No data was overwritten. Recover the cloud files before syncing again."));
 				clearSyncOperation();
+			}
+		});
+
+	connect(&fileStore, &CloudSyncFileStore::versionedDownloadFinished, this,
+		[this](CloudSyncProviderType type, const QString &fileName, const QByteArray &data,
+		       const QString &version, const QString &fileId) {
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			if (providerId != syncProviderId || fileName != QString::fromLatin1(NEO_MANIFEST_FILENAME))
+				return;
+			syncRemoteVersion = version;
+			syncRemoteFileId = fileId;
+			if (syncOperation == SyncOperation::SyncVerifyCommit) {
+				const auto committed = CloudSyncManifest::fromJson(data);
+				if (!committed.isValid() || committed.toJson() != syncUploadManifest.toJson()) {
+					fileStore.writeConflict(type, fileName);
+					return;
+				}
+				finishUpload(providerId);
+			} else if (syncOperation == SyncOperation::SyncDownloadManifest) {
+				handleDownloadedManifest(providerId, data);
+			}
+		});
+	connect(&fileStore, &CloudSyncFileStore::writeConflict, this,
+		[this](CloudSyncProviderType type, const QString &) {
+			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			setError(tr("The cloud log changed during synchronization. Your local log was kept. Sync again to compare the versions."));
+			if (providerId == syncProviderId) {
+				clearSyncOperation();
+				emit diveLogSyncConflict(providerId);
 			}
 		});
 
@@ -196,7 +224,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			if (providerId == syncProviderId && syncOperation == SyncOperation::SyncCheckOrphanPayload &&
 			    fileName == QString::fromLatin1(NEO_DIVELOG_FILENAME)) {
 				if (localDiveLogUnchanged())
-					startUploadSequence(providerId, syncLocalPayload, QString(), false);
+					startUploadSequence(providerId, syncLocalPayload, QString(), syncBackupOnly);
 				else
 					clearSyncOperation();
 				return;
@@ -893,6 +921,10 @@ void CloudSyncManager::clearSyncOperation()
 	syncRemoteManifest = CloudSyncManifest();
 	syncUploadManifest = CloudSyncManifest();
 	forceCloudDownload = false;
+	forceLocalUpload = false;
+	syncBackupOnly = false;
+	syncRemoteVersion.clear();
+	syncRemoteFileId.clear();
 	if (wasActive)
 		emit syncInProgressChanged();
 }
@@ -910,8 +942,11 @@ void CloudSyncManager::startUploadSequence(const QString &providerId, const QByt
 	syncLocalPayload = payload;
 	syncLocalSha256 = CloudSyncManifest::sha256(payload);
 	syncUploadManifest = CloudSyncManifest::forPayload(payload, parentSha256);
+	syncUploadManifest.schemaVersion = 2;
+	syncUploadManifest.payloadFile = QStringLiteral("subsurface-neo-%1.xml").arg(syncUploadManifest.revisionId);
+	syncBackupOnly = backupOnly;
 	syncOperation = backupOnly ? SyncOperation::BackupUploadPayload : SyncOperation::SyncUploadPayload;
-	uploadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME), payload);
+	uploadSyncFile(providerId, syncUploadManifest.payloadFileName(), payload);
 }
 
 void CloudSyncManager::backupDiveLog(const QString &providerId)
@@ -930,10 +965,14 @@ void CloudSyncManager::backupDiveLog(const QString &providerId)
 		return;
 
 	setError(QString());
-	const CloudSyncManifest previous = lastSyncManifest(providerId);
+	forceLocalUpload = true;
+	syncBackupOnly = true;
 	syncProviderId = providerId;
+	syncLocalPayload = payload;
+	syncLocalSha256 = CloudSyncManifest::sha256(payload);
+	syncOperation = SyncOperation::SyncDownloadManifest;
 	emit syncInProgressChanged();
-	startUploadSequence(providerId, payload, previous.payloadSha256, true);
+	downloadSyncManifest(providerId);
 }
 
 void CloudSyncManager::syncDiveLog(const QString &providerId)
@@ -958,7 +997,7 @@ void CloudSyncManager::syncDiveLog(const QString &providerId)
 	syncLocalSha256 = CloudSyncManifest::sha256(payload);
 	syncOperation = SyncOperation::SyncDownloadManifest;
 	emit syncInProgressChanged();
-	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
+	downloadSyncManifest(providerId);
 }
 
 void CloudSyncManager::useCloudDiveLog(const QString &providerId)
@@ -982,7 +1021,7 @@ void CloudSyncManager::useCloudDiveLog(const QString &providerId)
 	syncLocalSha256 = CloudSyncManifest::sha256(payload);
 	syncOperation = SyncOperation::SyncDownloadManifest;
 	emit syncInProgressChanged();
-	downloadBytes(providerId, QString::fromLatin1(NEO_MANIFEST_FILENAME));
+	downloadSyncManifest(providerId);
 }
 
 void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const QByteArray &data)
@@ -1000,9 +1039,13 @@ void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const
 	}
 
 	syncRemoteManifest = remote;
+	if (forceLocalUpload) {
+		startUploadSequence(providerId, syncLocalPayload, remote.payloadSha256, true);
+		return;
+	}
 	if (forceCloudDownload) {
 		syncOperation = SyncOperation::SyncDownloadPayload;
-		downloadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME));
+		downloadBytes(providerId, remote.payloadFileName());
 		return;
 	}
 
@@ -1022,7 +1065,7 @@ void CloudSyncManager::handleDownloadedManifest(const QString &providerId, const
 		break;
 	case CloudSyncRelation::CloudOnlyChanged:
 		syncOperation = SyncOperation::SyncDownloadPayload;
-		downloadBytes(providerId, QString::fromLatin1(NEO_DIVELOG_FILENAME));
+		downloadBytes(providerId, remote.payloadFileName());
 		break;
 	case CloudSyncRelation::Conflict:
 		clearSyncOperation();
@@ -1062,4 +1105,43 @@ void CloudSyncManager::handleDownloadedDiveLog(const QString &providerId, const 
 	recordSuccessfulSync(providerId);
 	clearSyncOperation();
 	emit diveLogSyncFinished(providerId, QStringLiteral("downloaded"));
+}
+
+void CloudSyncManager::downloadSyncManifest(const QString &providerId)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider)
+		return;
+	refreshThen(*provider, providerId, [this, type = provider->type](const QString &token) {
+		fileStore.downloadVersioned(type, token, QString::fromLatin1(NEO_MANIFEST_FILENAME));
+	});
+}
+
+void CloudSyncManager::uploadSyncFile(const QString &providerId, const QString &fileName, const QByteArray &data,
+				     const QString &version, const QString &fileId)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider)
+		return;
+	refreshThen(*provider, providerId, [this, type = provider->type, fileName, data, version, fileId](const QString &token) {
+		fileStore.uploadConditional(type, token, fileName, data, version, fileId);
+	});
+}
+
+void CloudSyncManager::finishUpload(const QString &providerId)
+{
+	const bool backupOnly = syncBackupOnly;
+	saveLastSyncManifest(providerId, syncUploadManifest);
+	// A late local edit remains dirty against the committed snapshot.
+	if (!localDiveLogUnchanged()) {
+		clearSyncOperation();
+		return;
+	}
+	if (!backupOnly)
+		recordSuccessfulSync(providerId);
+	clearSyncOperation();
+	if (backupOnly)
+		emit diveLogBackupFinished(providerId);
+	else
+		emit diveLogSyncFinished(providerId, QStringLiteral("uploaded"));
 }

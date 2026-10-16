@@ -1,0 +1,31 @@
+# Neo cloud commit protocol
+
+Milestone 13 implementation, Windows live validation in progress (2026-10-16).
+
+Google Drive and Dropbox now publish schema 2 manifests. XML remains the canonical dive-log format. Each attempt creates `subsurface-neo-<revision UUID>.xml`; the fixed `subsurface-neo-sync.json` manifest names that immutable payload and its SHA-256. The previous XML remains readable until the manifest commit succeeds. Readers follow the manifest's exact payload name and validate the checksum and complete canonical XML before replacement.
+
+## Commit and recovery
+
+1. Read the manifest together with its provider revision. Explicit backup and Keep this device also read this revision before uploading.
+2. Create a unique XML snapshot without overwriting an existing file.
+3. Confirm the local log still matches the captured snapshot.
+4. Update the manifest only if its provider revision still matches. A stale writer preserves its local log and reports a conflict; it never automatically retries the overwrite.
+5. Re-read the manifest by name before recording success or advancing the local baseline.
+
+Dropbox uses `mode=update` with the downloaded `rev`, or `mode=add` for creation, with `strict_conflict=true` and `autorename=false`. Google uses the v2 File `etag` and a v2 media PUT with `If-Match`. Live disposable-file probes verified that stale writes return HTTP 409 and 412 respectively. A v3 media PATCH ignored `If-Match` in the probe and must not be substituted. Google metadata is read before and after the media body; differing ETags abort the read. Metadata and media ETags are not interchangeable.
+
+An upload interrupted before manifest publication leaves the previous committed log intact. Retry starts with a fresh manifest read. If the server committed but the success response was lost, an identical manifest payload is recognized as up to date without another write. Partial or unreferenced uploads are not used by readers. Old and abandoned snapshots are retained for recovery; automatic garbage collection is intentionally absent until a safe retention protocol exists.
+
+## Migration and limits
+
+Schema 1 remains readable and continues to reference `subsurface-neo.xml`. The first changed upload publishes schema 2 without changing that legacy XML. Upgrade every syncing client before using schema 2: older clients reject the new schema, and older explicit backup implementations can still overwrite a manifest without conditional protection.
+
+Drive allows duplicate filenames and cannot conditionally create a filename. If two devices initialize an empty account simultaneously, duplicate manifests may be created. The post-commit lookup and subsequent reads reject that ambiguity, retaining both payloads for recovery rather than selecting a winner. Automatic consolidation of duplicate initial manifests is not implemented. Dropbox atomically rejects a conflicting first creation.
+
+These changes do not include equipment-library, manual-collection, or planner-preset synchronization. Public OAuth approval and physical Android validation remain separate work.
+
+## Validation
+
+The native regression suite models both providers and covers concurrent writers, initial creation races, rejected payloads, failed manifest commits, lost commit responses, changes during upload, missing revisions, and a cloud update during a Google manifest read. Windows live validation results are recorded in the provider testing documents after the new package is built.
+
+Provider references: [Google v2 File resource](https://developers.google.com/workspace/drive/api/reference/rest/v2/files), [Google v2 update](https://developers.google.com/workspace/drive/api/reference/rest/v2/files/update), [Dropbox SDK file-write contract](https://dropbox-sdk-python.readthedocs.io/en/latest/api/files.html).

@@ -21,6 +21,9 @@
 #include <QSettings>
 #include <QUuid>
 #include <cstring>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace {
 class FakeReply : public QNetworkReply {
@@ -37,6 +40,7 @@ public:
 		if (!deferred)
 			QTimer::singleShot(0, this, [this] { complete(); });
 	}
+	void header(const QByteArray &name, const QByteArray &value) { setRawHeader(name, value); }
 	void complete() { setFinished(true); emit finished(); }
 	void abort() override { setError(QNetworkReply::OperationCanceledError, "Canceled"); complete(); }
 	qint64 bytesAvailable() const override { return body.size() - offset + QNetworkReply::bytesAvailable(); }
@@ -71,9 +75,108 @@ protected:
 		posted = outgoing ? outgoing->readAll() : QByteArray();
 		timeout = request.transferTimeout();
 		lastReply = new FakeReply(request, body, status, this, deferred);
+		lastReply->header("Dropbox-API-Result", R"({"rev":"test-revision"})");
 		return lastReply;
 	}
 };
+
+// Model provider-side atomic operations, with independent files/revisions and
+// injected failures before or after the remote commit. No real network or keys.
+class MemoryCloud : public QNetworkAccessManager {
+public:
+	struct File { QString name, id, version; QByteArray data; };
+	QVector<File> files;
+	int serial = 0;
+	int failStage = 0; // 1: payload rejected, 2: commit rejected, 3: commit ACK lost
+	bool changeDuringRead = false;
+	bool omitVersion = false;
+	int puts = 0;
+	QString manifestName = "subsurface-neo-sync.json";
+	QByteArray json(const QJsonObject &object) { return QJsonDocument(object).toJson(QJsonDocument::Compact); }
+	void add(const QString &name, const QByteArray &data) {
+		const QString id = QString::number(++serial);
+		files.append({name, id, "rev-" + id, data});
+	}
+	int byName(const QString &name) const {
+		for (int i = 0; i < files.size(); ++i) if (files[i].name == name) return i;
+		return -1;
+	}
+	QByteArray content(const QString &name) const { const int i = byName(name); return i < 0 ? QByteArray() : files[i].data; }
+protected:
+	QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoing) override {
+		const QByteArray sent = outgoing ? outgoing->readAll() : QByteArray();
+		const auto url = request.url();
+		const bool google = url.host() == "www.googleapis.com";
+		const QUrlQuery query(url);
+		QByteArray body;
+		QByteArray metadata;
+		int status = 200;
+		QString name;
+		int index = -1;
+		bool write = false, create = false;
+		QByteArray data = sent;
+		QString expected;
+		if (!google) {
+			const auto arg = QJsonDocument::fromJson(request.rawHeader("Dropbox-API-Arg")).object();
+			name = arg.value("path").toString().mid(1);
+			index = byName(name);
+			write = url.path().endsWith("/upload");
+			create = arg.value("mode").toString() == "add";
+			expected = arg.value("mode").toObject().value("update").toString();
+		} else if (op == GetOperation && url.path() == "/drive/v3/files") {
+			const QString filter = query.queryItemValue("q");
+			name = filter.section('\'', 1, 1);
+			QJsonArray matches;
+			for (const auto &file : files)
+				if (file.name == name) matches.append(QJsonObject{{"id", file.id}, {"name", file.name}});
+			body = json({{"files", matches}});
+		} else if (op == PostOperation) {
+			create = write = true;
+			const int metaBegin = sent.indexOf("\r\n\r\n") + 4;
+			const int metaEnd = sent.indexOf("\r\n--", metaBegin);
+			name = QJsonDocument::fromJson(sent.mid(metaBegin, metaEnd - metaBegin)).object().value("name").toString();
+			const int dataBegin = sent.indexOf("\r\n\r\n", metaEnd) + 4;
+			data = sent.mid(dataBegin, sent.lastIndexOf("\r\n--") - dataBegin);
+		} else {
+			const QString id = url.path().section('/', -1);
+			for (int i = 0; i < files.size(); ++i) if (files[i].id == id) index = i;
+			if (index >= 0) name = files[index].name;
+			write = op == PutOperation;
+			expected = QString::fromUtf8(request.rawHeader("If-Match"));
+		}
+		if (write) {
+			++puts;
+			const bool commit = name == manifestName;
+			if ((failStage == 1 && !commit) || (failStage == 2 && commit)) {
+				status = 503;
+			} else if ((!create && (index < 0 || expected != files[index].version)) || (!google && create && index >= 0)) {
+				status = google ? 412 : 409;
+				body = json({{"error_summary", "path/conflict/file/"}});
+			} else {
+				if (create) { add(name, data); index = files.size() - 1; }
+				else { files[index].data = data; files[index].version = "rev-" + QString::number(++serial); }
+				body = json({{"id", files[index].id}, {"rev", files[index].version}});
+				if (failStage == 3 && commit) status = 503;
+			}
+		} else if (body.isEmpty()) {
+			if (index < 0) {
+				status = google ? 404 : 409;
+				body = R"({"error":{".tag":"path","path":{".tag":"not_found"}}})";
+			} else if (google && url.path().startsWith("/drive/v2/")) {
+				body = json(omitVersion ? QJsonObject{{"id", files[index].id}}
+					: QJsonObject{{"id", files[index].id}, {"etag", files[index].version}});
+			} else {
+				body = files[index].data;
+				if (!omitVersion) metadata = json({{"rev", files[index].version}});
+				if (changeDuringRead && google) files[index].version = "rev-" + QString::number(++serial);
+			}
+		}
+		auto *reply = new FakeReply(request, body, status, this);
+		if (!metadata.isEmpty()) reply->header("Dropbox-API-Result", metadata);
+		return reply;
+	}
+};
+
 }
 
 void TestCloudSyncManager::init()
@@ -714,6 +817,174 @@ void TestCloudSyncManager::testOrphanCloudLog()
 	QCOMPARE(success.count(), 0);
 	QCOMPARE(uploads.count(), 0);
 	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+}
+
+
+void TestCloudSyncManager::testTransactionalUpload_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<int>("failure");
+	QTest::addColumn<bool>("initial");
+	for (const QString &provider : {QString("google-drive"), QString("dropbox")})
+		for (bool initial : {false, true})
+			for (int failure = 0; failure <= 4; ++failure)
+				QTest::newRow(qPrintable(provider + QString("-%1-%2").arg(initial).arg(failure))) << provider << failure << initial;
+}
+
+void TestCloudSyncManager::testTransactionalUpload()
+{
+	QFETCH(QString, providerId);
+	QFETCH(int, failure);
+	QFETCH(bool, initial);
+	MemoryCloud network;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "synthetic";
+	manager.tokens.insert(providerId, token);
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	const auto baseline = CloudSyncManifest::forPayload(original);
+	if (!initial) {
+		network.add("subsurface-neo.xml", original);
+		network.add(network.manifestName, baseline.toJson());
+		manager.saveLastSyncManifest(providerId, baseline);
+	}
+	const auto savedBaseline = CloudCredentialStore::load(manager.syncStateCredentialKey(providerId));
+	::divelog.dives[0]->notes = "A local edit to publish.";
+	const QByteArray edited = manager.serializeCurrentDiveLog();
+	network.failStage = failure <= 3 ? failure : 0;
+	QSignalSpy backedUp(&manager, &CloudSyncManager::diveLogBackupFinished);
+	QSignalSpy synced(&manager, &CloudSyncManager::diveLogSyncFinished);
+	if (failure == 4) {
+		connect(&manager, &CloudSyncManager::uploadFinished, &manager, [&](const QString &, const QString &name) {
+			if (name.endsWith(".xml")) ::divelog.dives[0]->notes = "Edited while the payload was uploading.";
+		});
+	}
+	manager.backupDiveLog(providerId);
+	QTRY_VERIFY(!manager.syncInProgress());
+	QCOMPARE(backedUp.count(), failure == 0 ? 1 : 0);
+	QCOMPARE(synced.count(), 0);
+	QCOMPARE(network.content("subsurface-neo.xml"), initial ? QByteArray() : original);
+	if (failure == 4) {
+		QVERIFY(manager.lastError().contains("changed during synchronization"));
+		QCOMPARE(QString::fromStdString(::divelog.dives[0]->notes), QString("Edited while the payload was uploading."));
+	} else {
+		QCOMPARE(manager.serializeCurrentDiveLog(), edited);
+	}
+	if (failure == 1 || failure == 2 || failure == 4) {
+		QCOMPARE(network.content(network.manifestName), initial ? QByteArray() : baseline.toJson());
+		QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(providerId)), savedBaseline);
+	} else {
+		const auto committed = CloudSyncManifest::fromJson(network.content(network.manifestName));
+		QVERIFY(committed.isValid());
+		QCOMPARE(committed.schemaVersion, 2);
+		QCOMPARE(network.content(committed.payloadFileName()), edited);
+		QCOMPARE(CloudSyncManifest::sha256(network.content(committed.payloadFileName())), committed.payloadSha256);
+	}
+	if (failure > 0 && failure < 4) {
+		QVERIFY(!manager.lastError().isEmpty());
+		network.failStage = 0;
+		const int writesBeforeRetry = network.puts;
+		if (failure == 3) manager.syncDiveLog(providerId); // Discover the committed write after losing its ACK.
+		else manager.backupDiveLog(providerId);
+		QTRY_VERIFY(!manager.syncInProgress());
+		QVERIFY2(manager.lastError().isEmpty(), qPrintable(manager.lastError()));
+		QCOMPARE(backedUp.count() + synced.count(), 1);
+		if (failure == 3) QCOMPARE(network.puts, writesBeforeRetry);
+		const auto committed = CloudSyncManifest::fromJson(network.content(network.manifestName));
+		QVERIFY(committed.isValid());
+		QCOMPARE(network.content(committed.payloadFileName()), edited);
+	}
+}
+
+void TestCloudSyncManager::testSimultaneousWriters_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<bool>("initial");
+	for (const QString &provider : {QString("google-drive"), QString("dropbox")})
+		for (bool initial : {false, true})
+			QTest::newRow(qPrintable(provider + QString::number(initial))) << provider << initial;
+}
+
+void TestCloudSyncManager::testSimultaneousWriters()
+{
+	QFETCH(QString, providerId);
+	QFETCH(bool, initial);
+	MemoryCloud network;
+	CloudSyncManager first(&network), second(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "synthetic";
+	first.tokens.insert(providerId, token);
+	second.tokens.insert(providerId, token);
+	const QByteArray original = first.serializeCurrentDiveLog();
+	if (!initial) {
+		network.add("subsurface-neo.xml", original);
+		network.add(network.manifestName, CloudSyncManifest::forPayload(original).toJson());
+	}
+	QSignalSpy firstDone(&first, &CloudSyncManager::diveLogBackupFinished);
+	QSignalSpy secondDone(&second, &CloudSyncManager::diveLogBackupFinished);
+	QSignalSpy firstConflict(&first, &CloudSyncManager::diveLogSyncConflict);
+	QSignalSpy secondConflict(&second, &CloudSyncManager::diveLogSyncConflict);
+	first.backupDiveLog(providerId);
+	second.backupDiveLog(providerId);
+	QTRY_VERIFY(!first.syncInProgress() && !second.syncInProgress());
+	QCOMPARE(first.serializeCurrentDiveLog(), original);
+	QCOMPARE(network.content("subsurface-neo.xml"), initial ? QByteArray() : original);
+	if (initial && providerId == "google-drive") {
+		// Drive cannot conditionally create a name. Both snapshots survive and
+		// duplicate manifests block use instead of selecting an arbitrary log.
+		QVERIFY(firstDone.count() + secondDone.count() < 2);
+		QVERIFY(!first.lastError().isEmpty() || !second.lastError().isEmpty());
+	} else {
+		QCOMPARE(firstDone.count() + secondDone.count(), 1);
+		QCOMPARE(firstConflict.count() + secondConflict.count(), 1);
+	}
+	int immutablePayloads = 0;
+	for (const auto &file : network.files) {
+		if (file.name.startsWith("subsurface-neo-") && file.name.endsWith(".xml")) {
+			++immutablePayloads;
+			QCOMPARE(file.data, original);
+		}
+	}
+	QCOMPARE(immutablePayloads, 2);
+	const auto committed = CloudSyncManifest::fromJson(network.content(network.manifestName));
+	QVERIFY(committed.isValid());
+	QCOMPARE(network.content(committed.payloadFileName()), original);
+}
+
+void TestCloudSyncManager::testVersionedRead_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<int>("fault");
+	for (const QString &provider : {QString("google-drive"), QString("dropbox")})
+		for (int fault : {0, 1, 2}) {
+			if (provider == "dropbox" && fault == 2) continue;
+			QTest::newRow(qPrintable(provider + QString::number(fault))) << provider << fault;
+		}
+}
+
+void TestCloudSyncManager::testVersionedRead()
+{
+	QFETCH(QString, providerId);
+	QFETCH(int, fault);
+	const auto type = providerId == "dropbox" ? CloudSyncProviderType::Dropbox : CloudSyncProviderType::GoogleDrive;
+	MemoryCloud network;
+	network.add(network.manifestName, "known manifest");
+	network.omitVersion = fault == 1;
+	network.changeDuringRead = fault == 2;
+	CloudSyncFileStore store(&network);
+	QSignalSpy received(&store, &CloudSyncFileStore::versionedDownloadFinished);
+	QSignalSpy errors(&store, &CloudSyncFileStore::operationError);
+	QSignalSpy conflicts(&store, &CloudSyncFileStore::writeConflict);
+	store.downloadVersioned(type, "synthetic", network.manifestName);
+	QTRY_COMPARE(received.count() + errors.count() + conflicts.count(), 1);
+	QCOMPARE(received.count(), fault == 0 ? 1 : 0);
+	QCOMPARE(errors.count(), fault == 1 ? 1 : 0);
+	QCOMPARE(conflicts.count(), fault == 2 ? 1 : 0);
+	QCOMPARE(network.puts, 0);
+	if (!fault) {
+		QCOMPARE(received[0][2].toByteArray(), QByteArray("known manifest"));
+		QCOMPARE(received[0][3].toString(), network.files[0].version);
+	}
 }
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)

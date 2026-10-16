@@ -84,6 +84,7 @@ private:
 		SyncUploadPayload,
 		SyncUploadManifest,
 		SyncDownloadPayload,
+		SyncVerifyCommit,
 	};
 
 	const CloudSyncProviderDescriptor *descriptorForId(const QString &providerId) const;
@@ -110,6 +111,10 @@ private:
 	void clearSyncOperation();
 	static QString syncStateCredentialKey(const QString &providerId);
 	bool localDiveLogUnchanged();
+	void downloadSyncManifest(const QString &providerId);
+	void uploadSyncFile(const QString &providerId, const QString &fileName, const QByteArray &data,
+		const QString &version = {}, const QString &fileId = {});
+	void finishUpload(const QString &providerId);
 
 	QNetworkAccessManager *networkManager;
 	OAuth2TokenClient tokenClient;
@@ -132,6 +137,10 @@ private:
 	CloudSyncManifest syncRemoteManifest;
 	CloudSyncManifest syncUploadManifest;
 	bool forceCloudDownload = false;
+	bool forceLocalUpload = false;
+	bool syncBackupOnly = false;
+	QString syncRemoteVersion;
+	QString syncRemoteFileId;
 };
 
 #endif // CLOUD_SYNC_MANAGER_H

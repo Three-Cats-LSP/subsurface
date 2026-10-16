@@ -5,10 +5,24 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
+#include <QRegularExpression>
 
 bool CloudSyncManifest::isValid() const
 {
-	return schemaVersion == 1 && !revisionId.isEmpty() && !payloadSha256.isEmpty() && createdAtUtc.isValid();
+	if (revisionId.isEmpty() || payloadSha256.isEmpty() || !createdAtUtc.isValid())
+		return false;
+	if (schemaVersion == 1)
+		return true;
+	static const QRegularExpression revisionPattern(QStringLiteral("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"));
+	static const QRegularExpression hashPattern(QStringLiteral("^[0-9a-f]{64}$"));
+	return schemaVersion == 2 && revisionPattern.match(revisionId).hasMatch() &&
+		hashPattern.match(payloadSha256).hasMatch() &&
+		payloadFile == QStringLiteral("subsurface-neo-%1.xml").arg(revisionId);
+}
+
+QString CloudSyncManifest::payloadFileName() const
+{
+	return schemaVersion == 1 ? QStringLiteral("subsurface-neo.xml") : payloadFile;
 }
 
 QByteArray CloudSyncManifest::toJson() const
@@ -18,6 +32,8 @@ QByteArray CloudSyncManifest::toJson() const
 	object.insert(QStringLiteral("revision"), revisionId);
 	object.insert(QStringLiteral("sha256"), payloadSha256);
 	object.insert(QStringLiteral("parent_sha256"), parentSha256);
+	if (schemaVersion == 2)
+		object.insert(QStringLiteral("payload_file"), payloadFile);
 	object.insert(QStringLiteral("created_at"), createdAtUtc.toUTC().toString(Qt::ISODateWithMs));
 	return QJsonDocument(object).toJson(QJsonDocument::Compact);
 }
@@ -37,6 +53,7 @@ CloudSyncManifest CloudSyncManifest::fromJson(const QByteArray &json, QString *e
 	manifest.revisionId = object.value(QStringLiteral("revision")).toString();
 	manifest.payloadSha256 = object.value(QStringLiteral("sha256")).toString();
 	manifest.parentSha256 = object.value(QStringLiteral("parent_sha256")).toString();
+	manifest.payloadFile = object.value(QStringLiteral("payload_file")).toString();
 	manifest.createdAtUtc = QDateTime::fromString(object.value(QStringLiteral("created_at")).toString(), Qt::ISODateWithMs);
 	if (!manifest.isValid() && error)
 		*error = QStringLiteral("Sync manifest is incomplete or uses an unsupported schema.");

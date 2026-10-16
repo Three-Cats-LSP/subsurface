@@ -39,5 +39,11 @@ private slots:
 	void testGoogleDesktopCredentials();
 	void testGoogleDesktopTokenRequests();
 	void testLoopbackIgnoresBrowserRequests();
+	void testTransactionalUpload_data();
+	void testTransactionalUpload();
+	void testSimultaneousWriters_data();
+	void testSimultaneousWriters();
+	void testVersionedRead_data();
+	void testVersionedRead();
 };
 #endif

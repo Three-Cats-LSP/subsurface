@@ -170,9 +170,13 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 	});
 }
 
-void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data)
+void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data, bool createOnly)
 {
-	googleFindFile(accessToken, fileName, [this, accessToken, fileName, data](const QString &fileId) {
+	googleFindFile(accessToken, fileName, [this, accessToken, fileName, data, createOnly](const QString &fileId) {
+		if (createOnly && !fileId.isEmpty()) {
+			emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
+			return;
+		}
 		QNetworkRequest request;
 		QNetworkReply *reply = nullptr;
 		if (!fileId.isEmpty()) {
@@ -245,38 +249,45 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 	});
 }
 
-void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data)
+void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
+				     bool conditional, const QString &version)
 {
 	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/upload")), accessToken);
 	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
 	request.setRawHeader("Dropbox-API-Arg", compactJson({
 		{QStringLiteral("path"), QStringLiteral("/") + fileName},
-		{QStringLiteral("mode"), QStringLiteral("overwrite")},
+		{QStringLiteral("mode"), !conditional ? QJsonValue(QStringLiteral("overwrite")) : version.isEmpty()
+			? QJsonValue(QStringLiteral("add")) : QJsonValue(QJsonObject{{QStringLiteral(".tag"), QStringLiteral("update")},
+				{QStringLiteral("update"), version}})},
+		{QStringLiteral("strict_conflict"), conditional},
 		{QStringLiteral("autorename"), false},
 		{QStringLiteral("mute"), true},
 	}));
 	QNetworkReply *reply = networkManager->post(request, data);
 	trackReply(CloudSyncProviderType::Dropbox, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, conditional]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
 		reply->deleteLater();
 		if (ok)
 			emit uploadFinished(CloudSyncProviderType::Dropbox, fileName);
+		else if (conditional && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 409 &&
+			 QJsonDocument::fromJson(payload).object().value(QStringLiteral("error_summary")).toString().startsWith(QStringLiteral("path/conflict/")))
+			emit writeConflict(CloudSyncProviderType::Dropbox, fileName);
 		else
 			emit operationError(CloudSyncProviderType::Dropbox, fileName, error,
 				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 	});
 }
 
-void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QString &fileName)
+void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned)
 {
 	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/download")), accessToken);
 	request.setRawHeader("Dropbox-API-Arg", compactJson({{QStringLiteral("path"), QStringLiteral("/") + fileName}}));
 	QNetworkReply *reply = networkManager->post(request, QByteArray());
 	trackReply(CloudSyncProviderType::Dropbox, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, versioned]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
@@ -285,12 +296,125 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 			providerError.value(QStringLiteral(".tag")).toString() == QStringLiteral("path") &&
 			providerError.value(QStringLiteral("path")).toObject().value(QStringLiteral(".tag")).toString() == QStringLiteral("not_found");
 		reply->deleteLater();
-		if (ok)
+		if (ok && versioned) {
+			const QString version = QJsonDocument::fromJson(reply->rawHeader("Dropbox-API-Result")).object().value(QStringLiteral("rev")).toString();
+			if (version.isEmpty())
+				emit operationError(CloudSyncProviderType::Dropbox, fileName, tr("Dropbox did not return a file revision. No data was changed."));
+			else
+				emit versionedDownloadFinished(CloudSyncProviderType::Dropbox, fileName, payload, version, QString());
+		} else if (ok)
 			emit downloadFinished(CloudSyncProviderType::Dropbox, fileName, payload);
 		else if (missing)
 			emit fileNotFound(CloudSyncProviderType::Dropbox, fileName);
 		else
 			emit operationError(CloudSyncProviderType::Dropbox, fileName, error,
 				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
+	});
+}
+
+
+void CloudSyncFileStore::uploadConditional(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId)
+{
+	if (safeRemoteName(fileName).isEmpty() || accessToken.isEmpty()) {
+		emit operationError(provider, fileName, tr("Cloud upload is missing a file name or access token."));
+		return;
+	}
+	if (provider == CloudSyncProviderType::Dropbox) {
+		dropboxUpload(accessToken, fileName, data, true, version);
+	} else if (provider == CloudSyncProviderType::GoogleDrive && version.isEmpty() && fileId.isEmpty()) {
+		// Drive permits duplicate names. A first-create race is detected by the
+		// manager's post-commit lookup; both immutable payloads are retained.
+		googleUpload(accessToken, fileName, data, true);
+	} else if (provider == CloudSyncProviderType::GoogleDrive && !version.isEmpty() && !fileId.isEmpty()) {
+		// Drive v3 ignores If-Match for media updates. v2 enforces the File etag.
+		QUrl url(QStringLiteral("https://www.googleapis.com/upload/drive/v2/files/%1?uploadType=media").arg(fileId));
+		QNetworkRequest request = authorizedRequest(url, accessToken);
+		request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
+		request.setRawHeader("If-Match", version.toUtf8());
+		QNetworkReply *reply = networkManager->put(request, data);
+		trackReply(provider, reply);
+		connect(reply, &QNetworkReply::finished, this, [this, reply, provider, fileName]() {
+			const QByteArray payload = reply->readAll();
+			const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+			reply->deleteLater();
+			if (reply->error() == QNetworkReply::NoError)
+				emit uploadFinished(provider, fileName);
+			else if (status == 412 || status == 404)
+				emit writeConflict(provider, fileName);
+			else
+				emit operationError(provider, fileName, replyError(reply, payload), status == 401);
+		});
+	} else {
+		emit operationError(provider, fileName, tr("Cloud update is missing its expected file revision."));
+	}
+}
+
+void CloudSyncFileStore::downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName)
+{
+	if (safeRemoteName(fileName).isEmpty() || accessToken.isEmpty()) {
+		emit operationError(provider, fileName, tr("Cloud download is missing a file name or access token."));
+		return;
+	}
+	if (provider == CloudSyncProviderType::GoogleDrive)
+		googleDownloadVersioned(accessToken, fileName);
+	else if (provider == CloudSyncProviderType::Dropbox)
+		dropboxDownload(accessToken, fileName, true);
+	else
+		emit operationError(provider, fileName, tr("Legacy Subsurface Cloud uses its existing sync backend."));
+}
+
+void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QString &fileName,
+		const QString &fileId, const std::function<void(const QString &)> &continuation)
+{
+	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1?fields=id,etag").arg(fileId));
+	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
+	trackReply(CloudSyncProviderType::GoogleDrive, reply);
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation]() {
+		const QByteArray payload = reply->readAll();
+		reply->deleteLater();
+		if (reply->error() != QNetworkReply::NoError) {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload),
+				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
+			return;
+		}
+		const QString version = QJsonDocument::fromJson(payload).object().value(QStringLiteral("etag")).toString();
+		if (version.isEmpty()) {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Google Drive did not return a file revision. No data was changed."));
+			return;
+		}
+		continuation(version);
+	});
+}
+
+void CloudSyncFileStore::googleDownloadVersioned(const QString &accessToken, const QString &fileName)
+{
+	googleFindFile(accessToken, fileName, [this, accessToken, fileName](const QString &fileId) {
+		if (fileId.isEmpty()) {
+			emit fileNotFound(CloudSyncProviderType::GoogleDrive, fileName);
+			return;
+		}
+		googleReadVersion(accessToken, fileName, fileId, [this, accessToken, fileName, fileId](const QString &version) {
+			QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files/%1?alt=media").arg(fileId));
+			QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
+			trackReply(CloudSyncProviderType::GoogleDrive, reply);
+			connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, fileId, version]() {
+				const QByteArray payload = reply->readAll();
+				reply->deleteLater();
+				if (reply->error() != QNetworkReply::NoError) {
+					emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload),
+						reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
+					return;
+				}
+				// Metadata and media have different ETags. Bracket the media
+				// read with metadata reads so its CAS version cannot be stale.
+				googleReadVersion(accessToken, fileName, fileId, [this, fileName, fileId, version, payload](const QString &after) {
+					if (after != version)
+						emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
+					else
+						emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, payload, version, fileId);
+				});
+			});
+		});
 	});
 }

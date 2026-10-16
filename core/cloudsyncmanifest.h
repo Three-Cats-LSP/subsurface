@@ -11,9 +11,11 @@ struct CloudSyncManifest {
 	QString revisionId;
 	QString payloadSha256;
 	QString parentSha256;
+	QString payloadFile;
 	QDateTime createdAtUtc;
 
 	bool isValid() const;
+	QString payloadFileName() const;
 	QByteArray toJson() const;
 	static CloudSyncManifest fromJson(const QByteArray &json, QString *error = nullptr);
 	static CloudSyncManifest forPayload(const QByteArray &payload, const QString &parentSha256 = QString());
