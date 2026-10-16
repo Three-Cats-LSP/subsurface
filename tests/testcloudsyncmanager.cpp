@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testcloudsyncmanager.h"
 #include "core/cloudsyncmanager.h"
+#include "core/cloudcredentialstore.h"
+#include "core/subsurfacestartup.h"
 #include "core/divelog.h"
 #include "core/dive.h"
 #include "core/fulltext.h"
@@ -16,6 +18,8 @@
 #include <QScopeGuard>
 #include <QTcpSocket>
 #include <QHostAddress>
+#include <QSettings>
+#include <QUuid>
 #include <cstring>
 
 namespace {
@@ -34,7 +38,7 @@ public:
 			QTimer::singleShot(0, this, [this] { complete(); });
 	}
 	void complete() { setFinished(true); emit finished(); }
-	void abort() override {}
+	void abort() override { setError(QNetworkReply::OperationCanceledError, "Canceled"); complete(); }
 	qint64 bytesAvailable() const override { return body.size() - offset + QNetworkReply::bytesAvailable(); }
 protected:
 	qint64 readData(char *data, qint64 maxSize) override
@@ -74,6 +78,12 @@ protected:
 
 void TestCloudSyncManager::init()
 {
+	previousApplicationName = QCoreApplication::applicationName();
+	previousOrganizationName = QCoreApplication::organizationName();
+	previousSettingsSuffix = settings_suffix;
+	settings_suffix = "neo-cloud-regression-" + QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+	QCoreApplication::setOrganizationName("SubsurfaceNeoTests");
+	QCoreApplication::setApplicationName(QString::fromStdString(settings_suffix));
 	prefs = default_prefs;
 	::divelog.clear();
 	const QByteArray local("<divelog program='subsurface' version='3'><dives>"
@@ -89,6 +99,14 @@ void TestCloudSyncManager::init()
 void TestCloudSyncManager::cleanup()
 {
 	::divelog.clear();
+	for (const QString &provider : {QStringLiteral("google-drive"), QStringLiteral("dropbox")}) {
+		CloudCredentialStore::remove(provider);
+		CloudCredentialStore::remove(CloudSyncManager::syncStateCredentialKey(provider));
+	}
+	QSettings().clear();
+	settings_suffix = previousSettingsSuffix;
+	QCoreApplication::setApplicationName(previousApplicationName);
+	QCoreApplication::setOrganizationName(previousOrganizationName);
 }
 
 void TestCloudSyncManager::testLoopbackIgnoresBrowserRequests()
@@ -378,6 +396,154 @@ void TestCloudSyncManager::testNetworkFailureAllowsRetry()
 	QVERIFY(manager.syncInProgress());
 	QTRY_VERIFY(!manager.syncInProgress());
 	QCOMPARE(network.requests, 2);
+}
+
+void TestCloudSyncManager::testRefreshFailure_data()
+{
+	QTest::addColumn<int>("status");
+	QTest::addColumn<QByteArray>("body");
+	QTest::addColumn<bool>("reconnect");
+	QTest::newRow("revoked grant") << 400 << QByteArray(R"({"error":"invalid_grant"})") << true;
+	QTest::newRow("unauthorized grant") << 401 << QByteArray(R"({"error":"invalid_grant"})") << true;
+	QTest::newRow("client configuration") << 400 << QByteArray(R"({"error":"invalid_client"})") << false;
+	QTest::newRow("server failure") << 503 << QByteArray(R"({"error":"invalid_grant"})") << false;
+	QTest::newRow("network failure") << 0 << QByteArray() << false;
+	QTest::newRow("malformed response") << 200 << QByteArray("broken") << false;
+}
+
+void TestCloudSyncManager::testRefreshFailure()
+{
+	QFETCH(int, status);
+	QFETCH(QByteArray, body);
+	QFETCH(bool, reconnect);
+	FakeNetwork network;
+	network.status = status;
+	network.body = body;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "expired-token";
+	token.refreshToken = "test-refresh";
+	token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(-60);
+	manager.tokens.insert("dropbox", token);
+	manager.setPrimaryProvider("dropbox");
+	manager.setAutoSyncEnabled(true);
+	CloudCredentialStore::save("dropbox", R"({"access_token":"expired-token","refresh_token":"test-refresh"})");
+	manager.saveLastSyncManifest("dropbox", CloudSyncManifest::forPayload(manager.serializeCurrentDiveLog()));
+	const QByteArray credentials = CloudCredentialStore::load("dropbox");
+	const QByteArray baseline = CloudCredentialStore::load(manager.syncStateCredentialKey("dropbox"));
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	QSignalSpy disconnected(&manager, &CloudSyncManager::providerDisconnected);
+	QSignalSpy browser(&manager, &CloudSyncManager::authorizationUrlOpened);
+	manager.syncDiveLog("dropbox");
+	QVERIFY(manager.syncInProgress());
+	QTRY_VERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.pendingTokenContinuation);
+	QVERIFY(manager.refreshProviderId.isEmpty());
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+	QCOMPARE(disconnected.count(), reconnect ? 1 : 0);
+	QCOMPARE(manager.tokens.contains("dropbox"), !reconnect);
+	QCOMPARE(manager.primaryProviderId(), reconnect ? QString() : QString("dropbox"));
+	QCOMPARE(CloudCredentialStore::load("dropbox"), reconnect ? QByteArray() : credentials);
+	QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey("dropbox")), reconnect ? QByteArray() : baseline);
+	if (reconnect) {
+		QVERIFY(manager.lastError().contains("connect it again"));
+		QVERIFY(!manager.syncPrimaryIfReady());
+		manager.syncDiveLog("dropbox");
+		QVERIFY(!manager.syncInProgress());
+		QCOMPARE(network.requests, 1);
+	} else {
+		manager.syncDiveLog("dropbox");
+		QTRY_VERIFY(!manager.syncInProgress());
+		QCOMPARE(network.requests, 2);
+	}
+	QCOMPARE(browser.count(), 0);
+}
+
+void TestCloudSyncManager::testDisconnectCancelsRefresh()
+{
+	FakeNetwork network;
+	network.deferred = true;
+	network.body = R"({"access_token":"late-token","expires_in":3600})";
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.refreshToken = "test-refresh";
+	manager.tokens.insert("dropbox", token);
+	manager.setPrimaryProvider("dropbox");
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	manager.syncDiveLog("dropbox");
+	QVERIFY(manager.pendingTokenContinuation);
+	FakeReply *lateReply = network.lastReply;
+	manager.disconnectProvider("dropbox");
+	QVERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.pendingTokenContinuation);
+	QVERIFY(manager.refreshProviderId.isEmpty());
+	QVERIFY(manager.primaryProviderId().isEmpty());
+	// Even a reply that completes after abort cannot restore credentials or
+	// continue to the manifest request.
+	lateReply->complete();
+	QVERIFY(!manager.tokens.contains("dropbox"));
+	QVERIFY(CloudCredentialStore::load("dropbox").isEmpty());
+	QCOMPARE(network.requests, 1);
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+}
+
+void TestCloudSyncManager::testDisconnectCancelsAuthorization()
+{
+	FakeNetwork network;
+	network.deferred = true;
+	network.body = R"({"access_token":"late-token","refresh_token":"late-refresh"})";
+	CloudSyncManager manager(&network);
+	manager.activeProviderId = "dropbox";
+	manager.tokenClient.exchangeAuthorizationCode(cloudSyncProviderDescriptor(CloudSyncProviderType::Dropbox),
+		"test-client", "code", "verifier", QUrl("http://127.0.0.1/callback"));
+	FakeReply *lateReply = network.lastReply;
+	manager.disconnectProvider("dropbox");
+	QVERIFY(!manager.authorizationInProgress());
+	// Starting a subsequent flow must not attribute the old reply to it.
+	manager.activeProviderId = "google-drive";
+	lateReply->complete();
+	QVERIFY(manager.tokens.isEmpty());
+	QCOMPARE(manager.activeProviderId, QString("google-drive"));
+	QVERIFY(CloudCredentialStore::load("google-drive").isEmpty());
+	manager.clearAuthorization();
+}
+
+void TestCloudSyncManager::testDisconnectCancelsFileRequests_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<bool>("upload");
+	QTest::newRow("google lookup before download") << QString("google-drive") << false;
+	QTest::newRow("google lookup before upload") << QString("google-drive") << true;
+	QTest::newRow("dropbox download") << QString("dropbox") << false;
+	QTest::newRow("dropbox upload") << QString("dropbox") << true;
+}
+
+void TestCloudSyncManager::testDisconnectCancelsFileRequests()
+{
+	QFETCH(QString, providerId);
+	QFETCH(bool, upload);
+	FakeNetwork network;
+	network.deferred = true;
+	network.body = R"({"files":[{"id":"test-file"}]})";
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	manager.tokens.insert(providerId, token);
+	QSignalSpy downloaded(&manager, &CloudSyncManager::downloadFinished);
+	QSignalSpy uploaded(&manager, &CloudSyncManager::uploadFinished);
+	if (upload)
+		manager.backupDiveLog(providerId);
+	else
+		manager.syncDiveLog(providerId);
+	QVERIFY(manager.syncInProgress());
+	FakeReply *lateReply = network.lastReply;
+	manager.disconnectProvider(providerId);
+	lateReply->complete();
+	QVERIFY(!manager.syncInProgress());
+	QCOMPARE(network.requests, 1);
+	QCOMPARE(downloaded.count(), 0);
+	QCOMPARE(uploaded.count(), 0);
+	QVERIFY(manager.tokens.isEmpty());
 }
 
 void TestCloudSyncManager::testMissingTextDoesNotStartUpload()

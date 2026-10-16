@@ -6,6 +6,7 @@
 
 #include <QDateTime>
 #include <QObject>
+#include <QPointer>
 #include <QUrl>
 
 class QNetworkAccessManager;
@@ -36,10 +37,11 @@ public:
 	void refreshAccessToken(const CloudSyncProviderDescriptor &provider,
 					 const QString &clientId,
 					 const QString &refreshToken);
+	void cancel();
 
 signals:
 	void tokenReceived(const OAuth2TokenSet &tokens);
-	void tokenError(const QString &message);
+	void tokenError(const QString &message, bool reconnectRequired = false);
 
 private:
 	void postTokenRequest(const CloudSyncProviderDescriptor &provider,
@@ -48,6 +50,7 @@ private:
 	void handleTokenReply(QNetworkReply *reply, const QString &preservedRefreshToken);
 
 	QNetworkAccessManager *networkManager;
+	QPointer<QNetworkReply> pendingReply;
 };
 
 Q_DECLARE_METATYPE(OAuth2TokenSet)

@@ -25,6 +25,24 @@ CloudSyncFileStore::CloudSyncFileStore(QNetworkAccessManager *networkManager, QO
 	qRegisterMetaType<CloudSyncProviderType>();
 }
 
+void CloudSyncFileStore::trackReply(CloudSyncProviderType provider, QNetworkReply *reply)
+{
+	pendingReplies[provider].insert(reply);
+	connect(reply, &QNetworkReply::finished, this, [this, provider, reply]() {
+		pendingReplies[provider].remove(reply);
+	});
+}
+
+void CloudSyncFileStore::cancel(CloudSyncProviderType provider)
+{
+	const auto replies = pendingReplies.take(provider);
+	for (QNetworkReply *reply : replies) {
+		reply->disconnect(this);
+		reply->abort();
+		reply->deleteLater();
+	}
+}
+
 void CloudSyncFileStore::upload(CloudSyncProviderType provider, const QString &accessToken,
 				const QString &fileName, const QByteArray &data)
 {
@@ -121,6 +139,7 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 	url.setQuery(query);
 
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
+	trackReply(CloudSyncProviderType::GoogleDrive, reply);
 	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
@@ -183,6 +202,7 @@ void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString 
 			reply = networkManager->post(request, body);
 		}
 
+		trackReply(CloudSyncProviderType::GoogleDrive, reply);
 		connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
 			const QByteArray payload = reply->readAll();
 			const bool ok = reply->error() == QNetworkReply::NoError;
@@ -208,6 +228,7 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 		query.addQueryItem(QStringLiteral("alt"), QStringLiteral("media"));
 		url.setQuery(query);
 		QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
+		trackReply(CloudSyncProviderType::GoogleDrive, reply);
 		connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
 			const QByteArray payload = reply->readAll();
 			const bool ok = reply->error() == QNetworkReply::NoError;
@@ -232,6 +253,7 @@ void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString
 		{QStringLiteral("mute"), true},
 	}));
 	QNetworkReply *reply = networkManager->post(request, data);
+	trackReply(CloudSyncProviderType::Dropbox, reply);
 	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
@@ -249,6 +271,7 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/download")), accessToken);
 	request.setRawHeader("Dropbox-API-Arg", compactJson({{QStringLiteral("path"), QStringLiteral("/") + fileName}}));
 	QNetworkReply *reply = networkManager->post(request, QByteArray());
+	trackReply(CloudSyncProviderType::Dropbox, reply);
 	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;

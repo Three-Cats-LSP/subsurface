@@ -114,10 +114,19 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 		emit providersChanged();
 		emit providerConnected(connectedProvider);
 	});
-	connect(&tokenClient, &OAuth2TokenClient::tokenError, this, [this](const QString &message) {
+	connect(&tokenClient, &OAuth2TokenClient::tokenError, this, [this](const QString &message, bool reconnectRequired) {
+		const QString providerId = refreshProviderId;
 		pendingTokenContinuation = {};
 		refreshProviderId.clear();
-		setError(message);
+		if (reconnectRequired && !providerId.isEmpty()) {
+			// A new authorization may select a different account. Discard the old
+			// baseline and assignments so it cannot silently resume automatic sync.
+			disconnectProvider(providerId);
+			setError(tr("%1 authorization expired or was revoked. Please connect it again.")
+				.arg(descriptorForId(providerId)->displayName));
+		} else {
+			setError(message);
+		}
 		clearAuthorization();
 		if (syncInProgress())
 			clearSyncOperation();
@@ -425,6 +434,8 @@ void CloudSyncManager::setError(const QString &message)
 
 void CloudSyncManager::clearAuthorization()
 {
+	if (!activeProviderId.isEmpty())
+		tokenClient.cancel();
 	const bool wasActive = authorizationInProgress();
 	activeProviderId.clear();
 	activeClientId.clear();
@@ -461,6 +472,10 @@ QUrl CloudSyncManager::startLoopbackListener(const CloudSyncProviderDescriptor &
 
 void CloudSyncManager::beginAuthorization(const QString &providerId)
 {
+	if (syncInProgress() || pendingTokenContinuation) {
+		setError(tr("Wait for the current cloud operation to finish before connecting."));
+		return;
+	}
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider || provider->type == CloudSyncProviderType::SubsurfaceCloud) {
 		setError(tr("Unknown OAuth cloud provider."));
@@ -626,6 +641,17 @@ void CloudSyncManager::finishLoopbackSocket(QTcpSocket *socket, bool success, co
 
 void CloudSyncManager::disconnectProvider(const QString &providerId)
 {
+	const auto *provider = descriptorForId(providerId);
+	if (!provider)
+		return;
+	fileStore.cancel(provider->type);
+	if (providerId == refreshProviderId) {
+		tokenClient.cancel();
+		pendingTokenContinuation = {};
+		refreshProviderId.clear();
+	}
+	if (providerId == activeProviderId)
+		clearAuthorization();
 	const bool hadToken = tokens.remove(providerId) > 0;
 	const bool wasAssigned = providerId == primaryProviderId() || providerId == backupProviderId();
 	if (wasAssigned) {
@@ -654,6 +680,12 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, const QString &providerId,
 					   const std::function<void(const QString &)> &continuation)
 {
+	if (authorizationInProgress() || pendingTokenContinuation) {
+		setError(tr("Wait for the current authorization to finish before syncing."));
+		if (providerId == syncProviderId)
+			clearSyncOperation();
+		return;
+	}
 	const OAuth2TokenSet current = tokens.value(providerId);
 	if (!current.hasAccessToken() && !current.canRefresh()) {
 		setError(tr("%1 is not connected.").arg(provider.displayName));

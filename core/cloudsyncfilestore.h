@@ -6,6 +6,8 @@
 
 #include <QByteArray>
 #include <QObject>
+#include <QMap>
+#include <QSet>
 
 #include <functional>
 
@@ -22,6 +24,7 @@ public:
 		    const QString &fileName, const QByteArray &data);
 	void download(CloudSyncProviderType provider, const QString &accessToken,
 		      const QString &fileName);
+	void cancel(CloudSyncProviderType provider);
 
 signals:
 	void uploadFinished(CloudSyncProviderType provider, const QString &fileName);
@@ -30,6 +33,7 @@ signals:
 	void fileNotFound(CloudSyncProviderType provider, const QString &fileName);
 
 private:
+	void trackReply(CloudSyncProviderType provider, QNetworkReply *reply);
 	void googleFindFile(const QString &accessToken, const QString &fileName,
 			    const std::function<void(const QString &)> &continuation);
 	void googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data);
@@ -42,6 +46,7 @@ private:
 	static QString safeRemoteName(const QString &fileName);
 
 	QNetworkAccessManager *networkManager;
+	QMap<CloudSyncProviderType, QSet<QNetworkReply *>> pendingReplies;
 };
 
 Q_DECLARE_METATYPE(CloudSyncProviderType)

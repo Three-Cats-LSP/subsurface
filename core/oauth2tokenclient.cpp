@@ -50,6 +50,7 @@ void OAuth2TokenClient::postTokenRequest(const CloudSyncProviderDescriptor &prov
 							 const QList<QPair<QString, QString>> &parameters,
 							 const QString &preservedRefreshToken)
 {
+	cancel();
 	if (!networkManager) {
 		emit tokenError(tr("OAuth network manager is unavailable."));
 		return;
@@ -83,9 +84,22 @@ void OAuth2TokenClient::postTokenRequest(const CloudSyncProviderDescriptor &prov
 	request.setRawHeader("Accept", "application/json");
 
 	QNetworkReply *reply = networkManager->post(request, form.query(QUrl::FullyEncoded).toUtf8());
+	pendingReply = reply;
 	connect(reply, &QNetworkReply::finished, this, [this, reply, preservedRefreshToken]() {
+		pendingReply.clear();
 		handleTokenReply(reply, preservedRefreshToken);
 	});
+}
+
+void OAuth2TokenClient::cancel()
+{
+	if (!pendingReply)
+		return;
+	QNetworkReply *reply = pendingReply.data();
+	pendingReply.clear();
+	reply->disconnect(this);
+	reply->abort();
+	reply->deleteLater();
 }
 
 void OAuth2TokenClient::handleTokenReply(QNetworkReply *reply, const QString &preservedRefreshToken)
@@ -107,7 +121,12 @@ void OAuth2TokenClient::handleTokenReply(QNetworkReply *reply, const QString &pr
 			message = object.value(QStringLiteral("error")).toString();
 		if (message.isEmpty())
 			message = tr("OAuth token request failed (HTTP %1).").arg(status);
-		emit tokenError(message);
+		// Only a rejected refresh grant establishes that the saved connection
+		// cannot be renewed. Network errors and client setup errors are retryable.
+		const bool reconnectRequired = !preservedRefreshToken.isEmpty() &&
+			(status == 400 || status == 401) &&
+			object.value(QStringLiteral("error")).toString() == QStringLiteral("invalid_grant");
+		emit tokenError(message, reconnectRequired);
 		return;
 	}
 

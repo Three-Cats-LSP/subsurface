@@ -36,6 +36,12 @@ Kirigami.ScrollablePage {
 
 	Connections {
 		target: CloudSync
+		function onProviderDisconnected(providerId) {
+			if (page.lastSyncProvider === providerId) page.lastSyncProvider = ""
+			if (page.lastBackupProvider === providerId) page.lastBackupProvider = ""
+			if (page.conflictProvider === providerId) page.conflictProvider = ""
+			if (page.initialChoiceProvider === providerId) page.initialChoiceProvider = ""
+		}
 		function onDiveLogBackupFinished(providerId) {
 			page.lastBackupProvider = providerId
 			page.conflictProvider = ""

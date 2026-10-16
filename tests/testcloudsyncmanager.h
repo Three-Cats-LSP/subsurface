@@ -2,9 +2,14 @@
 #ifndef TESTCLOUDSYNCMANAGER_H
 #define TESTCLOUDSYNCMANAGER_H
 #include "testbase.h"
+#include <string>
 
 class TestCloudSyncManager : public TestBase {
 	Q_OBJECT
+private:
+	QString previousApplicationName;
+	QString previousOrganizationName;
+	std::string previousSettingsSuffix;
 private slots:
 	void init();
 	void cleanup();
@@ -17,6 +22,12 @@ private slots:
 	void testDownloadKeepsConcurrentEdits();
 	void testManifestKeepsConcurrentEdits();
 	void testNetworkFailureAllowsRetry();
+	void testRefreshFailure_data();
+	void testRefreshFailure();
+	void testDisconnectCancelsRefresh();
+	void testDisconnectCancelsAuthorization();
+	void testDisconnectCancelsFileRequests_data();
+	void testDisconnectCancelsFileRequests();
 	void testMissingTextDoesNotStartUpload();
 	void testCorruptDownload_data();
 	void testCorruptDownload();
