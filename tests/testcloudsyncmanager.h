@@ -43,6 +43,9 @@ private slots:
 	void testTransactionalUpload();
 	void testSimultaneousWriters_data();
 	void testSimultaneousWriters();
+	void testGoogleInitialRecovery_data();
+	void testGoogleInitialRecovery();
+	void testGoogleDifferentInitialLog();
 	void testVersionedRead_data();
 	void testVersionedRead();
 };

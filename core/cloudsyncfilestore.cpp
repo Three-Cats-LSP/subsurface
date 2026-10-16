@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncfilestore.h"
+#include "cloudsyncmanifest.h"
+
+#include <algorithm>
+#include <QRegularExpression>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -126,7 +130,7 @@ QString CloudSyncFileStore::replyError(QNetworkReply *reply, const QByteArray &p
 }
 
 void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QString &fileName,
-					const std::function<void(const QString &)> &continuation)
+					const std::function<void(const QString &)> &continuation, int recoveryAttempt)
 {
 	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files"));
 	QUrlQuery query;
@@ -135,12 +139,12 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 	escapedName.replace(QLatin1Char('\''), QStringLiteral("\\'"));
 	query.addQueryItem(QStringLiteral("spaces"), QStringLiteral("appDataFolder"));
 	query.addQueryItem(QStringLiteral("q"), QStringLiteral("name='%1' and trashed=false").arg(escapedName));
-	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("nextPageToken,files(id,name)"));
+	query.addQueryItem(QStringLiteral("fields"), QStringLiteral("nextPageToken,files(id,name,createdTime)"));
 	url.setQuery(query);
 
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
 	trackReply(CloudSyncProviderType::GoogleDrive, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, continuation, recoveryAttempt]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
@@ -160,13 +164,102 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			return;
 		}
 		const QJsonArray files = object.value(QStringLiteral("files")).toArray();
-		if (files.size() > 1 || !object.value(QStringLiteral("nextPageToken")).toString().isEmpty() ||
+		if (!object.value(QStringLiteral("nextPageToken")).toString().isEmpty() ||
 		    (!files.isEmpty() && files.first().toObject().value(QStringLiteral("id")).toString().isEmpty())) {
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
 				tr("Google Drive returned an ambiguous or invalid cloud file. No data was changed."));
 			return;
 		}
+		if (files.size() > 1) {
+			// Only the known sync manifest has a recovery protocol. Never elect a
+			// winner for an ambiguous XML payload or an arbitrary caller's file.
+			if (fileName != QStringLiteral("subsurface-neo-sync.json") || recoveryAttempt >= 8) {
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+					tr("Google Drive has competing cloud files. Sync again to retry recovery. No logs were deleted."));
+				return;
+			}
+			QList<QPair<QDateTime, QString>> order;
+			QSet<QString> ids;
+			static const QRegularExpression idPattern(QStringLiteral("^[A-Za-z0-9_-]+$"));
+			for (const auto &value : files) {
+				const auto file = value.toObject();
+				const QString id = file.value(QStringLiteral("id")).toString();
+				const auto created = QDateTime::fromString(file.value(QStringLiteral("createdTime")).toString(), Qt::ISODateWithMs);
+				if (!idPattern.match(id).hasMatch() || ids.contains(id) || !created.isValid() ||
+				    file.value(QStringLiteral("name")).toString() != fileName) {
+					emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+						tr("Google Drive returned incomplete recovery metadata. No data was changed."));
+					return;
+				}
+				ids.insert(id);
+				order.append({created, id});
+			}
+			// Provider creation time, not a device clock or last modification.
+			// File ID breaks ties, so every recovering client uses the same order.
+			std::sort(order.begin(), order.end());
+			QList<GoogleRecoveryFile> candidates;
+			for (const auto &entry : order) candidates.append({entry.second, {}});
+			googleRecoverInitialManifests(accessToken, fileName, candidates, 0, recoveryAttempt, continuation);
+			return;
+		}
 		continuation(files.isEmpty() ? QString() : files.first().toObject().value(QStringLiteral("id")).toString());
+	});
+}
+
+void CloudSyncFileStore::googleRecoverInitialManifests(const QString &accessToken, const QString &fileName,
+		QList<GoogleRecoveryFile> files, int next, int attempt,
+		const std::function<void(const QString &)> &continuation)
+{
+	if (next == files.size()) {
+		googleArchiveInitialManifest(accessToken, fileName, files, 1, attempt, continuation);
+		return;
+	}
+	const auto retry = [this, accessToken, fileName, continuation, attempt]() {
+		googleFindFile(accessToken, fileName, continuation, attempt + 1);
+	};
+	googleReadFileVersioned(accessToken, fileName, files[next].id,
+		[this, accessToken, fileName, files, next, attempt, continuation](const QByteArray &data, const QString &version) mutable {
+			const auto manifest = CloudSyncManifest::fromJson(data);
+			// An established branch is not an abandoned initial upload. Keep it
+			// visible for manual recovery instead of silently demoting its edits.
+			if (!manifest.isValid() || (next > 0 && (manifest.schemaVersion != 2 || !manifest.parentSha256.isEmpty()))) {
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+					tr("Competing Google Drive logs include an invalid or previously synchronized log. All copies were kept for recovery."));
+				return;
+			}
+			files[next].version = version;
+			googleRecoverInitialManifests(accessToken, fileName, files, next + 1, attempt, continuation);
+		}, retry);
+}
+
+void CloudSyncFileStore::googleArchiveInitialManifest(const QString &accessToken, const QString &fileName,
+		const QList<GoogleRecoveryFile> &files, int next, int attempt,
+		const std::function<void(const QString &)> &continuation)
+{
+	if (next == files.size()) {
+		// Re-list after recovery: another client may have recovered these files,
+		// or a delayed first upload may have created another initial candidate.
+		googleFindFile(accessToken, fileName, continuation, attempt + 1);
+		return;
+	}
+	const auto &file = files[next];
+	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1").arg(file.id)), accessToken);
+	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+	request.setRawHeader("If-Match", file.version.toUtf8());
+	const QByteArray metadata = compactJson({{QStringLiteral("title"),
+		QStringLiteral("subsurface-neo-sync-recovered-%1.json").arg(file.id)}});
+	QNetworkReply *reply = networkManager->sendCustomRequest(request, "PATCH", metadata);
+	trackReply(CloudSyncProviderType::GoogleDrive, reply);
+	connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, files, next, attempt, continuation]() {
+		const QByteArray payload = reply->readAll();
+		const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		reply->deleteLater();
+		if (reply->error() == QNetworkReply::NoError)
+			googleArchiveInitialManifest(accessToken, fileName, files, next + 1, attempt, continuation);
+		else if (status == 412 || status == 404)
+			googleFindFile(accessToken, fileName, continuation, attempt + 1);
+		else
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload), status == 401);
 	});
 }
 
@@ -323,8 +416,8 @@ void CloudSyncFileStore::uploadConditional(CloudSyncProviderType provider, const
 	if (provider == CloudSyncProviderType::Dropbox) {
 		dropboxUpload(accessToken, fileName, data, true, version);
 	} else if (provider == CloudSyncProviderType::GoogleDrive && version.isEmpty() && fileId.isEmpty()) {
-		// Drive permits duplicate names. A first-create race is detected by the
-		// manager's post-commit lookup; both immutable payloads are retained.
+		// The post-commit lookup recovers duplicate initial manifests. Every
+		// competing immutable payload and manifest remains available.
 		googleUpload(accessToken, fileName, data, true);
 	} else if (provider == CloudSyncProviderType::GoogleDrive && !version.isEmpty() && !fileId.isEmpty()) {
 		// Drive v3 ignores If-Match for media updates. v2 enforces the File etag.
@@ -365,56 +458,81 @@ void CloudSyncFileStore::downloadVersioned(CloudSyncProviderType provider, const
 }
 
 void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QString &fileName,
-		const QString &fileId, const std::function<void(const QString &)> &continuation)
+		const QString &fileId, const std::function<void(const QString &)> &continuation, const std::function<void()> &changed)
 {
-	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1?fields=id,etag").arg(fileId));
+	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1?fields=id,etag,title").arg(fileId));
 	QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
 	trackReply(CloudSyncProviderType::GoogleDrive, reply);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, continuation, changed]() {
 		const QByteArray payload = reply->readAll();
 		reply->deleteLater();
 		if (reply->error() != QNetworkReply::NoError) {
+			if (changed && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+				changed();
+				return;
+			}
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload),
 				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 			return;
 		}
-		const QString version = QJsonDocument::fromJson(payload).object().value(QStringLiteral("etag")).toString();
+		const auto metadata = QJsonDocument::fromJson(payload).object();
+		const QString version = metadata.value(QStringLiteral("etag")).toString();
 		if (version.isEmpty()) {
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Google Drive did not return a file revision. No data was changed."));
+			return;
+		}
+		if (metadata.value(QStringLiteral("title")).toString() != fileName) {
+			if (changed) changed();
+			else emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
 			return;
 		}
 		continuation(version);
 	});
 }
 
-void CloudSyncFileStore::googleDownloadVersioned(const QString &accessToken, const QString &fileName)
+void CloudSyncFileStore::googleReadFileVersioned(const QString &accessToken, const QString &fileName, const QString &fileId,
+		const std::function<void(const QByteArray &, const QString &)> &continuation, const std::function<void()> &changed)
 {
-	googleFindFile(accessToken, fileName, [this, accessToken, fileName](const QString &fileId) {
+	googleReadVersion(accessToken, fileName, fileId, [this, accessToken, fileName, fileId, continuation, changed](const QString &version) {
+		QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files/%1?alt=media").arg(fileId));
+		QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
+		trackReply(CloudSyncProviderType::GoogleDrive, reply);
+		connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, fileId, version, continuation, changed]() {
+			const QByteArray payload = reply->readAll();
+			reply->deleteLater();
+			if (reply->error() != QNetworkReply::NoError) {
+				const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+				if (changed && status == 404) changed();
+				else emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload), status == 401);
+				return;
+			}
+			// Metadata and media have different ETags. Bracket the media read
+			// with metadata reads so its CAS version cannot be stale.
+			googleReadVersion(accessToken, fileName, fileId, [this, fileName, version, payload, continuation, changed](const QString &after) {
+				if (after != version) {
+					if (changed) changed();
+					else emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
+				} else continuation(payload, version);
+			}, changed);
+		});
+	}, changed);
+}
+
+void CloudSyncFileStore::googleDownloadVersioned(const QString &accessToken, const QString &fileName, int attempt)
+{
+	if (attempt >= 8) {
+		emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
+		return;
+	}
+	googleFindFile(accessToken, fileName, [this, accessToken, fileName, attempt](const QString &fileId) {
 		if (fileId.isEmpty()) {
 			emit fileNotFound(CloudSyncProviderType::GoogleDrive, fileName);
 			return;
 		}
-		googleReadVersion(accessToken, fileName, fileId, [this, accessToken, fileName, fileId](const QString &version) {
-			QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files/%1?alt=media").arg(fileId));
-			QNetworkReply *reply = networkManager->get(authorizedRequest(url, accessToken));
-			trackReply(CloudSyncProviderType::GoogleDrive, reply);
-			connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, fileId, version]() {
-				const QByteArray payload = reply->readAll();
-				reply->deleteLater();
-				if (reply->error() != QNetworkReply::NoError) {
-					emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, payload),
-						reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
-					return;
-				}
-				// Metadata and media have different ETags. Bracket the media
-				// read with metadata reads so its CAS version cannot be stale.
-				googleReadVersion(accessToken, fileName, fileId, [this, fileName, fileId, version, payload](const QString &after) {
-					if (after != version)
-						emit writeConflict(CloudSyncProviderType::GoogleDrive, fileName);
-					else
-						emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, payload, version, fileId);
-				});
-			});
+		googleReadFileVersioned(accessToken, fileName, fileId, [this, fileName, fileId](const QByteArray &payload, const QString &version) {
+			emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, payload, version, fileId);
+		}, [this, accessToken, fileName, attempt]() {
+			googleDownloadVersioned(accessToken, fileName, attempt + 1);
 		});
-	});
+	}, attempt);
 }

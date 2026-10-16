@@ -84,18 +84,23 @@ protected:
 // injected failures before or after the remote commit. No real network or keys.
 class MemoryCloud : public QNetworkAccessManager {
 public:
-	struct File { QString name, id, version; QByteArray data; };
+	struct File { QString name, id, version; QByteArray data; QString created; };
 	QVector<File> files;
 	int serial = 0;
 	int failStage = 0; // 1: payload rejected, 2: commit rejected, 3: commit ACK lost
 	bool changeDuringRead = false;
 	bool omitVersion = false;
 	int puts = 0;
+	int renames = 0;
+	int recoveryFault = 0; // 1: reject, 2: ACK lost, 3: revision race, 4: continuous race, 5: defer
+	bool reverseListing = false;
+	QByteArray lateInitialManifest;
+	FakeReply *recoveryReply = nullptr;
 	QString manifestName = "subsurface-neo-sync.json";
 	QByteArray json(const QJsonObject &object) { return QJsonDocument(object).toJson(QJsonDocument::Compact); }
 	void add(const QString &name, const QByteArray &data) {
 		const QString id = QString::number(++serial);
-		files.append({name, id, "rev-" + id, data});
+		files.append({name, id, "rev-" + id, data, QDateTime::fromMSecsSinceEpoch(serial, Qt::UTC).toString(Qt::ISODateWithMs)});
 	}
 	int byName(const QString &name) const {
 		for (int i = 0; i < files.size(); ++i) if (files[i].name == name) return i;
@@ -113,7 +118,7 @@ protected:
 		int status = 200;
 		QString name;
 		int index = -1;
-		bool write = false, create = false;
+		bool write = false, create = false, rename = false;
 		QByteArray data = sent;
 		QString expected;
 		if (!google) {
@@ -128,7 +133,10 @@ protected:
 			name = filter.section('\'', 1, 1);
 			QJsonArray matches;
 			for (const auto &file : files)
-				if (file.name == name) matches.append(QJsonObject{{"id", file.id}, {"name", file.name}});
+				if (file.name == name) {
+					const QJsonObject entry{{"id", file.id}, {"name", file.name}, {"createdTime", file.created}};
+					if (reverseListing) matches.prepend(entry); else matches.append(entry);
+				}
 			body = json({{"files", matches}});
 		} else if (op == PostOperation) {
 			create = write = true;
@@ -141,10 +149,30 @@ protected:
 			const QString id = url.path().section('/', -1);
 			for (int i = 0; i < files.size(); ++i) if (files[i].id == id) index = i;
 			if (index >= 0) name = files[index].name;
+			rename = op == CustomOperation && request.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray() == "PATCH";
 			write = op == PutOperation;
 			expected = QString::fromUtf8(request.rawHeader("If-Match"));
 		}
-		if (write) {
+		bool defer = false;
+		if (rename) {
+			++renames;
+			const int fault = recoveryFault;
+			if (fault != 4) recoveryFault = 0;
+			if ((fault == 3 || fault == 4) && index >= 0) files[index].version = "rev-" + QString::number(++serial);
+			if (fault == 1) status = 503;
+			else if (index < 0 || expected != files[index].version) status = 412;
+			else {
+				files[index].name = QJsonDocument::fromJson(sent).object().value("title").toString();
+				files[index].version = "rev-" + QString::number(++serial);
+				body = json({{"id", files[index].id}});
+				if (fault == 2) status = 503;
+				if (fault == 5) defer = true;
+				if (!lateInitialManifest.isEmpty()) {
+					add(manifestName, lateInitialManifest);
+					lateInitialManifest.clear();
+				}
+			}
+		} else if (write) {
 			++puts;
 			const bool commit = name == manifestName;
 			if ((failStage == 1 && !commit) || (failStage == 2 && commit)) {
@@ -164,14 +192,15 @@ protected:
 				body = R"({"error":{".tag":"path","path":{".tag":"not_found"}}})";
 			} else if (google && url.path().startsWith("/drive/v2/")) {
 				body = json(omitVersion ? QJsonObject{{"id", files[index].id}}
-					: QJsonObject{{"id", files[index].id}, {"etag", files[index].version}});
+					: QJsonObject{{"id", files[index].id}, {"etag", files[index].version}, {"title", files[index].name}});
 			} else {
 				body = files[index].data;
 				if (!omitVersion) metadata = json({{"rev", files[index].version}});
 				if (changeDuringRead && google) files[index].version = "rev-" + QString::number(++serial);
 			}
 		}
-		auto *reply = new FakeReply(request, body, status, this);
+		auto *reply = new FakeReply(request, body, status, this, defer);
+		if (defer) recoveryReply = reply;
 		if (!metadata.isEmpty()) reply->header("Dropbox-API-Result", metadata);
 		return reply;
 	}
@@ -930,10 +959,15 @@ void TestCloudSyncManager::testSimultaneousWriters()
 	QCOMPARE(first.serializeCurrentDiveLog(), original);
 	QCOMPARE(network.content("subsurface-neo.xml"), initial ? QByteArray() : original);
 	if (initial && providerId == "google-drive") {
-		// Drive cannot conditionally create a name. Both snapshots survive and
-		// duplicate manifests block use instead of selecting an arbitrary log.
-		QVERIFY(firstDone.count() + secondDone.count() < 2);
-		QVERIFY(!first.lastError().isEmpty() || !second.lastError().isEmpty());
+		QCOMPARE(firstDone.count() + secondDone.count(), 2);
+		QCOMPARE(firstConflict.count() + secondConflict.count(), 0);
+		int active = 0, recovered = 0;
+		for (const auto &file : network.files) {
+			if (file.name == network.manifestName) ++active;
+			if (file.name.startsWith("subsurface-neo-sync-recovered-")) ++recovered;
+		}
+		QCOMPARE(active, 1);
+		QCOMPARE(recovered, 1);
 	} else {
 		QCOMPARE(firstDone.count() + secondDone.count(), 1);
 		QCOMPARE(firstConflict.count() + secondConflict.count(), 1);
@@ -949,6 +983,126 @@ void TestCloudSyncManager::testSimultaneousWriters()
 	const auto committed = CloudSyncManifest::fromJson(network.content(network.manifestName));
 	QVERIFY(committed.isValid());
 	QCOMPARE(network.content(committed.payloadFileName()), original);
+}
+
+void TestCloudSyncManager::testGoogleInitialRecovery_data()
+{
+	QTest::addColumn<int>("scenario");
+	const char *names[] = {"different initial logs", "rename rejected", "rename ACK lost", "revision race",
+		"bounded contention", "established competing branch", "invalid competing manifest", "missing creation time",
+		"two recovery clients", "delayed first upload", "reversed listing", "equal creation timestamps",
+		"partial recovery and restart", "cancel during recovery", "invalid canonical manifest"};
+	for (int i = 0; i < 15; ++i) QTest::newRow(names[i]) << i;
+}
+
+void TestCloudSyncManager::testGoogleInitialRecovery()
+{
+	QFETCH(int, scenario);
+	MemoryCloud network;
+	const auto initial = [](const QByteArray &data, const QString &parent = {}) {
+		auto manifest = CloudSyncManifest::forPayload(data, parent);
+		manifest.schemaVersion = 2;
+		manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml";
+		return manifest;
+	};
+	const auto first = initial("first log");
+	const auto second = initial("second log", scenario == 5 ? first.payloadSha256 : QString());
+	network.add(network.manifestName, scenario == 14 ? QByteArray("invalid") : first.toJson());
+	const QString canonicalId = network.files[0].id;
+	network.add(network.manifestName, scenario == 6 ? QByteArray("invalid") : second.toJson());
+	const QString candidateId = network.files[1].id;
+	const QString candidateVersion = network.files[1].version;
+	if (scenario == 7) network.files[1].created.clear();
+	if (scenario == 11) network.files[1].created = network.files[0].created;
+	if (scenario == 12) network.add(network.manifestName, initial("third log").toJson());
+	network.add(first.payloadFileName(), "first log");
+	network.add(second.payloadFileName(), "second log");
+	network.add("unrelated.json", "untouched");
+	if (scenario >= 1 && scenario <= 4) network.recoveryFault = scenario;
+	if (scenario == 12) network.recoveryFault = 2;
+	if (scenario == 13) network.recoveryFault = 5;
+	if (scenario == 9) network.lateInitialManifest = initial("late log").toJson();
+	network.reverseListing = scenario == 10 || scenario == 11;
+	CloudSyncFileStore store(&network), other(&network);
+	QSignalSpy received(&store, &CloudSyncFileStore::versionedDownloadFinished);
+	QSignalSpy errors(&store, &CloudSyncFileStore::operationError);
+	QSignalSpy otherReceived(&other, &CloudSyncFileStore::versionedDownloadFinished);
+	store.downloadVersioned(CloudSyncProviderType::GoogleDrive, "synthetic", network.manifestName);
+	if (scenario == 8) other.downloadVersioned(CloudSyncProviderType::GoogleDrive, "synthetic", network.manifestName);
+	if (scenario == 13) {
+		QTRY_VERIFY(network.recoveryReply);
+		store.cancel(CloudSyncProviderType::GoogleDrive);
+		QTest::qWait(10);
+		QCOMPARE(received.count() + errors.count(), 0);
+		store.downloadVersioned(CloudSyncProviderType::GoogleDrive, "synthetic", network.manifestName);
+	}
+	if (scenario == 1 || scenario == 2 || scenario == 12) {
+		QTRY_COMPARE(errors.count(), 1);
+		QCOMPARE(received.count(), 0);
+		store.downloadVersioned(CloudSyncProviderType::GoogleDrive, "synthetic", network.manifestName);
+	}
+	if (scenario == 4 || scenario == 5 || scenario == 6 || scenario == 7 || scenario == 14) {
+		QTRY_COMPARE(errors.count(), 1);
+		QCOMPARE(received.count(), 0);
+		QCOMPARE(network.renames, scenario == 4 ? 8 : 0);
+		QCOMPARE(network.files[0].name, network.manifestName);
+		QCOMPARE(network.files[1].name, network.manifestName);
+	} else {
+		QTRY_COMPARE(received.count(), 1);
+		if (scenario == 8) QTRY_COMPARE(otherReceived.count(), 1);
+		QCOMPARE(received[0][2].toByteArray(), first.toJson());
+		QCOMPARE(received[0][4].toString(), canonicalId);
+		int active = 0;
+		for (const auto &file : network.files) if (file.name == network.manifestName) ++active;
+		QCOMPARE(active, 1);
+		QCOMPARE(network.files[1].name, "subsurface-neo-sync-recovered-" + candidateId + ".json");
+		// Renaming must fence a writer which read the candidate before recovery.
+		QSignalSpy conflicts(&store, &CloudSyncFileStore::writeConflict);
+		store.uploadConditional(CloudSyncProviderType::GoogleDrive, "synthetic", network.manifestName,
+			"stale overwrite", candidateVersion, candidateId);
+		QTRY_COMPARE(conflicts.count(), 1);
+	}
+	QCOMPARE(network.files[1].data, scenario == 6 ? QByteArray("invalid") : second.toJson());
+	QCOMPARE(network.content(first.payloadFileName()), QByteArray("first log"));
+	QCOMPARE(network.content(second.payloadFileName()), QByteArray("second log"));
+	QCOMPARE(network.content("unrelated.json"), QByteArray("untouched"));
+}
+
+void TestCloudSyncManager::testGoogleDifferentInitialLog()
+{
+	MemoryCloud network;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "synthetic";
+	manager.tokens.insert("google-drive", token);
+	const QByteArray local = manager.serializeCurrentDiveLog();
+	// Inject another device's first manifest after this device captured an
+	// empty account, but before its first manifest can be committed.
+	bool competingCreated = false;
+	connect(&manager, &CloudSyncManager::uploadFinished, &manager, [&](const QString &, const QString &name) {
+		if (competingCreated || !name.endsWith(".xml")) return;
+		competingCreated = true;
+		auto remote = CloudSyncManifest::forPayload("different log");
+		remote.schemaVersion = 2;
+		remote.payloadFile = "subsurface-neo-" + remote.revisionId + ".xml";
+		network.add(remote.payloadFileName(), "different log");
+		network.add(network.manifestName, remote.toJson());
+	});
+	QSignalSpy conflicts(&manager, &CloudSyncManager::diveLogSyncConflict);
+	QSignalSpy done(&manager, &CloudSyncManager::diveLogBackupFinished);
+	manager.backupDiveLog("google-drive");
+	QTRY_VERIFY(!manager.syncInProgress());
+	QCOMPARE(conflicts.count(), 1);
+	QCOMPARE(done.count(), 0);
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	QVERIFY(manager.lastSyncManifest("google-drive").payloadSha256.isEmpty());
+	// Retry reaches the ordinary initial-choice flow instead of a duplicate
+	// filename error; no provider-console repair or local replacement occurs.
+	QSignalSpy choice(&manager, &CloudSyncManager::diveLogInitialChoiceRequired);
+	manager.syncDiveLog("google-drive");
+	QTRY_VERIFY(!manager.syncInProgress());
+	QCOMPARE(choice.count(), 1);
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
 }
 
 void TestCloudSyncManager::testVersionedRead_data()

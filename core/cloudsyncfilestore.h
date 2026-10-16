@@ -42,17 +42,27 @@ signals:
 	void writeConflict(CloudSyncProviderType provider, const QString &fileName);
 
 private:
+	struct GoogleRecoveryFile { QString id, version; };
 	void trackReply(CloudSyncProviderType provider, QNetworkReply *reply);
 	void googleFindFile(const QString &accessToken, const QString &fileName,
-			    const std::function<void(const QString &)> &continuation);
+			    const std::function<void(const QString &)> &continuation, int recoveryAttempt = 0);
+	void googleRecoverInitialManifests(const QString &accessToken, const QString &fileName,
+		QList<GoogleRecoveryFile> files, int next, int attempt,
+		const std::function<void(const QString &)> &continuation);
+	void googleArchiveInitialManifest(const QString &accessToken, const QString &fileName,
+		const QList<GoogleRecoveryFile> &files, int next, int attempt,
+		const std::function<void(const QString &)> &continuation);
 	void googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data, bool createOnly = false);
 	void googleDownload(const QString &accessToken, const QString &fileName);
 	void dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
 		bool conditional = false, const QString &version = {});
 	void dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned = false);
-	void googleDownloadVersioned(const QString &accessToken, const QString &fileName);
+	void googleDownloadVersioned(const QString &accessToken, const QString &fileName, int attempt = 0);
 	void googleReadVersion(const QString &accessToken, const QString &fileName, const QString &fileId,
-		const std::function<void(const QString &)> &continuation);
+		const std::function<void(const QString &)> &continuation, const std::function<void()> &changed = {});
+	void googleReadFileVersioned(const QString &accessToken, const QString &fileName, const QString &fileId,
+		const std::function<void(const QByteArray &, const QString &)> &continuation,
+		const std::function<void()> &changed = {});
 
 	QNetworkRequest authorizedRequest(const QUrl &url, const QString &accessToken) const;
 	QString replyError(QNetworkReply *reply, const QByteArray &payload) const;

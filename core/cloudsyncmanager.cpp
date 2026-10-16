@@ -187,18 +187,32 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			syncRemoteFileId = fileId;
 			if (syncOperation == SyncOperation::SyncVerifyCommit) {
 				const auto committed = CloudSyncManifest::fromJson(data);
-				if (!committed.isValid() || committed.toJson() != syncUploadManifest.toJson()) {
+				const bool sameInitialGoogleLog = type == CloudSyncProviderType::GoogleDrive &&
+					syncUploadManifest.parentSha256.isEmpty() && committed.payloadSha256 == syncLocalSha256;
+				if (!committed.isValid() || (committed.toJson() != syncUploadManifest.toJson() && !sameInitialGoogleLog)) {
 					fileStore.writeConflict(type, fileName);
 					return;
 				}
+				// Recovery may retain another device's identical initial snapshot.
+				// Persist the canonical revision, not our archived candidate.
+				syncUploadManifest = committed;
 				finishUpload(providerId);
 			} else if (syncOperation == SyncOperation::SyncDownloadManifest) {
 				handleDownloadedManifest(providerId, data);
 			}
 		});
 	connect(&fileStore, &CloudSyncFileStore::writeConflict, this,
-		[this](CloudSyncProviderType type, const QString &) {
+		[this](CloudSyncProviderType type, const QString &fileName) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			if (type == CloudSyncProviderType::GoogleDrive && providerId == syncProviderId &&
+			    fileName == QString::fromLatin1(NEO_MANIFEST_FILENAME) && syncRemoteVersion.isEmpty() &&
+			    (syncOperation == SyncOperation::SyncUploadManifest || syncOperation == SyncOperation::BackupUploadManifest)) {
+				// A competing first upload may become visible before our create.
+				// Compare it through the same recovery/read path as a committed race.
+				syncOperation = SyncOperation::SyncVerifyCommit;
+				downloadSyncManifest(providerId);
+				return;
+			}
 			setError(tr("The cloud log changed during synchronization. Your local log was kept. Sync again to compare the versions."));
 			if (providerId == syncProviderId) {
 				clearSyncOperation();

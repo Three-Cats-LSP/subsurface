@@ -20,7 +20,13 @@ An upload interrupted before manifest publication leaves the previous committed 
 
 Schema 1 remains readable and continues to reference `subsurface-neo.xml`. The first changed upload publishes schema 2 without changing that legacy XML. Upgrade every syncing client before using schema 2: older clients reject the new schema, and older explicit backup implementations can still overwrite a manifest without conditional protection.
 
-Drive allows duplicate filenames and cannot conditionally create a filename. If two devices initialize an empty account simultaneously, duplicate manifests may be created. The post-commit lookup and subsequent reads reject that ambiguity, retaining both payloads for recovery rather than selecting a winner. Automatic consolidation of duplicate initial manifests is not implemented. Dropbox atomically rejects a conflicting first creation.
+Drive allows duplicate filenames and cannot conditionally create a filename. First-time setup now recovers duplicate initial manifests during lookup. Clients sort by provider creation time, then file ID for ties, retaining the earliest file as the active manifest. Every candidate is read with a stable revision before recovery. Only schema 2 candidates with no parent can be archived; invalid manifests or an established competing branch stop recovery without discarding either log.
+
+Each competing initial manifest is renamed to `subsurface-neo-sync-recovered-<Drive file ID>.json` with a v2 metadata PATCH and `If-Match`. Its contents and immutable XML are retained. The rename changes its ETag, fencing writers that captured the old revision. A stale rename triggers a fresh lookup; a final lookup also catches a delayed initial create. Recovery is bounded to eight attempts, and interrupted recovery resumes on the next sync. Reads verify the file title as well as its revision, so a client cannot mistake an archived candidate for the active head. No recovery file is automatically deleted.
+
+Identical initial logs can finish against the surviving manifest and save its actual revision as their baseline. Different logs retain the local copy and use the existing conflict/initial-choice flow. Recovery selects a sync head; it does not merge dive logs. Dropbox continues to atomically reject a conflicting first creation.
+
+The selection assumes the provider returns the current matching files and preserves their server creation times. It does not use device clocks or modification times. Manually changing creation metadata, externally deleting the active manifest, legacy clients that bypass conditional writes, and established divergent branches are outside automatic first-time recovery.
 
 These changes do not include equipment-library, manual-collection, or planner-preset synchronization. Public OAuth approval and physical Android validation remain separate work.
 
@@ -31,3 +37,5 @@ The native regression suite models both providers and covers concurrent writers,
 [Windows build, launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378239), [36 desktop and 33 mobile-target regression tests](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378266), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378290) passed at `ed8a15fd4`.
 
 Provider references: [Google v2 File resource](https://developers.google.com/workspace/drive/api/reference/rest/v2/files), [Google v2 update](https://developers.google.com/workspace/drive/api/reference/rest/v2/files/update), [Dropbox SDK file-write contract](https://dropbox-sdk-python.readthedocs.io/en/latest/api/files.html).
+
+The initial-recovery regression cases additionally cover two recovering clients, identical and different logs, delayed creation, stable ordering and timestamp ties, stale rename rejection, lost acknowledgements, partial recovery/restart, cancellation, invalid candidates, and bounded contention. A live disposable-file probe verified Google v2 metadata PATCH: first rename HTTP 200, stale rename HTTP 412, original contents retained. Windows end-to-end validation of this follow-up is pending.
