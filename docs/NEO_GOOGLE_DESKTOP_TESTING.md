@@ -72,4 +72,27 @@ Checks used the complete dive model and exported canonical XML, including expect
 
 [Windows build, launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378239), [36 desktop and 33 mobile-target regression tests](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378266), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38909378290) passed at `ed8a15fd4`.
 
-See the [commit protocol and compatibility limits](NEO_CLOUD_COMMIT_PROTOCOL.md). All syncing clients must be upgraded for schema 2. Simultaneous first-time Google initialization can create duplicate manifests and is blocked safely pending manual recovery; automated consolidation and snapshot retention policy remain open. Physical Android validation remains deferred at the owner's request.
+See the [commit protocol and compatibility limits](NEO_CLOUD_COMMIT_PROTOCOL.md). All syncing clients must be upgraded for schema 2. First-time Google initialization recovery is covered by the follow-up below; snapshot retention policy remains open. Physical Android validation remains deferred at the owner's request.
+
+## Automatic first-time setup recovery, 2026-10-16
+
+Code `74c9a3f1b` recovers competing initial Google manifests without provider-console repair. The live Windows harness held both clients after XML upload, released first-manifest creation together, then held both after their manifest uploads. Provider reads confirmed two distinct manifest IDs before either client began post-commit verification.
+
+| Windows check | Result |
+| --- | --- |
+| Different initial logs, two recovering clients | One upload completed, one conflict; both local logs retained |
+| Losing client restart and retry | Original local log survived; ordinary initial-choice flow remained available |
+| Explicit cloud choice and separate reader | Both obtained the elected cloud log |
+| Delayed first manifest | Automatically archived; existing active manifest ID retained |
+| Process killed partway through eight-candidate recovery | Restart completed recovery; all candidate contents retained |
+| Identical initial logs | Both completed, one active manifest; both reported up to date after restart |
+| Recovery copies | Original manifest bytes and immutable XML retained; no blanket cleanup |
+| Original disposable cloud | Original manifest and legacy XML restored by exact ID and byte content |
+
+Both identical clients also saved exactly the same canonical baseline. Three subsequent native restarts against an established head each recovered a newly injected initial candidate and remained up to date.
+
+The harness parked only the verified original disposable manifest and legacy XML while exercising an empty namespace. It restored them in cleanup, removed its temporary credential keys, and terminated only its own test processes. Original test credentials and unrelated local files were preserved. Evidence is under `work/google-initial-74c9a3-final/` (untracked); no tokens or OAuth JSON contents are recorded.
+
+[Windows build, launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38917564891) and [native cloud regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38917564862) passed. The regression suite also covers stale rename rejection, failed/lost rename responses, cancellation, incomplete metadata, invalid manifests, established competing branches, timestamp ties, reversed list order, and bounded retries. Recovery is deliberately limited to initial candidates; it does not silently merge dive logs or archive an established divergent branch. Physical Android testing remains deferred.
+
+An earlier live attempt terminated once in `ucrtbase.dll` with `0xc0000409` during the delayed-initial stage. Cleanup restored the original cloud files. This did not reproduce under exception tracing, in the complete untraced rerun, or in three additional native restarts. Its cause remains unidentified and is recorded for Windows stability follow-up; this cloud change is not claimed to fix that abort. A separate harness observation request received Google HTTP 500; the harness now retries transient read-only observation failures. These earlier attempts are retained in `work/google-initial-74c9a3/` and `work/google-initial-74c9a3-retry/`.
