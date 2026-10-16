@@ -24,8 +24,31 @@ At `fcfc5fbf2`, both authorized disposable providers passed ten native Windows s
 
 The real account ID/name/email returned by each provider were compared in memory with the saved Credential Manager fields. Native QML checks confirmed the email label was present, wrapped, and used plain text. Both mismatch stages stopped before file requests, removed the old baseline and assignments, preserved the disposable local dive, and required an explicit retry. All ten stages passed for both providers. The fixed remote manifests and original profile credentials/baselines remained unchanged; the four exact temporary credential entries and temporary proxy overrides were removed. Evidence remains local under `work/account-identity-fcfc5f-google/` and `work/account-identity-fcfc5f-dropbox/`, with no account values or tokens in the result reports.
 
-The mismatch test seeds a synthetic previous account ID into the temporary credential and verifies it against the real account endpoint. It exercises the native mismatch/recovery path without changing the provider account or consent. A subsequent [real provider-grant revocation and reconnection pass](NEO_CLOUD_REVOCATION_TESTING.md) passed for both providers on the same Windows binary. Switching between two different live accounts remains a separate test gate. Physical Android runtime tests remain deferred.
+The mismatch test seeds a synthetic previous account ID into the temporary credential and verifies it against the real account endpoint. It exercises the native mismatch/recovery path without changing the provider account or consent. A subsequent [real provider-grant revocation and reconnection pass](NEO_CLOUD_REVOCATION_TESTING.md) passed for both providers on the same Windows binary. Google then passed the two-real-account test below; switching between two different live Dropbox accounts remains a separate test gate. Physical Android runtime tests remain deferred.
 
 Thirty new native regression cases cover both identity response formats, legacy credentials, same-account label changes, different IDs, new consent/native renewal, token refresh, cancellation/late replies, HTTP 401 with and without refresh, server failures, redirects, malformed/missing IDs, and oversized responses. Existing transaction, simultaneous-writer and interrupted-recovery cases remain in the same suite.
 
-[Windows build, packaged launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358118), [desktop and mobile-target cloud regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358189), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358123) passed. These results do not close the remaining public OAuth, retention, physical-device or two-live-account gates.
+[Windows build, packaged launch, Clean/Modern and lifecycle checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358118), [desktop and mobile-target cloud regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358189), and [planner regression](https://github.com/Three-Cats-LSP/subsurface/actions/runs/38925358123) passed. These results do not close the remaining public OAuth, retention or physical-device gates.
+
+## Two real Google accounts, 2026-10-17
+
+The same `fcfc5fbf2` Windows package passed an A/B/A authorization sequence with two actual Google accounts. The owner completed browser consent; distinct stable account IDs were verified rather than seeded. A new UUID-scoped Neo profile held a copy of account A's authorized credential and the disposable one-dive log. The original profile's credentials, sync state and settings were not modified.
+
+| Native stage | Result |
+| --- | --- |
+| Initialize A | Verified A, downloaded its disposable cloud log and established a primary baseline |
+| Authorize B while connected to A | Detected the changed account, cleared A's baseline, primary assignment and last-sync state; displayed B's verified identity |
+| Restart on B | Retained B's identity with no baseline or assignment; automatic sync enabled but no file operation occurred during the observation period |
+| Authorize A while connected to B | Detected the reverse change and cleared a temporary backup assignment; local dive remained intact |
+| Explicit recovery on A | Downloaded A's existing cloud copy to establish a fresh baseline and primary role |
+| Restart on A | Verified A and returned `up-to-date` |
+| Local Disconnect | Removed the temporary profile's connection and sync state |
+| Restart disconnected | Retained the local dive and stayed disconnected with blank identity and assignments |
+
+Both account changes stopped before file synchronization. The driver also checked that `syncPrimaryIfReady()` returned false with automatic sync enabled after each change. The B restart observed no transfer for 6.5 seconds after identity verification, covering the delayed startup hook. The new identity label was present as plain text. The forward switch used Modern and the reverse switch/recovery used Clean.
+
+Every successful stage exported canonical XML byte-identical to the original disposable dive. B's App Data file inventory, including IDs, modification times, sizes and checksums, was unchanged across its identity/restart checks; no B log content was downloaded. A's original manifest and referenced XML retained their IDs and contents. Both exact temporary Credential Manager entries were absent after cleanup, original credentials and baseline were byte-identical to their pre-test values, and all test processes exited. No cloud upload or remote grant revocation was performed.
+
+This exercises the native OAuth reauthorization entry point while connected, including preservation of the old identity until the new account is verified. The ordinary UI currently uses Disconnect then Connect; this pass did not add a dedicated account-switch button or migrate a log into B's storage. An initial consent selected A again and retained A's baseline; that attempt was excluded from the cross-account results and repeated with B.
+
+Evidence remains local under `work/google-two-accounts-fcfc5f/`, with eight completed stages and `passed: true` in `state.json`. The successful forward-consent evidence is in `switch-b-other-account/`; `switch-b/` retains the initial same-account attempt. The helper is `work/test-google-two-accounts.py`. Reports contain account hashes rather than account labels or tokens. No application fix or new binary was required, so the existing CI results above apply. Two-live-account Dropbox validation, provider account-settings UI, public OAuth provisioning, snapshot retention and deferred physical Android testing remain open.
