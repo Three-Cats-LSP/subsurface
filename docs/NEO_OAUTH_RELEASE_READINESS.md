@@ -27,7 +27,7 @@ Retain App Folder access and exact registered callbacks. The native code uses au
 
 ## Engineering gates before publication
 
-- Finish automatic sync, fresh-profile download/restart, two-profile divergence, disconnect/reconnect, and revoked-token recovery checks on Windows.
+- Windows automatic startup sync and refused-connection recovery passed for both providers; Dropbox foreground sync, fresh-profile download/restart and sequential two-profile conflict resolution also passed. Continue disconnect/reconnect, revoked-token recovery, Google foreground sync and the remaining interrupted-transfer checks. See the provider testing documents for exact build revisions and scope.
 - Implement and test clear connected-account identity. Current `disconnectProvider()` removes local credentials and sync assignments; it does not remotely revoke the provider grant.
 - Address simultaneous remote writers and interrupted payload/manifest writes. Sequential divergence detection is not an atomic transaction or compare-and-swap guarantee.
 - Keep the advertised sync scope accurate: canonical XML and a manifest are synchronized; the separate equipment library, manual collections and planner presets are not.
