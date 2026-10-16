@@ -18,6 +18,8 @@ An upload interrupted before manifest publication leaves the previous committed 
 
 ## Migration and limits
 
+The [experimental coordinated history workflow](NEO_CLOUD_HISTORY.md) adds a separate development-gated schema 3 namespace with copy migration, explicit saves and restore. It preserves this schema 1/2 namespace and does not change automatic synchronization. Its tickets and restore reservations prepare the coordination model; production authority/migration handling and deletion remain disabled or pending.
+
 Schema 1 remains readable and continues to reference `subsurface-neo.xml`. The first changed upload publishes schema 2 without changing that legacy XML. Upgrade every syncing client before using schema 2: older clients reject the new schema, and older explicit backup implementations can still overwrite a manifest without conditional protection.
 
 Drive allows duplicate filenames and cannot conditionally create a filename. First-time setup now recovers duplicate initial manifests during lookup. Clients sort by provider creation time, then file ID for ties, retaining the earliest file as the active manifest. Every candidate is read with a stable revision before recovery. Only schema 2 candidates with no parent can be archived; invalid manifests or an established competing branch stop recovery without discarding either log.

@@ -1,6 +1,6 @@
 # Cloud snapshot retention and cleanup design
 
-Design and read-only Windows audit, 2026-10-17. [Native storage review](NEO_CLOUD_STORAGE_REVIEW.md) is now implemented and validated in Windows Clean and Modern at `ebaf24069`. The application still uses the [schema 2 commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md); this document does not enable deletion, migrate a cloud log, or implement a new manifest schema. Milestone 13 remains in progress. Physical Android validation and two-live-account Dropbox testing remain deferred.
+Design and read-only Windows audit, 2026-10-17. [Native storage review](NEO_CLOUD_STORAGE_REVIEW.md) is implemented and Windows-validated at `ebaf24069`; [experimental coordinated history](NEO_CLOUD_HISTORY.md) is implemented and Windows-validated at `9c3d3dcf0`. Normal synchronization still uses the [schema 2 commit protocol](NEO_CLOUD_COMMIT_PROTOCOL.md). The separate development history copies data without migrating ordinary sync or enabling deletion. Milestone 13 remains in progress. Physical Android validation and two-live-account Dropbox testing remain deferred.
 
 ## Decision for existing logs
 
@@ -94,7 +94,7 @@ The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is
 ## Implementation and validation sequence
 
 1. **Complete at `ebaf24069`:** native read-only storage review and a pure classification component. Regression coverage includes complete/paginated listings, shared references, malformed/unknown manifests, duplicate names/IDs, account change, cancellation and preserving original data. Both providers passed review in Windows Clean and Modern against disposable accounts, plus cancellation/retry. See [implementation and evidence](NEO_CLOUD_STORAGE_REVIEW.md).
-2. Implement the coordinated format behind an opt-in development gate, with migration, history/restore, upload tickets and reader reservations. Preserve schema 1/2 reads and current local conflict behavior. Do not add deletion yet.
+2. **Development increment implemented:** the [experimental history workflow](NEO_CLOUD_HISTORY.md) adds a gated schema 3 namespace, schema 1/2 copy migration, explicit history saves/restores, registered upload tickets and restore reservations. Existing sync remains unchanged. Authoritative root convergence, legacy-branch resolution, durable authority selection and coordinated automatic-sync migration remain required before this becomes a production format. Do not add deletion yet.
 3. Test conditional deletion on uniquely created disposable provider objects, including stale revisions and lost replies. Then implement retirement preview, durable state and bounded deletion batches. Enable opt-in cleanup only after the matrix below passes on the exact Windows build. Physical Android remains a separate gate; do not imply it has been covered by Windows results.
 
 | Required adversarial test | Required outcome |
@@ -112,4 +112,4 @@ The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is
 | Age/count boundary, clock skew or lost time evidence | Latest 20 and entire 30-day window retained; uncertainty extends retention |
 | Quota exhaustion or safety-metadata limit | Clear error and intact local/remote log; no emergency sweep |
 
-Retention design and native read-only storage review are complete. The coordinated format, migration/restore, provider deletion probes and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.
+Retention design and native read-only storage review are complete. Experimental coordinated history and restore are now available behind the development gate. Production migration/authority handling, provider deletion probes and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.
