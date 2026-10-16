@@ -389,6 +389,7 @@ Kirigami.ScrollablePage {
 
 					ColumnLayout {
 						visible: CloudSync.historyEnabled && modelData.connected
+						objectName: "historySection-" + modelData.id
 						Layout.fillWidth: true
 						spacing: tokens.space8
 						Text {
@@ -443,6 +444,7 @@ Kirigami.ScrollablePage {
 									color: tokens.textPrimary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
 								}
 								Components.NeoButton {
+									objectName: "restoreHistory-" + modelData.id
 									text: qsTr("Restore"); compact: true
 									enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 									onClicked: {
@@ -509,7 +511,7 @@ Kirigami.ScrollablePage {
 		footer: RowLayout {
 			Item { Layout.fillWidth: true }
 			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyRestoreDialog.close() }
-			Components.NeoButton { text: qsTr("Restore"); onClicked: { CloudSync.runHistory(page.historyProvider, "restore", page.historyRevision); historyRestoreDialog.close() } }
+			Components.NeoButton { objectName: "confirmHistoryRestore"; text: qsTr("Restore"); onClicked: { CloudSync.runHistory(page.historyProvider, "restore", page.historyRevision); historyRestoreDialog.close() } }
 		}
 	}
 

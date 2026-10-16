@@ -112,6 +112,7 @@ bool CloudHistoryRecord::valid() const
 		if (!source.isEmpty()) {
 			const auto r = reservations.value(reservation).toObject();
 			if (!committed.contains(source) || source == it.key() || string(r, "commit") != source ||
+			    t.value("sha256") != ticket(source).value("sha256") || t.value("bytes") != ticket(source).value("bytes") ||
 			    (state != "committed" && !r.value("active").toBool())) return false;
 		}
 	}

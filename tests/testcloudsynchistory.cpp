@@ -88,6 +88,12 @@ protected:
 		if (write) {
 			++mutations; allowed &= name.startsWith("subsurface-neo-history-");
 			const bool root = name.endsWith(".json");
+			if (!root) {
+				const QString epoch = name.mid(23, 36), ticket = name.mid(60, 36);
+				const auto registered = CloudHistoryRecord::parse(content(CloudHistoryRecord::rootName(epoch))).ticket(ticket);
+				allowed &= registered.value("state").toString() == "registered" && registered.value("name").toString() == name &&
+					registered.value("sha256").toString() == CloudSyncManifest::sha256(data);
+			}
 			const auto candidate = CloudHistoryRecord::parse(data);
 			const bool publish = root && candidate.valid() && !candidate.head().isEmpty() &&
 				(index < 0 || candidate.head() != CloudHistoryRecord::parse(files[index].data).head());
@@ -233,5 +239,33 @@ void TestCloudSyncHistory::concurrentInitialization()
 	QTRY_COMPARE(ad.size() + bd.size() + ae.size() + be.size(), 2);
 	QVERIFY(ad.size() + bd.size() <= 1); QCOMPARE(n.content(Legacy), before); QVERIFY(n.allowed);
 	if (google) { QCOMPARE(ad.size() + bd.size(), 0); QCOMPARE(ae.size() + be.size(), 2); }
+}
+void TestCloudSyncHistory::restoreRejection_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("fault");
+	for (bool g : {false, true}) for (int f = 0; f < 7; ++f) QTest::newRow(qPrintable(QString("%1-restore%2").arg(g).arg(f))) << g << f;
+}
+void TestCloudSyncHistory::restoreRejection()
+{
+	QFETCH(bool, google); QFETCH(int, fault); Network n; n.seed(); const auto epoch = uid();
+	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), error(&client, &CloudSyncHistory::failed);
+	client.start(provider, "token", Account, epoch, "migrate", {}, A, [&] { return n.guard; }); QTRY_COMPARE(done.size(), 1);
+	const auto rootName = CloudHistoryRecord::rootName(epoch);
+	auto record = CloudHistoryRecord::parse(n.content(rootName)); const auto id = record.head();
+	const auto snapshotName = record.ticket(id).value("name").toString();
+	const auto originalLegacy = n.content(Legacy);
+	if (fault == 0) n.files[n.find(snapshotName)].data = "<divelog>truncated";
+	if (fault == 1) n.files[n.find(snapshotName)].rev += "changed";
+	if (fault == 2) { record.value["account"] = CloudSyncManifest::sha256("other-account"); n.files[n.find(rootName)].data = record.json(); }
+	if (fault == 3) { record.value["unknown_safety_metadata"] = true; n.files[n.find(rootName)].data = record.json(); }
+	if (fault == 4) n.wrote = [&](const QString &) { n.guard = false; }; // Local edit while acquiring the reservation.
+	if (fault == 5) { n.files[n.find(snapshotName)].name = "preserved-but-renamed.xml"; }
+	if (fault == 6) { record.value["epoch"] = uid(); n.files[n.find(rootName)].data = record.json(); }
+	client.start(provider, "token", Account, epoch, "restore", id, A, [&] { return n.guard; });
+	QTRY_COMPARE(error.size(), 1); QCOMPARE(done.size(), 1); QCOMPARE(n.content(Legacy), originalLegacy);
+	const auto after = QJsonDocument::fromJson(n.content(rootName)).object();
+	QCOMPARE(after.value("head").toString(), id); QCOMPARE(after.value("history").toArray().size(), 1);
+	QVERIFY(n.allowed);
 }
 QTEST_GUILESS_MAIN(TestCloudSyncHistory)

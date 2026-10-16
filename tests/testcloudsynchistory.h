@@ -14,5 +14,7 @@ private slots:
 	void interruption();
 	void concurrentInitialization_data();
 	void concurrentInitialization();
+	void restoreRejection_data();
+	void restoreRejection();
 };
 #endif
