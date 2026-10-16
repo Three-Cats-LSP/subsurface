@@ -29,7 +29,8 @@ public:
 signals:
 	void uploadFinished(CloudSyncProviderType provider, const QString &fileName);
 	void downloadFinished(CloudSyncProviderType provider, const QString &fileName, const QByteArray &data);
-	void operationError(CloudSyncProviderType provider, const QString &fileName, const QString &message);
+	void operationError(CloudSyncProviderType provider, const QString &fileName, const QString &message,
+			    bool tokenRejected = false);
 	void fileNotFound(CloudSyncProviderType provider, const QString &fileName);
 
 private:

@@ -146,7 +146,8 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 		const QString error = ok ? QString() : replyError(reply, payload);
 		reply->deleteLater();
 		if (!ok) {
-			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error);
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error,
+				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 			return;
 		}
 		QJsonParseError parseError;
@@ -211,7 +212,8 @@ void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString 
 			if (ok)
 				emit uploadFinished(CloudSyncProviderType::GoogleDrive, fileName);
 			else
-				emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error);
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error,
+					reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 		});
 	});
 }
@@ -237,7 +239,8 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 			if (ok)
 				emit downloadFinished(CloudSyncProviderType::GoogleDrive, fileName, payload);
 			else
-				emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error);
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName, error,
+					reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 		});
 	});
 }
@@ -262,7 +265,8 @@ void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString
 		if (ok)
 			emit uploadFinished(CloudSyncProviderType::Dropbox, fileName);
 		else
-			emit operationError(CloudSyncProviderType::Dropbox, fileName, error);
+			emit operationError(CloudSyncProviderType::Dropbox, fileName, error,
+				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 	});
 }
 
@@ -286,6 +290,7 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 		else if (missing)
 			emit fileNotFound(CloudSyncProviderType::Dropbox, fileName);
 		else
-			emit operationError(CloudSyncProviderType::Dropbox, fileName, error);
+			emit operationError(CloudSyncProviderType::Dropbox, fileName, error,
+				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401);
 	});
 }

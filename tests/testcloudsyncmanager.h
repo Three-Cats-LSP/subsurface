@@ -24,6 +24,8 @@ private slots:
 	void testNetworkFailureAllowsRetry();
 	void testRefreshFailure_data();
 	void testRefreshFailure();
+	void testAccessTokenRejected_data();
+	void testAccessTokenRejected();
 	void testDisconnectCancelsRefresh();
 	void testDisconnectCancelsAuthorization();
 	void testDisconnectCancelsFileRequests_data();

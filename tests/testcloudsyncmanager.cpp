@@ -459,6 +459,69 @@ void TestCloudSyncManager::testRefreshFailure()
 	QCOMPARE(browser.count(), 0);
 }
 
+void TestCloudSyncManager::testAccessTokenRejected_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<bool>("refreshable");
+	QTest::addColumn<bool>("upload");
+	QTest::newRow("dropbox refreshable") << QString("dropbox") << true << false;
+	QTest::newRow("dropbox upload refreshable") << QString("dropbox") << true << true;
+	QTest::newRow("dropbox no refresh") << QString("dropbox") << false << false;
+	QTest::newRow("google refreshable") << QString("google-drive") << true << false;
+	QTest::newRow("google upload refreshable") << QString("google-drive") << true << true;
+	QTest::newRow("google no refresh") << QString("google-drive") << false << false;
+}
+
+void TestCloudSyncManager::testAccessTokenRejected()
+{
+	QFETCH(QString, providerId);
+	QFETCH(bool, refreshable);
+	QFETCH(bool, upload);
+	FakeNetwork network;
+	network.status = 401;
+	network.body = R"({"error_summary":"invalid_access_token"})";
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "rejected-token";
+	token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600);
+	if (refreshable)
+		token.refreshToken = "test-refresh";
+	manager.tokens.insert(providerId, token);
+	manager.setPrimaryProvider(providerId);
+	const QByteArray original = manager.serializeCurrentDiveLog();
+	if (upload)
+		manager.backupDiveLog(providerId);
+	else
+		manager.syncDiveLog(providerId);
+	QTRY_VERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.tokens.value(providerId).hasAccessToken());
+	QCOMPARE(manager.tokens.value(providerId).canRefresh(), refreshable);
+	QCOMPARE(manager.primaryProviderId(), refreshable ? providerId : QString());
+	QCOMPARE(manager.serializeCurrentDiveLog(), original);
+	QCOMPARE(network.requests, 1);
+	// Dropbox needs no external desktop client JSON. Complete a real manager
+	// refresh + manifest sequence to prove retry uses the new access token.
+	if (refreshable && providerId == "dropbox") {
+		network.deferred = true;
+		network.status = 200;
+		network.body = R"({"access_token":"renewed-token","expires_in":3600})";
+		QSignalSpy success(&manager, &CloudSyncManager::diveLogSyncFinished);
+		manager.syncDiveLog(providerId);
+		QCOMPARE(network.requests, 2);
+		QUrlQuery form(QString::fromUtf8(network.posted));
+		QCOMPARE(form.queryItemValue("grant_type"), QString("refresh_token"));
+		network.body = CloudSyncManifest::forPayload(original).toJson();
+		network.lastReply->complete();
+		QCOMPARE(network.requests, 3);
+		QCOMPARE(network.lastReply->request().rawHeader("Authorization"), QByteArray("Bearer renewed-token"));
+		network.lastReply->complete();
+		QVERIFY(!manager.syncInProgress());
+		QCOMPARE(success.count(), 1);
+		QCOMPARE(success.at(0).at(1).toString(), QString("up-to-date"));
+		QCOMPARE(manager.serializeCurrentDiveLog(), original);
+	}
+}
+
 void TestCloudSyncManager::testDisconnectCancelsRefresh()
 {
 	FakeNetwork network;

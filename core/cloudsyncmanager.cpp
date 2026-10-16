@@ -206,9 +206,27 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 				clearSyncOperation();
 		});
 	connect(&fileStore, &CloudSyncFileStore::operationError, this,
-		[this](CloudSyncProviderType type, const QString &, const QString &message) {
+		[this](CloudSyncProviderType type, const QString &, const QString &message, bool tokenRejected) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
-			setError(message);
+			if (tokenRejected) {
+				OAuth2TokenSet current = tokens.value(providerId);
+				if (current.canRefresh()) {
+					// The provider's expiry wins over our local clock. Keep the
+					// refresh grant so the next explicit/lifecycle sync can renew it.
+					current.accessToken.clear();
+					tokens.insert(providerId, current);
+					CloudCredentialStore::save(providerId, serializeTokens(current));
+					emit providersChanged();
+					setError(tr("%1 rejected the access token. Sync again to renew authorization.")
+						.arg(cloudSyncProviderDescriptor(type).displayName));
+				} else {
+					disconnectProvider(providerId);
+					setError(tr("%1 authorization expired or was revoked. Please connect it again.")
+						.arg(cloudSyncProviderDescriptor(type).displayName));
+				}
+			} else {
+				setError(message);
+			}
 			if (providerId == syncProviderId)
 				clearSyncOperation();
 		});
