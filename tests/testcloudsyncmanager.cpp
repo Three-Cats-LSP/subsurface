@@ -59,11 +59,27 @@ private:
 	qint64 offset = 0;
 };
 
+bool isAccountRequest(const QNetworkRequest &request)
+{
+	return request.url().path() == "/drive/v3/about" || request.url().path() == "/2/users/get_current_account";
+}
+
+QByteArray accountResponse(const QString &id = "test-account", const QString &email = "test@example.invalid")
+{
+	return QJsonDocument(QJsonObject{{"account_id", id}, {"email", email}, {"name", QJsonObject{{"display_name", "Test Diver"}}},
+		{"user", QJsonObject{{"permissionId", id}, {"displayName", "Test Diver"}, {"emailAddress", email}}}}).toJson();
+}
+
 class FakeNetwork : public QNetworkAccessManager {
 public:
 	QByteArray body;
 	int status = 200;
-	int requests = 0;
+	int requests = 0; // File/token requests, counted separately from identity.
+	int accountRequests = 0;
+	QByteArray accountBody = accountResponse();
+	int accountStatus = 200;
+	bool accountDeferred = false;
+	FakeReply *lastAccountReply = nullptr;
 	int timeout = 0;
 	QByteArray posted;
 	bool deferred = false;
@@ -71,6 +87,11 @@ public:
 protected:
 	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *outgoing) override
 	{
+		if (isAccountRequest(request)) {
+			++accountRequests;
+			lastAccountReply = new FakeReply(request, accountBody, accountStatus, this, accountDeferred);
+			return lastAccountReply;
+		}
 		++requests;
 		posted = outgoing ? outgoing->readAll() : QByteArray();
 		timeout = request.transferTimeout();
@@ -109,6 +130,8 @@ public:
 	QByteArray content(const QString &name) const { const int i = byName(name); return i < 0 ? QByteArray() : files[i].data; }
 protected:
 	QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *outgoing) override {
+		if (isAccountRequest(request))
+			return new FakeReply(request, accountResponse(), 200, this);
 		const QByteArray sent = outgoing ? outgoing->readAll() : QByteArray();
 		const auto url = request.url();
 		const bool google = url.host() == "www.googleapis.com";
@@ -644,7 +667,7 @@ void TestCloudSyncManager::testAccessTokenRejected()
 		QCOMPARE(form.queryItemValue("grant_type"), QString("refresh_token"));
 		network.body = CloudSyncManifest::forPayload(original).toJson();
 		network.lastReply->complete();
-		QCOMPARE(network.requests, 3);
+		QTRY_COMPARE(network.requests, 3);
 		QCOMPARE(network.lastReply->request().rawHeader("Authorization"), QByteArray("Bearer renewed-token"));
 		network.lastReply->complete();
 		QVERIFY(!manager.syncInProgress());
@@ -731,6 +754,7 @@ void TestCloudSyncManager::testDisconnectCancelsFileRequests()
 	else
 		manager.syncDiveLog(providerId);
 	QVERIFY(manager.syncInProgress());
+	QTRY_COMPARE(network.requests, 1);
 	FakeReply *lateReply = network.lastReply;
 	manager.disconnectProvider(providerId);
 	lateReply->complete();
@@ -1139,6 +1163,192 @@ void TestCloudSyncManager::testVersionedRead()
 		QCOMPARE(received[0][2].toByteArray(), QByteArray("known manifest"));
 		QCOMPARE(received[0][3].toString(), network.files[0].version);
 	}
+}
+
+void TestCloudSyncManager::testAccountIdentity_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<int>("mode");
+	for (const auto &provider : {QString("google-drive"), QString("dropbox")})
+		for (int mode = 0; mode < 7; ++mode)
+			QTest::newRow(qPrintable(provider + QString::number(mode))) << provider << mode;
+}
+
+void TestCloudSyncManager::testAccountIdentity()
+{
+	QFETCH(QString, providerId);
+	QFETCH(int, mode); // Legacy, rename, changed, new consent, unknown old consent, native consent, native renewal
+	FakeNetwork network;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	token.refreshToken = "test-refresh";
+	if (mode != 0 && mode != 4) token.accountId = mode >= 2 ? "previous-account" : "test-account";
+	token.accountEmail = "previous@example.invalid";
+	manager.tokens.insert(providerId, token);
+	manager.setPrimaryProvider(providerId);
+	manager.setAutoSyncEnabled(true);
+	const QByteArray local = manager.serializeCurrentDiveLog();
+	manager.saveLastSyncManifest(providerId, CloudSyncManifest::forPayload(local));
+	const auto saved = CloudCredentialStore::load(manager.syncStateCredentialKey(providerId));
+	QSettings().setValue("subsurface-neo/cloud/last-sync/" + providerId, "previous-sync");
+	QSignalSpy changed(&manager, &CloudSyncManager::providerAccountChanged);
+	QSignalSpy connected(&manager, &CloudSyncManager::providerConnected);
+	if (mode == 5 || mode == 6) {
+		if (mode == 5) manager.activeProviderId = providerId;
+		else {
+			manager.refreshProviderId = providerId;
+			manager.pendingTokenContinuation = [](const QString &) { QFAIL("Changed native account must not continue sync"); };
+		}
+		manager.acceptNativeAccessToken(providerId, "native-token");
+	} else if (mode == 3 || mode == 4) {
+		manager.activeProviderId = providerId;
+		OAuth2TokenSet next;
+		next.accessToken = "new-consent-token";
+		next.refreshToken = "new-consent-refresh";
+		manager.tokenClient.tokenReceived(next);
+	} else {
+		manager.checkAccount(providerId);
+	}
+	QVERIFY(manager.accountCheckInProgress());
+	QTRY_VERIFY(!manager.accountCheckInProgress());
+	const auto current = manager.tokens.value(providerId);
+	QCOMPARE(current.accountId, QString("test-account"));
+	QCOMPARE(current.accountEmail, QString("test@example.invalid"));
+	QCOMPARE(current.accountName, QString("Test Diver"));
+	QCOMPARE(manager.verifiedAccountTokens.value(providerId), current.accessToken);
+	QCOMPARE(network.accountRequests, 1);
+	QCOMPARE(network.requests, 0); // Identity checks never read or write cloud files.
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	QCOMPARE(changed.count(), mode == 2 || mode == 3 || mode == 5 || mode == 6 ? 1 : 0);
+	QCOMPARE(connected.count(), mode == 4 ? 1 : 0);
+	const bool reset = mode >= 2;
+	QCOMPARE(manager.primaryProviderId(), reset ? QString() : providerId);
+	QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(providerId)), reset ? QByteArray() : saved);
+	QCOMPARE(QSettings().value("subsurface-neo/cloud/last-sync/" + providerId).toString(), reset ? QString() : QString("previous-sync"));
+	if (reset) QVERIFY(!manager.syncPrimaryIfReady());
+	for (const auto &item : manager.providers()) {
+		const auto row = item.toMap();
+		if (row.value("id").toString() != providerId) continue;
+		QCOMPARE(row.value("accountEmail").toString(), current.accountEmail);
+		QVERIFY(row.value("accountVerified").toBool());
+	}
+#if defined(Q_OS_WIN)
+	CloudSyncManager restored(&network);
+	QCOMPARE(restored.tokens.value(providerId).accountId, current.accountId);
+	QCOMPARE(restored.tokens.value(providerId).accountEmail, current.accountEmail);
+	QVERIFY(restored.verifiedAccountTokens.isEmpty()); // Restart checks the credential again.
+#endif
+	manager.disconnectProvider(providerId);
+	QVERIFY(!manager.tokens.contains(providerId));
+	QVERIFY(!manager.verifiedAccountTokens.contains(providerId));
+	QVERIFY(CloudCredentialStore::load(providerId).isEmpty());
+}
+
+void TestCloudSyncManager::testAccountLookupFailure_data()
+{
+	QTest::addColumn<QString>("providerId");
+	QTest::addColumn<int>("failure");
+	for (const auto &provider : {QString("google-drive"), QString("dropbox")})
+		for (int failure = 0; failure < 7; ++failure)
+			QTest::newRow(qPrintable(provider + QString::number(failure))) << provider << failure;
+}
+
+void TestCloudSyncManager::testAccountLookupFailure()
+{
+	QFETCH(QString, providerId);
+	QFETCH(int, failure);
+	FakeNetwork network;
+	network.accountStatus = failure == 0 ? 503 : failure == 1 || failure == 2 ? 401 : failure == 5 ? 302 : 200;
+	if (failure == 3) network.accountBody = "malformed";
+	if (failure == 4) network.accountBody = R"({"email":"no-id@example.invalid"})";
+	if (failure == 6) network.accountBody = QByteArray(65537, ' ');
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	token.accountId = "test-account";
+	if (failure != 2) token.refreshToken = "test-refresh";
+	manager.tokens.insert(providerId, token);
+	manager.setPrimaryProvider(providerId);
+	const QByteArray local = manager.serializeCurrentDiveLog();
+	manager.saveLastSyncManifest(providerId, CloudSyncManifest::forPayload(local));
+	const auto baseline = CloudCredentialStore::load(manager.syncStateCredentialKey(providerId));
+	manager.backupDiveLog(providerId); // Even explicit backup stops before touching files.
+	QVERIFY(manager.syncInProgress());
+	QTRY_VERIFY(!manager.syncInProgress());
+	QVERIFY(!manager.accountCheckInProgress());
+	QVERIFY(!manager.lastError().isEmpty());
+	QCOMPARE(network.requests, 0);
+	QCOMPARE(network.accountRequests, 1);
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	QVERIFY(manager.verifiedAccountTokens.isEmpty());
+	QCOMPARE(manager.primaryProviderId(), failure == 2 ? QString() : providerId);
+	QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(providerId)), failure == 2 ? QByteArray() : baseline);
+	if (failure == 1 || failure == 2) {
+		QVERIFY(!manager.tokens.value(providerId).hasAccessToken());
+		QCOMPARE(manager.tokens.value(providerId).canRefresh(), failure == 1);
+	} else {
+		QCOMPARE(manager.tokens.value(providerId).accessToken, token.accessToken);
+		network.accountStatus = 200;
+		network.accountBody = accountResponse();
+		manager.checkAccount(providerId);
+		QTRY_VERIFY(!manager.accountCheckInProgress());
+		QVERIFY(manager.lastError().isEmpty());
+		QCOMPARE(manager.verifiedAccountTokens.value(providerId), token.accessToken);
+	}
+}
+
+void TestCloudSyncManager::testAccountLookupCancellation()
+{
+	FakeNetwork network;
+	network.accountDeferred = true;
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.accessToken = "test-token";
+	manager.tokens.insert("dropbox", token);
+	manager.syncDiveLog("dropbox");
+	QVERIFY(manager.accountCheckInProgress());
+	QVERIFY(manager.syncInProgress());
+	FakeReply *late = network.lastAccountReply;
+	QCOMPARE(late->request().transferTimeout(), 30000);
+	QCOMPARE(late->request().attribute(QNetworkRequest::RedirectPolicyAttribute).toInt(), int(QNetworkRequest::ManualRedirectPolicy));
+	manager.beginAuthorization("dropbox");
+	QVERIFY(!manager.authorizationInProgress());
+	manager.disconnectProvider("dropbox");
+	late->complete();
+	QVERIFY(!manager.accountCheckInProgress());
+	QVERIFY(!manager.syncInProgress());
+	QCOMPARE(network.requests, 0);
+	QVERIFY(manager.tokens.isEmpty());
+	QVERIFY(CloudCredentialStore::load("dropbox").isEmpty());
+}
+
+void TestCloudSyncManager::testAccountChangeDuringRefresh()
+{
+	FakeNetwork network;
+	network.body = R"({"access_token":"renewed-token","expires_in":3600})";
+	CloudSyncManager manager(&network);
+	OAuth2TokenSet token;
+	token.refreshToken = "test-refresh";
+	token.accountId = "previous-account";
+	manager.tokens.insert("dropbox", token);
+	manager.setBackupProvider("dropbox");
+	const QByteArray local = manager.serializeCurrentDiveLog();
+	manager.syncDiveLog("dropbox");
+	QTRY_VERIFY(!manager.syncInProgress());
+	QCOMPARE(network.requests, 1); // Refresh only; no file requests after the mismatch.
+	QCOMPARE(network.accountRequests, 1);
+	QVERIFY(manager.backupProviderId().isEmpty());
+	QVERIFY(manager.lastError().contains("account changed"));
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
+	QCOMPARE(manager.tokens.value("dropbox").accountId, QString("test-account"));
+	// An explicit retry can now compare the new account, with no old baseline.
+	network.body = CloudSyncManifest::forPayload("different cloud log").toJson();
+	QSignalSpy choice(&manager, &CloudSyncManager::diveLogInitialChoiceRequired);
+	manager.syncDiveLog("dropbox");
+	QTRY_COMPARE(choice.count(), 1);
+	QCOMPARE(network.accountRequests, 1); // Same verified access token reused.
+	QCOMPARE(manager.serializeCurrentDiveLog(), local);
 }
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)

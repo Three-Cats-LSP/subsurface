@@ -12,6 +12,12 @@ private:
 	std::string previousSettingsSuffix;
 private slots:
 	void init();
+	void testAccountIdentity_data();
+	void testAccountIdentity();
+	void testAccountLookupFailure_data();
+	void testAccountLookupFailure();
+	void testAccountLookupCancellation();
+	void testAccountChangeDuringRefresh();
 	void cleanup();
 	void testFileLookup_data();
 	void testFileLookup();

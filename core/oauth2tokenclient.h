@@ -17,6 +17,10 @@ struct OAuth2TokenSet {
 	QString refreshToken;
 	QString tokenType;
 	QString scope;
+	// Provider identity is stored with the credential, never in sync manifests.
+	QString accountId;
+	QString accountName;
+	QString accountEmail;
 	QDateTime expiresAt;
 
 	bool hasAccessToken() const { return !accessToken.isEmpty(); }

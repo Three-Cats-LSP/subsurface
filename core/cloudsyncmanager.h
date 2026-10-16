@@ -18,12 +18,14 @@
 
 class QNetworkAccessManager;
 class QTcpServer;
+class QNetworkReply;
 class QTcpSocket;
 
 class CloudSyncManager : public QObject {
 	Q_OBJECT
 	Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
 	Q_PROPERTY(bool authorizationInProgress READ authorizationInProgress NOTIFY authorizationInProgressChanged)
+	Q_PROPERTY(bool accountCheckInProgress READ accountCheckInProgress NOTIFY providersChanged)
 	Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 	Q_PROPERTY(QString primaryProviderId READ primaryProviderId NOTIFY providerAssignmentsChanged)
@@ -35,6 +37,7 @@ public:
 
 	QVariantList providers() const;
 	bool authorizationInProgress() const { return !activeProviderId.isEmpty(); }
+	bool accountCheckInProgress() const { return !accountProviderId.isEmpty(); }
 	bool syncInProgress() const { return !syncProviderId.isEmpty(); }
 	QString lastError() const { return errorText; }
 	QString primaryProviderId() const;
@@ -43,6 +46,7 @@ public:
 
 	Q_INVOKABLE void beginAuthorization(const QString &providerId);
 	Q_INVOKABLE void handleAuthorizationRedirect(const QUrl &url);
+	Q_INVOKABLE void checkAccount(const QString &providerId);
 	Q_INVOKABLE void disconnectProvider(const QString &providerId);
 	Q_INVOKABLE void uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data);
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
@@ -66,6 +70,7 @@ signals:
 	void authorizationUrlOpened(const QUrl &url);
 	void providerConnected(const QString &providerId);
 	void providerDisconnected(const QString &providerId);
+	void providerAccountChanged(const QString &providerId);
 	void uploadFinished(const QString &providerId, const QString &fileName);
 	void downloadFinished(const QString &providerId, const QString &fileName, const QByteArray &data);
 	void diveLogBackupFinished(const QString &providerId);
@@ -90,6 +95,11 @@ private:
 	const CloudSyncProviderDescriptor *descriptorForId(const QString &providerId) const;
 	QString configuredClientId(const CloudSyncProviderDescriptor &provider) const;
 	void setError(const QString &message);
+	void storeUpdatedTokens(const QString &providerId, OAuth2TokenSet updated);
+	bool resetAccountSyncState(const QString &providerId);
+	void cancelAccountCheck();
+	void verifyAccountThen(const QString &providerId, const QString &accessToken,
+		const std::function<void(const QString &)> &continuation);
 	void acceptNativeAccessToken(const QString &providerId, const QString &accessToken);
 	void requestAndroidGoogleAccessToken();
 	void clearAuthorization();
@@ -120,6 +130,9 @@ private:
 	OAuth2TokenClient tokenClient;
 	CloudSyncFileStore fileStore;
 	QHash<QString, OAuth2TokenSet> tokens;
+	QHash<QString, QString> verifiedAccountTokens;
+	QPointer<QNetworkReply> accountReply;
+	QString accountProviderId;
 	QString activeProviderId;
 	QString activeClientId;
 	bool codeExchangeInProgress = false;

@@ -36,6 +36,7 @@ Kirigami.ScrollablePage {
 
 	Connections {
 		target: CloudSync
+		function onProviderAccountChanged(providerId) { onProviderDisconnected(providerId) }
 		function onProviderDisconnected(providerId) {
 			if (page.lastSyncProvider === providerId) page.lastSyncProvider = ""
 			if (page.lastBackupProvider === providerId) page.lastBackupProvider = ""
@@ -140,6 +141,24 @@ Kirigami.ScrollablePage {
 								font.pixelSize: 14
 							}
 							Text {
+								visible: modelData.connected
+								text: modelData.checkingAccount ? qsTr("Checking account…") :
+									modelData.accountEmail || modelData.accountName || (modelData.accountVerified ? qsTr("Account verified") : qsTr("Account not checked yet"))
+								textFormat: Text.PlainText
+								color: tokens.textSecondary
+								font.pixelSize: 14
+								wrapMode: Text.WrapAnywhere
+								Layout.fillWidth: true
+							}
+							Text {
+								visible: modelData.connected && !modelData.accountVerified && !modelData.checkingAccount && (modelData.accountEmail.length > 0 || modelData.accountName.length > 0)
+								text: qsTr("Last connected account. Checked again before syncing.")
+								color: tokens.textMuted
+								font.pixelSize: 12
+								wrapMode: Text.WordWrap
+								Layout.fillWidth: true
+							}
+							Text {
 								visible: modelData.primary || modelData.backup
 								text: modelData.primary ? qsTr("Primary sync provider") : qsTr("Backup provider")
 								color: tokens.accent
@@ -197,7 +216,7 @@ Kirigami.ScrollablePage {
 							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Keep this device")
 							variant: "primary"; compact: true
-							enabled: !CloudSync.syncInProgress
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: {
 								page.conflictProvider = ""
 								page.initialChoiceProvider = ""
@@ -208,7 +227,7 @@ Kirigami.ScrollablePage {
 							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Use cloud copy")
 							compact: true
-							enabled: !CloudSync.syncInProgress
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: {
 								page.conflictProvider = ""
 								page.initialChoiceProvider = ""
@@ -223,13 +242,13 @@ Kirigami.ScrollablePage {
 						Components.NeoButton {
 							text: modelData.primary ? qsTr("Primary") : qsTr("Set primary")
 							compact: true; variant: modelData.primary ? "primary" : "secondary"
-							enabled: !CloudSync.syncInProgress
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: CloudSync.setPrimaryProvider(modelData.primary ? "" : modelData.id)
 						}
 						Components.NeoButton {
 							text: modelData.backup ? qsTr("Backup") : qsTr("Set backup")
 							compact: true; variant: modelData.backup ? "primary" : "secondary"
-							enabled: !CloudSync.syncInProgress && !modelData.primary
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress && !modelData.primary
 							onClicked: CloudSync.setBackupProvider(modelData.backup ? "" : modelData.id)
 						}
 						Item { Layout.fillWidth: true }
@@ -245,7 +264,7 @@ Kirigami.ScrollablePage {
 							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Sync now")
 							variant: "primary"; compact: true
-							enabled: !CloudSync.syncInProgress
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: {
 								page.lastSyncProvider = ""
 								page.conflictProvider = ""
@@ -257,7 +276,7 @@ Kirigami.ScrollablePage {
 							Layout.fillWidth: true; Layout.minimumWidth: 0
 							text: qsTr("Backup now")
 							compact: true
-							enabled: !CloudSync.syncInProgress
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: {
 								page.lastBackupProvider = ""
 								CloudSync.backupDiveLog(modelData.id)
@@ -272,17 +291,25 @@ Kirigami.ScrollablePage {
 							enabled: !CloudSync.syncInProgress
 							onClicked: {
 								page.pendingDisconnectProvider = modelData.id
-								page.pendingDisconnectName = modelData.name
+								page.pendingDisconnectName = modelData.name + (modelData.accountEmail ? " (" + modelData.accountEmail + ")" : "")
 								disconnectDialog.open()
 							}
 						}
 					}
 
 					Components.NeoButton {
+						visible: modelData.connected
+						text: qsTr("Check account")
+						compact: true
+						enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+						onClicked: CloudSync.checkAccount(modelData.id)
+					}
+
+					Components.NeoButton {
 						visible: !modelData.connected
 						text: qsTr("Connect")
 						variant: "primary"
-						enabled: modelData.configured && !CloudSync.authorizationInProgress && !CloudSync.syncInProgress
+						enabled: modelData.configured && !CloudSync.authorizationInProgress && !CloudSync.syncInProgress && !CloudSync.accountCheckInProgress
 						onClicked: CloudSync.beginAuthorization(modelData.id)
 					}
 				}

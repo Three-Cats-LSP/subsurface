@@ -14,6 +14,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QSettings>
 #include <QTemporaryFile>
 #include <QTcpServer>
@@ -52,6 +54,9 @@ QByteArray serializeTokens(const OAuth2TokenSet &tokens)
 	object.insert(QStringLiteral("refresh_token"), tokens.refreshToken);
 	object.insert(QStringLiteral("token_type"), tokens.tokenType);
 	object.insert(QStringLiteral("scope"), tokens.scope);
+	object.insert(QStringLiteral("account_id"), tokens.accountId);
+	object.insert(QStringLiteral("account_name"), tokens.accountName);
+	object.insert(QStringLiteral("account_email"), tokens.accountEmail);
 	if (tokens.expiresAt.isValid())
 		object.insert(QStringLiteral("expires_at"), tokens.expiresAt.toUTC().toString(Qt::ISODateWithMs));
 	return QJsonDocument(object).toJson(QJsonDocument::Compact);
@@ -68,6 +73,9 @@ OAuth2TokenSet deserializeTokens(const QByteArray &payload)
 	tokens.refreshToken = object.value(QStringLiteral("refresh_token")).toString();
 	tokens.tokenType = object.value(QStringLiteral("token_type")).toString(QStringLiteral("Bearer"));
 	tokens.scope = object.value(QStringLiteral("scope")).toString();
+	tokens.accountId = object.value(QStringLiteral("account_id")).toString();
+	tokens.accountName = object.value(QStringLiteral("account_name")).toString();
+	tokens.accountEmail = object.value(QStringLiteral("account_email")).toString();
 	tokens.expiresAt = QDateTime::fromString(object.value(QStringLiteral("expires_at")).toString(), Qt::ISODateWithMs);
 	return tokens;
 }
@@ -97,22 +105,27 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 			pendingTokenContinuation = {};
 			refreshProviderId.clear();
 			if (!providerId.isEmpty()) {
-				tokens.insert(providerId, newTokens);
-				CloudCredentialStore::save(providerId, serializeTokens(newTokens));
+				storeUpdatedTokens(providerId, newTokens);
 				emit providersChanged();
 			}
-			continuation(newTokens.accessToken);
+			verifyAccountThen(providerId, newTokens.accessToken, continuation);
 			return;
 		}
 
 		if (activeProviderId.isEmpty())
 			return;
 		const QString connectedProvider = activeProviderId;
-		tokens.insert(connectedProvider, newTokens);
-		CloudCredentialStore::save(connectedProvider, serializeTokens(newTokens));
+		// An older credential has no account ID to compare after a new consent.
+		if (tokens.value(connectedProvider).accountId.isEmpty() && !resetAccountSyncState(connectedProvider)) {
+			clearAuthorization();
+			return;
+		}
+		storeUpdatedTokens(connectedProvider, newTokens);
 		clearAuthorization();
 		emit providersChanged();
-		emit providerConnected(connectedProvider);
+		verifyAccountThen(connectedProvider, newTokens.accessToken, [this, connectedProvider](const QString &) {
+			emit providerConnected(connectedProvider);
+		});
 	});
 	connect(&tokenClient, &OAuth2TokenClient::tokenError, this, [this](const QString &message, bool reconnectRequired) {
 		const QString providerId = refreshProviderId;
@@ -274,7 +287,10 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 		});
 }
 
-CloudSyncManager::~CloudSyncManager() = default;
+CloudSyncManager::~CloudSyncManager()
+{
+	cancelAccountCheck();
+}
 
 QVariantList CloudSyncManager::providers() const
 {
@@ -295,6 +311,10 @@ QVariantList CloudSyncManager::providers() const
 		QVariantMap row;
 		row.insert(QStringLiteral("id"), provider.id);
 		row.insert(QStringLiteral("name"), provider.displayName);
+		row.insert(QStringLiteral("accountName"), tokenSet.accountName);
+		row.insert(QStringLiteral("accountEmail"), tokenSet.accountEmail);
+		row.insert(QStringLiteral("accountVerified"), !tokenSet.accessToken.isEmpty() && verifiedAccountTokens.value(provider.id) == tokenSet.accessToken);
+		row.insert(QStringLiteral("checkingAccount"), accountProviderId == provider.id);
 		row.insert(QStringLiteral("configured"), configured);
 		row.insert(QStringLiteral("configurationError"), configurationError);
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
@@ -336,7 +356,7 @@ void CloudSyncManager::setAutoSyncEnabled(bool enabled)
 
 bool CloudSyncManager::syncPrimaryIfReady()
 {
-	if (!autoSyncEnabled() || authorizationInProgress() || syncInProgress())
+	if (!autoSyncEnabled() || authorizationInProgress() || syncInProgress() || accountCheckInProgress())
 		return false;
 
 	const QString providerId = primaryProviderId();
@@ -438,20 +458,28 @@ void CloudSyncManager::acceptNativeAccessToken(const QString &providerId, const 
 		const auto continuation = std::move(pendingTokenContinuation);
 		pendingTokenContinuation = {};
 		refreshProviderId.clear();
-		tokens.insert(providerId, nativeTokens);
-		CloudCredentialStore::save(providerId, serializeTokens(nativeTokens));
+		if (tokens.value(providerId).accountId.isEmpty() && !resetAccountSyncState(providerId)) {
+			clearSyncOperation();
+			return;
+		}
+		storeUpdatedTokens(providerId, nativeTokens);
 		emit providersChanged();
-		continuation(nativeTokens.accessToken);
+		verifyAccountThen(providerId, nativeTokens.accessToken, continuation);
 		return;
 	}
 
 	if (activeProviderId != providerId)
 		return;
-	tokens.insert(providerId, nativeTokens);
-	CloudCredentialStore::save(providerId, serializeTokens(nativeTokens));
+	if (tokens.value(providerId).accountId.isEmpty() && !resetAccountSyncState(providerId)) {
+		clearAuthorization();
+		return;
+	}
+	storeUpdatedTokens(providerId, nativeTokens);
 	clearAuthorization();
 	emit providersChanged();
-	emit providerConnected(providerId);
+	verifyAccountThen(providerId, nativeTokens.accessToken, [this, providerId](const QString &) {
+		emit providerConnected(providerId);
+	});
 }
 
 void CloudSyncManager::requestAndroidGoogleAccessToken()
@@ -532,7 +560,7 @@ QUrl CloudSyncManager::startLoopbackListener(const CloudSyncProviderDescriptor &
 
 void CloudSyncManager::beginAuthorization(const QString &providerId)
 {
-	if (syncInProgress() || pendingTokenContinuation) {
+	if (syncInProgress() || pendingTokenContinuation || accountCheckInProgress()) {
 		setError(tr("Wait for the current cloud operation to finish before connecting."));
 		return;
 	}
@@ -705,6 +733,9 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 	if (!provider)
 		return;
 	fileStore.cancel(provider->type);
+	if (accountProviderId == providerId)
+		cancelAccountCheck();
+	verifiedAccountTokens.remove(providerId);
 	if (providerId == refreshProviderId) {
 		tokenClient.cancel();
 		pendingTokenContinuation = {};
@@ -737,10 +768,147 @@ void CloudSyncManager::disconnectProvider(const QString &providerId)
 	}
 }
 
+void CloudSyncManager::storeUpdatedTokens(const QString &providerId, OAuth2TokenSet updated)
+{
+	const auto previous = tokens.value(providerId);
+	updated.accountId = previous.accountId;
+	updated.accountName = previous.accountName;
+	updated.accountEmail = previous.accountEmail;
+	verifiedAccountTokens.remove(providerId);
+	tokens.insert(providerId, updated);
+	CloudCredentialStore::save(providerId, serializeTokens(updated));
+}
+
+bool CloudSyncManager::resetAccountSyncState(const QString &providerId)
+{
+	// Remove the old baseline before saving a different account identity. If
+	// removal fails, retain the old identity so a restart also refuses to reuse it.
+	if (!CloudCredentialStore::remove(syncStateCredentialKey(providerId))) {
+		setError(tr("Could not clear the previous account's sync history. Please try again before syncing."));
+		return false;
+	}
+	QSettings settings;
+	if (providerId == primaryProviderId())
+		settings.remove(QStringLiteral("subsurface-neo/cloud/primary-provider"));
+	if (providerId == backupProviderId())
+		settings.remove(QStringLiteral("subsurface-neo/cloud/backup-provider"));
+	settings.remove(QStringLiteral("subsurface-neo/cloud/last-sync/%1").arg(providerId));
+	settings.sync();
+	emit providerAssignmentsChanged();
+	return true;
+}
+
+void CloudSyncManager::cancelAccountCheck()
+{
+	if (accountReply) {
+		accountReply->disconnect(this);
+		accountReply->abort();
+		accountReply->deleteLater();
+		accountReply = nullptr;
+	}
+	accountProviderId.clear();
+}
+
+void CloudSyncManager::checkAccount(const QString &providerId)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider || syncInProgress() || authorizationInProgress() || accountCheckInProgress() || pendingTokenContinuation)
+		return;
+	setError(QString());
+	verifiedAccountTokens.remove(providerId);
+	refreshThen(*provider, providerId, [](const QString &) {});
+}
+
+void CloudSyncManager::verifyAccountThen(const QString &providerId, const QString &accessToken,
+					 const std::function<void(const QString &)> &continuation)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider || accessToken.isEmpty())
+		return;
+	if (verifiedAccountTokens.value(providerId) == accessToken) {
+		continuation(accessToken);
+		return;
+	}
+	Q_ASSERT(!accountCheckInProgress());
+	const bool google = provider->type == CloudSyncProviderType::GoogleDrive;
+	QNetworkRequest request(QUrl(google
+		? QStringLiteral("https://www.googleapis.com/drive/v3/about?fields=user(permissionId,displayName,emailAddress)")
+		: QStringLiteral("https://api.dropboxapi.com/2/users/get_current_account")));
+	request.setRawHeader("Authorization", "Bearer " + accessToken.toUtf8());
+	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+	request.setTransferTimeout(30000);
+	accountProviderId = providerId;
+	QNetworkReply *reply = google ? networkManager->get(request) : networkManager->post(request, QByteArray("null"));
+	accountReply = reply;
+	// Bound both a stalled request and an unexpectedly large identity response.
+	QTimer::singleShot(35000, reply, [reply] { if (!reply->isFinished()) reply->abort(); });
+	connect(reply, &QNetworkReply::readyRead, this, [reply] { if (reply->bytesAvailable() > 65536) reply->abort(); });
+	connect(reply, &QNetworkReply::finished, this, [this, providerId, accessToken, continuation, google, reply] {
+		if (accountReply != reply)
+			return;
+		accountReply = nullptr;
+		accountProviderId.clear();
+		reply->deleteLater();
+		if (tokens.value(providerId).accessToken != accessToken) {
+			emit providersChanged();
+			return;
+		}
+		const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		if (status == 401) {
+			// Use the existing refresh/reconnect recovery without exposing the body.
+			fileStore.operationError(descriptorForId(providerId)->type, QString(), QString(), true);
+			emit providersChanged();
+			return;
+		}
+		const QByteArray body = reply->read(65537);
+		const auto object = QJsonDocument::fromJson(body).object();
+		const auto user = google ? object.value(QStringLiteral("user")).toObject() : object;
+		const QString id = user.value(google ? QStringLiteral("permissionId") : QStringLiteral("account_id")).toString();
+		if (reply->error() != QNetworkReply::NoError || status != 200 || body.size() > 65536 ||
+		    id.trimmed().isEmpty() || id.size() > 512) {
+			setError(tr("Could not verify the connected %1 account. Your local log was kept. Check your connection and try again.")
+				.arg(descriptorForId(providerId)->displayName));
+			if (syncProviderId == providerId)
+				clearSyncOperation();
+			emit providersChanged();
+			return;
+		}
+		auto current = tokens.value(providerId);
+		const bool changed = !current.accountId.isEmpty() && current.accountId != id;
+		if (changed && !resetAccountSyncState(providerId)) {
+			if (syncProviderId == providerId)
+				clearSyncOperation();
+			emit providersChanged();
+			return;
+		}
+		current.accountId = id;
+		current.accountName = (google ? user.value(QStringLiteral("displayName"))
+			: user.value(QStringLiteral("name")).toObject().value(QStringLiteral("display_name"))).toString().left(512);
+		current.accountEmail = user.value(google ? QStringLiteral("emailAddress") : QStringLiteral("email")).toString().left(512);
+		tokens.insert(providerId, current);
+		CloudCredentialStore::save(providerId, serializeTokens(current));
+		verifiedAccountTokens.insert(providerId, accessToken);
+		emit providersChanged();
+		if (changed) {
+			if (syncProviderId == providerId)
+				clearSyncOperation();
+			setError(tr("The connected %1 account changed. Your local log was kept. Sync again to compare this account's cloud log, then choose primary or backup.")
+				.arg(descriptorForId(providerId)->displayName));
+			emit providerAccountChanged(providerId);
+			return;
+		}
+		// A UI callback may have disconnected the provider during notification.
+		if (tokens.value(providerId).accessToken == accessToken && verifiedAccountTokens.value(providerId) == accessToken)
+			continuation(accessToken);
+	});
+	emit providersChanged();
+}
+
 void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, const QString &providerId,
 					   const std::function<void(const QString &)> &continuation)
 {
-	if (authorizationInProgress() || pendingTokenContinuation) {
+	if (authorizationInProgress() || pendingTokenContinuation || accountCheckInProgress()) {
 		setError(tr("Wait for the current authorization to finish before syncing."));
 		if (providerId == syncProviderId)
 			clearSyncOperation();
@@ -754,7 +922,7 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 		return;
 	}
 	if (current.hasAccessToken() && !current.isExpired()) {
-		continuation(current.accessToken);
+		verifyAccountThen(providerId, current.accessToken, continuation);
 		return;
 	}
 	if (!current.canRefresh()) {
@@ -969,7 +1137,7 @@ void CloudSyncManager::backupDiveLog(const QString &providerId)
 		setError(tr("Unknown cloud provider."));
 		return;
 	}
-	if (syncInProgress()) {
+	if (syncInProgress() || accountCheckInProgress()) {
 		setError(tr("Another cloud operation is already in progress."));
 		return;
 	}
@@ -995,7 +1163,7 @@ void CloudSyncManager::syncDiveLog(const QString &providerId)
 		setError(tr("Unknown cloud provider."));
 		return;
 	}
-	if (syncInProgress()) {
+	if (syncInProgress() || accountCheckInProgress()) {
 		setError(tr("Another cloud operation is already in progress."));
 		return;
 	}
@@ -1020,7 +1188,7 @@ void CloudSyncManager::useCloudDiveLog(const QString &providerId)
 		setError(tr("Unknown cloud provider."));
 		return;
 	}
-	if (syncInProgress()) {
+	if (syncInProgress() || accountCheckInProgress()) {
 		setError(tr("Another cloud operation is already in progress."));
 		return;
 	}
