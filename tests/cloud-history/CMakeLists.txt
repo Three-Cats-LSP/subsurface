@@ -12,6 +12,7 @@ add_executable(TestCloudSyncHistory
     ../testcloudsynchistory.cpp ../testcloudsynchistory.h
     ${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
     ${NEO_ROOT}/core/cloudsyncworkspace.cpp ${NEO_ROOT}/core/cloudsyncworkspace.h
+    ${NEO_ROOT}/core/cloudsyncworkspacesource.cpp ${NEO_ROOT}/core/cloudsyncworkspacesource.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)
@@ -25,6 +26,7 @@ add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory -o "${CMAKE_CURR
 add_executable(NeoCloudIdentityProbe identityprobe.cpp
 	${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
 	${NEO_ROOT}/core/cloudsyncworkspace.cpp ${NEO_ROOT}/core/cloudsyncworkspace.h
+	${NEO_ROOT}/core/cloudsyncworkspacesource.cpp ${NEO_ROOT}/core/cloudsyncworkspacesource.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)

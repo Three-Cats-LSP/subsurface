@@ -3,11 +3,13 @@
 // Operates only on explicitly named synthetic fixtures, with a hash/revision
 // precondition before writes. Archive mode admits only marked synthetic fences.
 // Creation mode admits only marked fresh workspace intents. No credential
+// Source-review mode reads the legacy namespace and saves metadata proofs only.
 // persistence, ordinary-log writes or object deletion API.
 #include "core/cloudsyncfilestore.h"
 #include "core/cloudsyncmanifest.h"
 #include "core/cloudsynchistory.h"
 #include "core/cloudsyncworkspace.h"
+#include "core/cloudsyncworkspacesource.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -22,7 +24,7 @@
 // Count operation kinds without logging headers, tokens, bodies or URLs.
 class ProbeNetwork : public QNetworkAccessManager {
 public:
-	int creates = 0, updates = 0, reads = 0, lookups = 0;
+	int creates = 0, updates = 0, reads = 0, lookups = 0, otherWrites = 0;
 protected:
 	QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request, QIODevice *outgoing) override {
 		const auto path = request.url().path();
@@ -31,7 +33,8 @@ protected:
 		else if (operation == PostOperation && path == "/2/files/upload") {
 			const auto mode = QJsonDocument::fromJson(request.rawHeader("Dropbox-API-Arg")).object().value("mode");
 			if (mode.toString() == "add") ++creates; else ++updates;
-		} else { ++reads; if (path == "/drive/v3/files") ++lookups; }
+		} else if (operation == GetOperation || (operation == PostOperation && path == "/2/files/download")) { ++reads; if (path == "/drive/v3/files") ++lookups; }
+		else ++otherWrites;
 		return QNetworkAccessManager::createRequest(operation, request, outgoing);
 	}
 };
@@ -58,16 +61,38 @@ int main(int argc, char **argv)
 	const bool archival = mode == "archive";
 	const bool workspace = mode == "workspace-open";
 	const bool creation = mode == "workspace-create";
+	const bool sourceReview = mode == "workspace-source";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
 	const QRegularExpression workspaceFixture(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
-	if (!valid || (!google && get("provider") != "dropbox") || !((workspace || creation) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch() ||
-	    (mode != "read" && mode != "write" && !archival && !workspace && !creation) || token.isEmpty() || token.size() > 8192 ||
+	const bool validName = sourceReview ? name == "subsurface-neo-sync.json" : ((workspace || creation) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch();
+	if (!valid || (!google && get("provider") != "dropbox") || !validName ||
+	    (mode != "read" && mode != "write" && !archival && !workspace && !creation && !sourceReview) || token.isEmpty() || token.size() > 8192 ||
 	    !QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(get("before_sha256")).hasMatch() ||
-	    ((archival || workspace || creation) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
+	    ((archival || workspace || creation || sourceReview) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
 	ProbeNetwork network;
+	if (sourceReview) {
+		const auto payload = QJsonDocument::fromJson(body).object(); const QFileInfo proof(payload.value("proof_file").toString());
+		const auto parent = QDir(proof.absolutePath()).dirName();
+		if (payload.size() != 2 || !proof.isAbsolute() || proof.fileName() != "source.json" || !parent.startsWith("neo-workspace-source-probe-") ||
+		    !CloudHistoryRecord::validEpoch(parent.mid(27)) || id.isEmpty() || version.isEmpty()) return output({{"ok", false}, {"phase", "input"}}, 2);
+		CloudWorkspaceSourceReview review(&network);
+		QObject::connect(&review, &CloudWorkspaceSourceReview::finished, &app, [&](const QJsonObject &record, const QByteArray &bytes) {
+			CloudWorkspaceCopySource source; source.value = record; const auto manifest = record.value("manifest").toObject(), object = record.value("payload").toObject();
+			const bool confirmed = source.accepts(bytes) && manifest.value("id").toString() == id && manifest.value("version").toString() == version &&
+				manifest.value("sha256").toString() == get("before_sha256") && network.creates == 0 && network.updates == 0 && network.otherWrites == 0 && source.preserve(proof.absoluteFilePath());
+			output({{"ok", confirmed}, {"phase", "source-reviewed"}, {"proof_key", source.key()}, {"manifest_sha256", manifest.value("sha256")},
+				{"payload_sha256", object.value("sha256")}, {"bytes", qint64(bytes.size())}, {"createRequests", network.creates}, {"updateRequests", network.updates},
+				{"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, confirmed ? 0 : 2); app.exit(confirmed ? 0 : 2);
+		});
+		QObject::connect(&review, &CloudWorkspaceSourceReview::failed, &app, [&](const QString &, bool rejected) {
+			output({{"ok", false}, {"phase", "source-review"}, {"tokenRejected", rejected}, {"createRequests", network.creates}, {"updateRequests", network.updates}, {"otherWrites", network.otherWrites}}, 2); app.exit(2);
+		});
+		QTimer::singleShot(0, &app, [&] { review.start(token, get("provider"), payload.value("account").toString(), [] { return true; }); });
+		return app.exec();
+	}
 	if (creation) {
 		const auto payload = QJsonDocument::fromJson(body).object(); const auto epoch = payload.value("epoch").toString(), nonce = payload.value("nonce").toString();
 		const auto intentFile = payload.value("intent_file").toString(), directory = payload.value("checkpoint_directory").toString();

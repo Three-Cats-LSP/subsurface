@@ -38,6 +38,10 @@ private slots:
 	void workspaceCreateTransport();
 	void workspaceCreate_data();
 	void workspaceCreate();
+	void workspaceCopySource_data();
+	void workspaceCopySource();
+	void workspaceSourceReview_data();
+	void workspaceSourceReview();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();
