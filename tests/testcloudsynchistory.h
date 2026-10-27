@@ -14,6 +14,8 @@ private slots:
 	void interruption();
 	void concurrentInitialization_data();
 	void concurrentInitialization();
+	void initialRootRecovery_data();
+	void initialRootRecovery();
 	void restoreRejection_data();
 	void restoreRejection();
 };

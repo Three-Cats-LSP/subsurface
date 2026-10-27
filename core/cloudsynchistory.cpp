@@ -205,6 +205,9 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 		writeRoot(root, [this] { processRoot(); });
 	});
 	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &) {
+		// Initialization is idempotent. Join the winning root, or allocate a
+		// fresh ticket after a conflict; never replay a stale publication.
+		if (retryInitialization()) return;
 		fail(tr("Cloud history changed during this operation. Reload it before retrying. All versions were kept."));
 	});
 	connect(&files, &CloudSyncFileStore::operationError, this, [this](CloudSyncProviderType, const QString &, const QString &, bool rejected) {
@@ -222,6 +225,7 @@ void CloudSyncHistory::cancel()
 {
 	step = Step::Idle; deadline.stop(); files.cancel(provider); continuation = {}; localUnchanged = {};
 	token.clear(); local.clear(); payload.clear(); pendingRoot.value = {};
+	files.setHistoryRootRecovery({}, {});
 }
 void CloudSyncHistory::fail(const QString &message, bool rejected)
 {
@@ -234,10 +238,22 @@ void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessTo
 {
 	cancel(); provider = type; token = accessToken; account = accountHash; epoch = namespaceEpoch; action = operation; revision = commit;
 	local = localPayload; localUnchanged = guard; root.value = {}; pendingRoot.value = {}; rootId.clear(); rootVersion.clear(); reservationId.clear(); uploadId.clear();
+	initializationRetries = 0;
 	step = Step::Legacy;
 	if ((type != CloudSyncProviderType::GoogleDrive && type != CloudSyncProviderType::Dropbox) || token.isEmpty() || !hash(account) ||
 	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore"}.contains(action) ||
 	    !CloudHistoryRecord::validXml(local) || (action == "restore" && !CloudHistoryRecord::validEpoch(revision))) { fail(); return; }
+	if (action != "list") {
+		files.setHistoryRootRecovery(CloudHistoryRecord::rootName(epoch), [this](const QByteArray &data) {
+			using State = CloudSyncFileStore::HistoryRootState;
+			const auto candidate = CloudHistoryRecord::parse(data);
+			if (!candidate.valid() || string(candidate.value, "provider") != cloudSyncProviderDescriptor(provider).id ||
+			    string(candidate.value, "account") != account || string(candidate.value, "epoch") != epoch) return State::Invalid;
+			return candidate.value.value("sequence").toInt() == 0 && candidate.head().isEmpty() &&
+				candidate.value.value("tickets").toObject().isEmpty() && candidate.value.value("reservations").toObject().isEmpty() ?
+				State::Pristine : State::Active;
+		});
+	}
 	deadline.start(180000); read(LegacyName, Step::Legacy);
 }
 void CloudSyncHistory::read(const QString &name, Step next)
@@ -266,7 +282,14 @@ void CloudSyncHistory::received(const QString &, const QByteArray &data, const Q
 		if (!rootId.isEmpty() && rootId != id) { fail(); return; }
 		root = parsed; rootVersion = version; rootId = id;
 		if (step == Step::VerifyRoot) {
-			if (root.json() != pendingRoot.json()) { fail(); return; }
+			// Another initializer may already have advanced the selected root.
+			// Only the initial empty create can be adopted this way.
+			if (action == "migrate" && pendingRoot.valid() && pendingRoot.value.value("sequence").toInt() == 0 &&
+			    pendingRoot.head().isEmpty() && pendingRoot.value.value("tickets").toObject().isEmpty() &&
+			    string(root.value, "legacy_sha256") == legacyHash) {
+				pendingRoot.value = {}; continuation = {}; processRoot(); return;
+			}
+			if (root.json() != pendingRoot.json()) { if (!retryInitialization()) fail(); return; }
 			pendingRoot.value = {}; auto next = std::move(continuation); continuation = {}; next(); return;
 		}
 		if (step == Step::VerifyReservation) {
@@ -296,6 +319,12 @@ void CloudSyncHistory::received(const QString &, const QByteArray &data, const Q
 		if (!next.completeUpload(uploadId, id, version)) { fail(); return; }
 		writeRoot(next, [this] { read(LegacyName, Step::CheckLegacy); });
 	}
+}
+bool CloudSyncHistory::retryInitialization()
+{
+	if (step == Step::Idle || action != "migrate" || initializationRetries++ >= 8 || !localUnchanged || !localUnchanged()) return false;
+	files.cancel(provider); pendingRoot.value = {}; continuation = {}; uploadId.clear(); payload.clear();
+	read(CloudHistoryRecord::rootName(epoch), Step::Root); return true;
 }
 void CloudSyncHistory::processRoot()
 {

@@ -139,6 +139,13 @@ QString CloudSyncFileStore::replyError(QNetworkReply *reply, const QByteArray &p
 	return reply->errorString();
 }
 
+void CloudSyncFileStore::setHistoryRootRecovery(const QString &name,
+	const std::function<HistoryRootState(const QByteArray &)> &validator)
+{
+	historyRootName = name;
+	historyRootValidator = validator;
+}
+
 void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QString &fileName,
 					const std::function<void(const QString &)> &continuation, int recoveryAttempt)
 {
@@ -181,9 +188,9 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			return;
 		}
 		if (files.size() > 1) {
-			// Only the known sync manifest has a recovery protocol. Never elect a
-			// winner for an ambiguous XML payload or an arbitrary caller's file.
-			if (strictReads || fileName != QStringLiteral("subsurface-neo-sync.json") || recoveryAttempt >= 8) {
+			const bool historyRecovery = historyRootValidator && fileName == historyRootName;
+			// Never elect a winner for ambiguous payloads or arbitrary names.
+			if ((!historyRecovery && (strictReads || fileName != QStringLiteral("subsurface-neo-sync.json"))) || recoveryAttempt >= 8) {
 				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
 					tr("Google Drive has competing cloud files. Sync again to retry recovery. No logs were deleted."));
 				return;
@@ -209,7 +216,10 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 			std::sort(order.begin(), order.end());
 			QList<GoogleRecoveryFile> candidates;
 			for (const auto &entry : order) candidates.append({entry.second, {}});
-			googleRecoverInitialManifests(accessToken, fileName, candidates, 0, recoveryAttempt, continuation);
+			if (historyRecovery)
+				googleRecoverInitialHistoryRoots(accessToken, fileName, candidates, 0, -1, recoveryAttempt, continuation);
+			else
+				googleRecoverInitialManifests(accessToken, fileName, candidates, 0, recoveryAttempt, continuation);
 			return;
 		}
 		if (strictReads && !files.isEmpty()) {
@@ -249,6 +259,33 @@ void CloudSyncFileStore::googleRecoverInitialManifests(const QString &accessToke
 		}, retry);
 }
 
+void CloudSyncFileStore::googleRecoverInitialHistoryRoots(const QString &accessToken, const QString &fileName,
+	QList<GoogleRecoveryFile> files, int next, int active, int attempt,
+	const std::function<void(const QString &)> &continuation)
+{
+	if (next == files.size()) {
+		// A root with any durable activity wins over every pristine root,
+		// even when an older, delayed create becomes visible later.
+		if (active > 0) files.swapItemsAt(0, active);
+		googleArchiveInitialManifest(accessToken, fileName, files, 1, attempt, continuation);
+		return;
+	}
+	googleReadFileVersioned(accessToken, fileName, files[next].id,
+		[this, accessToken, fileName, files, next, active, attempt, continuation](const QByteArray &data, const QString &version) mutable {
+			const auto state = historyRootValidator && fileName == historyRootName ? historyRootValidator(data) : HistoryRootState::Invalid;
+			if (state == HistoryRootState::Invalid || (state == HistoryRootState::Active && active >= 0)) {
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+					tr("Competing history roots contain activity or unsupported data. All roots and versions were kept for recovery."));
+				return;
+			}
+			files[next].version = version;
+			googleRecoverInitialHistoryRoots(accessToken, fileName, files, next + 1,
+				state == HistoryRootState::Active ? next : active, attempt, continuation);
+		}, [this, accessToken, fileName, continuation, attempt] {
+			googleFindFile(accessToken, fileName, continuation, attempt + 1);
+		});
+}
+
 void CloudSyncFileStore::googleArchiveInitialManifest(const QString &accessToken, const QString &fileName,
 		const QList<GoogleRecoveryFile> &files, int next, int attempt,
 		const std::function<void(const QString &)> &continuation)
@@ -264,7 +301,7 @@ void CloudSyncFileStore::googleArchiveInitialManifest(const QString &accessToken
 	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 	request.setRawHeader("If-Match", file.version.toUtf8());
 	const QByteArray metadata = compactJson({{QStringLiteral("title"),
-		QStringLiteral("subsurface-neo-sync-recovered-%1.json").arg(file.id)}});
+		fileName.left(fileName.size() - 5) + QStringLiteral("-recovered-%1.json").arg(file.id)}});
 	QNetworkReply *reply = networkManager->sendCustomRequest(request, "PATCH", metadata);
 	trackReply(CloudSyncProviderType::GoogleDrive, reply);
 	connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, files, next, attempt, continuation]() {

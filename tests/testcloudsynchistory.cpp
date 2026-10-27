@@ -41,7 +41,7 @@ class Network : public QNetworkAccessManager {
 public:
 	struct File { QString name, id, rev; QByteArray data; };
 	QList<File> files;
-	int serial = 0, fault = 0, mutations = 0;
+	int serial = 0, fault = 0, mutations = 0, renames = 0;
 	bool allowed = true, guard = true;
 	QPointer<Reply> deferred;
 	std::function<void(const QString &)> wrote;
@@ -61,7 +61,7 @@ protected:
 		const QByteArray sent = outgoing ? outgoing->readAll() : QByteArray();
 		const bool google = r.url().host() == "www.googleapis.com";
 		const auto path = r.url().path(); const QUrlQuery query(r.url());
-		QString name, expected; int index = -1, status = 200; bool write = false, create = false, defer = false;
+		QString name, expected; int index = -1, status = 200; bool write = false, create = false, defer = false, rename = false;
 		QByteArray data = sent, body, meta;
 		if (!google) {
 			const auto arg = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object();
@@ -73,7 +73,8 @@ protected:
 			if (write) allowed &= arg.value("strict_conflict").toBool() && !arg.value("autorename").toBool() && (create || !expected.isEmpty());
 		} else if (op == GetOperation && path == "/drive/v3/files") {
 			name = query.queryItemValue("q").section('\'', 1, 1); QJsonArray matches;
-			for (const auto &f : files) if (f.name == name) matches.append(QJsonObject{{"id", f.id.mid(3)}, {"name", f.name}});
+			for (const auto &f : files) if (f.name == name) matches.append(QJsonObject{{"id", f.id.mid(3)}, {"name", f.name},
+				{"createdTime", fault == 17 ? "" : "2026-10-27T00:00:00.000Z"}});
 			body = json({{"files", matches}, {"incompleteSearch", false}});
 		} else if (op == PostOperation && path == "/upload/drive/v3/files") {
 			create = write = true; const int begin = sent.indexOf("\r\n\r\n") + 4, end = sent.indexOf("\r\n--", begin);
@@ -82,10 +83,29 @@ protected:
 		} else {
 			const auto id = "id:" + path.section('/', -1); for (int i = 0; i < files.size(); ++i) if (files[i].id == id) index = i;
 			if (index >= 0) name = files[index].name;
-			write = op == PutOperation; expected = QString::fromUtf8(r.rawHeader("If-Match"));
-			allowed &= op == GetOperation || (write && !expected.isEmpty() && path.startsWith("/upload/drive/v2/files/"));
+			rename = op == CustomOperation && r.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray() == "PATCH";
+			write = op == PutOperation || rename; expected = QString::fromUtf8(r.rawHeader("If-Match"));
+			allowed &= op == GetOperation || (write && !expected.isEmpty() &&
+				path.startsWith(rename ? "/drive/v2/files/" : "/upload/drive/v2/files/"));
 		}
-		if (write) {
+		if (rename) {
+			++mutations; ++renames;
+			const auto target = QJsonDocument::fromJson(sent).object().value("title").toString();
+			const auto old = index < 0 ? CloudHistoryRecord() : CloudHistoryRecord::parse(files[index].data);
+			allowed &= old.valid() && old.value["sequence"].toInt() == 0 && old.value["tickets"].toObject().isEmpty() &&
+				target == name.left(name.size() - 5) + "-recovered-" + files[index].id.mid(3) + ".json";
+			if (fault == 15 && index >= 0) {
+				auto active = old; active.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size());
+				files[index].data = active.json(); files[index].rev = "concurrent-registration"; fault = 0;
+			}
+			if (index < 0 || files[index].rev != expected) status = 412;
+			else {
+				files[index].name = target; files[index].rev = "rev-" + QString::number(++serial);
+				body = json({{"id", files[index].id.mid(3)}, {"title", target}});
+				if (fault == 14) { status = 503; fault = 0; }
+				if (fault == 16) defer = true;
+			}
+		} else if (write) {
 			++mutations; allowed &= name.startsWith("subsurface-neo-history-");
 			const bool root = name.endsWith(".json");
 			if (!root) {
@@ -104,7 +124,7 @@ protected:
 				if (create) { add(name, data); index = files.size() - 1; }
 				else { files[index].data = data; files[index].rev = "rev-" + QString::number(++serial); }
 				body = json({{"id", google ? files[index].id.mid(3) : files[index].id}, {"rev", files[index].rev}});
-				if (fault == 3 && publish) { status = 503; fault = 0; }
+			if (fault == 3 && publish) { status = 503; fault = 0; }
 				if (fault == 7 && !root) { auto m = CloudSyncManifest::forPayload(B); files[find(Legacy)].data = m.toJson(); fault = 0; }
 				if (fault == 8 && !root) guard = false;
 				if (fault == 11 && !root) defer = true;
@@ -214,7 +234,7 @@ void TestCloudSyncHistory::interruption()
 	CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), error(&client, &CloudSyncHistory::failed);
 	client.start(provider, "token", Account, epoch, "migrate", {}, A, [&] { return n.guard; });
 	if (fault == 11) { QTRY_VERIFY(n.deferred); client.cancel(); QTest::qWait(20); QCOMPARE(done.size(), 0); QCOMPARE(error.size(), 0); }
-	else if (fault == 3) { QTRY_COMPARE(done.size(), 1); QCOMPARE(error.size(), 0); }
+	else if (fault == 3 || fault == 4) { QTRY_COMPARE(done.size(), 1); QCOMPARE(error.size(), 0); }
 	else { QTRY_COMPARE(error.size(), 1); QCOMPARE(done.size(), 0); }
 	if (fault != 7) QCOMPARE(n.content(Legacy), before);
 	QCOMPARE(n.content(CloudSyncManifest::fromJson(before).payloadFileName()), A); QVERIFY(n.allowed);
@@ -237,8 +257,59 @@ void TestCloudSyncHistory::concurrentInitialization()
 	a.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; });
 	b.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; });
 	QTRY_COMPARE(ad.size() + bd.size() + ae.size() + be.size(), 2);
-	QVERIFY(ad.size() + bd.size() <= 1); QCOMPARE(n.content(Legacy), before); QVERIFY(n.allowed);
-	if (google) { QCOMPARE(ad.size() + bd.size(), 0); QCOMPARE(ae.size() + be.size(), 2); }
+	QCOMPARE(ae.size() + be.size(), 0); QCOMPARE(ad.size() + bd.size(), 2);
+	QCOMPARE(n.content(Legacy), before); QVERIFY(n.allowed);
+	const auto root = CloudHistoryRecord::parse(n.content(CloudHistoryRecord::rootName(epoch)));
+	QVERIFY(root.valid()); QCOMPARE(root.value["history"].toArray().size(), 1);
+	QCOMPARE(ad.last()[0].toMap(), bd.last()[0].toMap());
+	int roots = 0; for (const auto &f : n.files) if (f.name == CloudHistoryRecord::rootName(epoch)) ++roots;
+	QCOMPARE(roots, 1);
+	if (google) { QVERIFY(n.renames >= 1); QVERIFY(n.files.size() >= 5); } // Losing attempts remain protected too.
+}
+void TestCloudSyncHistory::initialRootRecovery_data()
+{
+	QTest::addColumn<int>("scenario");
+	const char *names[] = {"pristine", "active-newer", "two-active", "unknown-metadata", "other-account", "other-epoch",
+		"read-only-list", "lost-rename-reply", "registration-races-rename", "cancel-rename", "missing-creation-time", "legacy-duplicates"};
+	for (int i = 0; i < 12; ++i) QTest::newRow(names[i]) << i;
+}
+void TestCloudSyncHistory::initialRootRecovery()
+{
+	QFETCH(int, scenario); Network n; n.seed(); const auto legacy = n.content(Legacy);
+	const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch);
+	const auto pristine = CloudHistoryRecord::create("google-drive", Account, epoch, CloudSyncManifest::sha256(legacy));
+	auto other = pristine;
+	if (scenario == 1 || scenario == 2) QVERIFY(other.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size()));
+	if (scenario == 3) other.value["unknown-safety-metadata"] = true;
+	if (scenario == 4) other.value["account"] = CloudSyncManifest::sha256("other-account");
+	if (scenario == 5) other.value["epoch"] = uid();
+	n.add(name, scenario == 2 ? other.json() : pristine.json()); n.add(name, other.json());
+	const auto firstId = n.files[2].id, secondId = n.files[3].id;
+	if (scenario == 7) n.fault = 14;
+	if (scenario == 8) n.fault = 15;
+	if (scenario == 9) n.fault = 16;
+	if (scenario == 10) n.fault = 17;
+	if (scenario == 11) n.add(Legacy, legacy);
+	CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), error(&client, &CloudSyncHistory::failed);
+	client.start(CloudSyncProviderType::GoogleDrive, "token", Account, epoch, scenario == 6 ? "list" : "migrate", {}, A, [] { return true; });
+	if (scenario == 9) { QTRY_VERIFY(n.deferred); client.cancel(); QTest::qWait(20); QCOMPARE(done.size(), 0); QCOMPARE(error.size(), 0); }
+	else if (scenario == 0 || scenario == 1 || scenario == 8) { QTRY_COMPARE(done.size(), 1); QCOMPARE(error.size(), 0); }
+	else { QTRY_COMPARE(error.size(), 1); QCOMPARE(done.size(), 0); }
+	QCOMPARE(n.content(Legacy), legacy); QCOMPARE(n.content(CloudSyncManifest::fromJson(legacy).payloadFileName()), A); QVERIFY(n.allowed);
+	if (scenario == 2 || scenario == 3 || scenario == 4 || scenario == 5 || scenario == 6 || scenario == 10 || scenario == 11) {
+		QCOMPARE(n.mutations, 0); QCOMPARE(n.files[2].data, scenario == 2 ? other.json() : pristine.json()); QCOMPARE(n.files[3].data, other.json());
+		return;
+	}
+	n.fault = 0;
+	CloudSyncHistory restarted(&n); QSignalSpy retry(&restarted, &CloudSyncHistory::finished), failed(&restarted, &CloudSyncHistory::failed);
+	restarted.start(CloudSyncProviderType::GoogleDrive, "token", Account, epoch, "migrate", {}, A, [] { return true; });
+	QTRY_COMPARE(retry.size(), 1); QCOMPARE(failed.size(), 0); QVERIFY(n.allowed);
+	const auto r = CloudHistoryRecord::parse(n.content(name)); QVERIFY(r.valid()); QCOMPARE(r.value["history"].toArray().size(), 1);
+	QCOMPARE(n.files[n.find(name)].id, scenario == 1 || scenario == 8 ? secondId : firstId);
+	const auto archived = scenario == 1 || scenario == 8 ? 2 : 3;
+	QCOMPARE(n.files[archived].data, pristine.json()); // Rename retains exact bytes and object identity.
+	QCOMPARE(n.files[2].id, firstId); QCOMPARE(n.files[3].id, secondId);
+	if (scenario == 1 || scenario == 8) QCOMPARE(r.value["tickets"].toObject().size(), 2); // Pending work stays protected.
 }
 void TestCloudSyncHistory::restoreRejection_data()
 {

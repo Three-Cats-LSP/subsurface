@@ -32,6 +32,11 @@ public:
 	void downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName);
 	// History uses strict reads: duplicate legacy names must never trigger a rename.
 	void setStrictReads(bool enabled) { strictReads = enabled; }
+	// Explicit opt-in for one history root. Only pristine duplicates may be
+	// renamed; the caller validates the full format and account binding.
+	enum class HistoryRootState { Invalid, Pristine, Active };
+	void setHistoryRootRecovery(const QString &name,
+		const std::function<HistoryRootState(const QByteArray &)> &validator);
 	void setResponseLimit(qint64 bytes) { responseLimit = bytes; }
 	void downloadExact(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QString &fileId, const QString &version);
@@ -57,6 +62,9 @@ private:
 	void googleArchiveInitialManifest(const QString &accessToken, const QString &fileName,
 		const QList<GoogleRecoveryFile> &files, int next, int attempt,
 		const std::function<void(const QString &)> &continuation);
+	void googleRecoverInitialHistoryRoots(const QString &accessToken, const QString &fileName,
+		QList<GoogleRecoveryFile> files, int next, int active, int attempt,
+		const std::function<void(const QString &)> &continuation);
 	void googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data, bool createOnly = false);
 	void googleDownload(const QString &accessToken, const QString &fileName);
 	void dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
@@ -77,6 +85,8 @@ private:
 	QNetworkAccessManager *networkManager;
 	QMap<CloudSyncProviderType, QSet<QNetworkReply *>> pendingReplies;
 	bool strictReads = false;
+	QString historyRootName;
+	std::function<HistoryRootState(const QByteArray &)> historyRootValidator;
 	qint64 responseLimit = 0;
 };
 

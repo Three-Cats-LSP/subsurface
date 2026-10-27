@@ -52,6 +52,7 @@ private:
 	void read(const QString &name, Step next);
 	void received(const QString &name, const QByteArray &data, const QString &version, const QString &id);
 	void processRoot();
+	bool retryInitialization();
 	void writeRoot(const CloudHistoryRecord &next, const std::function<void()> &then);
 	void registerUpload();
 	void publish();
@@ -66,6 +67,7 @@ private:
 	QByteArray local, payload;
 	Step step = Step::Idle;
 	bool retriedRootRead = false;
+	int initializationRetries = 0;
 	std::function<void()> continuation;
 	std::function<bool()> localUnchanged;
 };
