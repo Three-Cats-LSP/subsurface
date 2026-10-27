@@ -62,6 +62,23 @@ private:
 	bool replaceJournal(const CloudHistoryRecord &journal);
 };
 
+// A monotonic checkpoint for one immutable workspace reference. Observations
+// must already be provider verified. This preserves metadata only and cannot
+// change the selected workspace, credentials, XML or the old sync baseline.
+class CloudWorkspaceAuthority {
+public:
+	CloudWorkspaceAuthority(const QString &fileName, const CloudWorkspaceReference &reference);
+	bool load();
+	bool observe(const CloudWorkspaceRecord &record, const QString &version);
+	CloudWorkspaceRecord record() const { return checkpoint; }
+	QString version() const { return observedVersion; }
+private:
+	bool readUnlocked();
+	QString fileName, observedVersion;
+	CloudWorkspaceReference reference;
+	CloudWorkspaceRecord checkpoint;
+};
+
 // Read-only exact-root verification. The caller must supply a freshly verified
 // provider/account and retain/recheck scope before recording an explicit choice.
 // No filename lookup, creation, local binding, XML application or cloud write.

@@ -1068,6 +1068,75 @@ void TestCloudSyncHistory::workspaceOpen()
 	QVERIFY(n.allowed);
 }
 
+void TestCloudSyncHistory::workspaceAuthority_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"restart-and-lost-ack", "advance-and-reservation", "rollback", "same-name-foreign-id", "foreign-account", "corrupt-file",
+		"future-format", "held-lock", "blocked-parent", "missing-parent", "oversized-file", "empty-revision", "unsafe-revision", "stale-process",
+		"same-body-new-revision", "tampered-binding", "invalid-reference"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-checkpoint-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceAuthority()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid(), first = uid(), pending = uid(), reservation = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-a" : "id:root-a");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("legacy"));
+	QVERIFY(root.registerUpload(first, {}, CloudSyncManifest::sha256(A), A.size()));
+	QVERIFY(root.completeUpload(first, google ? "payload-a" : "id:payload-a", "v1")); QVERIFY(root.publish(first, {}));
+	const auto original = root;
+	QVERIFY(root.registerUpload(pending, first, CloudSyncManifest::sha256(B), B.size())); QVERIFY(root.reserve(reservation, first));
+	QTemporaryDir temporary; QVERIFY(temporary.isValid());
+	const auto path = temporary.filePath(scenario == 9 ? "new/parent/checkpoint.json" : "checkpoint.json");
+	const auto read = [](const QString &name) { QFile f(name); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
+	const auto write = [](const QString &name, const QByteArray &bytes) { QFile f(name); return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size(); };
+	const auto selection = temporary.filePath("selection.json"), baseline = temporary.filePath("sync-baseline.json"), local = temporary.filePath("divelog.xml");
+	QVERIFY(write(selection, "preserve selected workspace")); QVERIFY(write(baseline, "preserve schema 2 baseline")); QVERIFY(write(local, A));
+	CloudWorkspaceAuthority authority(path, ref); QVERIFY(authority.load()); QVERIFY(!authority.record().valid());
+	if (scenario == 9) QVERIFY(!QFileInfo::exists(QFileInfo(path).absolutePath()));
+	QVERIFY(authority.observe(original, "root-v1")); const auto initialBytes = read(path);
+	if (scenario == 0 || scenario == 9) {
+		QVERIFY(authority.observe(original, "root-v1")); QCOMPARE(read(path), initialBytes);
+		CloudWorkspaceAuthority restarted(path, ref); QVERIFY(restarted.load()); QCOMPARE(restarted.record().json(), original.json()); QCOMPARE(restarted.version(), QString("root-v1"));
+	} else if (scenario == 1) {
+		QVERIFY(authority.observe(root, "root-v2")); CloudWorkspaceAuthority restarted(path, ref); QVERIFY(restarted.load()); QCOMPARE(restarted.record().json(), root.json());
+		QCOMPARE(restarted.record().ticket(pending), root.ticket(pending)); QVERIFY(!restarted.observe(original, "root-v1"));
+		QCOMPARE(restarted.record().value["journal"].toObject()["reservations"], root.value["journal"].toObject()["reservations"]);
+	} else if (scenario == 2) {
+		QVERIFY(authority.observe(root, "root-v2")); const auto advanced = read(path); QVERIFY(!authority.observe(original, "different-new-provider-revision")); QCOMPARE(read(path), advanced);
+	} else if (scenario == 3 || scenario == 4 || scenario == 16) {
+		auto foreign = CloudWorkspaceReference::create(provider, scenario == 4 ? CloudSyncManifest::sha256("other-account") : Account, epoch,
+			scenario == 3 ? (google ? "root-b" : "id:root-b") : ref.value["root_id"].toString());
+		if (scenario == 16) foreign.value["unknown_safety_field"] = true;
+		CloudWorkspaceAuthority other(path, foreign); QVERIFY(!other.load()); QVERIFY(!other.observe(CloudWorkspaceRecord::create(foreign, CloudSyncManifest::sha256("legacy")), "foreign-revision"));
+		QCOMPARE(read(path), initialBytes);
+	} else if (scenario == 8) {
+		const auto blocker = temporary.filePath("unrelated-blocker"); QVERIFY(write(blocker, "preserve blocker"));
+		CloudWorkspaceAuthority blocked(blocker + "/checkpoint.json", ref); QVERIFY(!blocked.observe(root, "root-v2")); QCOMPARE(read(blocker), QByteArray("preserve blocker"));
+	} else if (scenario == 13) {
+		CloudWorkspaceAuthority other(path, ref); QVERIFY(other.load()); QVERIFY(other.observe(root, "root-v2")); const auto advanced = read(path);
+		QVERIFY(!authority.observe(original, "root-v1")); QCOMPARE(authority.record().json(), root.json()); QCOMPARE(read(path), advanced);
+		QVERIFY(authority.observe(root, "root-v2")); QCOMPARE(read(path), advanced);
+	} else if (scenario == 14) {
+		QVERIFY(authority.observe(original, "root-metadata-v2")); QCOMPARE(authority.record().json(), original.json()); QCOMPARE(authority.version(), QString("root-metadata-v2"));
+		CloudWorkspaceAuthority restarted(path, ref); QVERIFY(restarted.load()); QCOMPARE(restarted.version(), authority.version());
+	} else {
+		std::unique_ptr<QLockFile> held; QString revision = "root-v2";
+		if (scenario == 5) QVERIFY(write(path, "invalid checkpoint"));
+		if (scenario == 6 || scenario == 15) {
+			auto stored = QJsonDocument::fromJson(read(path)).object();
+			if (scenario == 6) stored["format"] = "unknown-future-checkpoint"; else stored["workspace_key"] = CloudSyncManifest::sha256("other-root");
+			QVERIFY(write(path, QJsonDocument(stored).toJson(QJsonDocument::Compact)));
+		}
+		if (scenario == 7) { held = std::make_unique<QLockFile>(path + ".lock"); QVERIFY(held->tryLock(0)); QVERIFY(!authority.load()); QVERIFY(!authority.record().valid()); }
+		if (scenario == 10) QVERIFY(write(path, QByteArray(1024 * 1024 + 5121, ' ')));
+		if (scenario == 11) revision.clear();
+		if (scenario == 12) revision = QString("unsafe") + QChar::Null + "revision";
+		const auto before = read(path); QVERIFY(!authority.observe(root, revision)); QCOMPARE(read(path), before);
+	}
+	QCOMPARE(read(selection), QByteArray("preserve selected workspace")); QCOMPARE(read(baseline), QByteArray("preserve schema 2 baseline")); QCOMPARE(read(local), A);
+}
+
 void TestCloudSyncHistory::invalidRecords_data()
 {
 	QTest::addColumn<int>("fault");

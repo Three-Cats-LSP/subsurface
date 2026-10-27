@@ -12,9 +12,11 @@
 namespace {
 constexpr int ReferenceLimit = 2048, SelectionLimit = 64 * 1024, WorkspaceLimit = 32;
 constexpr int RootLimit = 1024 * 1024 + ReferenceLimit + 1024;
+constexpr int CheckpointLimit = RootLimit + 2048;
 bool providerValid(const QString &s) { return s == "google-drive" || s == "dropbox"; }
 bool hash(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(s).hasMatch(); }
 bool uuid(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$")).match(s).hasMatch(); }
+bool versionValid(const QString &s) { return !s.isEmpty() && s.size() <= 512 && !s.contains(QChar::Null) && !s.contains('\r') && !s.contains('\n'); }
 bool fields(const QJsonObject &o, const QStringList &keys) {
 	if (o.size() != keys.size()) return false;
 	for (const auto &key : keys) if (!o.contains(key)) return false;
@@ -60,7 +62,7 @@ bool CloudWorkspaceRecord::valid() const
 		const auto t = entry.toObject(); const auto id = string(t, "object"), version = string(t, "version");
 		if (string(t, "state") != "registered" &&
 		    (!CloudWorkspaceReference::create(string(ref.value, "provider"), string(ref.value, "account"), string(ref.value, "epoch"), id).valid() ||
-		     id == string(ref.value, "root_id") || version.size() > 512 || version.contains('\r') || version.contains('\n'))) return false;
+		     id == string(ref.value, "root_id") || !versionValid(version))) return false;
 	}
 	return true;
 }
@@ -117,6 +119,47 @@ bool CloudWorkspaceRecord::release(const QString &id)
 	auto next = journal(); return next.release(id) && replaceJournal(next);
 }
 
+CloudWorkspaceAuthority::CloudWorkspaceAuthority(const QString &path, const CloudWorkspaceReference &ref) : fileName(path), reference(ref) {}
+bool CloudWorkspaceAuthority::readUnlocked()
+{
+	checkpoint.value = {}; observedVersion.clear();
+	if (!reference.valid()) return false;
+	const QFileInfo info(fileName);
+	if (!info.exists()) return !info.isSymLink();
+	if (!info.isFile() || info.isSymLink() || info.size() > CheckpointLimit) return false;
+	QFile file(fileName); if (!file.open(QIODevice::ReadOnly)) return false;
+	const auto bytes = file.read(CheckpointLimit + 1);
+	if (bytes.size() > CheckpointLimit || file.error() != QFileDevice::NoError) return false;
+	const auto saved = QJsonDocument::fromJson(bytes).object();
+	if (!fields(saved, {"schema", "format", "workspace_key", "record", "version"}) || saved.value("schema") != QJsonValue(1) ||
+	    string(saved, "format") != "neo-workspace-checkpoint-development-1" || string(saved, "workspace_key") != reference.key() ||
+	    !versionValid(string(saved, "version"))) return false;
+	CloudWorkspaceRecord root; root.value = saved.value("record").toObject();
+	if (!root.valid() || root.reference().value != reference.value) return false;
+	checkpoint = root; observedVersion = string(saved, "version"); return true;
+}
+bool CloudWorkspaceAuthority::load()
+{
+	checkpoint.value = {}; observedVersion.clear();
+	if (fileName.isEmpty()) return false;
+	if (!QFileInfo(QFileInfo(fileName).absolutePath()).exists()) return readUnlocked();
+	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && readUnlocked();
+}
+bool CloudWorkspaceAuthority::observe(const CloudWorkspaceRecord &root, const QString &version)
+{
+	if (fileName.isEmpty() || !reference.valid() || !root.valid() || root.reference().value != reference.value || !versionValid(version) ||
+	    !QDir().mkpath(QFileInfo(fileName).absolutePath())) return false;
+	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !readUnlocked()) return false;
+	if (checkpoint.valid() && !root.follows(checkpoint)) return false;
+	if (checkpoint.json() == root.json() && observedVersion == version) return true;
+	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", "neo-workspace-checkpoint-development-1"},
+		{"workspace_key", reference.key()}, {"record", root.value}, {"version", version}}).toJson(QJsonDocument::Compact);
+	if (bytes.size() > CheckpointLimit) return false;
+	QSaveFile file(fileName);
+	if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return false;
+	return readUnlocked() && checkpoint.json() == root.json() && observedVersion == version;
+}
+
 CloudWorkspaceOpen::CloudWorkspaceOpen(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
 {
 	files.setStrictReads(true); files.setResponseLimit(RootLimit);
@@ -127,7 +170,7 @@ CloudWorkspaceOpen::CloudWorkspaceOpen(QNetworkAccessManager *network, QObject *
 			if (!active) return;
 			const auto root = CloudWorkspaceRecord::parse(bytes);
 			if (!scopeCurrent || !scopeCurrent() || type != provider || id != string(reference.value, "root_id") || name != reference.rootName() ||
-			    version.isEmpty() || version.size() > 512 || version.contains('\r') || version.contains('\n') || !root.valid() ||
+			    !versionValid(version) || !root.valid() ||
 			    root.reference().value != reference.value || (!checkpoint.value.isEmpty() && !root.follows(checkpoint))) { fail(); return; }
 			const auto confirmed = root.value; cancel(); emit finished(confirmed, version);
 		});

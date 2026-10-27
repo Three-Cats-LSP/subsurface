@@ -30,6 +30,8 @@ private slots:
 	void workspaceRecord();
 	void workspaceOpen_data();
 	void workspaceOpen();
+	void workspaceAuthority_data();
+	void workspaceAuthority();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();
