@@ -9,6 +9,7 @@ on:
       - '.github/workflows/neo-qml-validation.yml'
       - 'mobile-widgets/qml/main.qml'
       - 'mobile-widgets/qml/MapPage.qml'
+      - 'mobile-widgets/qml/DiveDetailsView.qml'
       - 'mobile-widgets/qml/modern/**'
       - 'scripts/test-neo-qml-contracts.py'
       - 'scripts/test-neo-data-contracts.py'
@@ -43,6 +44,7 @@ jobs:
           mapfile -d '' files < <(find mobile-widgets/qml/modern web/subsurface-neo/wasm -type f -name '*.qml' -print0)
           files+=(mobile-widgets/qml/main.qml)
           files+=(mobile-widgets/qml/MapPage.qml)
+          files+=(mobile-widgets/qml/DiveDetailsView.qml)
           test "${#files[@]}" -gt 0
           for file in "${files[@]}"; do
             echo "Parsing $file"

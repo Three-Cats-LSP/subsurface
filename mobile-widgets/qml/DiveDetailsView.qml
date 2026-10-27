@@ -624,7 +624,8 @@ Item {
 
 		Controls.Label {
 			id: txtNotes
-			text: notes
+			// Hidden legacy pages must not lay out large notes during log reload.
+			text: visible ? notes : ""
 			focus: true
 			Layout.columnSpan: 3
 			Layout.fillWidth: true
