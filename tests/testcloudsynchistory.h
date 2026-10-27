@@ -14,6 +14,10 @@ private slots:
 	void fenceCas();
 	void identityWrite_data();
 	void identityWrite();
+	void handoffReceipt_data();
+	void handoffReceipt();
+	void handoffProof_data();
+	void handoffProof();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();

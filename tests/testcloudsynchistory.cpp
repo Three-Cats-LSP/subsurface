@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QLockFile>
 #include <QNetworkAccessManager>
@@ -237,13 +238,13 @@ void TestCloudSyncHistory::fenceTransitions()
 	QCOMPARE(source.value["nonce"], target.intent(sourceId)["nonce"]);
 	const auto restartedSource = CloudHistoryFence::parse(source.json()); QVERIFY(restartedSource.valid());
 	auto restartedTarget = CloudHistoryFence::parse(target.json()); QVERIFY(restartedTarget.valid());
-	QVERIFY(restartedTarget.acknowledge(restartedSource, "archived-version", CloudHistoryFence::archiveName(epoch, sourceId)));
+	QVERIFY(restartedTarget.acknowledge(sourceId, restartedSource, "archived-version", CloudHistoryFence::archiveName(epoch, sourceId)));
 	QVERIFY(restartedTarget.follows(frozen)); QVERIFY(restartedTarget.follows(intent));
 	QCOMPARE(restartedTarget.record().json(), root.json());
 	QCOMPARE(restartedTarget.intent(sourceId)["sha256"].toString(), CloudSyncManifest::sha256(source.json()));
 	QCOMPARE(restartedTarget.intent(sourceId)["version"].toString(), QString("archived-version"));
 	const auto acknowledged = restartedTarget.json();
-	QVERIFY(!restartedTarget.acknowledge(source, "archived-version", CloudHistoryFence::archiveName(epoch, sourceId)));
+	QVERIFY(!restartedTarget.acknowledge(sourceId, source, "archived-version", CloudHistoryFence::archiveName(epoch, sourceId)));
 	QCOMPARE(restartedTarget.json(), acknowledged);
 	QVERIFY(!intent.follows(restartedTarget)); // A lost-ack retry cannot roll back the acknowledged source.
 	for (int i = 1; i < 16; ++i) QVERIFY(restartedTarget.intend(google ? "source-" + QString::number(i) : "id:source-" + QString::number(i)));
@@ -283,7 +284,7 @@ void TestCloudSyncHistory::fenceRejection()
 		if (scenario == 3) source.value["format"] = "neo-history-fence-future";
 		else source.value["unknown_safety_field"] = true;
 		QVERIFY(!CloudHistoryFence::parse(source.json()).valid());
-		QVERIFY(!target.acknowledge(source, "archived", name)); QCOMPARE(target.json(), before);
+		QVERIFY(!target.acknowledge(sourceId, source, "archived", name)); QCOMPARE(target.json(), before);
 	} else if (scenario >= 5 && scenario <= 8) {
 		if (scenario == 5) root.value["account"] = CloudSyncManifest::sha256("other-account");
 		if (scenario == 6) root = fencedBranch(provider, uid());
@@ -294,7 +295,7 @@ void TestCloudSyncHistory::fenceRejection()
 		if (scenario == 9) source.value["session"] = uid();
 		if (scenario == 10) source.value["nonce"] = uid();
 		if (scenario == 11) source.value["destination"] = google ? "other-target" : "id:other-target";
-		QVERIFY(!target.acknowledge(source, scenario == 12 ? "before-seal" : "archived", scenario == 13 ? "wrong-name.json" : name));
+		QVERIFY(!target.acknowledge(sourceId, source, scenario == 12 ? "before-seal" : "archived", scenario == 13 ? "wrong-name.json" : name));
 		QCOMPARE(target.json(), before);
 	} else if (scenario >= 14 && scenario <= 20) {
 		const auto previous = target;
@@ -306,7 +307,7 @@ void TestCloudSyncHistory::fenceRejection()
 		if (scenario == 18) { entry["nonce"] = uid(); entries.append(entry); }
 		if (scenario == 19) { entry["id"] = google ? "other-source" : "id:other-source"; entries.append(entry); }
 		if (scenario == 20) {
-			QVERIFY(target.acknowledge(source, "archived", name)); const auto acknowledged = target;
+			QVERIFY(target.acknowledge(sourceId, source, "archived", name)); const auto acknowledged = target;
 			entries = target.value["sources"].toArray(); entry = entries.first().toObject(); entry["version"] = "rewritten"; entries[0] = entry;
 			target.value["sources"] = entries; target.value["sequence"] = 3;
 			QVERIFY(target.valid()); QVERIFY(!target.follows(acknowledged)); return;
@@ -453,7 +454,7 @@ void TestCloudSyncHistory::fenceCas()
 		n.files[3].name = archived; n.files[3].rev += "-archived";
 		const int reads = read.size(); files.downloadIdentity(provider, "token", archived, sourceId); QTRY_COMPARE(read.size(), reads + 1);
 		QCOMPARE(read.last()[2].toByteArray(), source.json()); QCOMPARE(read.last()[4].toString(), sourceId);
-		QVERIFY(target.acknowledge(CloudHistoryFence::parse(read.last()[2].toByteArray()), read.last()[3].toString(), archived));
+		QVERIFY(target.acknowledge(read.last()[4].toString(), CloudHistoryFence::parse(read.last()[2].toByteArray()), read.last()[3].toString(), archived));
 		QVERIFY(persist(2, target.json()));
 		QCOMPARE(target.record().json(), root.json()); QCOMPARE(source.record().json(), scenario == 2 ? sourceRoot.json() : root.json());
 		if (scenario == 5) n.add(google ? name : name.chopped(5) + "-delayed.json", root.json());
@@ -555,6 +556,151 @@ void TestCloudSyncHistory::identityWrite()
 		QCOMPARE(read.first()[2].toByteArray(), unchanged ? A : B); QCOMPARE(read.first()[4].toString(), targetId);
 	}
 	QCOMPARE(n.mutations, 1); QCOMPARE(n.files.size(), before.size());
+}
+
+void TestCloudSyncHistory::handoffReceipt_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"verified", "wrong-observed-id", "changed-source-body", "wrong-revision", "wrong-name", "unsealed-revision",
+		"intent-without-receipt", "wrong-destination", "wrong-nonce", "wrong-session", "foreign-account", "wrong-hash", "unknown-format", "newline-revision"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s)
+		QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::handoffReceipt()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto epoch = uid(), provider = QString(google ? "google-drive" : "dropbox");
+	const auto sourceId = QString(google ? "source" : "id:source"), targetId = QString(google ? "target" : "id:target");
+	auto root = fencedBranch(provider, epoch); QVERIFY(root.valid());
+	auto target = CloudHistoryFence::freeze(targetId, root); QVERIFY(target.intend(sourceId));
+	QVERIFY(target.intend(google ? "different-id" : "id:different-id"));
+	const auto intended = target;
+	auto source = CloudHistoryFence::seal(sourceId, root, "before-seal", target); QVERIFY(source.valid());
+	QString actualId = sourceId, version = "sealed-revision", name = CloudHistoryFence::archiveName(epoch, sourceId);
+	QVERIFY(!target.acknowledge(google ? "different-id" : "id:different-id", source, version, name));
+	QCOMPARE(target.json(), intended.json()); // A body cannot attest another physical identity.
+	QVERIFY(target.acknowledge(actualId, source, version, name));
+	if (scenario == 1) actualId = google ? "different-id" : "id:different-id";
+	if (scenario == 2) { QVERIFY(root.registerUpload(uid(), root.head(), CloudSyncManifest::sha256(B), B.size())); source.value["record"] = root.value; QVERIFY(source.valid()); }
+	if (scenario == 3) version += "changed";
+	if (scenario == 4) name = "unverified-name.json";
+	if (scenario == 5) version = "before-seal";
+	if (scenario == 6) target = intended;
+	if (scenario == 7) target.value["id"] = google ? "another-target" : "id:another-target";
+	if (scenario == 8) source.value["nonce"] = uid();
+	if (scenario == 9) target.value["session"] = uid();
+	if (scenario == 10) { auto record = source.record(); record.value["account"] = CloudSyncManifest::sha256("other-account"); source.value["record"] = record.value; QVERIFY(source.valid()); }
+	if (scenario == 5 || scenario == 11 || scenario == 13) {
+		auto entries = target.value["sources"].toArray(); auto entry = entries.first().toObject();
+		if (scenario == 11) entry["sha256"] = CloudSyncManifest::sha256("other-body");
+		else { if (scenario == 13) version += '\n'; entry["version"] = version; }
+		entries[0] = entry; target.value["sources"] = entries;
+	}
+	if (scenario == 12) source.value["format"] = "unknown-future-format";
+	const auto before = target.json();
+	QCOMPARE(target.acknowledges(actualId, source, version, name), scenario == 0);
+	QCOMPARE(target.json(), before); // Verification never rewrites safety metadata.
+	if (scenario == 0) {
+		const auto restartedSource = CloudHistoryFence::parse(source.json());
+		auto restartedTarget = CloudHistoryFence::parse(target.json());
+		QVERIFY(restartedTarget.acknowledges(actualId, restartedSource, version, name));
+		QVERIFY(restartedTarget.intend(google ? "later-source" : "id:later-source"));
+		QVERIFY(restartedTarget.acknowledges(actualId, restartedSource, version, name));
+	}
+}
+void TestCloudSyncHistory::handoffProof_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"restart-and-idempotence", "coordinator-advance", "source-advance", "reload-new-checkpoint", "source-rollback",
+		"wrong-observed-source", "wrong-observed-target", "missing-target-revision", "wrong-source-revision", "wrong-source-name", "checkpoint-lock",
+		"corrupt-checkpoint", "directory-is-file", "corrupt-proof", "proof-is-directory", "competing-proof", "receipt-rollback", "pristine-anchor",
+		"no-local-anchor", "oversized-proof", "unknown-proof-format", "foreign-source-account", "large-proof", "changed-checkpoint-bytes", "changed-sealed-body"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s)
+		QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::handoffProof()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto epoch = uid(), provider = QString(google ? "google-drive" : "dropbox");
+	const auto sourceId = QString(google ? "source" : "id:source"), targetId = QString(google ? "target" : "id:target");
+	auto baseline = fencedBranch(provider, epoch); QVERIFY(baseline.valid());
+	if (scenario == 22) {
+		auto tickets = baseline.value["tickets"].toObject(); auto t = baseline.ticket(baseline.head());
+		t["state"] = "uploaded"; t["parent"] = baseline.head();
+		for (int i = 0; i < 505; ++i) {
+			const auto id = uid(); t["name"] = CloudHistoryRecord::payloadName(epoch, id);
+			t["object"] = QString::number(i) + QString(490, 'x'); t["version"] = QString(512, 'v'); tickets[id] = t;
+		}
+		baseline.value["tickets"] = tickets; QVERIFY(baseline.valid());
+	}
+	auto advanced = baseline;
+	QVERIFY(advanced.registerUpload(uid(), advanced.head(), CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(advanced.upgradeLegacyProvenance());
+	const auto sourceRoot = scenario == 2 || scenario == 3 ? advanced : baseline;
+	auto target = CloudHistoryFence::freeze(targetId, baseline); QVERIFY(target.intend(sourceId)); const auto intent = target;
+	auto source = CloudHistoryFence::seal(sourceId, sourceRoot, "before-seal", target); QVERIFY(source.valid());
+	const auto archived = CloudHistoryFence::archiveName(epoch, sourceId);
+	QVERIFY(target.acknowledge(sourceId, source, "sealed-revision", archived));
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); const auto path = temporary.filePath("authority.json");
+	CloudHistoryAuthority authority(path);
+	const auto anchor = scenario == 17 ? CloudHistoryRecord::create(provider, Account, epoch, baseline.value["legacy_sha256"].toString()) : baseline;
+	if (scenario != 18) QVERIFY(authority.observe(sourceId, anchor));
+	if (scenario == 3 || scenario == 4) { CloudHistoryAuthority other(path); QVERIFY(other.observe(sourceId, advanced)); }
+	const auto readBytes = [](const QString &name) { QFile file(name); return QFileInfo(name).isFile() && file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray(); };
+	const auto writeBytes = [](const QString &name, const QByteArray &bytes) { QFile file(name); return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(); };
+	const auto directory = path + ".handoffs", expectedPath = directory + "/" + CloudSyncManifest::sha256(sourceId.toUtf8()) + ".json";
+	std::unique_ptr<QLockFile> held;
+	if (scenario == 10) { held = std::make_unique<QLockFile>(path + ".lock"); QVERIFY(held->tryLock(0)); }
+	if (scenario == 11) QVERIFY(writeBytes(path, "invalid checkpoint"));
+	if (scenario == 12) QVERIFY(writeBytes(directory, "unrelated directory blocker"));
+	if (scenario == 13 || scenario == 14 || scenario == 19) {
+		QVERIFY(QDir().mkpath(directory));
+		if (scenario == 13) QVERIFY(writeBytes(expectedPath, "unrelated proof blocker"));
+		if (scenario == 14) QVERIFY(QDir().mkpath(expectedPath));
+		if (scenario == 19) QVERIFY(writeBytes(expectedPath, QByteArray(4 * 1024 * 1024 + 4097, 'x')));
+	}
+	const bool priorReceipt = scenario == 1 || scenario == 15 || scenario == 16 || scenario == 20 || scenario == 23;
+	if (priorReceipt) QCOMPARE(authority.preserveHandoff(sourceId, source, "sealed-revision", archived, targetId, target, "target-revision"), expectedPath);
+	if (scenario == 1) QVERIFY(target.intend(google ? "later-source" : "id:later-source"));
+	if (scenario == 15) {
+		target = CloudHistoryFence::freeze(targetId, baseline); QVERIFY(target.intend(sourceId));
+		source = CloudHistoryFence::seal(sourceId, baseline, "another-before-seal", target);
+		QVERIFY(target.acknowledge(sourceId, source, "sealed-revision", archived));
+	}
+	if (scenario == 16) target = intent;
+	if (scenario == 20) {
+		auto unsupported = QJsonDocument::fromJson(readBytes(expectedPath)).object(); unsupported["format"] = "unknown-future-proof";
+		QVERIFY(writeBytes(expectedPath, QJsonDocument(unsupported).toJson(QJsonDocument::Compact)));
+	}
+	if (scenario == 21) { auto foreign = source.record(); foreign.value["account"] = CloudSyncManifest::sha256("other-account"); source.value["record"] = foreign.value; QVERIFY(source.valid()); }
+	if (scenario == 23) QVERIFY(writeBytes(path, readBytes(path) + "\n"));
+	if (scenario == 24) { source.value["record"] = advanced.value; QVERIFY(source.valid()); }
+	const auto checkpointBytes = readBytes(path), proofBefore = readBytes(expectedPath), blockerBefore = scenario == 12 ? readBytes(directory) : QByteArray();
+	const auto observedSource = scenario == 5 ? (google ? QString("another-source") : QString("id:another-source")) : sourceId;
+	const auto observedTarget = scenario == 6 ? (google ? QString("another-target") : QString("id:another-target")) : targetId;
+	const auto result = authority.preserveHandoff(observedSource, source, scenario == 8 ? "wrong-revision" : "sealed-revision",
+		scenario == 9 ? "wrong-name.json" : archived, observedTarget, target, scenario == 7 ? QString() : "new-target-revision");
+	const bool accepted = scenario <= 3 || scenario == 17 || scenario == 22;
+	QCOMPARE(!result.isEmpty(), accepted);
+	QCOMPARE(readBytes(path), checkpointBytes); // Never replace/normalize the active checkpoint.
+	if (scenario == 12) QCOMPARE(readBytes(directory), blockerBefore);
+	if (!proofBefore.isEmpty()) QCOMPARE(readBytes(expectedPath), proofBefore); // Existing receipts/blockers are immutable.
+	if (!accepted) {
+		if (proofBefore.isEmpty() && scenario != 14) QVERIFY(!QFileInfo::exists(expectedPath));
+		return;
+	}
+	QCOMPARE(result, expectedPath);
+	const auto proofBytes = readBytes(result); const auto proof = QJsonDocument::fromJson(proofBytes).object();
+	QCOMPARE(proof["format"].toString(), QString("neo-history-handoff-proof-development-1"));
+	QCOMPARE(QByteArray::fromBase64(proof["checkpoint_base64"].toString().toLatin1()), checkpointBytes);
+	QCOMPARE(proof["checkpoint_sha256"].toString(), CloudSyncManifest::sha256(checkpointBytes));
+	QCOMPARE(proof["source"].toObject(), source.value); QCOMPARE(proof["source_id"].toString(), sourceId);
+	if (scenario == 22) QVERIFY(proofBytes.size() > 1024 * 1024);
+	CloudHistoryAuthority restarted(path); QVERIFY(restarted.load()); QCOMPARE(restarted.id(), sourceId);
+	QVERIFY(!restarted.rebindPristine(sourceId, source.record(), targetId, target.record()));
+	QCOMPARE(readBytes(path), checkpointBytes);
+	QCOMPARE(restarted.preserveHandoff(sourceId, source, "sealed-revision", archived, targetId, target, "another-target-revision"), expectedPath);
+	QCOMPARE(readBytes(expectedPath), proofBytes);
 }
 
 void TestCloudSyncHistory::invalidRecords_data()

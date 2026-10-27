@@ -58,8 +58,10 @@ public:
 	bool intend(const QString &sourceId);
 	// Caller must confirm exact source ID, archived name, revision and bytes
 	// through the provider before publishing this acknowledgement by target CAS.
-	bool acknowledge(const CloudHistoryFence &source, const QString &version, const QString &name);
+	bool acknowledge(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name);
+	bool acknowledges(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const;
 private:
+	bool matchesSource(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const;
 	bool replace(const QJsonObject &candidate);
 };
 
@@ -72,6 +74,13 @@ public:
 	bool observe(const QString &id, const CloudHistoryRecord &root);
 	bool rebindPristine(const QString &oldId, const CloudHistoryRecord &archived,
 		const QString &newId, const CloudHistoryRecord &root);
+	// Preserve a confirmed handoff and the exact current checkpoint in a local
+	// immutable recovery file. Does not change the active identity/checkpoint.
+	// Caller supplies provider-verified observations; this performs no network I/O.
+	// Returned path is empty on any mismatch, lock or storage failure.
+	QString preserveHandoff(const QString &sourceId, const CloudHistoryFence &source,
+		const QString &sourceVersion, const QString &sourceName,
+		const QString &targetId, const CloudHistoryFence &target, const QString &targetVersion);
 	QString id() const { return rootId; }
 	CloudHistoryRecord record() const { return checkpoint; }
 private:

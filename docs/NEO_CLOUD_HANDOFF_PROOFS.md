@@ -1,0 +1,15 @@
+# Preserved local handoff proofs
+
+Development foundation, 2026-10-28 JST. This continues [root-resolution fences](NEO_CLOUD_ROOT_RESOLUTION.md) and [exact-ID provider updates](NEO_CLOUD_IDENTITY_UPDATES.md). No application action publishes fences or stages these proofs yet. This is not authority activation, production migration or cleanup.
+
+`CloudHistoryFence::acknowledge()` now requires the separately observed source ID; an embedded self-ID cannot attest a different physical object, even when the coordinator has intents for both. Read-only `acknowledges()` verifies the scope, source ID, target/session/nonce, confirmed archived name/revision and canonical sealed-body hash. It rejects intent-only receipts, changed bodies, unsupported formats and the pre-seal revision.
+
+`CloudHistoryAuthority::preserveHandoff()` accepts provider-verified observations and performs no network I/O. It reloads the established local checkpoint under its existing process lock, verifies that the sealed source extends every saved safety record, and checks the exact destination identity and acknowledgement. Missing local authority, rollback, scope mismatch or uncertain proof blocks staging.
+
+Before any future active-binding replacement, it saves a separate recovery receipt containing the exact original checkpoint bytes (base64 plus SHA-256), complete sealed source/coordinator records and observed object IDs/revisions. The active checkpoint and local log remain unchanged. Atomic `QSaveFile` publication is followed by a bounded readback. Receipts live under `<authority-file>.handoffs/<sha256(source-id)>.json`; each source's receipt is immutable. A retry may verify an advancing coordinator without rewriting the first receipt. Different source proofs, changed checkpoint bytes, corrupt/unknown files or storage errors preserve existing bytes and stop.
+
+The receipt format is `neo-history-handoff-proof-development-1`, capped at 4 MiB plus a small envelope allowance. It contains control metadata, not XML or credentials. No age/expiry inference, object retirement, deletion, binding replacement or broadening of the pristine-alias exception is included. Provider-backed age evidence and complete global authority discovery remain separate requirements.
+
+Native regression covers observed-ID misbinding, receipt tampering/scope/version/hash failures, source/checkpoint advancement, latest-checkpoint reload under the lock, competing receipts, unchanged active bindings, local lock/storage/corruption failures, unknown and oversized receipts, restart/idempotence, pristine/missing anchors and multi-megabyte proof preservation. These are synthetic Qt/provider/filesystem tests. They do not claim a real power-loss test or live multi-root resolution. No live history object is fenced by this increment.
+
+Validation is pending on its committed revision. Continue existing Windows package runs before dispatching duplicates, and record exact native/Windows/Clean/Modern results in [the continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md).

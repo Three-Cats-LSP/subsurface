@@ -18,10 +18,12 @@ namespace {
 constexpr qint64 PayloadLimit = 64 * 1024 * 1024;
 constexpr int RecordLimit = 1024 * 1024;
 constexpr int EntryLimit = 512;
+constexpr int ProofLimit = 4 * RecordLimit + 4096;
 const QString LegacyName = QStringLiteral("subsurface-neo-sync.json");
 QString uuid() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
 bool hash(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(s).hasMatch(); }
 bool text(const QString &s) { return !s.isEmpty() && s.size() <= 512 && !s.contains(QChar::Null); }
+bool revision(const QString &s) { return text(s) && !s.contains('\r') && !s.contains('\n'); }
 bool fields(const QJsonObject &o, const QStringList &names) {
 	if (o.size() != names.size()) return false;
 	for (const auto &name : names) if (!o.contains(name)) return false;
@@ -372,17 +374,27 @@ CloudHistoryFence CloudHistoryFence::seal(const QString &id, const CloudHistoryR
 	if (!source.valid()) source.value = {};
 	return source;
 }
-bool CloudHistoryFence::acknowledge(const CloudHistoryFence &source, const QString &version, const QString &name)
+bool CloudHistoryFence::matchesSource(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const
 {
 	if (!valid() || string(value, "state") != "coordinator" || !source.valid() || string(source.value, "state") != "sealed" ||
-	    !text(version) || version == string(source.value, "base_version") ||
+	    string(source.value, "id") != sourceId || !revision(version) || version == string(source.value, "base_version") ||
 	    string(source.value, "destination") != string(value, "id") || source.value.value("session") != value.value("session")) return false;
 	const auto root = record(), other = source.record();
 	for (const auto &key : {"provider", "account", "epoch"}) if (root.value.value(key) != other.value.value(key)) return false;
-	const auto sourceId = string(source.value, "id");
+	return intent(sourceId).value("nonce") == source.value.value("nonce") && name == archiveName(string(root.value, "epoch"), sourceId);
+}
+bool CloudHistoryFence::acknowledges(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const
+{
+	if (!matchesSource(sourceId, source, version, name)) return false;
+	const auto entry = intent(sourceId);
+	return string(entry, "state") == "acknowledged" && string(entry, "version") == version && string(entry, "name") == name &&
+		string(entry, "sha256") == CloudSyncManifest::sha256(source.json());
+}
+bool CloudHistoryFence::acknowledge(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name)
+{
+	if (!matchesSource(sourceId, source, version, name)) return false;
 	auto entry = intent(sourceId);
-	if (string(entry, "state") != "intent" || entry.value("nonce") != source.value.value("nonce") ||
-	    name != archiveName(string(root.value, "epoch"), sourceId)) return false;
+	if (string(entry, "state") != "intent") return false;
 	entry["state"] = "acknowledged"; entry["sha256"] = CloudSyncManifest::sha256(source.json()); entry["version"] = version; entry["name"] = name;
 	auto sources = value.value("sources").toArray();
 	for (int i = 0; i < sources.size(); ++i) if (sources[i].toObject().value("id") == QJsonValue(sourceId)) sources[i] = entry;
@@ -438,6 +450,49 @@ bool CloudHistoryAuthority::rebindPristine(const QString &oldId, const CloudHist
 	if (!lock.tryLock(0) || !readUnlocked() || rootId != oldId || !checkpoint.pristine() ||
 	    archived.json() != checkpoint.json() || !root.follows(checkpoint)) return false;
 	return writeUnlocked(newId, root);
+}
+QString CloudHistoryAuthority::preserveHandoff(const QString &sourceId, const CloudHistoryFence &source,
+	const QString &sourceVersion, const QString &sourceName,
+	const QString &targetId, const CloudHistoryFence &target, const QString &targetVersion)
+{
+	if (fileName.isEmpty() || !revision(targetVersion) || string(target.value, "id") != targetId ||
+	    !target.acknowledges(sourceId, source, sourceVersion, sourceName)) return {};
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !readUnlocked() || rootId != sourceId || !source.record().follows(checkpoint)) return {};
+	QFile active(fileName);
+	if (!active.open(QIODevice::ReadOnly)) return {};
+	const auto checkpointBytes = active.read(RecordLimit + 1025);
+	const QJsonObject expectedCheckpoint{{"schema", 1}, {"root_id", rootId}, {"root", checkpoint.value}};
+	if (checkpointBytes.size() > RecordLimit + 1024 || QJsonDocument::fromJson(checkpointBytes).object() != expectedCheckpoint) return {};
+	active.close();
+	const QJsonObject proof{{"format", "neo-history-handoff-proof-development-1"},
+		{"checkpoint_base64", QString::fromLatin1(checkpointBytes.toBase64())}, {"checkpoint_sha256", CloudSyncManifest::sha256(checkpointBytes)},
+		{"source_id", sourceId}, {"source_version", sourceVersion}, {"source_name", sourceName}, {"source", source.value},
+		{"target_id", targetId}, {"target_version", targetVersion}, {"target", target.value}};
+	const auto bytes = QJsonDocument(proof).toJson(QJsonDocument::Compact);
+	if (bytes.size() > ProofLimit) return {};
+	const auto directory = fileName + ".handoffs";
+	if (QFileInfo(directory).isSymLink() || (QFileInfo::exists(directory) && !QFileInfo(directory).isDir()) || !QDir().mkpath(directory)) return {};
+	const auto path = directory + "/" + CloudSyncManifest::sha256(sourceId.toUtf8()) + ".json";
+	const QFileInfo info(path);
+	if (info.isSymLink()) return {};
+	if (info.exists()) {
+		if (!info.isFile() || info.size() > ProofLimit) return {};
+		QFile existing(path); if (!existing.open(QIODevice::ReadOnly)) return {};
+		auto saved = QJsonDocument::fromJson(existing.read(ProofLimit + 1)).object();
+		CloudHistoryFence savedTarget; savedTarget.value = saved.value("target").toObject();
+		if (!revision(string(saved, "target_version")) || !target.follows(savedTarget) ||
+		    !savedTarget.acknowledges(sourceId, source, sourceVersion, sourceName)) return {};
+		// An advancing coordinator need not rewrite the first durable receipt.
+		// Everything else, including the exact original checkpoint, is immutable.
+		auto expected = proof;
+		for (const auto &key : {"target", "target_version"}) { saved.remove(QLatin1String(key)); expected.remove(QLatin1String(key)); }
+		return saved == expected ? path : QString();
+	}
+	QSaveFile file(path);
+	if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return {};
+	QFile confirmed(path);
+	return confirmed.open(QIODevice::ReadOnly) && confirmed.read(ProofLimit + 1) == bytes ? path : QString();
 }
 QVariantMap CloudHistoryRecord::report() const
 {
