@@ -11,6 +11,7 @@
 #include "core/cloudsyncworkspace.h"
 #include "core/cloudsyncworkspacesource.h"
 #include "core/cloudsyncworkspacecopy.h"
+#include "core/cloudsyncworkspaceupload.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -64,17 +65,46 @@ int main(int argc, char **argv)
 	const bool creation = mode == "workspace-create";
 	const bool sourceReview = mode == "workspace-source";
 	const bool copying = mode == "workspace-copy";
+	const bool uploading = mode == "workspace-upload";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
 	const QRegularExpression workspaceFixture(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
-	const bool validName = sourceReview ? name == "subsurface-neo-sync.json" : ((workspace || creation || copying) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch();
+	const bool validName = sourceReview ? name == "subsurface-neo-sync.json" : ((workspace || creation || copying || uploading) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch();
 	if (!valid || (!google && get("provider") != "dropbox") || !validName ||
-	    (mode != "read" && mode != "write" && !archival && !workspace && !creation && !sourceReview && !copying) || token.isEmpty() || token.size() > 8192 ||
+	    (mode != "read" && mode != "write" && !archival && !workspace && !creation && !sourceReview && !copying && !uploading) || token.isEmpty() || token.size() > 8192 ||
 	    !QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(get("before_sha256")).hasMatch() ||
-	    ((archival || workspace || creation || sourceReview || copying) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
+	    ((archival || workspace || creation || sourceReview || copying || uploading) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
 	ProbeNetwork network;
+	if (uploading) {
+		const auto payload = QJsonDocument::fromJson(body).object(); CloudWorkspaceReference ref; ref.value = payload.value("reference").toObject();
+		const auto epoch = ref.value.value("epoch").toString(), nonce = payload.value("nonce").toString(), ticket = payload.value("ticket").toString();
+		const QFileInfo intent(payload.value("intent_file").toString()); const QDir parent(intent.absolutePath());
+		const auto checkpoint = payload.value("checkpoint_file").toString(), choice = payload.value("choice_file").toString();
+		const auto encoded = payload.value("payload_base64").toString().toLatin1(), bytes = QByteArray::fromBase64(encoded);
+		CloudWorkspaceAuthority authority(checkpoint, ref);
+		const auto marker = CloudSyncManifest::sha256(("neo-workspace-create-probe:origin:" + epoch + ":" + nonce).toUtf8());
+		if (payload.size() != 10 || !ref.matches(get("provider"), payload.value("account").toString()) || ref.rootName() != name || ref.value.value("root_id").toString() != id || !version.isEmpty() ||
+		    bytes.isEmpty() || bytes.size() > 2048 || bytes.toBase64() != encoded || !CloudHistoryRecord::validXml(bytes) || !payload.value("parent").isString() ||
+		    !CloudHistoryRecord::validEpoch(nonce) || !CloudHistoryRecord::validEpoch(ticket) || marker != get("before_sha256") ||
+		    !intent.isAbsolute() || intent.fileName() != "upload-" + ticket + ".json" || parent.dirName() != "neo-workspace-probe-" + epoch + "-" + nonce ||
+		    QDir::cleanPath(checkpoint) != parent.filePath("checkpoints/" + ref.key() + ".json") || QDir::cleanPath(choice) != parent.filePath("choice.json") ||
+		    !authority.load() || !authority.record().valid() || authority.record().value.value("journal").toObject().value("legacy_sha256").toString() != marker)
+			return output({{"ok", false}, {"phase", "input"}}, 2);
+		CloudWorkspaceUpload upload(&network);
+		QObject::connect(&upload, &CloudWorkspaceUpload::finished, &app, [&](const QJsonObject &record, const QString &actualVersion, const QString &uploadedTicket, bool headMatches) {
+			output({{"ok", true}, {"phase", "workspace-uploaded"}, {"record", record}, {"version", actualVersion}, {"ticket", uploadedTicket}, {"headMatches", headMatches},
+				{"createRequests", network.creates}, {"updateRequests", network.updates}, {"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 0); app.exit(0);
+		});
+		QObject::connect(&upload, &CloudWorkspaceUpload::failed, &app, [&](const QString &, bool rejected) {
+			output({{"ok", false}, {"phase", "workspace-upload"}, {"tokenRejected", rejected}, {"createRequests", network.creates}, {"updateRequests", network.updates},
+				{"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 2); app.exit(2);
+		});
+		QTimer::singleShot(0, &app, [&] { upload.start(token, ref, bytes, choice, payload.value("choice_version").toString(), checkpoint, intent.absoluteFilePath(),
+			ticket, payload.value("parent").toString(), [] { return true; }); });
+		return app.exec();
+	}
 	if (copying) {
 		const auto payload = QJsonDocument::fromJson(body).object(); CloudWorkspaceReference ref; ref.value = payload.value("reference").toObject();
 		CloudWorkspaceCopySource source; source.value = payload.value("source").toObject();

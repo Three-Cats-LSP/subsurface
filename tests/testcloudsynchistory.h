@@ -50,6 +50,10 @@ private slots:
 	void workspacePayloadTransport();
 	void workspaceCopyWorkflow_data();
 	void workspaceCopyWorkflow();
+	void workspaceUploadIntent_data();
+	void workspaceUploadIntent();
+	void workspaceUploadWorkflow_data();
+	void workspaceUploadWorkflow();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();
