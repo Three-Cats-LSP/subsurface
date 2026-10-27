@@ -2,6 +2,7 @@
 #ifndef CLOUD_SYNC_WORKSPACE_H
 #define CLOUD_SYNC_WORKSPACE_H
 #include "cloudsynchistory.h"
+#include "cloudsyncworkspacesource.h"
 #include <QJsonObject>
 #include <QString>
 
@@ -52,6 +53,8 @@ public:
 	QByteArray json() const;
 	QString head() const;
 	QJsonObject ticket(const QString &id) const;
+	CloudWorkspaceCopySource copySource(const QString &ticket) const;
+	bool registerCopy(const QString &id, const QString &expectedHead, const CloudWorkspaceCopySource &source);
 	bool registerUpload(const QString &id, const QString &expectedHead, const QString &hash, qint64 bytes,
 		const QString &restoreSource = {}, const QString &reservation = {});
 	bool completeUpload(const QString &id, const QString &objectId, const QString &version);

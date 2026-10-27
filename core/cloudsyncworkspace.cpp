@@ -33,12 +33,19 @@ CloudWorkspaceReference CloudWorkspaceRecord::reference() const
 QByteArray CloudWorkspaceRecord::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
 QString CloudWorkspaceRecord::head() const { return value.value("journal").toObject().value("head").toString(); }
 QJsonObject CloudWorkspaceRecord::ticket(const QString &id) const { return value.value("journal").toObject().value("tickets").toObject().value(id).toObject(); }
+CloudWorkspaceCopySource CloudWorkspaceRecord::copySource(const QString &id) const
+{
+	CloudWorkspaceCopySource source; source.value = value.value("copies").toObject().value(id).toObject(); return source;
+}
 CloudHistoryRecord CloudWorkspaceRecord::journal() const
 {
 	CloudHistoryRecord result;
 	const auto ref = reference();
-	if (!ref.valid() || !fields(value, {"schema", "format", "workspace", "journal"}) || value.value("schema") != QJsonValue(4) ||
-	    string(value, "format") != "neo-workspace-history-development-1" || !value.value("journal").isObject()) return result;
+	const bool copies = string(value, "format") == "neo-workspace-history-development-2";
+	QStringList keys = {"schema", "format", "workspace", "journal"}; if (copies) keys.append("copies");
+	if (!ref.valid() || !fields(value, keys) || value.value("schema") != QJsonValue(4) ||
+	    (!copies && string(value, "format") != "neo-workspace-history-development-1") || !value.value("journal").isObject() ||
+	    (copies && (!value.value("copies").isObject() || value.value("copies").toObject().isEmpty()))) return result;
 	auto journal = value.value("journal").toObject();
 	if (!journal.value("tickets").isObject()) return result;
 	for (const auto &key : {"provider", "account", "epoch"}) if (journal.value(QLatin1String(key)) != ref.value.value(QLatin1String(key))) return result;
@@ -65,6 +72,14 @@ bool CloudWorkspaceRecord::valid() const
 		    (!CloudWorkspaceReference::create(string(ref.value, "provider"), string(ref.value, "account"), string(ref.value, "epoch"), id).valid() ||
 		     id == string(ref.value, "root_id") || !versionValid(version))) return false;
 	}
+	const auto copies = value.value("copies").toObject();
+	for (auto it = copies.begin(); it != copies.end(); ++it) {
+		const auto source = copySource(it.key()); const auto t = ticket(it.key()); const auto p = source.value.value("payload").toObject(), m = source.value.value("manifest").toObject();
+		if (!uuid(it.key()) || t.isEmpty() || !source.matches(string(ref.value, "provider"), string(ref.value, "account")) ||
+		    t.value("sha256") != p.value("sha256") || t.value("bytes") != p.value("bytes") || !string(t, "restore_source").isEmpty() ||
+		    string(p, "id") == string(ref.value, "root_id") || string(m, "id") == string(ref.value, "root_id") ||
+		    (!string(t, "object").isEmpty() && (string(t, "object") == string(p, "id") || string(t, "object") == string(m, "id")))) return false;
+	}
 	return true;
 }
 CloudWorkspaceRecord CloudWorkspaceRecord::create(const CloudWorkspaceReference &reference, const QString &legacyHash)
@@ -86,7 +101,23 @@ CloudWorkspaceRecord CloudWorkspaceRecord::parse(const QByteArray &bytes)
 }
 bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 {
-	return valid() && previous.valid() && reference().value == previous.reference().value && journal().follows(previous.journal());
+	if (!valid() || !previous.valid() || reference().value != previous.reference().value || !journal().follows(previous.journal())) return false;
+	const auto before = previous.value.value("copies").toObject(), after = value.value("copies").toObject();
+	for (auto it = before.begin(); it != before.end(); ++it) if (after.value(it.key()) != it.value()) return false;
+	for (auto it = after.begin(); it != after.end(); ++it) if (!before.contains(it.key()) && !previous.ticket(it.key()).isEmpty()) return false;
+	return value.value("format") == previous.value.value("format") ||
+		(string(previous.value, "format") == "neo-workspace-history-development-1" && string(value, "format") == "neo-workspace-history-development-2" &&
+		 journal().value.value("sequence").toInt() > previous.journal().value.value("sequence").toInt());
+}
+bool CloudWorkspaceRecord::registerCopy(const QString &id, const QString &parent, const CloudWorkspaceCopySource &source)
+{
+	const auto ref = reference(); const auto payload = source.value.value("payload").toObject(); auto next = *this;
+	if (!valid() || !source.matches(string(ref.value, "provider"), string(ref.value, "account")) ||
+	    !next.registerUpload(id, parent, string(payload, "sha256"), qint64(payload.value("bytes").toDouble()))) return false;
+	auto copies = value.value("copies").toObject(); copies[id] = source.value;
+	next.value["format"] = "neo-workspace-history-development-2"; next.value["copies"] = copies;
+	if (!next.valid() || !next.follows(*this)) return false;
+	value = next.value; return true;
 }
 bool CloudWorkspaceRecord::replaceJournal(const CloudHistoryRecord &record)
 {

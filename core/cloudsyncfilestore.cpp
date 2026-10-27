@@ -621,10 +621,21 @@ void CloudSyncFileStore::uploadIdentity(CloudSyncProviderType provider, const QS
 void CloudSyncFileStore::createWorkspaceIdentity(CloudSyncProviderType provider, const QString &accessToken,
 	const QString &fileName, const QByteArray &bootstrap)
 {
+	createWorkspaceObjectIdentity(provider, accessToken, fileName, bootstrap, false);
+}
+void CloudSyncFileStore::createWorkspacePayloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QByteArray &data)
+{
+	createWorkspaceObjectIdentity(provider, accessToken, fileName, data, true);
+}
+void CloudSyncFileStore::createWorkspaceObjectIdentity(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QByteArray &bootstrap, bool payload)
+{
 	const bool google = provider == CloudSyncProviderType::GoogleDrive;
-	const QRegularExpression pattern(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
+	const QString uuid = "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}";
+	const QRegularExpression pattern("^subsurface-neo-workspace-" + uuid + (payload ? "-[a-f0-9]{64}-" + uuid + "\\.xml$" : "\\.json$"));
 	if ((!google && provider != CloudSyncProviderType::Dropbox) || accessToken.isEmpty() || !pattern.match(fileName).hasMatch() ||
-	    bootstrap.isEmpty() || bootstrap.size() > 8192) {
+	    bootstrap.isEmpty() || bootstrap.size() > (payload ? 64 * 1024 * 1024 : 8192)) {
 		emit operationError(provider, fileName, tr("Workspace creation requires a new valid namespace.")); return;
 	}
 	QNetworkRequest request; QByteArray body = bootstrap;
@@ -642,14 +653,16 @@ void CloudSyncFileStore::createWorkspaceIdentity(CloudSyncProviderType provider,
 			{"strict_conflict", true}, {"autorename", false}, {"mute", true}}));
 	}
 	auto *reply = networkManager->post(request, body); trackReply(provider, reply, bootstrap.size(), fileName);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, provider, google, fileName] {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, provider, google, fileName, payload] {
 		const auto bytes = reply->readAll(); const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 		const bool ok = reply->error() == QNetworkReply::NoError; reply->deleteLater();
-		if (ok) {
+		if (ok && (!payload || status == 200 || status == 201)) {
 			const auto metadata = QJsonDocument::fromJson(bytes).object(); const auto id = metadata.value("id").toString();
 			const QRegularExpression idPattern(google ? QStringLiteral("^[A-Za-z0-9_-]+$") : QStringLiteral("^id:[A-Za-z0-9_-]+$"));
 			if (metadata.value("name").toString() == fileName && id.size() <= 512 && idPattern.match(id).hasMatch()) {
-				emit workspaceIdentityCreated(provider, fileName, id); return;
+				if (payload) emit workspacePayloadCreated(provider, fileName, id);
+				else emit workspaceIdentityCreated(provider, fileName, id);
+				return;
 			}
 		} else if (!google && status == 409 && QJsonDocument::fromJson(bytes).object().value("error_summary").toString().startsWith("path/conflict/")) {
 			emit writeConflict(provider, fileName); return;
