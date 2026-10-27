@@ -12,7 +12,13 @@ Two frozen coordinators cannot be nested or sealed through this API: they remain
 
 Native tests cover both earlier history formats, full pending/uploaded/committed state, active and released reservations, stale target/source writes, uploads completing after a fence, competing coordinators, delayed roots, invalid identities/scopes/nonces, immutable acknowledgements, size bounds and lost responses after every conditional body transition. The provider simulator models archival metadata externally; these tests do **not** validate a new native active-root rename adapter. Exact-ID current-revision reads now support Dropbox as well as Google, including expected-name checks when strict name lookup is disabled. Dropbox conditional writes still use its unique path plus expected revision; a future resolver must add/validate the required identity-preserving write/rename adapter before publishing live fences.
 
-Validation: pending native Windows/Linux protocol and exact-head application checks. No live object has been fenced or renamed by this increment, and no credentials were accessed.
+Validation: revision `e46d02881546f2e337f425204dfdbdfe2b0f55f2` passed the native Windows protocol job in [cloud regression `40519034489`](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40519034489), with actual CTest execution taking 31.08 seconds. Linux/full native and [Windows application/Clean/Modern `40519027999`](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40519027999) remain in progress. Initial assertions expecting an error for Google name mismatches were corrected to its existing write-conflict signal contract; that failed run is retained as evidence. No live object has been fenced or renamed by this increment, and no credentials were accessed.
+
+### Provider adapter follow-up
+
+The official [Dropbox API specification](https://github.com/dropbox/dropbox-api-spec/blob/main/files.stone) defines upload `CommitInfo.path` as `WritePathOrId` and supports strict revision-conditioned updates. A native adapter can therefore add an explicit exact-ID update path; it must not silently fall back to a name on failure. Validate moved/replaced paths, wrong IDs, stale revisions and lost acknowledgements against disposable objects before using it for resolution.
+
+Dropbox's [move endpoint](https://docs.dropboxapi.com/dropbox-api/api-reference/user-endpoints/files/move-v-2) has no expected-revision argument. A read followed by that move is not a conditional rename. Do not implement it as though it supplied Google's v2 ETag guarantee. Dropbox has unique file paths, unlike Google's duplicate active names; its eventual resolution/migration flow may retain a sealed source under its original verified name instead. The current archive-name certificate primitive does not settle that provider-specific orchestration rule. Existing source objects stay protected while that rule is unresolved.
 
 ## Required implementation boundaries
 
