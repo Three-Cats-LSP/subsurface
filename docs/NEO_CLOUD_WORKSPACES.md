@@ -10,6 +10,8 @@ The owner chose explicit workspace selection on 2026-10-28 JST, keeping Google A
 
 The selection file is now `neo-workspace-selection-development-2`; earlier version-1 files lack the independent choice version and are preserved/refused rather than silently upgraded. The first implementation has no application UI caller, and live tests did not create selection files. Eight new native rows cover the away/back race, old files and invalid expected/stored versions on both providers.
 
+Capture the expected choice version **before** starting asynchronous verification. Re-reading the current choice version just before committing would let an older pending user action override a more recent choice.
+
 Native regression cases cover equal-name roots, distinct payload ownership, invalid/foreign/unknown references, restart, concurrent stale choice, lost local acknowledgement, locks, blocked paths, corruption, size bounds and preservation of earlier choices/checkpoints. This increment does not use live cloud credentials or publish cloud objects.
 
 ## Self-bound records and exact verification
