@@ -41,6 +41,16 @@ protected:
 private:
 	QByteArray body; qint64 offset = 0;
 };
+class QueuedUploadNetwork : public QNetworkAccessManager {
+public:
+	QPointer<Reply> last;
+	QByteArray sent;
+protected:
+	QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *outgoing) override {
+		sent = outgoing ? outgoing->readAll() : QByteArray();
+		last = new Reply(request, "{}", 200, this, true); return last;
+	}
+};
 class Network : public QNetworkAccessManager {
 public:
 	struct File { QString name, id, rev; QByteArray data; };
@@ -554,6 +564,57 @@ void TestCloudSyncHistory::authorityStorageFailure()
 		QVERIFY(QFile::remove(blocked));
 		client.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, path);
 		QTRY_COMPARE(done.size(), 1); CloudHistoryAuthority check(path); QVERIFY(check.load()); QVERIFY(!check.record().head().isEmpty()); QVERIFY(n.allowed);
+	}
+}
+void TestCloudSyncHistory::bufferedUpload_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	for (bool g : {false, true}) for (int s = 0; s < 12; ++s)
+		QTest::newRow(qPrintable(QString("%1-buffered%2").arg(g).arg(s))) << g << s;
+}
+void TestCloudSyncHistory::bufferedUpload()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	QueuedUploadNetwork network; CloudSyncFileStore store(&network);
+	QSignalSpy done(&store, &CloudSyncFileStore::uploadFinished), errors(&store, &CloudSyncFileStore::operationError);
+	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	const auto name = CloudHistoryRecord::payloadName(uid(), uid());
+	const QByteArray payload(scenario == 8 ? 64 * 1024 : 128 * 1024, 'x');
+	const auto start = [&] { store.uploadConditional(provider, "token", name, payload, "expected-revision", google ? "exact-root" : "id:exact-root"); };
+	start(); QPointer<Reply> reply = network.last; QVERIFY(reply); QCOMPARE(network.sent, payload);
+	QPointer<QTimer> idle = reply->findChild<QTimer *>("neo-cloud-upload-idle");
+	if (scenario == 8) {
+		QVERIFY(!idle); QCOMPARE(reply->request().transferTimeout(), 30000); reply->complete();
+		QCOMPARE(done.size(), 1); QCOMPARE(errors.size(), 0); return;
+	}
+	QVERIFY(idle); QVERIFY(idle->isActive()); QCOMPARE(idle->interval(), 30000); QCOMPARE(reply->request().transferTimeout(), 0);
+	reply->uploadProgress(0, 0); QCOMPARE(idle->interval(), 30000);
+	if (scenario == 1) reply->uploadProgress(128, payload.size());
+	if (scenario >= 2 && scenario != 9 && scenario != 10 && scenario != 11) {
+		if (scenario == 7) { reply->uploadProgress(payload.size(), -1); QCOMPARE(idle->interval(), 30000); }
+		reply->uploadProgress(payload.size(), payload.size()); QCOMPARE(idle->interval(), 120000);
+	}
+	if (scenario == 6) {
+		const auto remaining = idle->remainingTime(); QTest::qWait(15);
+		reply->uploadProgress(payload.size(), payload.size()); reply->uploadProgress(0, 0); reply->downloadProgress(0, -1);
+		QCOMPARE(idle->interval(), 120000); QVERIFY(idle->remainingTime() <= remaining);
+	}
+	if (scenario == 4) { reply->downloadProgress(1, 2); QCOMPARE(idle->interval(), 30000); }
+	if (scenario == 5 || scenario == 10) {
+		store.cancel(provider); QVERIFY(!idle->isActive());
+		// A queued completion cannot revive a cancelled upload.
+		reply->complete(); QTest::qWait(10); QCOMPARE(done.size(), 0); QCOMPARE(errors.size(), 0); return;
+	}
+	if (scenario == 3 || scenario == 6 || scenario == 7 || scenario == 11) {
+		reply->complete(); QVERIFY(!idle->isActive()); QCOMPARE(done.size(), 1); QCOMPARE(errors.size(), 0); return;
+	}
+	// Accelerate the real expiry callback, preserving the production phase
+	// transitions above instead of sleeping for 30 or 120 seconds in CI.
+	idle->start(1); QTRY_COMPARE(errors.size(), 1); QCOMPARE(done.size(), 0);
+	QCOMPARE(errors.first()[1].toString(), name); QVERIFY(!errors.first()[3].toBool());
+	if (scenario == 9) {
+		start(); QVERIFY(network.last); network.last->complete();
+		QCOMPARE(done.size(), 1); QCOMPARE(errors.size(), 1);
 	}
 }
 void TestCloudSyncHistory::rootReview_data()

@@ -59,7 +59,7 @@ signals:
 
 private:
 	struct GoogleRecoveryFile { QString id, version; };
-	void trackReply(CloudSyncProviderType provider, QNetworkReply *reply);
+	void trackReply(CloudSyncProviderType provider, QNetworkReply *reply, qint64 uploadBytes = 0, const QString &fileName = {});
 	void googleFindFile(const QString &accessToken, const QString &fileName,
 			    const std::function<void(const QString &)> &continuation, int recoveryAttempt = 0);
 	void googleRecoverInitialManifests(const QString &accessToken, const QString &fileName,
@@ -86,7 +86,7 @@ private:
 		const std::function<void(const QByteArray &, const QString &)> &continuation,
 		const std::function<void()> &changed = {});
 
-	QNetworkRequest authorizedRequest(const QUrl &url, const QString &accessToken) const;
+	QNetworkRequest authorizedRequest(const QUrl &url, const QString &accessToken, qint64 uploadBytes = 0) const;
 	QString replyError(QNetworkReply *reply, const QByteArray &payload) const;
 	static QString safeRemoteName(const QString &fileName);
 

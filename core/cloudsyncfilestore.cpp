@@ -12,8 +12,12 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
+#include <QTimer>
+#include <memory>
 
 namespace {
+
+constexpr qint64 BufferedUploadThreshold = 64 * 1024;
 
 QByteArray compactJson(const QJsonObject &object)
 {
@@ -29,9 +33,36 @@ CloudSyncFileStore::CloudSyncFileStore(QNetworkAccessManager *networkManager, QO
 	qRegisterMetaType<CloudSyncProviderType>();
 }
 
-void CloudSyncFileStore::trackReply(CloudSyncProviderType provider, QNetworkReply *reply)
+void CloudSyncFileStore::trackReply(CloudSyncProviderType provider, QNetworkReply *reply, qint64 uploadBytes, const QString &fileName)
 {
 	pendingReplies[provider].insert(reply);
+	if (uploadBytes > BufferedUploadThreshold) {
+		// Qt can report the whole body sent while a socket/proxy still buffers
+		// it. A slow upstream then needs time to receive it before replying.
+		// Keep connection/progress stalls bounded, with one longer response
+		// wait after the body is queued. This is never evidence of publication.
+		struct Progress { qint64 sent = 0, received = 0; bool queued = false, response = false; };
+		const auto progress = std::make_shared<Progress>();
+		auto *idle = new QTimer(reply); idle->setObjectName("neo-cloud-upload-idle"); idle->setSingleShot(true); idle->start(30000);
+		connect(reply, &QNetworkReply::uploadProgress, this, [idle, progress](qint64 sent, qint64 total) {
+			if (sent < progress->sent || sent < 0) return;
+			const bool complete = total > 0 && sent == total && !progress->queued;
+			if (sent == progress->sent && !complete) return;
+			progress->sent = sent; progress->queued |= complete;
+			idle->start(complete && !progress->response ? 120000 : 30000);
+		});
+		connect(reply, &QNetworkReply::downloadProgress, this, [idle, progress](qint64 received, qint64) {
+			if (received <= progress->received) return;
+			progress->received = received; progress->response = true; idle->start(30000);
+		});
+		connect(reply, &QNetworkReply::finished, idle, &QTimer::stop);
+		connect(idle, &QTimer::timeout, this, [this, provider, reply, fileName] {
+			if (!pendingReplies.value(provider).contains(reply) || reply->isFinished()) return;
+			pendingReplies[provider].remove(reply);
+			reply->disconnect(this); reply->abort(); reply->deleteLater();
+			emit operationError(provider, fileName, tr("Cloud upload timed out before its result could be confirmed. All files were kept; retry to check the current cloud log."));
+		});
+	}
 	if (responseLimit > 0) {
 		const auto checkSize = [this, provider, reply] {
 			if (reply->bytesAvailable() <= responseLimit) return;
@@ -101,10 +132,10 @@ void CloudSyncFileStore::download(CloudSyncProviderType provider, const QString 
 	}
 }
 
-QNetworkRequest CloudSyncFileStore::authorizedRequest(const QUrl &url, const QString &accessToken) const
+QNetworkRequest CloudSyncFileStore::authorizedRequest(const QUrl &url, const QString &accessToken, qint64 uploadBytes) const
 {
 	QNetworkRequest request(url);
-	request.setTransferTimeout(30000);
+	request.setTransferTimeout(uploadBytes > BufferedUploadThreshold ? 0 : 30000);
 	request.setRawHeader("Authorization", QByteArray("Bearer ") + accessToken.toUtf8());
 	request.setRawHeader("Accept", "application/json");
 	return request;
@@ -393,7 +424,7 @@ void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString 
 			QUrlQuery query;
 			query.addQueryItem(QStringLiteral("uploadType"), QStringLiteral("media"));
 			url.setQuery(query);
-			request = authorizedRequest(url, accessToken);
+			request = authorizedRequest(url, accessToken, data.size());
 			request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
 			reply = networkManager->sendCustomRequest(request, "PATCH", data);
 		} else {
@@ -410,13 +441,13 @@ void CloudSyncFileStore::googleUpload(const QString &accessToken, const QString 
 			QUrlQuery query;
 			query.addQueryItem(QStringLiteral("uploadType"), QStringLiteral("multipart"));
 			url.setQuery(query);
-			request = authorizedRequest(url, accessToken);
+			request = authorizedRequest(url, accessToken, data.size());
 			request.setHeader(QNetworkRequest::ContentTypeHeader,
 					  QStringLiteral("multipart/related; boundary=%1").arg(QString::fromLatin1(boundary)));
 			reply = networkManager->post(request, body);
 		}
 
-		trackReply(CloudSyncProviderType::GoogleDrive, reply);
+		trackReply(CloudSyncProviderType::GoogleDrive, reply, data.size(), fileName);
 		connect(reply, &QNetworkReply::finished, this, [this, reply, fileName]() {
 			const QByteArray payload = reply->readAll();
 			const bool ok = reply->error() == QNetworkReply::NoError;
@@ -461,7 +492,7 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
 				     bool conditional, const QString &version)
 {
-	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/upload")), accessToken);
+	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/upload")), accessToken, data.size());
 	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
 	request.setRawHeader("Dropbox-API-Arg", compactJson({
 		{QStringLiteral("path"), QStringLiteral("/") + fileName},
@@ -473,7 +504,7 @@ void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString
 		{QStringLiteral("mute"), true},
 	}));
 	QNetworkReply *reply = networkManager->post(request, data);
-	trackReply(CloudSyncProviderType::Dropbox, reply);
+	trackReply(CloudSyncProviderType::Dropbox, reply, data.size(), fileName);
 	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, conditional]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
@@ -542,11 +573,11 @@ void CloudSyncFileStore::uploadConditional(CloudSyncProviderType provider, const
 	} else if (provider == CloudSyncProviderType::GoogleDrive && !version.isEmpty() && !fileId.isEmpty()) {
 		// Drive v3 ignores If-Match for media updates. v2 enforces the File etag.
 		QUrl url(QStringLiteral("https://www.googleapis.com/upload/drive/v2/files/%1?uploadType=media").arg(fileId));
-		QNetworkRequest request = authorizedRequest(url, accessToken);
+		QNetworkRequest request = authorizedRequest(url, accessToken, data.size());
 		request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
 		request.setRawHeader("If-Match", version.toUtf8());
 		QNetworkReply *reply = networkManager->put(request, data);
-		trackReply(provider, reply);
+		trackReply(provider, reply, data.size(), fileName);
 		connect(reply, &QNetworkReply::finished, this, [this, reply, provider, fileName]() {
 			const QByteArray payload = reply->readAll();
 			const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

@@ -26,6 +26,8 @@ private slots:
 	void authorityStorageFailure();
 	void rootReview_data();
 	void rootReview();
+	void bufferedUpload_data();
+	void bufferedUpload();
 	void boundAuthority_data();
 	void boundAuthority();
 	void restoreRejection_data();
