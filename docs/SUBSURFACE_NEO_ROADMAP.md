@@ -736,6 +736,8 @@ The next [record-level fence/handoff foundation](NEO_CLOUD_ROOT_RESOLUTION.md), 
 
 The subsequent [source-receipt verification and immutable local handoff proofs](NEO_CLOUD_HANDOFF_PROOFS.md), `cd3ffbc6c`, passed 377 native cases on Linux and Windows. They preserve the exact active checkpoint and cannot adopt a frozen destination. The e46 and 4eb Windows launch/Clean/Modern/lifecycle gates have passed; the cd3/CI-only 0db package gate remains active. Coordinator convergence, conditional source archival, activation and production migration remain open.
 
+The [sealed-source Google archival component](NEO_CLOUD_SOURCE_ARCHIVAL.md), `2ad92cd87`, then passed 420 native cases on Windows/Linux and four live Windows stages against six fresh synthetic controls: conditional archival, already-archived restart, committed-but-unread recovery and changed-body refusal. Original Google inventory/current bytes/credentials matched the independent audit; all 116 test objects remain protected. The cd3/0db package gate has passed; the 2ad package gate is active. No resolution action is exposed, and coordinator convergence, activation, active rebinding and production migration remain required.
+
 ## Milestone 14 — Web / WebAssembly & Deployment
 
 **Goal:** deploy a useful browser version while maximizing code sharing.
