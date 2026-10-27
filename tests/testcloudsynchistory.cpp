@@ -1301,7 +1301,7 @@ void TestCloudSyncHistory::workspaceSourceReview()
 		else n.metadataResponse = [&](const QByteArray &bytes) { auto m = QJsonDocument::fromJson(bytes).object(); m["id"] = ""; return n.json(m); };
 	}
 	if (mode == 18) n.deferReads = true; if (mode == 20) n.readFailureStatus = 401; if (mode == 21) n.readFailureStatus = 503; if (mode == 6) n.guard = false;
-	int requests = 0, manifestAliases = 0, payloadAliases = 0; bool injected = false;
+	int requests = 0, manifestAliases = 0, payloadAliases = 0, payloadReads = 0; bool injected = false;
 	n.requested = [&](const QNetworkRequest &r) {
 		++requests; if (mode == 19) n.guard = false;
 		QString alias;
@@ -1313,8 +1313,14 @@ void TestCloudSyncHistory::workspaceSourceReview()
 		}
 	};
 	n.response = [&](const QNetworkRequest &r, const QByteArray &bytes) {
-		const bool payloadRead = google ? r.url().path() == "/drive/v3/files/2" : QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["path"] == QJsonValue("/" + payloadName);
-		if (!injected && payloadRead && (mode == 15 || mode == 22)) { if (mode == 15) n.files[1].rev = "changed-revision"; else n.files[0].name = "retained-renamed-source.json"; injected = true; }
+		const auto target = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["path"].toString();
+		const bool payloadRead = google ? r.url().path() == "/drive/v3/files/2" : target == "/" + payloadName || target == "id:2";
+		if (payloadRead) ++payloadReads;
+		// Initial discovery can legitimately retry to a stable first revision.
+		// Change an already observed source during its later exact verification.
+		if (!injected && ((mode == 15 && payloadReads == 2) || (mode == 22 && payloadReads == 1))) {
+			if (mode == 15) n.files[1].rev = "changed-revision"; else n.files[0].name = "retained-renamed-source.json"; injected = true;
+		}
 		return bytes;
 	};
 	const auto before = n.files; CloudWorkspaceSourceReview review(&n); QSignalSpy done(&review, &CloudWorkspaceSourceReview::finished), errors(&review, &CloudWorkspaceSourceReview::failed);
