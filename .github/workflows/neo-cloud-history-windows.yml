@@ -1,17 +1,7 @@
 name: Neo Windows history protocol
 
 on:
-  push:
-    branches: [modern-ui]
-    paths:
-      - '.github/workflows/neo-cloud-history-windows.yml'
-      - 'core/cloudsynchistory.*'
-      - 'core/cloudsyncfilestore.*'
-      - 'core/cloudsyncmanifest.*'
-      - 'core/cloudsyncprovider.*'
-      - 'tests/testcloudsynchistory.*'
-      - 'tests/cloud-history/**'
-  workflow_dispatch:
+  workflow_call:
 
 permissions: read-all
 

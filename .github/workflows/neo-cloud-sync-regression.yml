@@ -5,6 +5,7 @@ on:
     branches: [modern-ui]
     paths:
       - '.github/workflows/neo-cloud-sync-regression.yml'
+      - '.github/workflows/neo-cloud-history-windows.yml'
       - 'core/cloudcredentialstore.*'
       - 'core/cloudsync*'
       - 'core/oauth2*'
@@ -19,6 +20,11 @@ on:
       - 'tests/testqPrefCloudStorage.*'
       - 'tests/CMakeLists.txt'
   workflow_dispatch:
+    inputs:
+      protocol_only:
+        description: 'Run Linux/Windows history protocol checks without rebuilding the full application suites'
+        type: boolean
+        default: false
 
 permissions: read-all
 
@@ -36,9 +42,14 @@ jobs:
           cmake --build build-history --parallel 2
           ctest --test-dir build-history --output-on-failure
 
+  windows-history-protocol:
+    name: Windows history protocol
+    uses: ./.github/workflows/neo-cloud-history-windows.yml
+
   native-cloud-sync-tests:
     name: Native Qt 6 cloud sync tests
-    needs: history-protocol
+    needs: [history-protocol, windows-history-protocol]
+    if: ${{ inputs.protocol_only != true }}
     uses: ./.github/workflows/linux-debian-generic-qt6.yml
     with:
       container-image: debian:trixie
