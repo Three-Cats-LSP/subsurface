@@ -70,7 +70,7 @@ class CloudWorkspaceAuthority {
 public:
 	CloudWorkspaceAuthority(const QString &fileName, const CloudWorkspaceReference &reference);
 	bool load();
-	bool observe(const CloudWorkspaceRecord &record, const QString &version);
+	bool observe(const CloudWorkspaceRecord &record, const QString &version, bool requireExisting = false);
 	CloudWorkspaceRecord record() const { return checkpoint; }
 	QString version() const { return observedVersion; }
 private:

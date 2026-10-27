@@ -19,6 +19,7 @@ Kirigami.ScrollablePage {
 	property string pendingDisconnectName: ""
 	property string historyProvider: ""
 	property string historyRevision: ""
+	property var workspaceDrafts: ({})
 
 	Modern.DesignTokens { id: tokens }
 
@@ -156,7 +157,7 @@ Kirigami.ScrollablePage {
 								font.weight: Font.DemiBold
 							}
 							Text {
-								text: modelData.connected ? (CloudSync.storageReviewInProgress || CloudSync.historyInProgress ? qsTr("Connected") : CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
+								text: modelData.connected ? (CloudSync.storageReviewInProgress || CloudSync.historyInProgress || CloudSync.workspaceInProgress ? qsTr("Connected") : CloudSync.syncInProgress ? qsTr("Syncing…") : qsTr("Connected")) :
 									  modelData.configured ? qsTr("Ready to connect") : qsTr("Setup required")
 								color: modelData.connected ? tokens.accent : tokens.textSecondary
 								font.pixelSize: 14
@@ -494,6 +495,20 @@ Kirigami.ScrollablePage {
 									}
 								}
 							}
+						}
+					}
+
+					Components.NeoWorkspacePanel {
+						objectName: "workspaceSection-" + modelData.id
+						visible: CloudSync.workspaceEnabled && modelData.connected
+						Layout.fillWidth: true
+						provider: providerCard.modelData
+						draft: page.workspaceDrafts[providerCard.modelData.id] || ""
+						onDraftEdited: function(value) {
+							var updated = {}
+							for (var id in page.workspaceDrafts) updated[id] = page.workspaceDrafts[id]
+							updated[providerCard.modelData.id] = value
+							page.workspaceDrafts = updated
 						}
 					}
 

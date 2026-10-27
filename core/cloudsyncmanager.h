@@ -6,6 +6,7 @@
 #include "cloudsyncmanifest.h"
 #include "cloudsyncreview.h"
 #include "cloudsynchistory.h"
+#include "cloudsyncworkspace.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -32,6 +33,9 @@ class CloudSyncManager : public QObject {
 	Q_PROPERTY(bool storageReviewInProgress READ storageReviewInProgress NOTIFY syncInProgressChanged)
 	Q_PROPERTY(bool historyEnabled READ historyEnabled CONSTANT)
 	Q_PROPERTY(bool historyInProgress READ historyInProgress NOTIFY syncInProgressChanged)
+	Q_PROPERTY(bool workspaceEnabled READ workspaceEnabled CONSTANT)
+	Q_PROPERTY(bool workspaceInProgress READ workspaceInProgress NOTIFY syncInProgressChanged)
+	Q_PROPERTY(QString workspaceProviderId READ workspaceProviderId NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString storageReviewProviderId READ storageReviewProviderId NOTIFY syncInProgressChanged)
 	Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 	Q_PROPERTY(QString primaryProviderId READ primaryProviderId NOTIFY providerAssignmentsChanged)
@@ -49,6 +53,9 @@ public:
 	QString storageReviewProviderId() const { return storageReviewInProgress() ? syncProviderId : QString(); }
 	bool historyEnabled() const { return CloudHistoryRecord::validEpoch(historyEpoch); }
 	bool historyInProgress() const { return syncOperation == SyncOperation::History; }
+	bool workspaceEnabled() const { return historyEnabled(); }
+	bool workspaceInProgress() const { return syncOperation == SyncOperation::Workspace; }
+	QString workspaceProviderId() const { return workspaceInProgress() ? syncProviderId : QString(); }
 	QString lastError() const { return errorText; }
 	QString primaryProviderId() const;
 	QString backupProviderId() const;
@@ -61,6 +68,8 @@ public:
 	Q_INVOKABLE void cancelStorageReview();
 	Q_INVOKABLE void runHistory(const QString &providerId, const QString &action, const QString &revision = {});
 	Q_INVOKABLE void cancelHistory();
+	Q_INVOKABLE void runWorkspace(const QString &providerId, const QString &action, const QString &argument = {});
+	Q_INVOKABLE void cancelWorkspace();
 	Q_INVOKABLE void disconnectProvider(const QString &providerId);
 	Q_INVOKABLE void uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data);
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
@@ -93,6 +102,7 @@ signals:
 	void diveLogInitialChoiceRequired(const QString &providerId);
 	void storageReviewFinished(const QString &providerId);
 	void historyFinished(const QString &providerId);
+	void workspaceFinished(const QString &providerId);
 
 private:
 	friend class TestCloudSyncManager;
@@ -100,6 +110,7 @@ private:
 		None,
 		StorageReview,
 		History,
+		Workspace,
 		BackupUploadPayload,
 		BackupUploadManifest,
 		SyncDownloadManifest,
@@ -144,15 +155,29 @@ private:
 		const QString &version = {}, const QString &fileId = {});
 	void finishUpload(const QString &providerId);
 	void clearStorageReview(const QString &providerId);
+	QString workspaceDirectory(const QString &providerId, const QString &account) const;
+	QList<QJsonObject> workspaceCreations(const QString &directory, const QString &providerId, const QString &account, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QVariantMap workspaceReport(const QString &providerId) const;
+	bool workspaceScopeCurrent() const;
+	void finishWorkspace(const QJsonObject &record, const QString &version);
+	void failWorkspace(const QString &message, bool rejected = false);
 
 	QNetworkAccessManager *networkManager;
 	OAuth2TokenClient tokenClient;
 	CloudSyncFileStore fileStore;
 	CloudStorageReview storageReviewClient;
 	CloudSyncHistory historyClient;
+	CloudWorkspaceOpen workspaceReader;
+	CloudWorkspaceCreate workspaceCreator;
 	const QString historyEpoch = qEnvironmentVariable("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
 	QHash<QString, QVariantMap> historyReports;
 	QHash<QString, QVariantMap> storageReviews;
+	QHash<QString, QVariantMap> workspaceReports;
+	QString workspaceAction, workspaceAccount, workspaceToken, workspacePath, workspaceChoiceVersion;
+	CloudWorkspaceReference workspaceReference;
+	bool workspaceCheckpointRequired = false;
+	quint64 workspaceSerial = 0;
+	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;
 	QPointer<QNetworkReply> accountReply;

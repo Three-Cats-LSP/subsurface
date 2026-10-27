@@ -1086,7 +1086,7 @@ void TestCloudSyncHistory::workspaceAuthority_data()
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
 	const QStringList cases = {"restart-and-lost-ack", "advance-and-reservation", "rollback", "same-name-foreign-id", "foreign-account", "corrupt-file",
 		"future-format", "held-lock", "blocked-parent", "missing-parent", "oversized-file", "empty-revision", "unsafe-revision", "stale-process",
-		"same-body-new-revision", "tampered-binding", "invalid-reference"};
+		"same-body-new-revision", "tampered-binding", "invalid-reference", "required-checkpoint-missing", "required-checkpoint-existing"};
 	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-checkpoint-%2").arg(g).arg(cases[s]))) << g << s;
 }
 void TestCloudSyncHistory::workspaceAuthority()
@@ -1108,7 +1108,10 @@ void TestCloudSyncHistory::workspaceAuthority()
 	CloudWorkspaceAuthority authority(path, ref); QVERIFY(authority.load()); QVERIFY(!authority.record().valid());
 	if (scenario == 9) QVERIFY(!QFileInfo::exists(QFileInfo(path).absolutePath()));
 	QVERIFY(authority.observe(original, "root-v1")); const auto initialBytes = read(path);
-	if (scenario == 0 || scenario == 9) {
+	if (scenario == 17 || scenario == 18) {
+		if (scenario == 17) { QVERIFY(QFile::remove(path)); QVERIFY(!authority.observe(original, "root-v1", true)); QVERIFY(!QFileInfo::exists(path)); }
+		else { QVERIFY(authority.observe(original, "root-v1", true)); QCOMPARE(read(path), initialBytes); }
+	} else if (scenario == 0 || scenario == 9) {
 		QVERIFY(authority.observe(original, "root-v1")); QCOMPARE(read(path), initialBytes);
 		CloudWorkspaceAuthority restarted(path, ref); QVERIFY(restarted.load()); QCOMPARE(restarted.record().json(), original.json()); QCOMPARE(restarted.version(), QString("root-v1"));
 	} else if (scenario == 1) {

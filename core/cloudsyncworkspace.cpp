@@ -146,11 +146,12 @@ bool CloudWorkspaceAuthority::load()
 	if (!QFileInfo(QFileInfo(fileName).absolutePath()).exists()) return readUnlocked();
 	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && readUnlocked();
 }
-bool CloudWorkspaceAuthority::observe(const CloudWorkspaceRecord &root, const QString &version)
+bool CloudWorkspaceAuthority::observe(const CloudWorkspaceRecord &root, const QString &version, bool requireExisting)
 {
 	if (fileName.isEmpty() || !reference.valid() || !root.valid() || root.reference().value != reference.value || !versionValid(version) ||
 	    !QDir().mkpath(QFileInfo(fileName).absolutePath())) return false;
 	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !readUnlocked()) return false;
+	if (requireExisting && !checkpoint.valid()) return false;
 	if (checkpoint.valid() && !root.follows(checkpoint)) return false;
 	if (checkpoint.json() == root.json() && observedVersion == version) return true;
 	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", "neo-workspace-checkpoint-development-1"},
@@ -311,7 +312,7 @@ void CloudWorkspaceCreate::received(CloudSyncProviderType type, const QString &n
 		step = Step::Bind; if (current()) files.uploadIdentity(provider, token, name, initial.json(), version, id); return;
 	}
 	const auto root = CloudWorkspaceRecord::parse(bytes);
-	if ((intent->state() != "binding" && intent->state() != "bound") || !root.follows(initial) || (saved.record().valid() && !root.follows(saved.record())) || !current() || !saved.observe(root, version) || !current() || !intent->bind()) { fail(); return; }
+	if ((intent->state() != "binding" && intent->state() != "bound") || !root.follows(initial) || (saved.record().valid() && !root.follows(saved.record())) || !current() || !saved.observe(root, version, intent->state() == "bound" || saved.record().valid()) || !current() || !intent->bind()) { fail(); return; }
 	const auto confirmed = root.value; cancel(); emit finished(confirmed, version, path);
 }
 

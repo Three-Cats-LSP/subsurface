@@ -89,9 +89,15 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	tokenClient(networkManager, this),
 	fileStore(networkManager, this),
 	storageReviewClient(networkManager, this),
-	historyClient(networkManager, this)
+	historyClient(networkManager, this),
+	workspaceReader(networkManager, this),
+	workspaceCreator(networkManager, this)
 {
 	Q_ASSERT(networkManager);
+	connect(&workspaceReader, &CloudWorkspaceOpen::finished, this, &CloudSyncManager::finishWorkspace);
+	connect(&workspaceCreator, &CloudWorkspaceCreate::finished, this, [this](const QJsonObject &root, const QString &version, const QString &) { finishWorkspace(root, version); });
+	connect(&workspaceReader, &CloudWorkspaceOpen::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceCreator, &CloudWorkspaceCreate::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&historyClient, &CloudSyncHistory::finished, this, [this](const QVariantMap &report, const QByteArray &restored) {
 		if (!historyInProgress()) return;
 		const QString providerId = syncProviderId;
@@ -359,6 +365,7 @@ QVariantList CloudSyncManager::providers() const
 		row.insert(QStringLiteral("checkingAccount"), accountProviderId == provider.id);
 		row.insert(QStringLiteral("storageReview"), storageReviews.value(provider.id));
 		row.insert(QStringLiteral("history"), historyReports.value(provider.id));
+		row.insert(QStringLiteral("workspace"), workspaceReport(provider.id));
 		row.insert(QStringLiteral("configured"), configured);
 		row.insert(QStringLiteral("configurationError"), configurationError);
 		row.insert(QStringLiteral("connected"), tokenSet.hasAccessToken() || tokenSet.canRefresh());
@@ -868,6 +875,7 @@ void CloudSyncManager::checkAccount(const QString &providerId)
 
 void CloudSyncManager::clearStorageReview(const QString &providerId)
 {
+	if (workspaceReports.remove(providerId)) emit providersChanged();
 	if (historyReports.remove(providerId)) emit providersChanged();
 	if (storageReviews.remove(providerId)) emit providersChanged();
 }
@@ -1071,7 +1079,7 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 
 void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data)
 {
-	if (storageReviewInProgress() || historyInProgress()) return;
+	if (storageReviewInProgress() || historyInProgress() || workspaceInProgress()) return;
 	clearStorageReview(providerId);
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
@@ -1083,7 +1091,7 @@ void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fil
 
 void CloudSyncManager::downloadBytes(const QString &providerId, const QString &fileName)
 {
-	if (storageReviewInProgress() || historyInProgress()) return;
+	if (storageReviewInProgress() || historyInProgress() || workspaceInProgress()) return;
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
@@ -1218,6 +1226,8 @@ void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); ++workspaceSerial; }
+	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

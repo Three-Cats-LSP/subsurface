@@ -53,6 +53,7 @@
 		<file>modern/components/NeoSpinBox.qml</file>
 		<file>modern/components/NeoSwitch.qml</file>
 		<file>modern/components/NeoTextArea.qml</file>
+		<file>modern/components/NeoWorkspacePanel.qml</file>
 		<file>modern/components/NeoTextField.qml</file>
 		<file>modern/components/NeoDiveIcon.qml</file>
 		<file>modern/components/DiveInfoCard.qml</file>
