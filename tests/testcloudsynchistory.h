@@ -54,6 +54,12 @@ private slots:
 	void workspaceUploadIntent();
 	void workspaceUploadWorkflow_data();
 	void workspaceUploadWorkflow();
+	void workspaceReadIntent_data();
+	void workspaceReadIntent();
+	void workspaceReadWorkflow_data();
+	void workspaceReadWorkflow();
+	void workspaceReleaseWorkflow_data();
+	void workspaceReleaseWorkflow();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();
