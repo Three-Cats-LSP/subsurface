@@ -194,7 +194,7 @@ bool CloudWorkspaceCreationIntent::readUnlocked()
 	if (!fields(body, {"schema", "format", "provider", "account", "epoch", "nonce", "origin_sha256", "state", "id"})) return false;
 	for (auto it = scope.begin(); it != scope.end(); ++it) if (body.value(it.key()) != it.value()) return false;
 	const auto stage = string(body, "state"), identity = string(body, "id");
-	if ((stage != "prepared" && stage != "submitted" && stage != "identified" && stage != "bound") || !body.value("id").isString()) return false;
+	if ((stage != "prepared" && stage != "submitted" && stage != "identified" && stage != "binding" && stage != "bound") || !body.value("id").isString()) return false;
 	if (stage == "prepared" || stage == "submitted") { if (!identity.isEmpty()) return false; }
 	else if (!CloudWorkspaceReference::create(string(scope, "provider"), string(scope, "account"), string(scope, "epoch"), identity).valid()) return false;
 	saved = body; return true;
@@ -218,15 +218,22 @@ bool CloudWorkspaceCreationIntent::advance(const QString &stage, const QString &
 	if (stage == "submitted") { if (state() != "prepared") return false; }
 	else if (stage == "identified") {
 		if (!CloudWorkspaceReference::create(string(scope, "provider"), string(scope, "account"), string(scope, "epoch"), identity).valid()) return false;
-		if (state() == "identified" || state() == "bound") return id() == identity;
+		if (state() == "identified" || state() == "binding" || state() == "bound") return id() == identity;
 		if (state() != "submitted") return false;
-	} else if (stage == "bound") { if (state() == "bound") return true; if (state() != "identified") return false; }
+	} else if (stage == "binding") { if (state() == "binding") return true; if (state() != "identified") return false; }
+	else if (stage == "bound") { if (state() == "bound") return true; if (state() != "binding") return false; }
 	else return false;
 	auto next = saved; next["state"] = stage; if (stage == "identified") next["id"] = identity; return writeUnlocked(next);
 }
 bool CloudWorkspaceCreationIntent::submit() { return advance("submitted"); }
 bool CloudWorkspaceCreationIntent::identify(const QString &id) { return advance("identified", id); }
+bool CloudWorkspaceCreationIntent::beginBinding() { return advance("binding"); }
 bool CloudWorkspaceCreationIntent::bind() { return advance("bound"); }
+bool CloudWorkspaceCreationIntent::reload()
+{
+	if (fileName.isEmpty() || scope.isEmpty()) return false;
+	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && readUnlocked() && !saved.isEmpty();
+}
 
 CloudWorkspaceCreate::CloudWorkspaceCreate(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
 {
@@ -293,17 +300,18 @@ void CloudWorkspaceCreate::read(Step next)
 void CloudWorkspaceCreate::received(CloudSyncProviderType type, const QString &name, const QByteArray &bytes, const QString &version, const QString &id)
 {
 	if (!current()) return;
+	if (!intent->reload()) { fail(); return; }
 	const auto ref = intent->reference();
 	if ((step != Step::Read && step != Step::Confirm) || type != provider || name != intent->rootName() || id != intent->id() || !versionValid(version)) { fail(); return; }
 	const auto path = QDir(checkpointDirectory).filePath(ref.key() + ".json"); CloudWorkspaceAuthority saved(path, ref);
 	if (!saved.load()) { fail(); return; }
 	const auto initial = CloudWorkspaceRecord::create(ref, originHash);
 	if (bytes == intent->bootstrap()) {
-		if (step != Step::Read || intent->state() != "identified" || saved.record().valid() || !initial.valid()) { fail(); return; }
+		if (step != Step::Read || (intent->state() != "identified" && intent->state() != "binding") || saved.record().valid() || !initial.valid() || !intent->beginBinding()) { fail(); return; }
 		step = Step::Bind; if (current()) files.uploadIdentity(provider, token, name, initial.json(), version, id); return;
 	}
 	const auto root = CloudWorkspaceRecord::parse(bytes);
-	if (!root.follows(initial) || (saved.record().valid() && !root.follows(saved.record())) || !current() || !saved.observe(root, version) || !current() || !intent->bind()) { fail(); return; }
+	if ((intent->state() != "binding" && intent->state() != "bound") || !root.follows(initial) || (saved.record().valid() && !root.follows(saved.record())) || !current() || !saved.observe(root, version) || !current() || !intent->bind()) { fail(); return; }
 	const auto confirmed = root.value; cancel(); emit finished(confirmed, version, path);
 }
 

@@ -87,8 +87,10 @@ public:
 	CloudWorkspaceCreationIntent(const QString &fileName, const QString &provider, const QString &account,
 		const QString &epoch, const QString &nonce, const QString &originHash);
 	bool prepare();
+	bool reload();
 	bool submit();
 	bool identify(const QString &id);
+	bool beginBinding();
 	bool bind();
 	QString state() const;
 	QString id() const;

@@ -134,6 +134,20 @@ Review then identified an away/back race in the earlier local choice model: proc
 
 ## Successive protocol work
 
+## Guarded native creation increment, 2026-10-28 JST
+
+The saved 30-minute continuation was updated through the Codex automation tool to follow the accepted explicit-workspace model, preserving its schedule, target chat and ACTIVE status. It no longer asks future runs to restart automatic per-account election experiments.
+
+Creation revision **`e7c2d820d`** adds a direct create-only workspace transport, a durable scoped creation-intent file and an unused native empty-root creation/binding service. It records submission before POST, records the acknowledged physical ID before any dependent read, verifies the complete bootstrap, uses exact-ID revision CAS and confirms the full root before a metadata-only checkpoint. Unknown create acknowledgements cannot be replayed. It does not select a workspace, publish XML, migrate, change credentials/baselines or expose UI.
+
+Initial protocol **`40553440163`**, Windows job `122363044818`, compiled and ran **730 cases**: 728 passed and two assertions failed because they incorrectly limited bind attempts across a deliberately requested post-authorization retry. Both functional retry cases had completed correctly. Fix the assertion to allow those two fresh attempts; preserve this failed result. Linux dependency installation is still active as of 17:50 UTC and may be superseded by the repaired revision.
+
+Review also required a durable **binding** phase after bootstrap verification and before CAS. Merely receiving an ID is not proof that a matching pre-existing bound root is the result of this intent. The follow-up rejects such an acknowledgement even when provider/account/epoch/origin match, reloads intent state before interpreting a reply and preserves missing/corrupt state rather than recreating it. Two additional native rows cover this receipt guard. The native synthetic creator utility gains operation counters without recording tokens/headers/bodies/URLs. These changes are not yet validated; dispatch the repaired **732-case** protocol, fix failures, then exact-head Windows/Clean/Modern and matching isolated live creation/restart/interruption tests. All original 121 test/probe objects and schema 1/2 logs remain untouched by this new increment so far.
+
+**Current next action:** finish guarded creator validation, then shared create/join and copy migration. Earlier 3b workspace safeguards and 600-case/package gates above are complete; do not repeat or reimplement them. No owner input is required and the continuation remains active.
+
+## Successive protocol work
+
 Follow the accepted [explicit workspace model](NEO_CLOUD_WORKSPACES.md) for production create/join and guarded copy migration. Older [multiple-active-root foundations](NEO_CLOUD_ROOT_RESOLUTION.md) remain preserved and unused; do not resume automatic per-account election experiments. A local checkpoint is an anchor after first observation. A new device explicitly reviews/joins a reference; a selected workspace whose checkpoint disappeared needs recovery. Never recreate an uncertain established epoch or broaden the old pristine-alias exception to active roots.
 
 Workspace schema 4 now binds root and payload names to a physical identity. Complete guarded creation and user selection before routing automatic sync through it. Retain all old roots, histories, pending tickets and reservations across copy migration and crashes; never concatenate branch journals. Ordinary schema 1/2 writes during migration surface as protected branches. Migration allocates fresh payload identities and cannot make old logs collectible. Then proceed with provider-backed time evidence, pins/recovery roots, retirement/deleting/deleted fences, native conditional deletion adapters, lost-response/throttling recovery and continuously progressing slow-transfer validation. Keep production cleanup disabled until the full adversarial matrix passes.

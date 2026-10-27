@@ -15,8 +15,26 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QTimer>
+
+// Count operation kinds without logging headers, tokens, bodies or URLs.
+class ProbeNetwork : public QNetworkAccessManager {
+public:
+	int creates = 0, updates = 0, reads = 0, lookups = 0;
+protected:
+	QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request, QIODevice *outgoing) override {
+		const auto path = request.url().path();
+		if (operation == PostOperation && path == "/upload/drive/v3/files") ++creates;
+		else if (operation == PutOperation && path.startsWith("/upload/drive/v2/files/")) ++updates;
+		else if (operation == PostOperation && path == "/2/files/upload") {
+			const auto mode = QJsonDocument::fromJson(request.rawHeader("Dropbox-API-Arg")).object().value("mode");
+			if (mode.toString() == "add") ++creates; else ++updates;
+		} else { ++reads; if (path == "/drive/v3/files") ++lookups; }
+		return QNetworkAccessManager::createRequest(operation, request, outgoing);
+	}
+};
 
 int main(int argc, char **argv)
 {
@@ -49,7 +67,7 @@ int main(int argc, char **argv)
 	    ((archival || workspace || creation) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
-	QNetworkAccessManager network;
+	ProbeNetwork network;
 	if (creation) {
 		const auto payload = QJsonDocument::fromJson(body).object(); const auto epoch = payload.value("epoch").toString(), nonce = payload.value("nonce").toString();
 		const auto intentFile = payload.value("intent_file").toString(), directory = payload.value("checkpoint_directory").toString();
@@ -61,10 +79,12 @@ int main(int argc, char **argv)
 			return output({{"ok", false}, {"phase", "input"}}, 2);
 		CloudWorkspaceCreate create(&network);
 		QObject::connect(&create, &CloudWorkspaceCreate::finished, &app, [&](const QJsonObject &root, const QString &actualVersion, const QString &checkpoint) {
-			output({{"ok", true}, {"phase", "workspace-created"}, {"record", root}, {"version", actualVersion}, {"checkpoint_file", checkpoint}}, 0); app.exit(0);
+			output({{"ok", true}, {"phase", "workspace-created"}, {"record", root}, {"version", actualVersion}, {"checkpoint_file", checkpoint},
+				{"createRequests", network.creates}, {"updateRequests", network.updates}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 0); app.exit(0);
 		});
 		QObject::connect(&create, &CloudWorkspaceCreate::failed, &app, [&](const QString &, bool rejected) {
-			output({{"ok", false}, {"phase", "workspace-create"}, {"tokenRejected", rejected}}, 2); app.exit(2);
+			output({{"ok", false}, {"phase", "workspace-create"}, {"tokenRejected", rejected}, {"createRequests", network.creates},
+				{"updateRequests", network.updates}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 2); app.exit(2);
 		});
 		QTimer::singleShot(0, &app, [&] { create.start(intentFile, directory, get("provider"), token, payload.value("account").toString(), epoch, nonce, marker, [] { return true; }); });
 		return app.exec();

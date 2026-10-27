@@ -1169,7 +1169,7 @@ void TestCloudSyncHistory::workspaceCreationIntent()
 	QVERIFY(intent.bootstrap().contains(nonce.toUtf8())); QVERIFY(!intent.bootstrap().contains("tickets"));
 	if (scenario == 0 || scenario == 17) {
 		QVERIFY(intent.prepare()); QCOMPARE(read(), initial); QVERIFY(intent.submit()); QVERIFY(intent.identify(id)); const auto identified = read();
-		QVERIFY(intent.identify(id)); QCOMPARE(read(), identified); QVERIFY(intent.bind()); const auto bound = read(); QVERIFY(intent.bind()); QCOMPARE(read(), bound);
+		QVERIFY(intent.identify(id)); QCOMPARE(read(), identified); QVERIFY(!intent.bind()); QVERIFY(intent.beginBinding()); QVERIFY(intent.bind()); const auto bound = read(); QVERIFY(intent.bind()); QCOMPARE(read(), bound);
 		CloudWorkspaceCreationIntent restarted(path, provider, Account, epoch, nonce, origin); QVERIFY(restarted.prepare()); QCOMPARE(restarted.state(), QString("bound")); QCOMPARE(restarted.reference().value, intent.reference().value);
 	} else if (scenario == 1 || scenario == 2) {
 		CloudWorkspaceCreationIntent other(path, provider, Account, epoch, nonce, origin); QVERIFY(other.prepare()); QVERIFY(other.submit()); const auto submitted = read();
@@ -1237,7 +1237,7 @@ void TestCloudSyncHistory::workspaceCreate_data()
 	const QStringList cases = {"create-restart", "submitted-unknown", "lost-create-ack", "bad-create-ack", "wrong-create-id", "lost-bind-ack", "bad-bind-ack",
 		"bind-cas-race", "two-creators", "scope-before", "scope-after-create", "scope-after-bind", "cancel-create", "cancel-known-read", "cancel-bind",
 		"token-create", "token-bind", "corrupt-checkpoint", "missing-checkpoint", "unknown-bootstrap", "wrong-bootstrap-nonce", "moved-id-with-replacement",
-		"blocked-intent-parent", "corrupt-intent", "locked-intent", "bad-scope", "blocked-checkpoint-directory", "bound-root-reset", "checkpoint-rollback", "same-name-root", "missing-established-root", "future-intent", "ack-points-at-original"};
+		"blocked-intent-parent", "corrupt-intent", "locked-intent", "bad-scope", "blocked-checkpoint-directory", "bound-root-reset", "checkpoint-rollback", "same-name-root", "missing-established-root", "future-intent", "ack-points-at-original", "ack-points-at-same-scope-root"};
 	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-create-%2").arg(g).arg(cases[s]))) << g << s;
 }
 void TestCloudSyncHistory::workspaceCreate()
@@ -1255,12 +1255,12 @@ void TestCloudSyncHistory::workspaceCreate()
 		if (scenario == 1) QVERIFY(prepared.submit()); else { auto v = QJsonDocument::fromJson(readFile(intentFile)).object(); v["format"] = "unknown-future-intent"; QVERIFY(write(intentFile, n.json(v))); }
 	}
 	if (scenario == 2) n.loseWriteAck = true;
-	if (scenario == 3 || scenario == 4 || scenario == 6 || scenario == 32) n.response = [&](const QNetworkRequest &r, const QByteArray &bytes) {
+	if (scenario == 3 || scenario == 4 || scenario == 6 || scenario == 32 || scenario == 33) n.response = [&](const QNetworkRequest &r, const QByteArray &bytes) {
 		const bool update = r.url().path().startsWith("/upload/drive/v2/") || (!google && QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["mode"].isObject());
 		const bool create = (google ? r.url().path() == "/upload/drive/v3/files" : r.url().path() == "/2/files/upload" && !update);
-		if ((scenario == 6 && update) || ((scenario == 3 || scenario == 4 || scenario == 32) && create)) {
+		if ((scenario == 6 && update) || ((scenario == 3 || scenario == 4 || scenario == 32 || scenario == 33) && create)) {
 			if (scenario == 3 || scenario == 6) return QByteArray("{}");
-			auto m = QJsonDocument::fromJson(bytes).object(); m["id"] = scenario == 32 ? (google ? "1" : "id:1") : (google ? "wrong-id" : "id:wrong-id"); return n.json(m);
+			auto m = QJsonDocument::fromJson(bytes).object(); m["id"] = scenario == 32 ? (google ? "1" : "id:1") : scenario == 33 ? (google ? "3" : "id:3") : (google ? "wrong-id" : "id:wrong-id"); return n.json(m);
 		} return bytes;
 	};
 	if (scenario == 9) n.guard = false; if (scenario == 12) n.deferReads = true; if (scenario == 15) n.writeFailureStatus = 401;
@@ -1270,12 +1270,20 @@ void TestCloudSyncHistory::workspaceCreate()
 	if (scenario == 24) { held = std::make_unique<QLockFile>(intentFile + ".lock"); QVERIFY(held->tryLock(0)); }
 	if (scenario == 26) { directory = temporary.filePath("blocked-directory"); QVERIFY(write(directory, "preserve blocker")); }
 	if (scenario == 29) n.add(name, "preserve competing root");
+	if (scenario == 33) {
+		// Dropbox cannot create a second equal path; acknowledge another existing
+		// equal-scope root under a changed name to exercise the receipt guard.
+		const auto ref = CloudWorkspaceReference::create(provider, Account, epoch, google ? "3" : "id:3");
+		n.add(google ? name : "existing-workspace.json", CloudWorkspaceRecord::create(ref, origin).json());
+		if (!google) n.metadataResponse = [&](const QByteArray &bytes) { auto m = QJsonDocument::fromJson(bytes).object(); m["name"] = name; return n.json(m); };
+	}
 	int creates = 0, binds = 0, lookups = 0, reads = 0; bool injected = false;
 	n.requested = [&](const QNetworkRequest &r) {
 		const auto path = r.url().path(); const auto arg = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object();
 		const bool update = path.startsWith("/upload/drive/v2/") || (!google && path == "/2/files/upload" && arg["mode"].isObject());
 		if (path == "/drive/v3/files") ++lookups;
 		if (update) {
+			QCOMPARE(QJsonDocument::fromJson(readFile(intentFile)).object()["state"].toString(), QString("binding"));
 			++binds; if (scenario == 5) n.loseWriteAck = true; if (scenario == 16 && !injected) { n.writeFailureStatus = 401; injected = true; }
 			if (scenario == 7 && !injected) { n.files.last().rev += "-raced"; injected = true; }
 		} else if (path == "/upload/drive/v3/files" || (!google && path == "/2/files/upload")) {
@@ -1284,7 +1292,7 @@ void TestCloudSyncHistory::workspaceCreate()
 		}
 		else {
 			++reads; const auto state = QJsonDocument::fromJson(readFile(intentFile)).object(); QVERIFY(!state["id"].toString().isEmpty());
-			QVERIFY(state["state"].toString() == "identified" || state["state"].toString() == "bound");
+			QVERIFY(state["state"].toString() == "identified" || state["state"].toString() == "binding" || state["state"].toString() == "bound");
 			if (scenario == 13 && !injected) { n.deferReads = true; injected = true; }
 		}
 	};
@@ -1327,7 +1335,8 @@ void TestCloudSyncHistory::workspaceCreate()
 		if (scenario == 8) { start(other); QTRY_COMPARE(otherDone.size(), 1); QCOMPARE(n.mutations, mutations); }
 	}
 	if (scenario == 2 || scenario == 3) { const auto mutations = n.mutations; start(client); QTRY_COMPARE(errors.size(), 2); QCOMPARE(n.mutations, mutations); }
-	QCOMPARE(lookups, 0); QVERIFY(creates <= 1); if (scenario != 7) QVERIFY(binds <= 1);
+	QCOMPARE(lookups, 0); QVERIFY(creates <= 1); if (scenario != 7 && scenario != 16) QVERIFY(binds <= 1); else QCOMPARE(binds, 2);
+	if (scenario == 33) { QCOMPARE(binds, 0); QVERIFY(QDir(directory).entryList({"*.json"}, QDir::Files).isEmpty()); }
 	for (int i = 0; i < old.size(); ++i) { QCOMPARE(n.files[i].data, old[i].data); QCOMPARE(n.files[i].rev, old[i].rev); QCOMPARE(n.files[i].name, old[i].name); }
 	if (scenario == 29) QCOMPARE(n.files[2].data, QByteArray("preserve competing root"));
 	QCOMPARE(readFile(selection), QByteArray("preserve selection")); QCOMPARE(readFile(baseline), QByteArray("preserve baseline")); QCOMPARE(readFile(local), A); QVERIFY(n.allowed);
