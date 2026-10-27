@@ -44,6 +44,10 @@ All versions and prior schema 1/2 files remain protected. The [retention design]
 
 ## Validation
 
+### Current increment, 2026-10-27
+
+At `a0f5b0d41`, the [Qt-only protocol test job](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40483566947/job/122119629097) passes the new pristine-root recovery, retry cancellation/local-edit guards and legacy-branch copy cases alongside the existing history cases. [QML validation](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40483566852) also passes. Full native regression, Windows packaging and new live-provider checks are still pending; the Windows evidence below applies to the earlier `9c3d3dcf0` application. [The continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md) records current runs and the prepared isolated live-test driver.
+
 The native regression suite exercises schema 1/2 copy migration, save/restore with new identities, restart, active reservations, ticket reuse and stale-parent rejection, malformed/unsupported records, simultaneous initialization, failed uploads, lost root acknowledgements, cancellation, changed legacy branches, corrupted/revised/renamed source objects, account/epoch mismatch and local edits during restore. Manager cases cover the disabled gate, assignment/automatic-sync restrictions, fresh identity, cancellation, disconnect and identity failure. Provider simulations assert conditional root writes and ticket registration before payload creation, and prohibit legacy writes or deletion requests.
 
 ### Exact-head checks
