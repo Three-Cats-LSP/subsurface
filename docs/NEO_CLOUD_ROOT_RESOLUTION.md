@@ -1,6 +1,18 @@
 # Active history-root resolution: next protocol gate
 
-Design constraints, 2026-10-27. This protocol is **not implemented or proved**. [Branch review](NEO_CLOUD_BRANCH_REVIEW.md) is implemented and Windows-validated; it deliberately refuses to elect between active roots. [Local checkpoints](NEO_CLOUD_AUTHORITY.md) protect an established profile but do not establish global authority for a new device.
+Design constraints, 2026-10-27. The complete resolution protocol is **not implemented or proved**. A native record-level fence/handoff foundation is under validation below; no application action publishes it. [Branch review](NEO_CLOUD_BRANCH_REVIEW.md) is implemented and Windows-validated; it deliberately refuses to elect between active roots. [Local checkpoints](NEO_CLOUD_AUTHORITY.md) protect an established profile but do not establish global authority for a new device.
+
+## Record-level foundation
+
+`CloudHistoryFence` uses the distinct `neo-history-fence-development-1` control format, stored in place of the original root only by a future exact-identity conditional transition. It contains the complete unchanged original development-1/2 record once, with a bounded coordinator intent table or a terminal source seal. Ordinary history parsers reject the fence; a writer holding the old revision must lose its CAS. The library does not perform a provider write, archive rename or local rebinding itself.
+
+A coordinator creates a fresh session UUID; each source intent creates a fresh nonce and permanently retains its exact source ID. The intent does not pin a stale source body: a racing source writer invalidates the seal CAS, and a reread can seal the newer complete source under the same durable intent. A source seal records the pre-seal revision and matching target/session/nonce. Acknowledgement requires the same scope and handoff, a new confirmed revision, the deterministic archived name and the sealed-body SHA-256. Callers must actually confirm those provider facts before acknowledging. Acknowledged references and all baseline safety metadata are immutable. There is no unfreeze, coordinator redirection, activation, retirement or deletion transition.
+
+Two frozen coordinators cannot be nested or sealed through this API: they remain preserved and blocked. A late root is not automatically absorbed or discarded, and a successful pair handoff is not a proof of complete namespace membership. Coordinator convergence and activation therefore remain separate unimplemented gates. No UI recovery action or ordinary history workflow invokes this foundation yet.
+
+Native tests cover both earlier history formats, full pending/uploaded/committed state, active and released reservations, stale target/source writes, uploads completing after a fence, competing coordinators, delayed roots, invalid identities/scopes/nonces, immutable acknowledgements, size bounds and lost responses after every conditional body transition. The provider simulator models archival metadata externally; these tests do **not** validate a new native active-root rename adapter. Exact-ID current-revision reads now support Dropbox as well as Google, including expected-name checks when strict name lookup is disabled. Dropbox conditional writes still use its unique path plus expected revision; a future resolver must add/validate the required identity-preserving write/rename adapter before publishing live fences.
+
+Validation: pending native Windows/Linux protocol and exact-head application checks. No live object has been fenced or renamed by this increment, and no credentials were accessed.
 
 ## Required implementation boundaries
 

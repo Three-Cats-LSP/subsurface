@@ -41,6 +41,8 @@ public:
 	void setResponseLimit(qint64 bytes) { responseLimit = bytes; }
 	void downloadExact(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QString &fileId, const QString &version);
+	// Read the current revision of one exact identity after an uncertain write.
+	// Returned provider ID and expected name must still match.
 	void downloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QString &fileId);
 	// Read-only discovery for branch review. Never chooses or renames a root.

@@ -256,6 +256,139 @@ bool CloudHistoryRecord::release(const QString &id)
 	r["active"] = false; reservations[id] = r;
 	auto next = value; next["reservations"] = reservations; return replace(next);
 }
+CloudHistoryRecord CloudHistoryFence::record() const
+{
+	CloudHistoryRecord root; root.value = value.value("record").toObject(); return root;
+}
+QByteArray CloudHistoryFence::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
+QString CloudHistoryFence::archiveName(const QString &epoch, const QString &id)
+{
+	return CloudHistoryRecord::rootName(epoch).chopped(5) + "-sealed-" + CloudSyncManifest::sha256(id.toUtf8()) + ".json";
+}
+QJsonObject CloudHistoryFence::intent(const QString &sourceId) const
+{
+	for (const auto &entry : value.value("sources").toArray()) {
+		const auto source = entry.toObject(); if (string(source, "id") == sourceId) return source;
+	}
+	return {};
+}
+CloudHistoryFence CloudHistoryFence::parse(const QByteArray &bytes)
+{
+	CloudHistoryFence fence;
+	if (bytes.size() > RecordLimit) return fence;
+	fence.value = QJsonDocument::fromJson(bytes).object();
+	if (!fence.valid()) fence.value = {};
+	return fence;
+}
+CloudHistoryFence CloudHistoryFence::freeze(const QString &id, const CloudHistoryRecord &root)
+{
+	CloudHistoryFence fence;
+	fence.value = {{"schema", 3}, {"format", "neo-history-fence-development-1"}, {"id", id},
+		{"record", root.value}, {"sequence", 0}, {"session", uuid()}, {"state", "coordinator"}, {"sources", QJsonArray()}};
+	if (!fence.valid()) fence.value = {};
+	return fence;
+}
+bool CloudHistoryFence::valid() const
+{
+	const auto root = record();
+	const auto provider = string(root.value, "provider"), state = string(value, "state"), id = string(value, "id");
+	QStringList names = {"schema", "format", "id", "record", "sequence", "session", "state"};
+	if (state == "coordinator") names.append("sources");
+	else if (state == "sealed") names.append({"destination", "nonce", "base_version"});
+	else return false;
+	if (!fields(value, names) || value.value("schema") != QJsonValue(3) ||
+	    string(value, "format") != "neo-history-fence-development-1" ||
+	    !value.value("record").isObject() || !root.valid() || root.pristine() ||
+	    !objectId(provider, id) || !CloudHistoryRecord::validEpoch(string(value, "session")) ||
+	    !integer(value.value("sequence"), 0, 1000000) || json().size() > RecordLimit) return false;
+	if (state == "sealed")
+		return value.value("sequence") == QJsonValue(0) && objectId(provider, string(value, "destination")) &&
+			string(value, "destination") != id && CloudHistoryRecord::validEpoch(string(value, "nonce")) && text(string(value, "base_version"));
+	if (!value.value("sources").isArray()) return false;
+	const auto sources = value.value("sources").toArray();
+	if (sources.size() > 16) return false;
+	QSet<QString> ids, nonces;
+	int transitions = sources.size();
+	for (const auto &entry : sources) {
+		const auto source = entry.toObject();
+		const auto sourceId = string(source, "id"), nonce = string(source, "nonce"), status = string(source, "state");
+		if (!fields(source, {"id", "nonce", "state", "sha256", "version", "name"}) ||
+		    !objectId(provider, sourceId) || sourceId == id || ids.contains(sourceId) ||
+		    !CloudHistoryRecord::validEpoch(nonce) || nonces.contains(nonce)) return false;
+		for (const auto &key : {"sha256", "version", "name"}) if (!source.value(QLatin1String(key)).isString()) return false;
+		if (status == "intent") {
+			if (!string(source, "sha256").isEmpty() || !string(source, "version").isEmpty() || !string(source, "name").isEmpty()) return false;
+		} else if (status == "acknowledged") {
+			if (!hash(string(source, "sha256")) || !text(string(source, "version")) ||
+			    string(source, "name") != archiveName(string(root.value, "epoch"), sourceId)) return false;
+			++transitions;
+		} else return false;
+		ids.insert(sourceId); nonces.insert(nonce);
+	}
+	return value.value("sequence").toInt() >= transitions;
+}
+bool CloudHistoryFence::follows(const CloudHistoryFence &previous) const
+{
+	if (!valid() || !previous.valid()) return false;
+	for (const auto &key : {"schema", "format", "id", "record", "session", "state"})
+		if (value.value(key) != previous.value.value(key)) return false;
+	const int sequence = value.value("sequence").toInt(), oldSequence = previous.value.value("sequence").toInt();
+	if (sequence < oldSequence) return false;
+	if (sequence == oldSequence || string(value, "state") == "sealed") return json() == previous.json();
+	const auto sources = value.value("sources").toArray(), oldSources = previous.value.value("sources").toArray();
+	if (sources.size() < oldSources.size()) return false;
+	for (int i = 0; i < oldSources.size(); ++i) {
+		const auto before = oldSources[i].toObject(), after = sources[i].toObject();
+		if (before.value("id") != after.value("id") || before.value("nonce") != after.value("nonce")) return false;
+		if (string(before, "state") == "acknowledged" && before != after) return false;
+	}
+	return true;
+}
+bool CloudHistoryFence::replace(const QJsonObject &candidate)
+{
+	CloudHistoryFence next; next.value = candidate;
+	next.value["sequence"] = value.value("sequence").toInt() + 1;
+	if (!next.follows(*this)) return false;
+	value = next.value; return true;
+}
+bool CloudHistoryFence::intend(const QString &sourceId)
+{
+	if (!valid() || string(value, "state") != "coordinator" || !intent(sourceId).isEmpty()) return false;
+	auto sources = value.value("sources").toArray();
+	sources.append(QJsonObject{{"id", sourceId}, {"nonce", uuid()}, {"state", "intent"}, {"sha256", ""}, {"version", ""}, {"name", ""}});
+	auto next = value; next["sources"] = sources; return replace(next);
+}
+CloudHistoryFence CloudHistoryFence::seal(const QString &id, const CloudHistoryRecord &root,
+	const QString &version, const CloudHistoryFence &coordinator)
+{
+	CloudHistoryFence source;
+	if (!coordinator.valid() || string(coordinator.value, "state") != "coordinator" ||
+	    string(coordinator.intent(id), "state") != "intent") return source;
+	const auto target = coordinator.record();
+	for (const auto &key : {"provider", "account", "epoch"}) if (root.value.value(key) != target.value.value(key)) return source;
+	source.value = {{"schema", 3}, {"format", "neo-history-fence-development-1"}, {"id", id}, {"record", root.value},
+		{"sequence", 0}, {"session", string(coordinator.value, "session")}, {"state", "sealed"},
+		{"destination", string(coordinator.value, "id")}, {"nonce", string(coordinator.intent(id), "nonce")}, {"base_version", version}};
+	if (!source.valid()) source.value = {};
+	return source;
+}
+bool CloudHistoryFence::acknowledge(const CloudHistoryFence &source, const QString &version, const QString &name)
+{
+	if (!valid() || string(value, "state") != "coordinator" || !source.valid() || string(source.value, "state") != "sealed" ||
+	    !text(version) || version == string(source.value, "base_version") ||
+	    string(source.value, "destination") != string(value, "id") || source.value.value("session") != value.value("session")) return false;
+	const auto root = record(), other = source.record();
+	for (const auto &key : {"provider", "account", "epoch"}) if (root.value.value(key) != other.value.value(key)) return false;
+	const auto sourceId = string(source.value, "id");
+	auto entry = intent(sourceId);
+	if (string(entry, "state") != "intent" || entry.value("nonce") != source.value.value("nonce") ||
+	    name != archiveName(string(root.value, "epoch"), sourceId)) return false;
+	entry["state"] = "acknowledged"; entry["sha256"] = CloudSyncManifest::sha256(source.json()); entry["version"] = version; entry["name"] = name;
+	auto sources = value.value("sources").toArray();
+	for (int i = 0; i < sources.size(); ++i) if (sources[i].toObject().value("id") == QJsonValue(sourceId)) sources[i] = entry;
+	auto next = value; next["sources"] = sources; return replace(next);
+}
+
 CloudHistoryAuthority::CloudHistoryAuthority(const QString &path) : fileName(path) {}
 bool CloudHistoryAuthority::readUnlocked()
 {

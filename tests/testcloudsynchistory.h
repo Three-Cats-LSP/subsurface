@@ -6,6 +6,12 @@ class TestCloudSyncHistory : public QObject {
 	Q_OBJECT
 private slots:
 	void stateTransitions();
+	void fenceTransitions_data();
+	void fenceTransitions();
+	void fenceRejection_data();
+	void fenceRejection();
+	void fenceCas_data();
+	void fenceCas();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();

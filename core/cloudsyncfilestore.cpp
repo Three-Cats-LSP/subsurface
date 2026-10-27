@@ -541,8 +541,8 @@ void CloudSyncFileStore::dropboxDownload(const QString &accessToken, const QStri
 			const auto metadata = QJsonDocument::fromJson(reply->rawHeader("Dropbox-API-Result")).object();
 			const QString version = metadata.value(QStringLiteral("rev")).toString();
 			const QString id = metadata.value(QStringLiteral("id")).toString();
-			if (version.isEmpty() || (strictReads && (id.isEmpty() || metadata.value("name").toString() != fileName)) ||
-			    (!expectedId.isEmpty() && (id != expectedId || version != expectedVersion)))
+			if (version.isEmpty() || ((strictReads || !expectedId.isEmpty()) && (id.isEmpty() || metadata.value("name").toString() != fileName)) ||
+			    (!expectedId.isEmpty() && (id != expectedId || (!expectedVersion.isEmpty() && version != expectedVersion))))
 				emit operationError(CloudSyncProviderType::Dropbox, fileName, tr("Dropbox did not return a file revision. No data was changed."));
 			else
 				emit versionedDownloadFinished(CloudSyncProviderType::Dropbox, fileName, payload, version, id);
@@ -660,10 +660,14 @@ void CloudSyncFileStore::downloadExact(CloudSyncProviderType provider, const QSt
 void CloudSyncFileStore::downloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 	const QString &fileName, const QString &fileId)
 {
+	if (provider == CloudSyncProviderType::Dropbox && !accessToken.isEmpty() && !fileName.isEmpty() && safeRemoteName(fileName) == fileName &&
+	    QRegularExpression(QStringLiteral("^id:[A-Za-z0-9_-]+$")).match(fileId).hasMatch()) {
+		dropboxDownload(accessToken, fileName, true, fileId, {}); return;
+	}
 	// A pristine-root alias has a new revision after its conditional rename.
 	// Read that exact ID under its expected archived name, bracketing its body
 	// with metadata reads; never elect another file by name.
-	if (provider != CloudSyncProviderType::GoogleDrive || accessToken.isEmpty() || safeRemoteName(fileName) != fileName ||
+	if (provider != CloudSyncProviderType::GoogleDrive || accessToken.isEmpty() || fileName.isEmpty() || safeRemoteName(fileName) != fileName ||
 	    !QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(fileId).hasMatch()) {
 		emit operationError(provider, fileName, tr("Cloud object identity is invalid.")); return;
 	}

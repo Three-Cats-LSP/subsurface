@@ -38,6 +38,31 @@ private:
 	bool replace(const QJsonObject &candidate);
 };
 
+// Protocol foundation only; no application action publishes these records yet.
+// Publish in place of the original root with its exact-ID provider CAS. The
+// different format fences ordinary history writers while retaining all state.
+// There is intentionally no unfreeze, redirect, activation or deletion method.
+class CloudHistoryFence {
+public:
+	QJsonObject value;
+	static CloudHistoryFence freeze(const QString &id, const CloudHistoryRecord &root);
+	static CloudHistoryFence seal(const QString &id, const CloudHistoryRecord &root,
+		const QString &version, const CloudHistoryFence &coordinator);
+	static CloudHistoryFence parse(const QByteArray &bytes);
+	static QString archiveName(const QString &epoch, const QString &id);
+	CloudHistoryRecord record() const;
+	QJsonObject intent(const QString &sourceId) const;
+	QByteArray json() const;
+	bool valid() const;
+	bool follows(const CloudHistoryFence &previous) const;
+	bool intend(const QString &sourceId);
+	// Caller must confirm exact source ID, archived name, revision and bytes
+	// through the provider before publishing this acknowledgement by target CAS.
+	bool acknowledge(const CloudHistoryFence &source, const QString &version, const QString &name);
+private:
+	bool replace(const QJsonObject &candidate);
+};
+
 // A local checkpoint contains only the control record, never XML or credentials.
 // Updates are atomic and serialized across processes using the same profile.
 class CloudHistoryAuthority {
