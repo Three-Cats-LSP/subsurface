@@ -24,4 +24,4 @@ Before any cleanup, implement and validate root ownership, writer/read/retiremen
 
 The owner selected the first path in this chat. Implement provider-verified create/join and durable workspace binding under that choice. Do not request broader Google scopes or introduce a coordination service. Physical Android and two-live-account Dropbox gates remain deferred.
 
-The first implementation adds [physical-root references and atomic local selection](NEO_CLOUD_WORKSPACES.md). These are not active-root verification or application onboarding yet; ordinary synchronization is unchanged.
+Implementation now includes [physical-root references, self-bound controls, exact-root verification, durable checkpoints and atomic versioned local selection](NEO_CLOUD_WORKSPACES.md), with completed native/live Windows validation. Application create/join and production migration remain to implement; ordinary synchronization is unchanged. A reference or local choice alone is not writable authority.
