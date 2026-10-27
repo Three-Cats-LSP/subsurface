@@ -16,6 +16,10 @@ Google's initial recovery can rename a pristine duplicate after a client has obs
 
 During duplicate recovery, the known root's contents are checked against its checkpoint before renaming candidates. An established bound identity must be present in the complete candidate list. Multiple active roots remain protected and blocked; this increment does not choose between them.
 
+## Staged handoff proofs
+
+The later [handoff-proof foundation](NEO_CLOUD_HANDOFF_PROOFS.md), `cd3ffbc6c`, can verify a source's explicit destination receipt and preserve exact checkpoint bytes in an immutable recovery file under the same process lock. It leaves the active binding unchanged and does not broaden pristine rebinding. Its 377-case native Linux/Windows protocol run passed; current packaged validation is recorded separately. No application action invokes proof staging or active-root resolution yet.
+
 ## Limits and next gates
 
 This is a local anchor after first observation. A new profile/device starts without that observation; externally removing local application data also removes its anchor. Production namespace discovery, migration/rollback, resolution of multiple active roots and safe retention remain separate protocol gates. A checkpoint is not permission to delete cloud data or to reset an uncertain namespace. Existing schema 1/2 files and all earlier test namespaces stay protected.

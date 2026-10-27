@@ -734,6 +734,8 @@ On 2026-10-27, `a0f5b0d41` passed Windows launch/Clean/Modern/lifecycle, all 38 
 
 The next [record-level fence/handoff foundation](NEO_CLOUD_ROOT_RESOLUTION.md), `e46d02881`, preserves complete active branches without exposing an unfinished resolution action. The subsequent [exact-ID update adapter](NEO_CLOUD_IDENTITY_UPDATES.md), `4eb424e5b`, passed 299 native Qt cases on Linux and Windows and eight matching compiled-tool live Dropbox stages. A separate actual-provider probe confirmed stale-ID/revision rejection, moved-ID safety and committed-but-unread acknowledgement recovery. Four fresh probe objects remain retained; audits matched the original Dropbox objects/credentials and all earlier test objects. Across both providers, 110 test objects are protected. Full e46 native regression passed all 38 desktop/35 mobile-target suites. The e46 application package and exact 4eb Windows/Clean/Modern packaging are still running; these component results do not close authority convergence, migration or retention gates.
 
+The subsequent [source-receipt verification and immutable local handoff proofs](NEO_CLOUD_HANDOFF_PROOFS.md), `cd3ffbc6c`, passed 377 native cases on Linux and Windows. They preserve the exact active checkpoint and cannot adopt a frozen destination. The e46 Windows launch/Clean/Modern/lifecycle gate has now passed; newer 4eb and cd3/CI-only 0db package gates remain active. Coordinator convergence, conditional source archival, activation and production migration remain open.
+
 ## Milestone 14 — Web / WebAssembly & Deployment
 
 **Goal:** deploy a useful browser version while maximizing code sharing.
