@@ -21,6 +21,11 @@ private slots:
 	void legacyProvenance();
 	void legacyBranch_data();
 	void legacyBranch();
+	void authorityCheckpoint();
+	void authorityPristineAlias();
+	void authorityStorageFailure();
+	void boundAuthority_data();
+	void boundAuthority();
 	void restoreRejection_data();
 	void restoreRejection();
 };

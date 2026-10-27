@@ -140,10 +140,11 @@ QString CloudSyncFileStore::replyError(QNetworkReply *reply, const QByteArray &p
 }
 
 void CloudSyncFileStore::setHistoryRootRecovery(const QString &name,
-	const std::function<HistoryRootState(const QByteArray &)> &validator)
+	const std::function<HistoryRootState(const QString &, const QByteArray &)> &validator, const QString &requiredId)
 {
 	historyRootName = name;
 	historyRootValidator = validator;
+	historyRootRequiredId = requiredId;
 }
 
 void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QString &fileName,
@@ -211,6 +212,11 @@ void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QStrin
 				ids.insert(id);
 				order.append({created, id});
 			}
+			if (historyRecovery && !historyRootRequiredId.isEmpty() && !ids.contains(historyRootRequiredId)) {
+				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+					tr("The known history root is missing. Competing files were kept unchanged."));
+				return;
+			}
 			// Provider creation time, not a device clock or last modification.
 			// File ID breaks ties, so every recovering client uses the same order.
 			std::sort(order.begin(), order.end());
@@ -272,7 +278,7 @@ void CloudSyncFileStore::googleRecoverInitialHistoryRoots(const QString &accessT
 	}
 	googleReadFileVersioned(accessToken, fileName, files[next].id,
 		[this, accessToken, fileName, files, next, active, attempt, continuation](const QByteArray &data, const QString &version) mutable {
-			const auto state = historyRootValidator && fileName == historyRootName ? historyRootValidator(data) : HistoryRootState::Invalid;
+			const auto state = historyRootValidator && fileName == historyRootName ? historyRootValidator(files[next].id, data) : HistoryRootState::Invalid;
 			if (state == HistoryRootState::Invalid || (state == HistoryRootState::Active && active >= 0)) {
 				emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
 					tr("Competing history roots contain activity or unsupported data. All roots and versions were kept for recovery."));
@@ -562,6 +568,21 @@ void CloudSyncFileStore::downloadExact(CloudSyncProviderType provider, const QSt
 			else emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, data, actual, fileId);
 		});
 	} else emit operationError(provider, fileName, tr("Cloud snapshot identity is invalid."));
+}
+
+void CloudSyncFileStore::downloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QString &fileId)
+{
+	// A pristine-root alias has a new revision after its conditional rename.
+	// Read that exact ID under its expected archived name, bracketing its body
+	// with metadata reads; never elect another file by name.
+	if (provider != CloudSyncProviderType::GoogleDrive || accessToken.isEmpty() || safeRemoteName(fileName) != fileName ||
+	    !QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(fileId).hasMatch()) {
+		emit operationError(provider, fileName, tr("Cloud object identity is invalid.")); return;
+	}
+	googleReadFileVersioned(accessToken, fileName, fileId, [this, fileName, fileId](const QByteArray &data, const QString &version) {
+		emit versionedDownloadFinished(CloudSyncProviderType::GoogleDrive, fileName, data, version, fileId);
+	});
 }
 
 void CloudSyncFileStore::googleReadFileVersioned(const QString &accessToken, const QString &fileName, const QString &fileId,

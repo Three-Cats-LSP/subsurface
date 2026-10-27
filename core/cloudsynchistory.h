@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <QVariantMap>
+#include <memory>
 
 // Experimental schema 3. All state changes are published through one provider
 // CAS record. There is deliberately no retirement, expiry or deletion operation.
@@ -20,6 +21,8 @@ public:
 		const QString &epoch, const QString &legacyHash);
 	static CloudHistoryRecord parse(const QByteArray &data);
 	bool valid() const;
+	bool pristine() const;
+	bool follows(const CloudHistoryRecord &previous) const;
 	QByteArray json() const;
 	QString head() const;
 	QJsonObject ticket(const QString &id) const;
@@ -35,6 +38,24 @@ private:
 	bool replace(const QJsonObject &candidate);
 };
 
+// A local checkpoint contains only the control record, never XML or credentials.
+// Updates are atomic and serialized across processes using the same profile.
+class CloudHistoryAuthority {
+public:
+	explicit CloudHistoryAuthority(const QString &fileName);
+	bool load();
+	bool observe(const QString &id, const CloudHistoryRecord &root);
+	bool rebindPristine(const QString &oldId, const CloudHistoryRecord &archived,
+		const QString &newId, const CloudHistoryRecord &root);
+	QString id() const { return rootId; }
+	CloudHistoryRecord record() const { return checkpoint; }
+private:
+	bool readUnlocked();
+	bool writeUnlocked(const QString &id, const CloudHistoryRecord &root);
+	QString fileName, rootId;
+	CloudHistoryRecord checkpoint;
+};
+
 class CloudSyncHistory : public QObject {
 	Q_OBJECT
 public:
@@ -42,14 +63,14 @@ public:
 	~CloudSyncHistory() override;
 	void start(CloudSyncProviderType provider, const QString &token, const QString &account,
 		const QString &epoch, const QString &action, const QString &revision,
-		const QByteArray &local, const std::function<bool()> &localUnchanged);
+		const QByteArray &local, const std::function<bool()> &localUnchanged, const QString &authorityFile = {});
 	void cancel();
 signals:
 	void finished(const QVariantMap &report, const QByteArray &restored);
 	void failed(const QString &message, bool tokenRejected);
 private:
 	enum class Step { Idle, Legacy, Root, MigrationPayload, CheckLegacy, VerifyRoot,
-		Upload, VerifyPayload, RestorePayload, VerifyReservation, RetryInitialization };
+		Upload, VerifyPayload, RestorePayload, VerifyReservation, RetryInitialization, VerifyPristineAlias };
 	void read(const QString &name, Step next);
 	void received(const QString &name, const QByteArray &data, const QString &version, const QString &id);
 	void processRoot();
@@ -60,6 +81,7 @@ private:
 	void complete();
 	void fail(const QString &message = {}, bool rejected = false);
 	CloudSyncFileStore files;
+	std::unique_ptr<CloudHistoryAuthority> authority;
 	QTimer deadline;
 	QTimer initializationRetry;
 	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
@@ -68,6 +90,7 @@ private:
 	CloudHistoryRecord root, pendingRoot;
 	QByteArray local, payload;
 	Step step = Step::Idle;
+	Step aliasStep = Step::Idle;
 	bool retriedRootRead = false;
 	int initializationRetries = 0;
 	std::function<void()> continuation;

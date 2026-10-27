@@ -36,10 +36,12 @@ public:
 	// renamed; the caller validates the full format and account binding.
 	enum class HistoryRootState { Invalid, Pristine, Active };
 	void setHistoryRootRecovery(const QString &name,
-		const std::function<HistoryRootState(const QByteArray &)> &validator);
+		const std::function<HistoryRootState(const QString &, const QByteArray &)> &validator, const QString &requiredId = {});
 	void setResponseLimit(qint64 bytes) { responseLimit = bytes; }
 	void downloadExact(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QString &fileId, const QString &version);
+	void downloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QString &fileId);
 
 signals:
 	void uploadFinished(CloudSyncProviderType provider, const QString &fileName);
@@ -85,8 +87,8 @@ private:
 	QNetworkAccessManager *networkManager;
 	QMap<CloudSyncProviderType, QSet<QNetworkReply *>> pendingReplies;
 	bool strictReads = false;
-	QString historyRootName;
-	std::function<HistoryRootState(const QByteArray &)> historyRootValidator;
+	QString historyRootName, historyRootRequiredId;
+	std::function<HistoryRootState(const QString &, const QByteArray &)> historyRootValidator;
 	qint64 responseLimit = 0;
 };
 

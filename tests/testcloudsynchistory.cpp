@@ -4,10 +4,14 @@
 #include "core/cloudsyncmanifest.h"
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QFile>
+#include <QDir>
+#include <QLockFile>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QUrlQuery>
 #include <QUuid>
 #include <cstring>
@@ -247,15 +251,18 @@ void TestCloudSyncHistory::interruption()
 }
 void TestCloudSyncHistory::concurrentInitialization_data()
 {
-	QTest::addColumn<bool>("google"); QTest::newRow("google") << true; QTest::newRow("dropbox") << false;
+	QTest::addColumn<bool>("google"); QTest::addColumn<bool>("bound");
+	for (bool g : {false, true}) for (bool b : {false, true})
+		QTest::newRow(qPrintable(QString("%1-bound%2").arg(g).arg(b))) << g << b;
 }
 void TestCloudSyncHistory::concurrentInitialization()
 {
-	QFETCH(bool, google); Network n; n.seed(); const auto before = n.content(Legacy); const auto epoch = uid();
+	QFETCH(bool, google); QFETCH(bool, bound); Network n; n.seed(); const auto before = n.content(Legacy); const auto epoch = uid();
+	QTemporaryDir directory; QVERIFY(directory.isValid());
 	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
 	CloudSyncHistory a(&n), b(&n); QSignalSpy ad(&a, &CloudSyncHistory::finished), bd(&b, &CloudSyncHistory::finished), ae(&a, &CloudSyncHistory::failed), be(&b, &CloudSyncHistory::failed);
-	a.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; });
-	b.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; });
+	a.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, bound ? directory.filePath("a.json") : QString());
+	b.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, bound ? directory.filePath("b.json") : QString());
 	QTRY_COMPARE(ad.size() + bd.size() + ae.size() + be.size(), 2);
 	QCOMPARE(ae.size() + be.size(), 0); QCOMPARE(ad.size() + bd.size(), 2);
 	QCOMPARE(n.content(Legacy), before); QVERIFY(n.allowed);
@@ -419,6 +426,129 @@ void TestCloudSyncHistory::legacyBranch()
 	run("save"); QTRY_COMPARE(done.size(), fault == 0 || fault == 3 ? 4 : 3);
 	run("restore", A, copy); QTRY_COMPARE(done.size(), fault == 0 || fault == 3 ? 5 : 4); QCOMPARE(done.last()[1].toByteArray(), B);
 	QCOMPARE(n.content(Legacy), branch.toJson()); QCOMPARE(n.content(branch.payloadFileName()), B); QVERIFY(n.allowed);
+}
+void TestCloudSyncHistory::authorityCheckpoint()
+{
+	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("authority.json");
+	auto read = [&] { QFile f(path); if (!f.open(QIODevice::ReadOnly)) return QByteArray(); return f.readAll(); };
+	CloudHistoryAuthority store(path); QVERIFY(store.load()); QVERIFY(store.id().isEmpty()); QVERIFY(!QFile::exists(path));
+	auto r = CloudHistoryRecord::create("google-drive", Account, uid(), CloudSyncManifest::sha256("legacy"));
+	const auto first = uid(), pending = uid(), reservation = uid();
+	QVERIFY(store.observe("root-a", r)); const auto pristine = r;
+	QVERIFY(r.registerUpload(first, {}, CloudSyncManifest::sha256(A), A.size())); QVERIFY(store.observe("root-a", r));
+	QVERIFY(r.completeUpload(first, "payload-a", "v1")); QVERIFY(store.observe("root-a", r));
+	QVERIFY(r.publish(first, {})); QVERIFY(store.observe("root-a", r));
+	QVERIFY(r.registerUpload(pending, first, CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(r.completeUpload(pending, "payload-b", "v1"));
+	QVERIFY(r.reserve(reservation, first)); QVERIFY(r.release(reservation)); QVERIFY(store.observe("root-a", r));
+	const auto bytes = read(); QVERIFY(!bytes.contains(A));
+	CloudHistoryAuthority restarted(path); QVERIFY(restarted.load()); QCOMPARE(restarted.id(), QString("root-a")); QCOMPARE(restarted.record().json(), r.json());
+	QVERIFY(!restarted.observe("replacement", r)); QVERIFY(!restarted.observe("root-a", pristine)); QCOMPARE(read(), bytes);
+	for (int fault = 0; fault < 7; ++fault) {
+		auto candidate = r; auto tickets = candidate.value["tickets"].toObject(), t = tickets[pending].toObject();
+		if (fault == 0) { t["created_at"] = "2026-01-01T00:00:00.000Z"; tickets[pending] = t; }
+		if (fault == 1) { tickets.remove(pending); }
+		if (fault == 2) { t["state"] = "registered"; t["object"] = ""; t["version"] = ""; tickets[pending] = t; }
+		if (fault == 3) { t["sha256"] = CloudSyncManifest::sha256("rewritten pending data"); tickets[pending] = t; }
+		if (fault == 4) { t["object"] = "replacement-object"; tickets[pending] = t; }
+		if (fault == 5) { t["version"] = "replacement-version"; tickets[pending] = t; }
+		candidate.value["tickets"] = tickets;
+		if (fault == 6) { auto reservations = candidate.value["reservations"].toObject(), v = reservations[reservation].toObject(); v["active"] = true; reservations[reservation] = v; candidate.value["reservations"] = reservations; }
+		if (fault != 0) candidate.value["sequence"] = r.value["sequence"].toInt() + 1;
+		QVERIFY(candidate.valid()); QVERIFY(!candidate.follows(r)); QVERIFY(!restarted.observe("root-a", candidate)); QCOMPARE(read(), bytes);
+	}
+	QLockFile lock(path + ".lock"); QVERIFY(lock.tryLock(0)); QVERIFY(!restarted.load()); QVERIFY(!restarted.observe("root-a", r)); lock.unlock();
+	QVERIFY(restarted.load()); QCOMPARE(read(), bytes);
+	const auto beforeUpgrade = r; QVERIFY(r.upgradeLegacyProvenance()); QVERIFY(r.follows(beforeUpgrade)); QVERIFY(restarted.observe("root-a", r));
+	const auto imported = uid(), legacy = CloudSyncManifest::sha256("new-legacy");
+	QVERIFY(r.registerUpload(imported, first, CloudSyncManifest::sha256(B), B.size(), {}, {}, legacy));
+	QVERIFY(r.completeUpload(imported, "payload-import", "v1")); QVERIFY(r.publish(imported, first));
+	QVERIFY(restarted.observe("root-a", r)); QVERIFY(!beforeUpgrade.follows(r));
+	QFile corrupt(path); QVERIFY(corrupt.open(QIODevice::WriteOnly)); QCOMPARE(corrupt.write("broken checkpoint"), qint64(17)); corrupt.close();
+	QVERIFY(!restarted.load()); QVERIFY(!restarted.observe("root-a", r)); QCOMPARE(read(), QByteArray("broken checkpoint"));
+}
+void TestCloudSyncHistory::authorityPristineAlias()
+{
+	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("authority.json");
+	const auto pristine = CloudHistoryRecord::create("google-drive", Account, uid(), CloudSyncManifest::sha256("legacy"));
+	auto next = pristine; const auto ticket = uid(); QVERIFY(next.registerUpload(ticket, {}, CloudSyncManifest::sha256(A), A.size()));
+	CloudHistoryAuthority store(path); QVERIFY(store.observe("old-root", pristine));
+	QVERIFY(!store.rebindPristine("wrong-root", pristine, "new-root", next));
+	QVERIFY(!store.rebindPristine("old-root", next, "new-root", next)); // The archived object must still be exactly pristine.
+	QVERIFY(store.rebindPristine("old-root", pristine, "new-root", next));
+	CloudHistoryAuthority restarted(path); QVERIFY(restarted.load()); QCOMPARE(restarted.id(), QString("new-root"));
+	QVERIFY(!restarted.observe("old-root", next)); QVERIFY(!restarted.rebindPristine("new-root", pristine, "third-root", next));
+}
+void TestCloudSyncHistory::boundAuthority_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("fault");
+	for (bool g : {false, true}) for (int f = 0; f < 12; ++f)
+		if (g || f < 9) QTest::newRow(qPrintable(QString("%1-bound%2").arg(g).arg(f))) << g << f;
+}
+void TestCloudSyncHistory::boundAuthority()
+{
+	QFETCH(bool, google); QFETCH(int, fault); Network n; n.seed();
+	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto path = directory.filePath("authority.json");
+	const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch); const auto legacy = n.content(Legacy);
+	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	const auto pristine = CloudHistoryRecord::create(google ? "google-drive" : "dropbox", Account, epoch, CloudSyncManifest::sha256(legacy));
+	CloudSyncHistory initial(&n); QSignalSpy initialized(&initial, &CloudSyncHistory::finished), initialError(&initial, &CloudSyncHistory::failed);
+	if (fault >= 10) {
+		n.add(name, pristine.json());
+		CloudHistoryAuthority store(path); QVERIFY(store.observe(n.files[n.find(name)].id.mid(google ? 3 : 0), pristine));
+	} else {
+		initial.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, path);
+		QTRY_COMPARE(initialized.size(), 1); QCOMPARE(initialError.size(), 0);
+	}
+	const int index = n.find(name); QVERIFY(index >= 0); const auto originalFile = n.files[index];
+	const auto original = CloudHistoryRecord::parse(originalFile.data);
+	QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto checkpoint = file.readAll(); file.close();
+	if (fault == 0) n.files[index].rev += "metadata-only-change";
+	if (fault == 1) n.files[index].name = "kept-but-renamed.json";
+	if (fault == 2) { n.files[index].name = "kept-original-root.json"; n.add(name, originalFile.data); }
+	if (fault == 3) n.files[index].data = pristine.json();
+	if (fault == 4) {
+		auto changed = original; auto tickets = changed.value["tickets"].toObject(), t = tickets[changed.head()].toObject();
+		t["created_at"] = "2026-01-01T00:00:00.000Z"; tickets[changed.head()] = t; changed.value["tickets"] = tickets;
+		QVERIFY(changed.valid()); n.files[index].data = changed.json();
+	}
+	if (fault == 5) { QVERIFY(file.open(QIODevice::WriteOnly)); file.write("unsupported checkpoint"); file.close(); }
+	if (fault == 6) { auto changed = pristine; changed.value["sequence"] = original.value["sequence"].toInt() + 10; QVERIFY(changed.valid()); n.files[index].data = changed.json(); }
+	if (fault == 7) { QVERIFY(file.remove()); QVERIFY(QDir().mkdir(path)); }
+	if (fault == 9) { n.files[index].name = "kept-original-root.json"; n.add(name, pristine.json()); n.add(name, pristine.json()); }
+	if (fault >= 10) {
+		const QString oldId = originalFile.id.mid(3);
+		n.files[index].name = name.chopped(5) + "-recovered-" + oldId + ".json";
+		if (fault == 11) { auto changed = pristine; QVERIFY(changed.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size())); n.files[index].data = changed.json(); }
+		n.add(name, pristine.json());
+	}
+	const int before = n.mutations;
+	CloudSyncHistory restarted(&n); QSignalSpy done(&restarted, &CloudSyncHistory::finished), errors(&restarted, &CloudSyncHistory::failed);
+	restarted.start(provider, "token", fault == 8 ? CloudSyncManifest::sha256("other-account") : Account, epoch,
+		fault == 9 ? "migrate" : "list", {}, A, [] { return true; }, path);
+	if (fault == 0 || fault == 10) {
+		QTRY_COMPARE(done.size(), 1); QCOMPARE(errors.size(), 0);
+		if (fault == 10) { CloudHistoryAuthority check(path); QVERIFY(check.load()); QCOMPARE(check.id(), n.files[n.find(name)].id.mid(3)); }
+	} else { QTRY_COMPARE(errors.size(), 1); QCOMPARE(done.size(), 0); }
+	QCOMPARE(n.mutations, before); QCOMPARE(n.content(Legacy), legacy); QVERIFY(n.allowed);
+	if (fault != 5 && fault != 7 && fault != 10) { QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), checkpoint); }
+}
+void TestCloudSyncHistory::authorityStorageFailure()
+{
+	for (bool google : {false, true}) {
+		Network n; n.seed(); const auto legacy = n.content(Legacy); const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch);
+		QTemporaryDir directory; QVERIFY(directory.isValid()); const auto blocked = directory.filePath("checkpoint-dir"), path = blocked + "/authority.json";
+		bool blockedOnce = false;
+		n.wrote = [&](const QString &written) { if (written == name && !blockedOnce) { QFile blocker(blocked); QVERIFY(blocker.open(QIODevice::WriteOnly)); blocker.write("synthetic storage failure"); blockedOnce = true; } };
+		const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+		CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), errors(&client, &CloudSyncHistory::failed);
+		client.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, path);
+		QTRY_COMPARE(errors.size(), 1); QCOMPARE(done.size(), 0); QCOMPARE(n.mutations, 1);
+		QVERIFY(CloudHistoryRecord::parse(n.content(name)).pristine()); QCOMPARE(n.content(Legacy), legacy); QVERIFY(n.allowed);
+		QVERIFY(QFile::remove(blocked));
+		client.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; }, path);
+		QTRY_COMPARE(done.size(), 1); CloudHistoryAuthority check(path); QVERIFY(check.load()); QVERIFY(!check.record().head().isEmpty()); QVERIFY(n.allowed);
+	}
 }
 void TestCloudSyncHistory::restoreRejection_data()
 {

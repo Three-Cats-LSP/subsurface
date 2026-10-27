@@ -509,16 +509,22 @@ Kirigami.ScrollablePage {
 		anchors.centerIn: parent
 		modal: true
 		width: Math.min(page.width - tokens.space32, 500)
-		title: qsTr("Copy the changed cloud log?")
+		title: qsTr("Copy cloud log?")
 		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
 		contentItem: Text {
 			text: qsTr("This adds the changed cloud log as the newest history version. Your local log, earlier versions and existing sync files are kept. To restore the copied version locally afterward, first save your local log as a history version, then choose Restore on the cloud copy.")
 			color: tokens.textSecondary; wrapMode: Text.WordWrap
 		}
-		footer: RowLayout {
-			Item { Layout.fillWidth: true }
-			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyLegacyDialog.close() }
-			Components.NeoButton { objectName: "confirmLegacyHistoryCopy"; text: qsTr("Copy"); onClicked: { CloudSync.runHistory(page.historyProvider, "import-legacy"); historyLegacyDialog.close() } }
+		footer: Item {
+			width: historyLegacyDialog.width
+			implicitHeight: legacyButtons.implicitHeight + tokens.space16
+			RowLayout {
+				id: legacyButtons
+				anchors.fill: parent; anchors.margins: tokens.space8; spacing: tokens.space8
+				Item { Layout.fillWidth: true }
+				Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyLegacyDialog.close() }
+				Components.NeoButton { objectName: "confirmLegacyHistoryCopy"; text: qsTr("Copy"); onClicked: { CloudSync.runHistory(page.historyProvider, "import-legacy"); historyLegacyDialog.close() } }
+			}
 		}
 	}
 
@@ -528,16 +534,22 @@ Kirigami.ScrollablePage {
 		anchors.centerIn: parent
 		modal: true
 		width: Math.min(page.width - tokens.space32, 500)
-		title: qsTr("Restore this history version?")
+		title: qsTr("Restore version?")
 		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
 		contentItem: Text {
 			text: qsTr("This creates a new history version and replaces the local dive log. Save your current local log as a version first. Earlier versions and existing sync files are kept.")
 			color: tokens.textSecondary; wrapMode: Text.WordWrap
 		}
-		footer: RowLayout {
-			Item { Layout.fillWidth: true }
-			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyRestoreDialog.close() }
-			Components.NeoButton { objectName: "confirmHistoryRestore"; text: qsTr("Restore"); onClicked: { CloudSync.runHistory(page.historyProvider, "restore", page.historyRevision); historyRestoreDialog.close() } }
+		footer: Item {
+			width: historyRestoreDialog.width
+			implicitHeight: restoreButtons.implicitHeight + tokens.space16
+			RowLayout {
+				id: restoreButtons
+				anchors.fill: parent; anchors.margins: tokens.space8; spacing: tokens.space8
+				Item { Layout.fillWidth: true }
+				Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyRestoreDialog.close() }
+				Components.NeoButton { objectName: "confirmHistoryRestore"; text: qsTr("Restore"); onClicked: { CloudSync.runHistory(page.historyProvider, "restore", page.historyRevision); historyRestoreDialog.close() } }
+			}
 		}
 	}
 
@@ -550,9 +562,19 @@ Kirigami.ScrollablePage {
 		title: qsTr("Disconnect %1?").arg(page.pendingDisconnectName)
 		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
 		contentItem: Text {
-			text: qsTr("OAuth tokens and saved synchronization state for this provider will be removed from this device. Remote files will not be deleted.")
+			text: qsTr("Disconnect removes this device’s sign-in and sync baseline. Local history recovery records and cloud files are kept.")
 			color: tokens.textSecondary; wrapMode: Text.WordWrap
 		}
-		footer: RowLayout { spacing: tokens.space8; Item { Layout.fillWidth: true } Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: disconnectDialog.close() } Components.NeoButton { text: qsTr("Disconnect"); variant: "danger"; onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } } }
+		footer: Item {
+			width: disconnectDialog.width
+			implicitHeight: disconnectButtons.implicitHeight + tokens.space16
+			RowLayout {
+				id: disconnectButtons
+				anchors.fill: parent; anchors.margins: tokens.space8; spacing: tokens.space8
+				Item { Layout.fillWidth: true }
+				Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: disconnectDialog.close() }
+				Components.NeoButton { text: qsTr("Disconnect"); variant: "danger"; onClicked: { CloudSync.disconnectProvider(page.pendingDisconnectProvider); disconnectDialog.close() } }
+			}
+		}
 	}
 }

@@ -3,9 +3,14 @@
 #include "cloudsyncmanifest.h"
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QLockFile>
 #include <QRegularExpression>
 #include <QRandomGenerator>
 #include <QSet>
+#include <QSaveFile>
 #include <QUuid>
 #include <QXmlStreamReader>
 
@@ -26,6 +31,13 @@ bool integer(const QJsonValue &v, qint64 minimum, qint64 maximum) {
 	return v.isDouble() && v.toDouble() >= minimum && v.toDouble() <= maximum && v.toDouble() == double(qint64(v.toDouble()));
 }
 QString string(const QJsonObject &o, const char *key) { return o.value(QLatin1String(key)).toString(); }
+QString archivedRootName(const QString &epoch, const QString &id) {
+	return CloudHistoryRecord::rootName(epoch).chopped(5) + QStringLiteral("-recovered-%1.json").arg(id);
+}
+bool objectId(const QString &provider, const QString &id) {
+	return QRegularExpression(provider == "google-drive" ? QStringLiteral("^[A-Za-z0-9_-]+$") :
+		QStringLiteral("^id:[A-Za-z0-9_-]+$")).match(id).hasMatch() && id.size() <= 512;
+}
 }
 
 bool CloudHistoryRecord::validEpoch(const QString &id)
@@ -70,6 +82,48 @@ CloudHistoryRecord CloudHistoryRecord::parse(const QByteArray &data)
 QByteArray CloudHistoryRecord::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
 QString CloudHistoryRecord::head() const { return string(value, "head"); }
 QJsonObject CloudHistoryRecord::ticket(const QString &id) const { return value.value("tickets").toObject().value(id).toObject(); }
+bool CloudHistoryRecord::pristine() const
+{
+	return valid() && value.value("sequence").toInt() == 0 && head().isEmpty() &&
+		value.value("tickets").toObject().isEmpty() && value.value("reservations").toObject().isEmpty();
+}
+bool CloudHistoryRecord::follows(const CloudHistoryRecord &previous) const
+{
+	if (!valid() || !previous.valid()) return false;
+	for (const auto &key : {"schema", "provider", "account", "epoch"})
+		if (value.value(key) != previous.value.value(key)) return false;
+	const int sequence = value.value("sequence").toInt(), oldSequence = previous.value.value("sequence").toInt();
+	if (sequence < oldSequence) return false;
+	if (sequence == oldSequence) return json() == previous.json();
+	const bool upgrade = string(previous.value, "format") == "neo-history-development-1" && string(value, "format") == "neo-history-development-2";
+	if (value.value("format") != previous.value.value("format") && !upgrade) return false;
+	if (string(value, "format") == "neo-history-development-1" && value.value("legacy_sha256") != previous.value.value("legacy_sha256")) return false;
+	const auto history = value.value("history").toArray(), oldHistory = previous.value.value("history").toArray();
+	if (history.size() < oldHistory.size()) return false;
+	for (int i = 0; i < oldHistory.size(); ++i) if (history[i] != oldHistory[i]) return false;
+	const auto oldTickets = previous.value.value("tickets").toObject();
+	const QString initial = oldHistory.isEmpty() ? QString() : oldHistory.first().toString();
+	const QStringList states = {"registered", "uploaded", "committed"};
+	for (auto it = oldTickets.begin(); it != oldTickets.end(); ++it) {
+		const auto before = it.value().toObject(), after = ticket(it.key());
+		if (after.isEmpty()) return false;
+		for (const auto &key : {"name", "parent", "sha256", "bytes", "restore_source", "reservation", "created_at"})
+			if (before.value(key) != after.value(key)) return false;
+		if (states.indexOf(string(after, "state")) < states.indexOf(string(before, "state"))) return false;
+		if (string(before, "state") != "registered" &&
+		    (before.value("object") != after.value("object") || before.value("version") != after.value("version"))) return false;
+		if (upgrade) {
+			if (string(after, "legacy_source") != (it.key() == initial ? string(previous.value, "legacy_sha256") : QString())) return false;
+		} else if (before.value("legacy_source") != after.value("legacy_source")) return false;
+	}
+	const auto oldReservations = previous.value.value("reservations").toObject(), reservations = value.value("reservations").toObject();
+	for (auto it = oldReservations.begin(); it != oldReservations.end(); ++it) {
+		const auto before = it.value().toObject(), after = reservations.value(it.key()).toObject();
+		if (after.isEmpty() || before.value("commit") != after.value("commit") ||
+		    (!before.value("active").toBool() && after.value("active").toBool())) return false;
+	}
+	return true;
+}
 bool CloudHistoryRecord::valid() const
 {
 	const bool provenance = string(value, "format") == "neo-history-development-2";
@@ -202,6 +256,56 @@ bool CloudHistoryRecord::release(const QString &id)
 	r["active"] = false; reservations[id] = r;
 	auto next = value; next["reservations"] = reservations; return replace(next);
 }
+CloudHistoryAuthority::CloudHistoryAuthority(const QString &path) : fileName(path) {}
+bool CloudHistoryAuthority::readUnlocked()
+{
+	rootId.clear(); checkpoint.value = {};
+	const QFileInfo info(fileName);
+	if (!info.exists()) return !info.isSymLink();
+	if (!info.isFile() || info.isSymLink() || info.size() > RecordLimit + 1024) return false;
+	QFile file(fileName);
+	if (!file.open(QIODevice::ReadOnly)) return false;
+	QJsonParseError error;
+	const auto document = QJsonDocument::fromJson(file.read(RecordLimit + 1025), &error);
+	const auto value = document.object();
+	if (error.error != QJsonParseError::NoError || !document.isObject() || !fields(value, {"schema", "root_id", "root"}) ||
+	    value.value("schema") != QJsonValue(1) || !text(string(value, "root_id")) || !value.value("root").isObject()) return false;
+	checkpoint.value = value.value("root").toObject();
+	if (!checkpoint.valid() || !objectId(string(checkpoint.value, "provider"), string(value, "root_id"))) { checkpoint.value = {}; return false; }
+	rootId = string(value, "root_id"); return true;
+}
+bool CloudHistoryAuthority::load()
+{
+	if (fileName.isEmpty()) return false;
+	if (!QFileInfo(QFileInfo(fileName).absolutePath()).exists()) { rootId.clear(); checkpoint.value = {}; return true; }
+	QLockFile lock(fileName + ".lock");
+	return lock.tryLock(0) && readUnlocked();
+}
+bool CloudHistoryAuthority::writeUnlocked(const QString &id, const CloudHistoryRecord &root)
+{
+	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"root_id", id}, {"root", root.value}}).toJson(QJsonDocument::Compact);
+	QSaveFile file(fileName);
+	if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return false;
+	return readUnlocked() && rootId == id && checkpoint.json() == root.json();
+}
+bool CloudHistoryAuthority::observe(const QString &id, const CloudHistoryRecord &root)
+{
+	if (!root.valid() || !objectId(string(root.value, "provider"), id) || fileName.isEmpty() || !QDir().mkpath(QFileInfo(fileName).absolutePath())) return false;
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !readUnlocked()) return false;
+	if (!rootId.isEmpty() && (rootId != id || !root.follows(checkpoint))) return false;
+	if (rootId == id && checkpoint.json() == root.json()) return true;
+	return writeUnlocked(id, root);
+}
+bool CloudHistoryAuthority::rebindPristine(const QString &oldId, const CloudHistoryRecord &archived,
+	const QString &newId, const CloudHistoryRecord &root)
+{
+	if (!root.valid() || !objectId(string(root.value, "provider"), newId) || newId == oldId || fileName.isEmpty()) return false;
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !readUnlocked() || rootId != oldId || !checkpoint.pristine() ||
+	    archived.json() != checkpoint.json() || !root.follows(checkpoint)) return false;
+	return writeUnlocked(newId, root);
+}
 QVariantMap CloudHistoryRecord::report() const
 {
 	QVariantList versions;
@@ -235,6 +339,9 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 	});
 	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &name) {
 		if (step != Step::Root || name != CloudHistoryRecord::rootName(epoch)) { fail(); return; }
+		if (authority && (!authority->load() || !authority->id().isEmpty())) {
+			fail(tr("The known history root is missing or its local checkpoint cannot be read. No replacement was created. Restore the known root or use a new history namespace.")); return;
+		}
 		if (action == "list") { complete(); return; }
 		if (action != "migrate") { fail(tr("Initialize history from the cloud log first.")); return; }
 		root = CloudHistoryRecord::create(cloudSyncProviderDescriptor(provider).id, account, epoch, legacyHash);
@@ -261,6 +368,7 @@ void CloudSyncHistory::cancel()
 {
 	step = Step::Idle; deadline.stop(); initializationRetry.stop(); files.cancel(provider); continuation = {}; localUnchanged = {};
 	token.clear(); local.clear(); payload.clear(); pendingRoot.value = {};
+	authority.reset(); aliasStep = Step::Idle;
 	files.setHistoryRootRecovery({}, {});
 }
 void CloudSyncHistory::fail(const QString &message, bool rejected)
@@ -270,7 +378,8 @@ void CloudSyncHistory::fail(const QString &message, bool rejected)
 	emit failed(message.isEmpty() ? tr("Cloud history could not be confirmed. Reload history before retrying. Local data and cloud files were kept.") : message, rejected);
 }
 void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessToken, const QString &accountHash,
-	const QString &namespaceEpoch, const QString &operation, const QString &commit, const QByteArray &localPayload, const std::function<bool()> &guard)
+	const QString &namespaceEpoch, const QString &operation, const QString &commit, const QByteArray &localPayload, const std::function<bool()> &guard,
+	const QString &authorityFile)
 {
 	cancel(); provider = type; token = accessToken; account = accountHash; epoch = namespaceEpoch; action = operation; revision = commit;
 	local = localPayload; localUnchanged = guard; root.value = {}; pendingRoot.value = {}; rootId.clear(); rootVersion.clear(); reservationId.clear(); uploadId.clear();
@@ -279,16 +388,29 @@ void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessTo
 	if ((type != CloudSyncProviderType::GoogleDrive && type != CloudSyncProviderType::Dropbox) || token.isEmpty() || !hash(account) ||
 	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore", "import-legacy"}.contains(action) ||
 	    !CloudHistoryRecord::validXml(local) || (action == "restore" && !CloudHistoryRecord::validEpoch(revision))) { fail(); return; }
+	if (!authorityFile.isEmpty()) {
+		authority = std::make_unique<CloudHistoryAuthority>(authorityFile);
+		if (!authority->load() || (!authority->id().isEmpty() &&
+		    (string(authority->record().value, "provider") != cloudSyncProviderDescriptor(provider).id ||
+		     string(authority->record().value, "account") != account || string(authority->record().value, "epoch") != epoch))) {
+			fail(tr("The saved history authority cannot be confirmed. Its checkpoint was kept; history access is paused.")); return;
+		}
+	}
 	if (action != "list") {
-		files.setHistoryRootRecovery(CloudHistoryRecord::rootName(epoch), [this](const QByteArray &data) {
+		files.setHistoryRootRecovery(CloudHistoryRecord::rootName(epoch), [this](const QString &id, const QByteArray &data) {
 			using State = CloudSyncFileStore::HistoryRootState;
 			const auto candidate = CloudHistoryRecord::parse(data);
 			if (!candidate.valid() || string(candidate.value, "provider") != cloudSyncProviderDescriptor(provider).id ||
 			    string(candidate.value, "account") != account || string(candidate.value, "epoch") != epoch) return State::Invalid;
-			return candidate.value.value("sequence").toInt() == 0 && candidate.head().isEmpty() &&
-				candidate.value.value("tickets").toObject().isEmpty() && candidate.value.value("reservations").toObject().isEmpty() ?
-				State::Pristine : State::Active;
-		});
+			if (authority) {
+				if (!authority->load()) return State::Invalid;
+				const auto known = authority->record();
+				if (!authority->id().isEmpty() && (string(known.value, "provider") != cloudSyncProviderDescriptor(provider).id ||
+				    string(known.value, "account") != account || string(known.value, "epoch") != epoch ||
+				    (id == authority->id() && !candidate.follows(known)))) return State::Invalid;
+			}
+			return candidate.pristine() ? State::Pristine : State::Active;
+		}, authority && !authority->record().pristine() ? authority->id() : QString());
 	}
 	deadline.start(180000); read(LegacyName, Step::Legacy);
 }
@@ -300,6 +422,14 @@ void CloudSyncHistory::read(const QString &name, Step next)
 void CloudSyncHistory::received(const QString &, const QByteArray &data, const QString &version, const QString &id)
 {
 	if (step == Step::Idle) return;
+	if (step == Step::VerifyPristineAlias) {
+		const auto archived = CloudHistoryRecord::parse(data);
+		if (!authority || id != authority->id() || !authority->rebindPristine(id, archived, rootId, root)) {
+			fail(tr("The history root identity changed and its pristine recovery alias could not be confirmed. All files were kept.")); return;
+		}
+		step = aliasStep; aliasStep = Step::Idle;
+		received(CloudHistoryRecord::rootName(epoch), root.json(), rootVersion, rootId); return;
+	}
 	if (step == Step::Legacy || step == Step::CheckLegacy) {
 		const auto m = CloudSyncManifest::fromJson(data);
 		if (!m.isValid()) { fail(tr("The existing cloud manifest is invalid or unsupported. Nothing was migrated.")); return; }
@@ -315,6 +445,17 @@ void CloudSyncHistory::received(const QString &, const QByteArray &data, const Q
 		const auto parsed = CloudHistoryRecord::parse(data);
 		if (!parsed.valid() || string(parsed.value, "provider") != cloudSyncProviderDescriptor(provider).id ||
 		    string(parsed.value, "account") != account || string(parsed.value, "epoch") != epoch || version.isEmpty() || id.isEmpty()) { fail(); return; }
+		if (authority && !authority->id().isEmpty() && authority->id() != id) {
+			if (provider != CloudSyncProviderType::GoogleDrive || !authority->record().pristine()) {
+				fail(tr("The history root was replaced. The known authority and every cloud version were kept; history access is paused.")); return;
+			}
+			const auto oldId = authority->id();
+			root = parsed; rootVersion = version; rootId = id; aliasStep = step; step = Step::VerifyPristineAlias;
+			files.downloadIdentity(provider, token, archivedRootName(epoch, oldId), oldId); return;
+		}
+		if (authority && !authority->observe(id, parsed)) {
+			fail(tr("History differs from its saved authority or its checkpoint could not be saved. History access is paused; all versions were kept.")); return;
+		}
 		if (!rootId.isEmpty() && rootId != id) { fail(); return; }
 		root = parsed; rootVersion = version; rootId = id;
 		if (step == Step::VerifyRoot) {
@@ -389,6 +530,9 @@ void CloudSyncHistory::processRoot()
 void CloudSyncHistory::writeRoot(const CloudHistoryRecord &next, const std::function<void()> &then)
 {
 	if (!next.valid() || !localUnchanged || !localUnchanged()) { fail(tr("Local data changed or history reached a safety limit. Your edits were kept. Reload history before retrying.")); return; }
+	if (authority && (rootId.isEmpty() ? (!authority->load() || !authority->id().isEmpty()) : !authority->observe(rootId, root))) {
+		fail(tr("The saved history authority changed or could not be confirmed. Reload history before retrying; no new version was published.")); return;
+	}
 	pendingRoot = next; continuation = then; step = Step::VerifyRoot; retriedRootRead = false;
 	files.uploadConditional(provider, token, CloudHistoryRecord::rootName(epoch), next.json(), rootVersion, rootId);
 }

@@ -17,6 +17,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTemporaryFile>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -887,10 +888,14 @@ void CloudSyncManager::runHistory(const QString &providerId, const QString &acti
 	emit syncInProgressChanged(); verifiedAccountTokens.remove(providerId);
 	refreshThen(*provider, providerId, [this, providerId, action, revision, type = provider->type](const QString &token) {
 		if (!historyInProgress() || syncProviderId != providerId) return;
-		historyClient.start(type, token, CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8()), historyEpoch,
+		const QString account = CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8());
+		const QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+		if (dataPath.isEmpty()) { setError(tr("A local history checkpoint cannot be stored on this device.")); clearSyncOperation(); return; }
+		const QString scope = CloudSyncManifest::sha256((QSettings().fileName() + "|" + providerId + "|" + account + "|" + historyEpoch).toUtf8());
+		historyClient.start(type, token, account, historyEpoch,
 			action, revision, syncLocalPayload, [this] {
 				return historyInProgress() && !autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty() && localDiveLogUnchanged();
-			});
+			}, dataPath + "/neo-history-authority/" + scope + ".json");
 	});
 }
 
