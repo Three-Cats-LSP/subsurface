@@ -72,8 +72,9 @@ QString CloudHistoryRecord::head() const { return string(value, "head"); }
 QJsonObject CloudHistoryRecord::ticket(const QString &id) const { return value.value("tickets").toObject().value(id).toObject(); }
 bool CloudHistoryRecord::valid() const
 {
+	const bool provenance = string(value, "format") == "neo-history-development-2";
 	if (!fields(value, {"schema", "format", "provider", "account", "epoch", "legacy_sha256", "sequence", "head", "history", "tickets", "reservations"}) ||
-	    value.value("schema") != QJsonValue(3) || string(value, "format") != "neo-history-development-1" ||
+	    value.value("schema") != QJsonValue(3) || (!provenance && string(value, "format") != "neo-history-development-1") ||
 	    (string(value, "provider") != "google-drive" && string(value, "provider") != "dropbox") ||
 	    !hash(string(value, "account")) || !validEpoch(string(value, "epoch")) || !hash(string(value, "legacy_sha256")) ||
 	    !integer(value.value("sequence"), 0, 1000000) || !value.value("head").isString() ||
@@ -82,26 +83,34 @@ bool CloudHistoryRecord::valid() const
 	const auto tickets = value.value("tickets").toObject(), reservations = value.value("reservations").toObject();
 	if (tickets.size() > EntryLimit || reservations.size() > EntryLimit || history.size() > tickets.size() || json().size() > RecordLimit) return false;
 	QSet<QString> committed, objects;
-	QString previous;
+	QString previous, acceptedLegacy;
 	for (const auto &entry : history) {
 		const QString id = entry.toString();
 		const auto t = ticket(id);
 		if (!validEpoch(id) || committed.contains(id) || string(t, "state") != "committed" || string(t, "parent") != previous) return false;
 		const QString source = string(t, "restore_source");
 		if (!source.isEmpty() && !committed.contains(source)) return false;
+		const auto legacy = string(t, "legacy_source");
+		if (provenance && previous.isEmpty() && legacy.isEmpty()) return false;
+		if (!legacy.isEmpty()) acceptedLegacy = legacy;
 		committed.insert(id); previous = id;
 	}
 	if (head() != previous) return false;
+	if (provenance && acceptedLegacy != string(value, "legacy_sha256")) return false;
 	for (auto it = tickets.begin(); it != tickets.end(); ++it) {
 		const auto t = it.value().toObject();
 		const QString state = string(t, "state"), parent = string(t, "parent"), source = string(t, "restore_source"), reservation = string(t, "reservation");
-		if (!validEpoch(it.key()) || !fields(t, {"name", "state", "parent", "sha256", "bytes", "object", "version", "restore_source", "reservation", "created_at"}) ||
+		QStringList ticketFields = {"name", "state", "parent", "sha256", "bytes", "object", "version", "restore_source", "reservation", "created_at"};
+		if (provenance) ticketFields.append("legacy_source");
+		if (!validEpoch(it.key()) || !fields(t, ticketFields) ||
 		    string(t, "name") != payloadName(string(value, "epoch"), it.key()) || !hash(string(t, "sha256")) ||
 		    !integer(t.value("bytes"), 1, PayloadLimit) || !QDateTime::fromString(string(t, "created_at"), Qt::ISODateWithMs).isValid() ||
 		    (state != "registered" && state != "uploaded" && state != "committed") ||
 		    (!parent.isEmpty() && (!committed.contains(parent) || parent == it.key())) ||
 		    (state == "committed") != committed.contains(it.key())) return false;
 		for (const auto &key : {"parent", "object", "version", "restore_source", "reservation"}) if (!t.value(QLatin1String(key)).isString()) return false;
+		if (provenance && (!t.value("legacy_source").isString() || (!string(t, "legacy_source").isEmpty() &&
+		    (!hash(string(t, "legacy_source")) || !source.isEmpty() || !reservation.isEmpty())))) return false;
 		if (state == "registered") {
 			if (!string(t, "object").isEmpty() || !string(t, "version").isEmpty()) return false;
 		} else {
@@ -131,14 +140,31 @@ bool CloudHistoryRecord::replace(const QJsonObject &candidate)
 	if (!valid() || !next.valid()) return false;
 	value = next.value; return true;
 }
-bool CloudHistoryRecord::registerUpload(const QString &id, const QString &expectedHead, const QString &sha, qint64 bytes, const QString &source, const QString &reservation)
+bool CloudHistoryRecord::upgradeLegacyProvenance()
+{
+	if (!valid() || head().isEmpty()) return false;
+	if (string(value, "format") == "neo-history-development-2") return true;
+	auto next = value; next["format"] = "neo-history-development-2";
+	auto tickets = value.value("tickets").toObject();
+	const QString initial = value.value("history").toArray().first().toString();
+	for (auto it = tickets.begin(); it != tickets.end(); ++it) {
+		auto t = it.value().toObject();
+		t["legacy_source"] = it.key() == initial ? string(value, "legacy_sha256") : QString();
+		it.value() = t;
+	}
+	next["tickets"] = tickets; return replace(next);
+}
+bool CloudHistoryRecord::registerUpload(const QString &id, const QString &expectedHead, const QString &sha, qint64 bytes, const QString &source, const QString &reservation, const QString &legacySource)
 {
 	if (head() != expectedHead || !validEpoch(id)) return false;
+	const bool provenance = string(value, "format") == "neo-history-development-2";
+	if (!legacySource.isEmpty() && !provenance) return false;
 	auto tickets = value.value("tickets").toObject();
 	if (tickets.contains(id) || value.value("reservations").toObject().contains(id)) return false;
 	tickets[id] = QJsonObject{{"name", payloadName(string(value, "epoch"), id)}, {"state", "registered"},
 		{"parent", expectedHead}, {"sha256", sha}, {"bytes", bytes}, {"object", ""}, {"version", ""},
 		{"restore_source", source}, {"reservation", reservation}, {"created_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}};
+	if (provenance) { auto t = tickets[id].toObject(); t["legacy_source"] = legacySource; tickets[id] = t; }
 	auto next = value; next["tickets"] = tickets; return replace(next);
 }
 bool CloudHistoryRecord::completeUpload(const QString &id, const QString &object, const QString &version)
@@ -156,7 +182,9 @@ bool CloudHistoryRecord::publish(const QString &id, const QString &expectedHead)
 	t["state"] = "committed";
 	auto tickets = value.value("tickets").toObject(); tickets[id] = t;
 	auto history = value.value("history").toArray(); history.append(id);
-	auto next = value; next["tickets"] = tickets; next["history"] = history; next["head"] = id; return replace(next);
+	auto next = value; next["tickets"] = tickets; next["history"] = history; next["head"] = id;
+	if (!string(t, "legacy_source").isEmpty()) next["legacy_sha256"] = string(t, "legacy_source");
+	return replace(next);
 }
 bool CloudHistoryRecord::reserve(const QString &id, const QString &commit)
 {
@@ -181,7 +209,8 @@ QVariantMap CloudHistoryRecord::report() const
 	for (auto it = history.constEnd(); it != history.constBegin();) {
 		const QString id = (*--it).toString(); const auto t = ticket(id);
 		versions.append(QVariantMap{{"id", id}, {"current", id == head()}, {"bytes", qint64(t.value("bytes").toDouble())},
-			{"createdAt", string(t, "created_at")}, {"restored", !string(t, "restore_source").isEmpty()}});
+			{"createdAt", string(t, "created_at")}, {"restored", !string(t, "restore_source").isEmpty()},
+			{"legacyImported", !string(t, "legacy_source").isEmpty()}});
 	}
 	return {{"initialized", !head().isEmpty()}, {"versions", versions}, {"legacyChanged", false}};
 }
@@ -248,7 +277,7 @@ void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessTo
 	initializationRetries = 0;
 	step = Step::Legacy;
 	if ((type != CloudSyncProviderType::GoogleDrive && type != CloudSyncProviderType::Dropbox) || token.isEmpty() || !hash(account) ||
-	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore"}.contains(action) ||
+	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore", "import-legacy"}.contains(action) ||
 	    !CloudHistoryRecord::validXml(local) || (action == "restore" && !CloudHistoryRecord::validEpoch(revision))) { fail(); return; }
 	if (action != "list") {
 		files.setHistoryRootRecovery(CloudHistoryRecord::rootName(epoch), [this](const QByteArray &data) {
@@ -305,6 +334,7 @@ void CloudSyncHistory::received(const QString &, const QByteArray &data, const Q
 			registerUpload(); return;
 		}
 		if (string(root.value, "legacy_sha256") != legacyHash) {
+			if (action == "import-legacy" && !root.head().isEmpty()) { processRoot(); return; }
 			if (action != "list") { fail(tr("The existing sync log changed after history initialization. Both branches were kept. History writes are paused.")); return; }
 			auto report = root.report(); report["legacyChanged"] = true; cancel(); emit finished(report, {}); return;
 		}
@@ -340,9 +370,11 @@ bool CloudSyncHistory::retryInitialization()
 void CloudSyncHistory::processRoot()
 {
 	if (action == "list" || (action == "migrate" && !root.head().isEmpty())) { complete(); return; }
+	if (action == "import-legacy" && string(root.value, "legacy_sha256") == legacyHash) { complete(); return; }
 	expectedHead = root.head();
 	if (action == "migrate") { read(legacyPayload, Step::MigrationPayload); return; }
 	if (expectedHead.isEmpty()) { fail(tr("Finish initializing history before saving or restoring a version.")); return; }
+	if (action == "import-legacy") { read(legacyPayload, Step::MigrationPayload); return; }
 	if (action == "save") { payload = local; registerUpload(); return; }
 	if (CloudSyncManifest::sha256(local) != string(root.ticket(expectedHead), "sha256")) {
 		fail(tr("Save your current local log as a history version before restoring an older one.")); return;
@@ -363,8 +395,9 @@ void CloudSyncHistory::writeRoot(const CloudHistoryRecord &next, const std::func
 void CloudSyncHistory::registerUpload()
 {
 	uploadId = uuid(); auto next = root;
+	if (action == "import-legacy" && !next.upgradeLegacyProvenance()) { fail(); return; }
 	if (!CloudHistoryRecord::validXml(payload) || !next.registerUpload(uploadId, expectedHead, CloudSyncManifest::sha256(payload), payload.size(),
-	    action == "restore" ? revision : QString(), reservationId)) { fail(); return; }
+	    action == "restore" ? revision : QString(), reservationId, action == "import-legacy" ? legacyHash : QString())) { fail(); return; }
 	writeRoot(next, [this] {
 		if (!localUnchanged || !localUnchanged()) { fail(); return; }
 		step = Step::Upload;

@@ -431,8 +431,15 @@ Kirigami.ScrollablePage {
 						}
 						Text {
 							visible: !!modelData.history.legacyChanged
-							text: qsTr("The existing sync log has changed since initialization. Both branches are kept; history writes are paused.")
+							text: qsTr("The existing sync log has changed. Copy it into history to preserve that branch and resume history writes. Your local log and earlier history versions are kept.")
 							color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true
+						}
+						Components.NeoButton {
+							objectName: "importLegacyHistory-" + modelData.id
+							text: qsTr("Copy changed cloud log"); compact: true; Layout.fillWidth: true
+							visible: !!modelData.history.initialized && !!modelData.history.legacyChanged
+							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+							onClicked: { page.historyProvider = modelData.id; historyLegacyDialog.open() }
 						}
 						Repeater {
 							model: modelData.history.versions || []
@@ -440,13 +447,13 @@ Kirigami.ScrollablePage {
 								required property var modelData
 								Layout.fillWidth: true
 								Text {
-									text: qsTr("%1 · %2%3").arg(Qt.locale().toLocaleString(new Date(modelData.createdAt), Locale.ShortFormat)).arg(page.storageSize(modelData.bytes)).arg(modelData.current ? qsTr(" · Current") : "")
+									text: qsTr("%1 · %2%3").arg(Qt.locale().toLocaleString(new Date(modelData.createdAt), Locale.ShortFormat)).arg(page.storageSize(modelData.bytes)).arg((modelData.current ? qsTr(" · Current") : "") + (modelData.legacyImported ? qsTr(" · Cloud copy") : ""))
 									color: tokens.textPrimary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
 								}
 								Components.NeoButton {
 									objectName: "restoreHistory-" + modelData.id
 									text: qsTr("Restore"); compact: true
-									enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+									enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress && !providerCard.modelData.history.legacyChanged
 									onClicked: {
 										page.historyProvider = providerCard.modelData.id
 										page.historyRevision = modelData.id
@@ -493,6 +500,25 @@ Kirigami.ScrollablePage {
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap
 			Layout.fillWidth: true
+		}
+	}
+
+	Dialog {
+		id: historyLegacyDialog
+		parent: Overlay.overlay
+		anchors.centerIn: parent
+		modal: true
+		width: Math.min(page.width - tokens.space32, 500)
+		title: qsTr("Copy the changed cloud log?")
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Text {
+			text: qsTr("This adds the changed cloud log as the newest history version. Your local log, earlier versions and existing sync files are kept. To restore the copied version locally afterward, first save your local log as a history version, then choose Restore on the cloud copy.")
+			color: tokens.textSecondary; wrapMode: Text.WordWrap
+		}
+		footer: RowLayout {
+			Item { Layout.fillWidth: true }
+			Components.NeoButton { text: qsTr("Cancel"); variant: "ghost"; onClicked: historyLegacyDialog.close() }
+			Components.NeoButton { objectName: "confirmLegacyHistoryCopy"; text: qsTr("Copy"); onClicked: { CloudSync.runHistory(page.historyProvider, "import-legacy"); historyLegacyDialog.close() } }
 		}
 	}
 

@@ -335,6 +335,91 @@ void TestCloudSyncHistory::initializationRetryGuard()
 	QTRY_COMPARE(done.size(), scenario == 2 ? 2 : 1);
 	QCOMPARE(n.content(Legacy), legacy); QVERIFY(n.allowed);
 }
+void TestCloudSyncHistory::legacyProvenance()
+{
+	const auto firstHash = CloudSyncManifest::sha256("initial legacy"), nextHash = CloudSyncManifest::sha256("changed legacy");
+	auto r = CloudHistoryRecord::create("dropbox", Account, uid(), firstHash);
+	QVERIFY(!r.upgradeLegacyProvenance());
+	const auto first = uid(), imported = uid(), pending = uid();
+	QVERIFY(r.registerUpload(first, {}, CloudSyncManifest::sha256(A), A.size()));
+	QVERIFY(r.completeUpload(first, "object-a", "v1")); QVERIFY(r.publish(first, {}));
+	QVERIFY(!r.registerUpload(imported, first, CloudSyncManifest::sha256(B), B.size(), {}, {}, nextHash));
+	QVERIFY(r.upgradeLegacyProvenance()); const auto upgraded = r.json(); QVERIFY(r.upgradeLegacyProvenance()); QCOMPARE(r.json(), upgraded);
+	QCOMPARE(r.ticket(first)["legacy_source"].toString(), firstHash);
+	QVERIFY(r.registerUpload(imported, first, CloudSyncManifest::sha256(B), B.size(), {}, {}, nextHash));
+	QVERIFY(r.completeUpload(imported, "object-b", "v1"));
+	QCOMPARE(r.value["legacy_sha256"].toString(), firstHash); // Accepted source changes only with publication.
+	QVERIFY(r.publish(imported, first)); QCOMPARE(r.value["legacy_sha256"].toString(), nextHash);
+	QVERIFY(r.registerUpload(pending, imported, CloudSyncManifest::sha256(A), A.size(), {}, {}, firstHash));
+	QCOMPARE(CloudHistoryRecord::parse(r.json()).json(), r.json());
+	for (int fault = 0; fault < 6; ++fault) {
+		auto invalid = r;
+		if (fault == 0) invalid.value["legacy_sha256"] = firstHash;
+		if (fault == 1) invalid.value["format"] = "neo-history-development-1"; // Old readers must reject the new metadata.
+		auto tickets = invalid.value["tickets"].toObject(), t = tickets[imported].toObject();
+		if (fault == 2) t["legacy_source"] = "invalid";
+		if (fault == 3) t.remove("legacy_source");
+		if (fault == 4) t["legacy_source"] = QJsonValue::Null;
+		if (fault == 5) { auto initial = tickets[first].toObject(); initial["legacy_source"] = ""; tickets[first] = initial; }
+		tickets[imported] = t; invalid.value["tickets"] = tickets; QVERIFY(!invalid.valid());
+	}
+}
+void TestCloudSyncHistory::legacyBranch_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("fault");
+	for (bool g : {false, true}) for (int f : {0, 2, 3, 4, 7, 8, 11, 20})
+		QTest::newRow(qPrintable(QString("%1-legacy%2").arg(g).arg(f))) << g << f;
+}
+void TestCloudSyncHistory::legacyBranch()
+{
+	QFETCH(bool, google); QFETCH(int, fault); Network n; n.seed();
+	const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch);
+	const auto initialLegacy = n.content(Legacy);
+	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), errors(&client, &CloudSyncHistory::failed);
+	auto run = [&](const QString &action, const QByteArray &local = A, const QString &revision = QString()) {
+		client.start(provider, "token", Account, epoch, action, revision, local, [&] { return n.guard; });
+	};
+	run("migrate"); QTRY_COMPARE(done.size(), 1);
+	const auto initial = CloudHistoryRecord::parse(n.content(name)); const auto first = initial.head();
+	const auto oldPayloadName = initial.ticket(first)["name"].toString(); const auto oldPayload = n.content(oldPayloadName);
+	// Simulate an old client publishing a separate schema 2 branch.
+	auto branch = CloudSyncManifest::forPayload(B); branch.schemaVersion = 2; branch.payloadFile = "subsurface-neo-" + branch.revisionId + ".xml";
+	n.add(branch.payloadFileName(), B); n.files[n.find(Legacy)].data = branch.toJson(); n.files[n.find(Legacy)].rev += "new-branch";
+	run("list"); QTRY_COMPARE(done.size(), 2); QVERIFY(done.last()[0].toMap()["legacyChanged"].toBool());
+	const int before = n.mutations;
+	run("save"); QTRY_COMPARE(errors.size(), 1); QCOMPARE(n.mutations, before);
+	n.fault = fault == 20 ? 0 : fault;
+	if (fault == 20) n.files[n.find(branch.payloadFileName())].data = "<divelog>truncated";
+	run("import-legacy");
+	if (fault == 11) { QTRY_VERIFY(n.deferred); client.cancel(); QTest::qWait(20); QCOMPARE(done.size(), 2); }
+	else if (fault == 0 || fault == 3) { QTRY_COMPARE(done.size(), 3); QCOMPARE(errors.size(), 1); QVERIFY(done.last()[1].toByteArray().isEmpty()); }
+	else { QTRY_COMPARE(errors.size(), 2); QCOMPARE(done.size(), 2); }
+	QCOMPARE(n.content(oldPayloadName), oldPayload); QCOMPARE(n.content(CloudSyncManifest::fromJson(initialLegacy).payloadFileName()), A);
+	QVERIFY(n.allowed);
+	const auto attempt = CloudHistoryRecord::parse(n.content(name)); QVERIFY(attempt.valid());
+	if (fault != 0 && fault != 3) { QCOMPARE(attempt.head(), first); QCOMPARE(attempt.value["legacy_sha256"], initial.value["legacy_sha256"]); }
+	// Restore only the synthetic old-client input after the injected fault, then
+	// retry with a fresh service. Any failed upload/ticket remains protected.
+	n.fault = 0; n.guard = true; n.files[n.find(Legacy)].data = branch.toJson(); n.files[n.find(branch.payloadFileName())].data = B;
+	CloudSyncHistory restarted(&n); QSignalSpy retry(&restarted, &CloudSyncHistory::finished), failed(&restarted, &CloudSyncHistory::failed);
+	restarted.start(provider, "token", Account, epoch, "import-legacy", {}, A, [] { return true; });
+	QTRY_COMPARE(retry.size(), 1); QCOMPARE(failed.size(), 0); QVERIFY(retry.last()[1].toByteArray().isEmpty());
+	auto imported = CloudHistoryRecord::parse(n.content(name)); QVERIFY(imported.valid());
+	QCOMPARE(imported.value["format"].toString(), QString("neo-history-development-2"));
+	QCOMPARE(imported.value["history"].toArray().size(), 2); QCOMPARE(imported.value["history"].toArray().first().toString(), first);
+	QCOMPARE(imported.value["legacy_sha256"].toString(), CloudSyncManifest::sha256(branch.toJson()));
+	const auto copy = imported.head(); QCOMPARE(n.content(imported.ticket(copy)["name"].toString()), B);
+	const auto oldTicket = initial.ticket(first), preserved = imported.ticket(first);
+	for (auto it = oldTicket.begin(); it != oldTicket.end(); ++it) QCOMPARE(preserved[it.key()], it.value());
+	for (const auto &key : attempt.value["tickets"].toObject().keys()) QVERIFY(imported.value["tickets"].toObject().contains(key));
+	const int settled = n.mutations;
+	restarted.start(provider, "token", Account, epoch, "import-legacy", {}, A, [] { return true; });
+	QTRY_COMPARE(retry.size(), 2); QCOMPARE(n.mutations, settled); // A lost confirmation cannot duplicate the branch.
+	run("save"); QTRY_COMPARE(done.size(), fault == 0 || fault == 3 ? 4 : 3);
+	run("restore", A, copy); QTRY_COMPARE(done.size(), fault == 0 || fault == 3 ? 5 : 4); QCOMPARE(done.last()[1].toByteArray(), B);
+	QCOMPARE(n.content(Legacy), branch.toJson()); QCOMPARE(n.content(branch.payloadFileName()), B); QVERIFY(n.allowed);
+}
 void TestCloudSyncHistory::restoreRejection_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("fault");

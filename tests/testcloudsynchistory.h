@@ -18,6 +18,9 @@ private slots:
 	void initialRootRecovery();
 	void initializationRetryGuard_data();
 	void initializationRetryGuard();
+	void legacyProvenance();
+	void legacyBranch_data();
+	void legacyBranch();
 	void restoreRejection_data();
 	void restoreRejection();
 };

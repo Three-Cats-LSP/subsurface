@@ -23,8 +23,9 @@ public:
 	QByteArray json() const;
 	QString head() const;
 	QJsonObject ticket(const QString &id) const;
+	bool upgradeLegacyProvenance();
 	bool registerUpload(const QString &id, const QString &expectedHead, const QString &hash,
-		qint64 bytes, const QString &restoreSource = {}, const QString &reservation = {});
+		qint64 bytes, const QString &restoreSource = {}, const QString &reservation = {}, const QString &legacySource = {});
 	bool completeUpload(const QString &id, const QString &objectId, const QString &version);
 	bool publish(const QString &id, const QString &expectedHead);
 	bool reserve(const QString &id, const QString &commit);
