@@ -24,6 +24,17 @@ bool revision(const QString &v) { return !v.isEmpty() && v.size() <= 512 && !v.c
 bool identity(const QString &provider, const QString &id) {
 	return id.size() <= 512 && QRegularExpression(provider == "google-drive" ? "^[A-Za-z0-9_-]+$" : "^id:[A-Za-z0-9_-]+$").match(id).hasMatch();
 }
+bool legacyManifest(const QByteArray &bytes) {
+	if (bytes.isEmpty() || bytes.size() > ManifestLimit) return false;
+	const auto object = QJsonDocument::fromJson(bytes).object(); const auto manifest = CloudSyncManifest::fromJson(bytes);
+	QStringList keys = {"schema", "revision", "sha256", "created_at"};
+	if (object.contains("parent_sha256")) keys.append("parent_sha256");
+	if (manifest.schemaVersion == 2) keys.append("payload_file");
+	const QRegularExpression hash("^[a-f0-9]{64}$");
+	return fields(object, keys) && object["schema"] == QJsonValue(manifest.schemaVersion) && manifest.isValid() &&
+		CloudHistoryRecord::validEpoch(manifest.revisionId) && hash.match(manifest.payloadSha256).hasMatch() && text(object, "created_at").size() <= 64 &&
+		(!object.contains("parent_sha256") || (object["parent_sha256"].isString() && (manifest.parentSha256.isEmpty() || hash.match(manifest.parentSha256).hasMatch())));
+}
 }
 QByteArray CloudWorkspaceCopySource::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
 QString CloudWorkspaceCopySource::key() const { return valid() ? CloudSyncManifest::sha256(json()) : QString(); }
@@ -47,7 +58,7 @@ bool CloudWorkspaceCopySource::valid() const
 	return fields(m, {"name", "id", "version", "sha256", "body_base64"}) && fields(p, {"name", "id", "version", "sha256", "bytes"}) &&
 		text(m, "name") == Legacy && identity(provider, text(m, "id")) && identity(provider, text(p, "id")) && text(m, "id") != text(p, "id") &&
 		revision(text(m, "version")) && revision(text(p, "version")) && body.size() <= ManifestLimit && body.toBase64() == encoded &&
-		CloudSyncManifest::sha256(body) == text(m, "sha256") && manifest.isValid() && manifest.payloadFileName() == text(p, "name") &&
+		CloudSyncManifest::sha256(body) == text(m, "sha256") && legacyManifest(body) && manifest.payloadFileName() == text(p, "name") &&
 		manifest.payloadSha256 == text(p, "sha256") && p["bytes"].isDouble() && size >= 1 && size <= PayloadLimit && size == double(qint64(size));
 }
 bool CloudWorkspaceCopySource::matches(const QString &provider, const QString &account) const
@@ -116,7 +127,7 @@ void CloudWorkspaceSourceReview::received(const QString &name, const QByteArray 
 	if (!identity(providerId, id) || !revision(version)) { fail(); return; }
 	if (step == Step::Manifest) {
 		const auto parsed = CloudSyncManifest::fromJson(bytes);
-		if (name != Legacy || bytes.size() > ManifestLimit || !parsed.isValid()) { fail(); return; }
+		if (name != Legacy || !legacyManifest(bytes)) { fail(); return; }
 		manifest = bytes; manifestId = id; manifestVersion = version; payloadName = parsed.payloadFileName();
 		step = Step::Payload; files.setResponseLimit(PayloadLimit); files.downloadVersioned(provider, token, payloadName); return;
 	}

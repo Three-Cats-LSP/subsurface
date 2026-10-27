@@ -1239,7 +1239,8 @@ void TestCloudSyncHistory::workspaceCopySource_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"preserve-restart", "foreign-account", "future-format", "extra-field", "invalid-base64", "manifest-hash", "payload-hash", "wrong-name",
-		"foreign-id", "same-id", "bad-revision", "fractional-size", "oversized-size", "wrong-payload", "corrupt-proof", "locked-proof", "blocked-parent", "conflicting-proof"};
+		"foreign-id", "same-id", "bad-revision", "fractional-size", "oversized-size", "wrong-payload", "corrupt-proof", "locked-proof", "blocked-parent", "conflicting-proof",
+		"manifest-extra-field", "manifest-invalid-parent", "fractional-schema"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-source-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceCopySource()
@@ -1251,7 +1252,7 @@ void TestCloudSyncHistory::workspaceCopySource()
 		{"payload", QJsonObject{{"name", m.payloadFileName()}, {"id", google ? "payload" : "id:payload"}, {"version", "p-rev"}, {"sha256", CloudSyncManifest::sha256(A)}, {"bytes", A.size()}}}};
 	QVERIFY(source.valid()); QVERIFY(source.matches(provider, Account)); QVERIFY(source.accepts(A)); const auto original = source;
 	QTemporaryDir temporary; QVERIFY(temporary.isValid()); const auto path = temporary.filePath("source.json");
-	if (mode >= 2 && mode <= 12) {
+	if ((mode >= 2 && mode <= 12) || mode >= 18) {
 		auto manifest = source.value["manifest"].toObject(), payload = source.value["payload"].toObject();
 		if (mode == 2) source.value["format"] = "future-source";
 		if (mode == 3) source.value["unknown_safety_field"] = true;
@@ -1264,6 +1265,14 @@ void TestCloudSyncHistory::workspaceCopySource()
 		if (mode == 10) payload["version"] = "invalid\nrevision";
 		if (mode == 11) payload["bytes"] = 1.5;
 		if (mode == 12) payload["bytes"] = 64 * 1024 * 1024 + 1;
+		if (mode >= 18) {
+			auto body = QJsonDocument::fromJson(bytes).object();
+			if (mode == 18) body["unknown_safety_field"] = true;
+			if (mode == 19) body["parent_sha256"] = "invalid-parent";
+			if (mode == 20) body["schema"] = 1.5;
+			const auto changed = QJsonDocument(body).toJson(QJsonDocument::Compact);
+			manifest["body_base64"] = QString::fromLatin1(changed.toBase64()); manifest["sha256"] = CloudSyncManifest::sha256(changed);
+		}
 		source.value["manifest"] = manifest; source.value["payload"] = payload;
 		QVERIFY(!source.valid()); QVERIFY(!source.preserve(path)); QVERIFY(!QFileInfo::exists(path)); return;
 	}
@@ -1283,12 +1292,12 @@ void TestCloudSyncHistory::workspaceSourceReview_data()
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"schema2", "schema1", "bad-provider", "bad-account", "empty-token", "missing-guard", "scope-before", "missing-manifest", "missing-payload",
 		"bad-manifest", "unsupported-schema", "checksum-mismatch", "invalid-xml", "oversized-manifest", "ambiguous-metadata", "revision-race", "manifest-replaced",
-		"payload-replaced", "cancel", "scope-during-read", "rejected-token", "provider-failure", "manifest-renamed"};
+		"payload-replaced", "cancel", "scope-during-read", "rejected-token", "provider-failure", "manifest-renamed", "manifest-extra-field", "manifest-invalid-parent", "fractional-schema", "schema1-invalid-revision"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-source-review-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceSourceReview()
 {
-	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(mode == 1 ? 1 : 2);
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(mode == 1 || mode == 26 ? 1 : 2);
 	const auto provider = QString(google ? "google-drive" : "dropbox"), payloadName = n.files[1].name;
 	if (mode == 7) n.files.removeAt(0); if (mode == 8) n.files.removeAt(1);
 	if (mode == 9) n.files[0].data = "invalid manifest";
@@ -1296,6 +1305,14 @@ void TestCloudSyncHistory::workspaceSourceReview()
 	if (mode == 11) n.files[1].data = B;
 	if (mode == 12) { n.files[1].data = "not XML"; auto m = CloudSyncManifest::fromJson(n.files[0].data); m.payloadSha256 = CloudSyncManifest::sha256(n.files[1].data); n.files[0].data = m.toJson(); }
 	if (mode == 13) n.files[0].data += QByteArray(16385, ' ');
+	if (mode >= 23) {
+		auto body = QJsonDocument::fromJson(n.files[0].data).object();
+		if (mode == 23) body["unknown_safety_field"] = true;
+		if (mode == 24) body["parent_sha256"] = "invalid-parent";
+		if (mode == 25) body["schema"] = 1.5;
+		if (mode == 26) body["revision"] = "unsupported-revision";
+		n.files[0].data = n.json(body);
+	}
 	if (mode == 14) {
 		if (google) n.add(Legacy, n.files[0].data);
 		else n.metadataResponse = [&](const QByteArray &bytes) { auto m = QJsonDocument::fromJson(bytes).object(); m["id"] = ""; return n.json(m); };
