@@ -73,6 +73,7 @@ public:
 	std::function<void(const QString &)> wrote;
 	std::function<void(const QNetworkRequest &)> requested;
 	std::function<QByteArray(const QNetworkRequest &, const QByteArray &)> response;
+	std::function<QByteArray(const QByteArray &)> metadataResponse;
 	bool deferReads = false;
 	bool loseWriteAck = false;
 	QByteArray json(const QJsonObject &o) { return QJsonDocument(o).toJson(QJsonDocument::Compact); }
@@ -175,6 +176,10 @@ protected:
 			}
 		}
 		if (response) body = response(r, body);
+		if (metadataResponse) {
+			if (google && path.startsWith("/drive/v2/files/") && op == GetOperation) body = metadataResponse(body);
+			else if (!meta.isEmpty()) meta = metadataResponse(meta);
+		}
 		defer |= deferReads;
 		auto *reply = new Reply(r, body, status, this, defer); if (defer) deferred = reply;
 		if (!meta.isEmpty()) reply->header(meta); return reply;
@@ -338,7 +343,7 @@ void TestCloudSyncHistory::fenceCas_data()
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
 	const QStringList cases = {"writer-before-freeze", "freeze-before-writer", "source-advance", "late-payload",
 		"competing-coordinators", "delayed-root", "lost-freeze-ack", "lost-intent-ack", "lost-seal-ack", "lost-acknowledgement-ack",
-		"identity-wrong-name", "identity-replaced-path"};
+		"identity-wrong-name", "identity-replaced-path", "identity-wrong-id", "identity-no-version", "identity-no-name"};
 	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s)
 		QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
 }
@@ -375,11 +380,20 @@ void TestCloudSyncHistory::fenceCas()
 	};
 	if (scenario >= 10) {
 		const auto expected = n.files[2].name;
-		n.files[2].name = name.chopped(5) + "-moved.json";
+		if (scenario <= 11) n.files[2].name = name.chopped(5) + "-moved.json";
 		if (scenario == 11) n.add(expected, root.json()); // A replacement path is never adopted.
+		if (scenario >= 12) n.metadataResponse = [&](const QByteArray &bytes) {
+			auto metadata = QJsonDocument::fromJson(bytes).object();
+			if (scenario == 12) metadata["id"] = google ? "different-id" : "id:different-id";
+			if (scenario == 13) metadata[google ? "etag" : "rev"] = "";
+			if (scenario == 14) metadata.remove(google ? "title" : "name");
+			return QJsonDocument(metadata).toJson(QJsonDocument::Compact);
+		};
 		files.setStrictReads(false); // Exact reads still enforce the name without this opt-in.
 		files.downloadIdentity(provider, "token", expected, targetId);
-		QTRY_COMPARE(errors.size(), 1); QCOMPARE(read.size(), 0); QCOMPARE(n.mutations, 0); QVERIFY(n.allowed); return;
+		if (google && (scenario <= 11 || scenario == 14)) { QTRY_COMPARE(conflicts.size(), 1); QCOMPARE(errors.size(), 0); }
+		else { QTRY_COMPARE(errors.size(), 1); QCOMPARE(conflicts.size(), 0); }
+		QCOMPARE(read.size(), 0); QCOMPARE(n.mutations, 0); QVERIFY(n.allowed); return;
 	}
 	auto target = CloudHistoryFence::freeze(targetId, root); QVERIFY(target.valid());
 	if (scenario == 0) {

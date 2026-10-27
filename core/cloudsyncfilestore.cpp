@@ -628,7 +628,7 @@ void CloudSyncFileStore::googleReadVersion(const QString &accessToken, const QSt
 		}
 		const auto metadata = QJsonDocument::fromJson(payload).object();
 		const QString version = metadata.value(QStringLiteral("etag")).toString();
-		if (version.isEmpty() || (strictReads && metadata.value("id").toString() != fileId)) {
+		if (version.isEmpty() || metadata.value("id").toString() != fileId) {
 			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("Google Drive did not return a file revision. No data was changed."));
 			return;
 		}
