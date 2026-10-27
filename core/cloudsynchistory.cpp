@@ -211,10 +211,10 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 		root = CloudHistoryRecord::create(cloudSyncProviderDescriptor(provider).id, account, epoch, legacyHash);
 		writeRoot(root, [this] { processRoot(); });
 	});
-	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &) {
+	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &name) {
 		// Initialization is idempotent. Join the winning root, or allocate a
 		// fresh ticket after a conflict; never replay a stale publication.
-		if (retryInitialization()) return;
+		if (name == CloudHistoryRecord::rootName(epoch) && retryInitialization()) return;
 		fail(tr("Cloud history changed during this operation. Reload it before retrying. All versions were kept."));
 	});
 	connect(&files, &CloudSyncFileStore::operationError, this, [this](CloudSyncProviderType, const QString &, const QString &, bool rejected) {

@@ -93,7 +93,7 @@ protected:
 			const auto target = QJsonDocument::fromJson(sent).object().value("title").toString();
 			const auto old = index < 0 ? CloudHistoryRecord() : CloudHistoryRecord::parse(files[index].data);
 			allowed &= old.valid() && old.value["sequence"].toInt() == 0 && old.value["tickets"].toObject().isEmpty() &&
-				target == name.left(name.size() - 5) + "-recovered-" + files[index].id.mid(3) + ".json";
+				target == CloudHistoryRecord::rootName(old.value["epoch"].toString()).chopped(5) + "-recovered-" + files[index].id.mid(3) + ".json";
 			if (fault == 15 && index >= 0) {
 				auto active = old; active.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size());
 				files[index].data = active.json(); files[index].rev = "concurrent-registration"; fault = 0;
