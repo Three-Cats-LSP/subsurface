@@ -11,6 +11,8 @@ public:
 	CloudWorkspaceCopyIntent(const QString &file, const CloudWorkspaceReference &workspace, const CloudWorkspaceCopySource &source,
 		const QString &ticket, const QString &parent);
 	bool prepare();
+	// Read-only UI observation; the coordinator still reloads under its lock.
+	bool inspect();
 	bool reload();
 	bool beginRegistration();
 	bool registerTicket();

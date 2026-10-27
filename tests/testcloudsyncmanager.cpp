@@ -1622,7 +1622,7 @@ void TestCloudSyncManager::testWorkspaceCopy_data()
 	const QStringList cases = {"copy-idempotent-restart", "unreviewed", "wrong-review", "edited-before-confirmation", "choice-away-back", "missing-checkpoint",
 		"changed-source", "replaced-source", "cancel-copy", "disconnect-copy", "edit-during-copy", "choice-during-copy", "assignment-during-copy",
 		"unknown-payload-ack", "resume-registered", "resume-identified", "submitted-no-replay", "corrupt-proof", "checkpoint-lost-during-copy", "restart-forgets-confirmation",
-		"cancel-review", "edit-during-review", "assigned-before-confirmation", "stale-parent"};
+		"cancel-review", "edit-during-review", "assigned-before-confirmation", "stale-parent", "resume-incomplete-intent-lock", "confirm-incomplete-choice-lock"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode) QTest::newRow(qPrintable(QString("%1-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
 void TestCloudSyncManager::testWorkspaceCopy()
@@ -1673,7 +1673,7 @@ void TestCloudSyncManager::testWorkspaceCopy()
 	if (mode == 7) { const auto body = network.files[1].data; network.files.removeAt(1); network.add("subsurface-neo-sync.json", body); }
 	if (mode == 13) network.workspacePayloadAckLost = true;
 	QString action = "copy", argument = review.id, savedTicket;
-	if (mode >= 14 && mode <= 17) {
+	if ((mode >= 14 && mode <= 17) || mode == 24) {
 		action = "resume-copy"; savedTicket = QUuid::createUuid().toString(QUuid::WithoutBraces); argument = savedTicket;
 		const auto copyPath = QDir(directory).filePath("copies/" + ref.key() + "/" + savedTicket);
 		QVERIFY(review.source.preserve(QDir(copyPath).filePath("source.json")));
@@ -1682,6 +1682,16 @@ void TestCloudSyncManager::testWorkspaceCopy()
 		if (mode == 15 || mode == 16) QVERIFY(intent.submit());
 		if (mode == 15) { network.add(ref.payloadName(savedTicket), local); QVERIFY(intent.identify(google ? network.files.last().id : "id:" + network.files.last().id)); }
 		if (mode == 17) { QFile proof(QDir(copyPath).filePath("source.json")); QVERIFY(proof.open(QIODevice::WriteOnly)); proof.write("bad proof"); proof.close(); }
+		if (mode == 24) {
+			const auto lockPath = QDir(copyPath).filePath("intent.json.lock"); QFile orphan(lockPath); QVERIFY(orphan.open(QIODevice::WriteOnly)); orphan.close();
+			QVERIFY(!manager.workspaceReport(provider).value("copyRecoveryRequired").toBool());
+			QTimer::singleShot(80, &manager, [lockPath] { QFile::remove(lockPath); });
+		}
+	}
+	if (mode == 25) {
+		const auto lockPath = choiceFile + ".lock"; QFile orphan(lockPath); QVERIFY(orphan.open(QIODevice::WriteOnly)); orphan.close();
+		QVERIFY(manager.workspaceReport(provider).value("selected").toBool());
+		QTimer::singleShot(80, &manager, [lockPath] { QFile::remove(lockPath); });
 	}
 	if (mode == 19) {
 		CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path(); restarted.tokens.insert(provider, manager.tokens.value(provider));
@@ -1702,7 +1712,7 @@ void TestCloudSyncManager::testWorkspaceCopy()
 		network.workspaceReadDeferred = false; late->complete();
 	}
 	QTRY_VERIFY(!manager.syncInProgress());
-	const bool success = mode == 0 || mode == 14 || mode == 15;
+	const bool success = mode == 0 || mode == 14 || mode == 15 || mode == 24 || mode == 25;
 	QCOMPARE(done.size(), success ? 2 : 1);
 	if (success) {
 		QVERIFY(manager.lastError().isEmpty()); QVERIFY(manager.workspaceReport(provider).value("copied").toBool());

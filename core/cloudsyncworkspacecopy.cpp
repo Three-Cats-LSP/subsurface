@@ -55,6 +55,7 @@ bool CloudWorkspaceCopyIntent::prepare()
 	if (!saved.isEmpty()) return true;
 	auto next = scope; next["state"] = "prepared"; next["object"] = ""; next["version"] = ""; return write(next);
 }
+bool CloudWorkspaceCopyIntent::inspect() { return !fileName.isEmpty() && read() && !saved.isEmpty(); }
 bool CloudWorkspaceCopyIntent::reload()
 {
 	if (fileName.isEmpty() || scope.isEmpty()) return false;

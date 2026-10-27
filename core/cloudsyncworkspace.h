@@ -28,6 +28,9 @@ public:
 class CloudWorkspaceSelection {
 public:
 	CloudWorkspaceSelection(const QString &fileName, const QString &provider, const QString &account);
+	// Read-only observation. Never authorizes mutation; reload under the normal
+	// lock and recheck the captured version before any dependent write.
+	bool inspect();
 	bool load();
 	bool select(const QString &expectedVersion, const CloudWorkspaceReference &reference);
 	CloudWorkspaceReference selected() const;

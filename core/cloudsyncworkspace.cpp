@@ -448,6 +448,7 @@ bool CloudWorkspaceSelection::readUnlocked()
 	}
 	references = known; selectedKey = string(root, "selected"); choiceVersion = string(root, "version"); return true;
 }
+bool CloudWorkspaceSelection::inspect() { return !fileName.isEmpty() && readUnlocked(); }
 bool CloudWorkspaceSelection::load()
 {
 	selectedKey.clear(); choiceVersion.clear(); references = {};
