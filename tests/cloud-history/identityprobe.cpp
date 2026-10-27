@@ -109,9 +109,17 @@ int main(int argc, char **argv)
 			QSaveFile file(localFile.absoluteFilePath()); if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) || file.write(model) != model.size() || !file.commit()) return false;
 			QFile verify(localFile.absoluteFilePath()); return verify.open(QIODevice::ReadOnly) && verify.read(2049) == model;
 		};
+		const auto paused = [&](const QString &phase) {
+			// Metadata marker appears only after the relevant durable boundary.
+			// The driver watches it without opening files during QSaveFile writes.
+			QFile marker(recovery + ".probe-pause-" + phase); const auto bytes = phase.toUtf8();
+			if (marker.exists()) { if (!marker.open(QIODevice::ReadOnly) || marker.read(64) != bytes) return false; marker.close(); }
+			else if (!marker.open(QIODevice::WriteOnly | QIODevice::NewOnly) || marker.write(bytes) != bytes.size() || !marker.flush()) return false;
+			marker.close(); QThread::msleep(1500); return true;
+		};
 		CloudWorkspaceApply apply(&network);
 		QObject::connect(&apply, &CloudWorkspaceApply::applied, &app, [&](const QString &) {
-			if (pause == "persistence") QThread::msleep(1500);
+			if (pause == "persistence" && !paused("persistence")) { apply.cancel(); output({{"ok", false}, {"phase", "pause-marker"}}, 2); app.exit(2); return; }
 			++persistCalls; if (!save()) { apply.cancel(); output({{"ok", false}, {"phase", "local-persistence"}}, 2); app.exit(2); return; }
 			apply.confirmPersisted();
 		});
@@ -127,8 +135,8 @@ int main(int argc, char **argv)
 		QTimer::singleShot(0, &app, [&] {
 			apply.start(token, ref, commit, reservation, choice, data.value("choice_version").toString(), checkpoint, sourceFile, uploadFile, readFile, recovery, before,
 				[] { return true; }, [&] { return model; }, [&](const QByteArray &xml) {
-					++applyCalls; if (pause == "before") QThread::msleep(1500); model = xml;
-					if (pause == "after") { if (!save()) return false; QThread::msleep(1500); } return true;
+					++applyCalls; if (pause == "before" && !paused("before")) return false; model = xml;
+					if (pause == "after" && (!save() || !paused("after"))) return false; return true;
 				});
 		});
 		return app.exec();

@@ -2795,9 +2795,9 @@ struct ApplyFixture {
 	ReadFixture base;
 	QString commit, sourceReservation, reservation;
 };
-ApplyFixture applyFixture(Network &n, bool google)
+ApplyFixture applyFixture(Network &n, bool google, bool copied = true)
 {
-	ApplyFixture f; f.base=readFixture(n,google,true); if(!f.base.root.valid()) return {};
+	ApplyFixture f; f.base=readFixture(n,google,copied); if(!f.base.root.valid()) return {};
 	f.commit=uid(); f.sourceReservation=uid(); f.reservation=uid(); auto &root=f.base.root;
 	if(!root.reserve(f.sourceReservation,f.base.commit) || !root.registerUpload(f.commit,f.base.head,CloudSyncManifest::sha256(A),A.size(),f.base.commit,f.sourceReservation)) return {};
 	n.add(f.base.reference.payloadName(f.commit),A);
@@ -2813,7 +2813,7 @@ void TestCloudSyncHistory::workspaceApplyIntent_data()
 }
 void TestCloudSyncHistory::workspaceApplyIntent()
 {
-	QFETCH(bool,google); QFETCH(int,mode); Network n; auto f=applyFixture(n,google); QVERIFY(f.base.root.valid()); auto root=f.base.root;
+	QFETCH(bool,google); QFETCH(int,mode); Network n; auto f=applyFixture(n,google,mode!=26 && mode!=27); QVERIFY(f.base.root.valid()); auto root=f.base.root;
 	QVERIFY(root.reserve(f.reservation,f.commit)); n.files[2].data=root.json();
 	QTemporaryDir temp; QVERIFY(temp.isValid()); const auto dir=temp.filePath("recovery"), choice=uid(), file=QDir(dir).filePath("intent.json");
 	const auto read=[](const QString &p) { QFile q(p); return q.open(QIODevice::ReadOnly) ? q.readAll() : QByteArray(); };
