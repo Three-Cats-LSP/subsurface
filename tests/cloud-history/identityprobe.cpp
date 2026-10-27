@@ -13,6 +13,7 @@
 #include "core/cloudsyncworkspacecopy.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
+#include "core/cloudsyncworkspaceapply.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -23,6 +24,8 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QSaveFile>
+#include <QThread>
 
 // Count operation kinds without logging headers, tokens, bodies or URLs.
 class ProbeNetwork : public QNetworkAccessManager {
@@ -69,17 +72,67 @@ int main(int argc, char **argv)
 	const bool restoring = mode == "workspace-restore";
 	const bool uploading = mode == "workspace-upload" || restoring;
 	const bool reservedRead = mode == "workspace-reservation";
+	const bool applying = mode == "workspace-apply";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
 	const QRegularExpression workspaceFixture(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
-	const bool validName = sourceReview ? name == "subsurface-neo-sync.json" : ((workspace || creation || copying || uploading || reservedRead) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch();
+	const bool validName = sourceReview ? name == "subsurface-neo-sync.json" : ((workspace || creation || copying || uploading || reservedRead || applying) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch();
 	if (!valid || (!google && get("provider") != "dropbox") || !validName ||
-	    (mode != "read" && mode != "write" && !archival && !workspace && !creation && !sourceReview && !copying && !uploading && !reservedRead) || token.isEmpty() || token.size() > 8192 ||
+	    (mode != "read" && mode != "write" && !archival && !workspace && !creation && !sourceReview && !copying && !uploading && !reservedRead && !applying) || token.isEmpty() || token.size() > 8192 ||
 	    !QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(get("before_sha256")).hasMatch() ||
-	    ((archival || workspace || creation || sourceReview || copying || uploading || reservedRead) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
+	    ((archival || workspace || creation || sourceReview || copying || uploading || reservedRead || applying) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
 	ProbeNetwork network;
+	if (applying) {
+		const auto data = QJsonDocument::fromJson(body).object(); CloudWorkspaceReference ref; ref.value = data.value("reference").toObject();
+		const auto epoch = ref.value.value("epoch").toString(), nonce = data.value("nonce").toString(), commit = data.value("commit").toString(), reservation = data.value("reservation").toString(), pause = data.value("pause").toString();
+		const QFileInfo localFile(data.value("local_file").toString()); const QDir parent(localFile.absolutePath());
+		const auto checkpoint = data.value("checkpoint_file").toString(), choice = data.value("choice_file").toString(), sourceFile = data.value("source_intent_file").toString(), uploadFile = data.value("upload_intent_file").toString(), readFile = data.value("apply_read_intent_file").toString(), recovery = data.value("recovery_directory").toString();
+		const auto encoded = data.value("before_base64").toString().toLatin1(), before = QByteArray::fromBase64(encoded);
+		CloudWorkspaceAuthority authority(checkpoint, ref); const auto marker = CloudSyncManifest::sha256(("neo-workspace-create-probe:origin:" + epoch + ":" + nonce).toUtf8());
+		if (data.size() != 15 || !ref.matches(get("provider"), data.value("account").toString()) || ref.rootName() != name || ref.value.value("root_id").toString() != id || !version.isEmpty() ||
+		    !CloudHistoryRecord::validEpoch(nonce) || !CloudHistoryRecord::validEpoch(commit) || !CloudHistoryRecord::validEpoch(reservation) || marker != get("before_sha256") ||
+		    !localFile.isAbsolute() || !localFile.isFile() || localFile.isSymLink() || localFile.size() > 2048 || localFile.fileName() != "local-" + reservation + ".xml" || parent.dirName() != "neo-workspace-probe-" + epoch + "-" + nonce ||
+		    before.isEmpty() || before.size() > 2048 || before.toBase64() != encoded || !CloudHistoryRecord::validXml(before) ||
+		    (pause != "none" && pause != "before" && pause != "after" && pause != "persistence") ||
+		    QDir::cleanPath(choice) != parent.filePath("choice.json") || QDir::cleanPath(checkpoint) != parent.filePath("checkpoints/" + ref.key() + ".json") ||
+		    QDir::cleanPath(uploadFile) != parent.filePath("restore-" + commit + ".json") || QDir::cleanPath(readFile) != parent.filePath("read-" + reservation + ".json") || QDir::cleanPath(recovery) != parent.filePath("apply-" + reservation) ||
+		    !authority.load() || !authority.record().valid() || authority.record().value.value("journal").toObject().value("legacy_sha256").toString() != marker ||
+		    authority.record().ticket(commit).value("state").toString() != "committed" || !CloudHistoryRecord::validEpoch(authority.record().ticket(commit).value("reservation").toString()) ||
+		    QDir::cleanPath(sourceFile) != parent.filePath("read-" + authority.record().ticket(commit).value("reservation").toString() + ".json"))
+			return output({{"ok", false}, {"phase", "input"}}, 2);
+		QFile initial(localFile.absoluteFilePath()); if (!initial.open(QIODevice::ReadOnly)) return output({{"ok", false}, {"phase", "input"}}, 2);
+		QByteArray model = initial.read(2049); initial.close(); if (model.size() > 2048 || !CloudHistoryRecord::validXml(model)) return output({{"ok", false}, {"phase", "input"}}, 2);
+		int applyCalls = 0, persistCalls = 0;
+		const auto save = [&] {
+			QSaveFile file(localFile.absoluteFilePath()); if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) || file.write(model) != model.size() || !file.commit()) return false;
+			QFile verify(localFile.absoluteFilePath()); return verify.open(QIODevice::ReadOnly) && verify.read(2049) == model;
+		};
+		CloudWorkspaceApply apply(&network);
+		QObject::connect(&apply, &CloudWorkspaceApply::applied, &app, [&](const QString &) {
+			if (pause == "persistence") QThread::msleep(1500);
+			++persistCalls; if (!save()) { apply.cancel(); output({{"ok", false}, {"phase", "local-persistence"}}, 2); app.exit(2); return; }
+			apply.confirmPersisted();
+		});
+		QObject::connect(&apply, &CloudWorkspaceApply::finished, &app, [&](const QJsonObject &record, const QString &v, const QString &c, bool headMatches, bool localMatches) {
+			output({{"ok", true}, {"phase", "workspace-applied"}, {"record", record}, {"version", v}, {"commit", c}, {"headMatches", headMatches}, {"localMatches", localMatches},
+				{"applyCalls", applyCalls}, {"persistCalls", persistCalls}, {"local_sha256", CloudSyncManifest::sha256(model)}, {"local_bytes", double(model.size())},
+				{"createRequests", network.creates}, {"updateRequests", network.updates}, {"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 0); app.exit(0);
+		});
+		QObject::connect(&apply, &CloudWorkspaceApply::failed, &app, [&](const QString &, bool rejected) {
+			output({{"ok", false}, {"phase", "workspace-apply"}, {"tokenRejected", rejected}, {"applyCalls", applyCalls}, {"persistCalls", persistCalls}, {"local_sha256", CloudSyncManifest::sha256(model)},
+				{"createRequests", network.creates}, {"updateRequests", network.updates}, {"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 2); app.exit(2);
+		});
+		QTimer::singleShot(0, &app, [&] {
+			apply.start(token, ref, commit, reservation, choice, data.value("choice_version").toString(), checkpoint, sourceFile, uploadFile, readFile, recovery, before,
+				[] { return true; }, [&] { return model; }, [&](const QByteArray &xml) {
+					++applyCalls; if (pause == "before") QThread::msleep(1500); model = xml;
+					if (pause == "after") { if (!save()) return false; QThread::msleep(1500); } return true;
+				});
+		});
+		return app.exec();
+	}
 	if (reservedRead) {
 		const auto data = QJsonDocument::fromJson(body).object(); CloudWorkspaceReference ref; ref.value = data.value("reference").toObject();
 		const auto epoch = ref.value.value("epoch").toString(), nonce = data.value("nonce").toString(), commit = data.value("commit").toString(), reservation = data.value("reservation").toString(), action = data.value("action").toString();

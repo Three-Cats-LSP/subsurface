@@ -16,6 +16,7 @@ add_executable(TestCloudSyncHistory
     ${NEO_ROOT}/core/cloudsyncworkspacecopy.cpp ${NEO_ROOT}/core/cloudsyncworkspacecopy.h
     ${NEO_ROOT}/core/cloudsyncworkspaceupload.cpp ${NEO_ROOT}/core/cloudsyncworkspaceupload.h
     ${NEO_ROOT}/core/cloudsyncworkspaceread.cpp ${NEO_ROOT}/core/cloudsyncworkspaceread.h
+    ${NEO_ROOT}/core/cloudsyncworkspaceapply.cpp ${NEO_ROOT}/core/cloudsyncworkspaceapply.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)
@@ -33,6 +34,7 @@ add_executable(NeoCloudIdentityProbe identityprobe.cpp
 	${NEO_ROOT}/core/cloudsyncworkspacecopy.cpp ${NEO_ROOT}/core/cloudsyncworkspacecopy.h
 	${NEO_ROOT}/core/cloudsyncworkspaceupload.cpp ${NEO_ROOT}/core/cloudsyncworkspaceupload.h
 	${NEO_ROOT}/core/cloudsyncworkspaceread.cpp ${NEO_ROOT}/core/cloudsyncworkspaceread.h
+    ${NEO_ROOT}/core/cloudsyncworkspaceapply.cpp ${NEO_ROOT}/core/cloudsyncworkspaceapply.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)

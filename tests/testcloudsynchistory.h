@@ -58,6 +58,10 @@ private slots:
 	void workspaceRestoreIntent();
 	void workspaceRestoreWorkflow_data();
 	void workspaceRestoreWorkflow();
+	void workspaceApplyIntent_data();
+	void workspaceApplyIntent();
+	void workspaceApplyWorkflow_data();
+	void workspaceApplyWorkflow();
 	void workspaceReadIntent_data();
 	void workspaceReadIntent();
 	void workspaceReadWorkflow_data();
