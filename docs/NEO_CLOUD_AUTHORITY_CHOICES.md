@@ -1,6 +1,6 @@
-# Production workspace authority: decision needed
+# Production workspace authority: explicit selection
 
-2026-10-28 JST. Windows source archival and its preceding safeguards are validated; automatic production discovery still needs an authority model that does not mistake repeated folder listings for an atomic election.
+2026-10-28 JST. **Owner decision: explicit workspace selection, with current private storage permissions and no new service.** Windows source archival and its preceding safeguards are validated. New-device onboarding will offer an explicit create/join choice; folder listings will not elect authority.
 
 ## Provider findings
 
@@ -22,4 +22,6 @@ The first path replaces “one automatically discovered root per account” with
 
 Before any cleanup, implement and validate root ownership, writer/read/retirement fences, conservative time evidence and migration/rollback under the chosen model. No path authorizes deletion of existing schema 1/2 objects. Dropbox's unique-path behavior can support its own singleton, but the cross-provider product behavior should be chosen deliberately rather than silently introducing a Google-only backend or broader Google permissions.
 
-Await the owner's choice before dependent production authority/activation work. Independent Windows reliability and retention primitives may continue. Physical Android and two-live-account Dropbox gates remain deferred.
+The owner selected the first path in this chat. Implement provider-verified create/join and durable workspace binding under that choice. Do not request broader Google scopes or introduce a coordination service. Physical Android and two-live-account Dropbox gates remain deferred.
+
+The first implementation adds [physical-root references and atomic local selection](NEO_CLOUD_WORKSPACES.md). These are not active-root verification or application onboarding yet; ordinary synchronization is unchanged.

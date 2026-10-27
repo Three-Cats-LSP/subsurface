@@ -738,6 +738,8 @@ The subsequent [source-receipt verification and immutable local handoff proofs](
 
 The [sealed-source Google archival component](NEO_CLOUD_SOURCE_ARCHIVAL.md), `2ad92cd87`, then passed 420 native cases on Windows/Linux and four live Windows stages against six fresh synthetic controls: conditional archival, already-archived restart, committed-but-unread recovery and changed-body refusal. Original Google inventory/current bytes/credentials matched the independent audit; all 116 test objects remain protected. The cd3/0db package gate has passed; the 2ad package gate is active. No resolution action is exposed, and coordinator convergence, activation, active rebinding and production migration remain required.
 
+On 2026-10-28 JST the owner chose [explicit workspace selection](NEO_CLOUD_AUTHORITY_CHOICES.md), retaining current private storage permissions and adding no coordination service. Exact 2ad Windows launch/Clean/Modern/lifecycle validation passed. Automatic per-account root election is replaced by explicit create/join with physical-root/account/epoch binding; references and atomic local choice are the first [implementation step](NEO_CLOUD_WORKSPACES.md). Cloud self-binding, guarded onboarding/migration and retention gates remain open. Existing schema 1/2 objects remain protected and cleanup stays disabled.
+
 ## Milestone 14 — Web / WebAssembly & Deployment
 
 **Goal:** deploy a useful browser version while maximizing code sharing.

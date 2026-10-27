@@ -22,6 +22,10 @@ private slots:
 	void archiveTransport();
 	void archiveWorkflow_data();
 	void archiveWorkflow();
+	void workspaceReference_data();
+	void workspaceReference();
+	void workspaceSelection_data();
+	void workspaceSelection();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();

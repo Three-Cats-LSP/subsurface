@@ -11,6 +11,7 @@ get_filename_component(NEO_ROOT "../.." ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURC
 add_executable(TestCloudSyncHistory
     ../testcloudsynchistory.cpp ../testcloudsynchistory.h
     ${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
+    ${NEO_ROOT}/core/cloudsyncworkspace.cpp ${NEO_ROOT}/core/cloudsyncworkspace.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)

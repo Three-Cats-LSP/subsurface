@@ -105,11 +105,11 @@ The local audit helper is `work/audit-cloud-retention.py`. Aggregate evidence is
 | New reader or pin races the `retired` to `deleting` transition | Exactly one transition wins; no read is admitted after the deletion fence |
 | Commit/delete response lost; app stopped at each transition | Restart determines actual state without deleting the head or reviving a retired ticket |
 | Two collectors and a writer race | Only valid conditional transitions succeed; repeated exact-object deletion is harmless |
-| Google duplicate roots, delayed creates or ambiguous payload names | Cleanup blocked until one authoritative namespace is established |
+| Google duplicate roots, delayed creates or ambiguous payload names | Cleanup blocked until the explicitly selected physical root/epoch and each payload's ownership are verified; listing never elects authority |
 | Old client writes legacy namespace during/after migration | New namespace remains intact; separate legacy changes are surfaced and preserved |
 | Missing page, stale cursor, changed account, malformed metadata, unexpected object revision | No deletion from the incomplete or invalid plan |
 | Recovery branch, legacy copy, pin, unknown file or long-offline device | Protected data retained; device re-establishes current state without silent local replacement |
 | Age/count boundary, clock skew or lost time evidence | Latest 20 and entire 30-day window retained; uncertainty extends retention |
 | Quota exhaustion or safety-metadata limit | Clear error and intact local/remote log; no emergency sweep |
 
-Retention design and native read-only storage review are complete. Experimental coordinated history and restore are now available behind the development gate. Production migration/authority handling, native conditional deletion adapters and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.
+Retention design and native read-only storage review are complete. Experimental coordinated history and restore are now available behind the development gate. The owner chose [explicit workspaces](NEO_CLOUD_AUTHORITY_CHOICES.md) on 2026-10-28 JST; provider/account/epoch/physical-root binding replaces automatic per-account root election. Production create/join/migration, native conditional deletion adapters and cleanup validation are still required; this does not close Milestone 13 or authorize deleting existing recovery data.

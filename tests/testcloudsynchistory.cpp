@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testcloudsynchistory.h"
 #include "core/cloudsynchistory.h"
+#include "core/cloudsyncworkspace.h"
 #include "core/cloudsyncmanifest.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -841,6 +842,97 @@ void TestCloudSyncHistory::archiveWorkflow()
 	if (scenario == 21) { QCOMPARE(n.files.last().id, allBefore.last().id); QCOMPARE(n.files.last().rev, allBefore.last().rev); QCOMPARE(n.files.last().data, allBefore.last().data); }
 	if (scenario != 22 && scenario != 8 && scenario != 9 && scenario != 28) { QCOMPARE(n.files[2].data, allBefore[2].data); QCOMPARE(n.files[2].rev, allBefore[2].rev); }
 	QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspaceReference_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	for (bool g : {false, true}) for (int s = 0; s < 10; ++s) QTest::newRow(qPrintable(QString("%1-reference%2").arg(g).arg(s))) << g << s;
+}
+void TestCloudSyncHistory::workspaceReference()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), id = QString(google ? "root-a" : "id:root-a"), epoch = uid(), ticket = uid();
+	auto reference = CloudWorkspaceReference::create(provider, Account, epoch, id); QVERIFY(reference.valid());
+	const auto original = reference;
+	if (scenario == 1) reference.value["account"] = "not-a-hash";
+	if (scenario == 2) reference.value["root_id"] = "unsafe/id";
+	if (scenario == 3) reference.value["epoch"] = "not-an-epoch";
+	if (scenario == 4) reference.value["provider"] = "subsurface-cloud";
+	if (scenario == 5) reference.value["format"] = "unknown-future-reference";
+	if (scenario == 6) reference.value["unknown_safety_field"] = true;
+	if (scenario == 7) reference.value["root_id"] = id + QString(513, 'x');
+	if (scenario == 8) reference.value["schema"] = 2;
+	if (scenario == 9) { QVERIFY(!CloudWorkspaceReference::parse(reference.json() + QByteArray(2049, ' ')).valid()); return; }
+	if (scenario) {
+		QVERIFY(!reference.valid()); QVERIFY(!CloudWorkspaceReference::parse(reference.json()).valid());
+		QVERIFY(reference.key().isEmpty()); QVERIFY(reference.rootName().isEmpty()); QVERIFY(reference.payloadName(ticket).isEmpty()); return;
+	}
+	QCOMPARE(CloudWorkspaceReference::parse(reference.json()).key(), reference.key()); QVERIFY(reference.matches(provider, Account));
+	QVERIFY(!reference.matches(provider, CloudSyncManifest::sha256("other-account"))); QVERIFY(reference.payloadName("invalid").isEmpty());
+	const auto second = CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-b" : "id:root-b"); QVERIFY(second.valid());
+	QCOMPARE(second.rootName(), reference.rootName()); // Equal names are not equal workspaces.
+	QVERIFY(second.key() != reference.key()); QVERIFY(second.payloadName(ticket) != reference.payloadName(ticket));
+	QVERIFY(reference.payloadName(ticket).contains(reference.key())); QVERIFY(reference.payloadName(ticket).size() < 255);
+	QVERIFY(!reference.rootName().startsWith("subsurface-neo-history-")); QCOMPARE(reference.json(), original.json());
+}
+void TestCloudSyncHistory::workspaceSelection_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"switch-and-restart", "stale-process", "foreign-account", "corrupt-file", "future-format", "lock", "blocked-parent", "oversized-file", "tampered-reference", "retain-bound", "new-parent", "invalid-reference"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceSelection()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid();
+	const auto first = CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-a" : "id:root-a");
+	auto second = CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-b" : "id:root-b");
+	const auto third = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root-c" : "id:root-c");
+	QTemporaryDir temporary; QVERIFY(temporary.isValid());
+	const auto path = temporary.filePath(scenario == 10 ? "new/parent/choice.json" : "choice.json");
+	const auto read = [](const QString &name) { QFile f(name); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
+	const auto write = [](const QString &name, const QByteArray &bytes) { QFile f(name); return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size(); };
+	const auto oldCheckpoint = temporary.filePath("old-history-checkpoint.json"); QVERIFY(write(oldCheckpoint, "preserve old checkpoint"));
+	CloudWorkspaceSelection selection(path, provider, Account); QVERIFY(selection.load()); QVERIFY(!selection.selected().valid());
+	if (scenario == 10) QVERIFY(!QFileInfo::exists(QFileInfo(path).absolutePath()));
+	QVERIFY(selection.select({}, first)); const auto originalBytes = read(path);
+	if (scenario == 0 || scenario == 10) {
+		QVERIFY(selection.select({}, first)); QCOMPARE(read(path), originalBytes); // Lost local acknowledgement, no replay.
+		QVERIFY(selection.select(first.key(), second)); QVERIFY(selection.select(second.key(), first));
+		CloudWorkspaceSelection restarted(path, provider, Account); QVERIFY(restarted.load()); QCOMPARE(restarted.selected().key(), first.key());
+		QCOMPARE(restarted.knownReferences().size(), 2); QCOMPARE(restarted.knownReferences()[second.key()].toObject(), second.value);
+	} else if (scenario == 1) {
+		CloudWorkspaceSelection other(path, provider, Account); QVERIFY(other.load()); QVERIFY(other.select(first.key(), second)); const auto changed = read(path);
+		QVERIFY(!selection.select(first.key(), third)); QCOMPARE(selection.selected().key(), second.key()); QCOMPARE(read(path), changed);
+		QVERIFY(selection.select(second.key(), third)); QCOMPARE(selection.knownReferences().size(), 3);
+	} else if (scenario == 6) {
+		const auto blocker = temporary.filePath("blocked"); QVERIFY(write(blocker, "unrelated blocker"));
+		CloudWorkspaceSelection blocked(blocker + "/choice.json", provider, Account); QVERIFY(!blocked.select({}, second)); QCOMPARE(read(blocker), QByteArray("unrelated blocker"));
+	} else if (scenario == 9) {
+		for (int i = 1; i < 32; ++i) {
+			const auto next = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root-" + QString::number(i) : "id:root-" + QString::number(i));
+			QVERIFY(selection.select(selection.selected().key(), next));
+		}
+		const auto full = read(path); QVERIFY(!selection.select(selection.selected().key(), second)); QCOMPARE(read(path), full);
+		QVERIFY(selection.select(selection.selected().key(), first)); QCOMPARE(selection.knownReferences().size(), 32);
+		QCOMPARE(selection.knownReferences()[first.key()].toObject(), first.value);
+	} else {
+		std::unique_ptr<QLockFile> held;
+		if (scenario == 2) second.value["account"] = CloudSyncManifest::sha256("other-account");
+		if (scenario == 3) QVERIFY(write(path, "invalid choice"));
+		if (scenario == 4 || scenario == 8) {
+			auto value = QJsonDocument::fromJson(read(path)).object();
+			if (scenario == 4) value["format"] = "unknown-future-choice";
+			else { auto refs = value["references"].toObject(); auto changed = first; changed.value["root_id"] = google ? "tampered-root" : "id:tampered-root"; refs[first.key()] = changed.value; value["references"] = refs; }
+			QVERIFY(write(path, QJsonDocument(value).toJson(QJsonDocument::Compact)));
+		}
+		if (scenario == 5) { held = std::make_unique<QLockFile>(path + ".lock"); QVERIFY(held->tryLock(0)); }
+		if (scenario == 7) QVERIFY(write(path, QByteArray(64 * 1024 + 1, ' ')));
+		if (scenario == 11) second.value["unknown_field"] = true;
+		const auto before = read(path); QVERIFY(!selection.select(first.key(), second)); QCOMPARE(read(path), before);
+	}
+	QCOMPARE(read(oldCheckpoint), QByteArray("preserve old checkpoint"));
 }
 
 void TestCloudSyncHistory::invalidRecords_data()
