@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QUuid>
 #include <QXmlStreamReader>
@@ -190,6 +191,12 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 	files.setStrictReads(true);
 	files.setResponseLimit(PayloadLimit);
 	deadline.setSingleShot(true);
+	initializationRetry.setSingleShot(true);
+	connect(&initializationRetry, &QTimer::timeout, this, [this] {
+		if (step != Step::RetryInitialization) return;
+		if (!localUnchanged || !localUnchanged()) { fail(); return; }
+		read(CloudHistoryRecord::rootName(epoch), Step::Root);
+	});
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(tr("History operation timed out. Reload history before retrying; all files were kept.")); });
 	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this,
 		[this](CloudSyncProviderType, const QString &name, const QByteArray &data, const QString &version, const QString &id) { received(name, data, version, id); });
@@ -223,7 +230,7 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 CloudSyncHistory::~CloudSyncHistory() { cancel(); }
 void CloudSyncHistory::cancel()
 {
-	step = Step::Idle; deadline.stop(); files.cancel(provider); continuation = {}; localUnchanged = {};
+	step = Step::Idle; deadline.stop(); initializationRetry.stop(); files.cancel(provider); continuation = {}; localUnchanged = {};
 	token.clear(); local.clear(); payload.clear(); pendingRoot.value = {};
 	files.setHistoryRootRecovery({}, {});
 }
@@ -324,7 +331,11 @@ bool CloudSyncHistory::retryInitialization()
 {
 	if (step == Step::Idle || action != "migrate" || initializationRetries++ >= 8 || !localUnchanged || !localUnchanged()) return false;
 	files.cancel(provider); pendingRoot.value = {}; continuation = {}; uploadId.clear(); payload.clear();
-	read(CloudHistoryRecord::rootName(epoch), Step::Root); return true;
+	// Give the winning initializer time to finish. Immediate competing
+	// registrations can repeatedly invalidate each other's upload completion.
+	step = Step::RetryInitialization;
+	initializationRetry.start(qMin(8000, 250 << (initializationRetries - 1)) + QRandomGenerator::global()->bounded(250));
+	return true;
 }
 void CloudSyncHistory::processRoot()
 {

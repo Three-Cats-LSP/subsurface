@@ -48,7 +48,7 @@ signals:
 	void failed(const QString &message, bool tokenRejected);
 private:
 	enum class Step { Idle, Legacy, Root, MigrationPayload, CheckLegacy, VerifyRoot,
-		Upload, VerifyPayload, RestorePayload, VerifyReservation };
+		Upload, VerifyPayload, RestorePayload, VerifyReservation, RetryInitialization };
 	void read(const QString &name, Step next);
 	void received(const QString &name, const QByteArray &data, const QString &version, const QString &id);
 	void processRoot();
@@ -60,6 +60,7 @@ private:
 	void fail(const QString &message = {}, bool rejected = false);
 	CloudSyncFileStore files;
 	QTimer deadline;
+	QTimer initializationRetry;
 	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
 	QString token, account, epoch, action, revision, legacyHash, rootVersion, rootId, expectedHead, uploadId, reservationId;
 	QString legacyPayload, legacyPayloadHash;
