@@ -333,11 +333,22 @@ CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *pare
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(tr("History operation timed out. Reload history before retrying; all files were kept.")); });
 	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this,
 		[this](CloudSyncProviderType, const QString &name, const QByteArray &data, const QString &version, const QString &id) { received(name, data, version, id); });
+	connect(&files, &CloudSyncFileStore::historyRootsFound, this, [this](const QStringList &ids) {
+		if (step == Step::VerifyReviewList) {
+			if (ids != reviewIds) { fail(tr("History branches changed during review. All files were kept; review again.")); return; }
+			completeRootReview();
+		} else if (step == Step::ReviewList) {
+			reviewIds = ids; reviewIndex = 0; step = Step::ReviewRoot; reviewNextRoot();
+		}
+	});
 	connect(&files, &CloudSyncFileStore::uploadFinished, this, [this](CloudSyncProviderType, const QString &name) {
 		if (step == Step::VerifyRoot) read(name, Step::VerifyRoot);
 		else if (step == Step::Upload) read(name, Step::VerifyPayload);
 	});
 	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &name) {
+		if (step == Step::ReviewRoot && provider == CloudSyncProviderType::Dropbox && reviewedRoots.isEmpty()) {
+			reviewIds.clear(); completeRootReview(); return;
+		}
 		if (step != Step::Root || name != CloudHistoryRecord::rootName(epoch)) { fail(); return; }
 		if (authority && (!authority->load() || !authority->id().isEmpty())) {
 			fail(tr("The known history root is missing or its local checkpoint cannot be read. No replacement was created. Restore the known root or use a new history namespace.")); return;
@@ -369,6 +380,7 @@ void CloudSyncHistory::cancel()
 	step = Step::Idle; deadline.stop(); initializationRetry.stop(); files.cancel(provider); continuation = {}; localUnchanged = {};
 	token.clear(); local.clear(); payload.clear(); pendingRoot.value = {};
 	authority.reset(); aliasStep = Step::Idle;
+	reviewedRoots.clear(); reviewIds.clear(); reviewIndex = 0;
 	files.setHistoryRootRecovery({}, {});
 }
 void CloudSyncHistory::fail(const QString &message, bool rejected)
@@ -386,7 +398,7 @@ void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessTo
 	initializationRetries = 0;
 	step = Step::Legacy;
 	if ((type != CloudSyncProviderType::GoogleDrive && type != CloudSyncProviderType::Dropbox) || token.isEmpty() || !hash(account) ||
-	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore", "import-legacy"}.contains(action) ||
+	    !CloudHistoryRecord::validEpoch(epoch) || !QStringList{"list", "migrate", "save", "restore", "import-legacy", "review-roots"}.contains(action) ||
 	    !CloudHistoryRecord::validXml(local) || (action == "restore" && !CloudHistoryRecord::validEpoch(revision))) { fail(); return; }
 	if (!authorityFile.isEmpty()) {
 		authority = std::make_unique<CloudHistoryAuthority>(authorityFile);
@@ -395,6 +407,15 @@ void CloudSyncHistory::start(CloudSyncProviderType type, const QString &accessTo
 		     string(authority->record().value, "account") != account || string(authority->record().value, "epoch") != epoch))) {
 			fail(tr("The saved history authority cannot be confirmed. Its checkpoint was kept; history access is paused.")); return;
 		}
+	}
+	if (action == "review-roots") {
+		deadline.start(180000);
+		if (provider == CloudSyncProviderType::GoogleDrive) {
+			step = Step::ReviewList; files.findHistoryRoots(token, CloudHistoryRecord::rootName(epoch));
+		} else {
+			reviewIds = {QString()}; read(CloudHistoryRecord::rootName(epoch), Step::ReviewRoot);
+		}
+		return;
 	}
 	if (action != "list") {
 		files.setHistoryRootRecovery(CloudHistoryRecord::rootName(epoch), [this](const QString &id, const QByteArray &data) {
@@ -422,6 +443,18 @@ void CloudSyncHistory::read(const QString &name, Step next)
 void CloudSyncHistory::received(const QString &, const QByteArray &data, const QString &version, const QString &id)
 {
 	if (step == Step::Idle) return;
+	if (step == Step::ReviewRoot || step == Step::VerifyReviewRoot) {
+		const auto record = CloudHistoryRecord::parse(data);
+		if (!record.valid() || string(record.value, "provider") != cloudSyncProviderDescriptor(provider).id ||
+		    string(record.value, "account") != account || string(record.value, "epoch") != epoch || version.isEmpty() ||
+		    !objectId(cloudSyncProviderDescriptor(provider).id, id) || reviewIndex >= reviewIds.size()) { fail(); return; }
+		if (provider == CloudSyncProviderType::Dropbox && step == Step::ReviewRoot) reviewIds[reviewIndex] = id;
+		if (id != reviewIds[reviewIndex]) { fail(); return; }
+		if (step == Step::ReviewRoot) reviewedRoots.append({id, version, record});
+		else if (id != reviewedRoots[reviewIndex].id || version != reviewedRoots[reviewIndex].version ||
+		         record.json() != reviewedRoots[reviewIndex].record.json()) { fail(); return; }
+		++reviewIndex; reviewNextRoot(); return;
+	}
 	if (step == Step::VerifyPristineAlias) {
 		const auto archived = CloudHistoryRecord::parse(data);
 		if (!authority || id != authority->id() || !authority->rebindPristine(id, archived, rootId, root)) {
@@ -497,6 +530,47 @@ void CloudSyncHistory::received(const QString &, const QByteArray &data, const Q
 		if (!next.completeUpload(uploadId, id, version)) { fail(); return; }
 		writeRoot(next, [this] { read(LegacyName, Step::CheckLegacy); });
 	}
+}
+void CloudSyncHistory::reviewNextRoot()
+{
+	if (reviewIndex >= reviewIds.size()) {
+		if (step == Step::ReviewRoot && !reviewIds.isEmpty()) { reviewIndex = 0; step = Step::VerifyReviewRoot; }
+		else {
+			if (provider == CloudSyncProviderType::GoogleDrive) {
+				step = Step::VerifyReviewList; files.findHistoryRoots(token, CloudHistoryRecord::rootName(epoch));
+			} else completeRootReview();
+			return;
+		}
+	}
+	if (step == Step::ReviewRoot)
+		files.downloadIdentity(provider, token, CloudHistoryRecord::rootName(epoch), reviewIds[reviewIndex]);
+	else {
+		const auto &entry = reviewedRoots[reviewIndex];
+		files.downloadExact(provider, token, CloudHistoryRecord::rootName(epoch), entry.id, entry.version);
+	}
+}
+void CloudSyncHistory::completeRootReview()
+{
+	if (!localUnchanged || !localUnchanged() || (authority && !authority->load())) { fail(); return; }
+	const auto knownId = authority ? authority->id() : QString();
+	QVariantList branches; bool conflict = false; int active = 0;
+	for (const auto &entry : reviewedRoots) {
+		const auto &record = entry.record; int pending = 0, reservations = 0;
+		const auto tickets = record.value.value("tickets").toObject();
+		for (auto it = tickets.begin(); it != tickets.end(); ++it) if (string(it.value().toObject(), "state") != "committed") ++pending;
+		const auto readers = record.value.value("reservations").toObject();
+		for (auto it = readers.begin(); it != readers.end(); ++it) if (it.value().toObject().value("active").toBool()) ++reservations;
+		const bool known = !knownId.isEmpty() && knownId == entry.id;
+		const bool matches = known && record.follows(authority->record());
+		conflict |= known && !matches; if (!record.pristine()) ++active;
+		branches.append(QVariantMap{{"versions", record.value.value("history").toArray().size()}, {"pendingUploads", pending},
+			{"activeReservations", reservations}, {"pristine", record.pristine()}, {"known", known}, {"matchesCheckpoint", matches}});
+	}
+	const QVariantMap report{{"initialized", false}, {"versions", QVariantList()}, {"legacyChanged", false},
+		{"branchesReviewed", true}, {"reviewedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+		{"branches", branches}, {"activeBranches", active}, {"hasCheckpoint", !knownId.isEmpty()},
+		{"knownRootMissing", !knownId.isEmpty() && !reviewIds.contains(knownId)}, {"checkpointConflict", conflict}};
+	cancel(); emit finished(report, {});
 }
 bool CloudSyncHistory::retryInitialization()
 {

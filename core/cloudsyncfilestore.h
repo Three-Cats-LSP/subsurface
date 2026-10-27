@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QMap>
 #include <QSet>
+#include <QStringList>
 
 #include <functional>
 
@@ -42,6 +43,8 @@ public:
 		const QString &fileName, const QString &fileId, const QString &version);
 	void downloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QString &fileId);
+	// Read-only discovery for branch review. Never chooses or renames a root.
+	void findHistoryRoots(const QString &accessToken, const QString &fileName);
 
 signals:
 	void uploadFinished(CloudSyncProviderType provider, const QString &fileName);
@@ -52,6 +55,7 @@ signals:
 	void versionedDownloadFinished(CloudSyncProviderType provider, const QString &fileName,
 		const QByteArray &data, const QString &version, const QString &fileId);
 	void writeConflict(CloudSyncProviderType provider, const QString &fileName);
+	void historyRootsFound(const QStringList &ids);
 
 private:
 	struct GoogleRecoveryFile { QString id, version; };
@@ -74,6 +78,8 @@ private:
 	void dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned = false,
 		const QString &expectedId = {}, const QString &expectedVersion = {});
 	void googleDownloadVersioned(const QString &accessToken, const QString &fileName, int attempt = 0);
+	void googleFindHistoryRoots(const QString &accessToken, const QString &fileName,
+		const QString &cursor, const QSet<QString> &cursors, const QStringList &ids);
 	void googleReadVersion(const QString &accessToken, const QString &fileName, const QString &fileId,
 		const std::function<void(const QString &)> &continuation, const std::function<void()> &changed = {});
 	void googleReadFileVersioned(const QString &accessToken, const QString &fileName, const QString &fileId,

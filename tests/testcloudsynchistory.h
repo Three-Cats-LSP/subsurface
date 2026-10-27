@@ -24,6 +24,8 @@ private slots:
 	void authorityCheckpoint();
 	void authorityPristineAlias();
 	void authorityStorageFailure();
+	void rootReview_data();
+	void rootReview();
 	void boundAuthority_data();
 	void boundAuthority();
 	void restoreRejection_data();

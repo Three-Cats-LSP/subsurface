@@ -881,6 +881,7 @@ void CloudSyncManager::runHistory(const QString &providerId, const QString &acti
 		setError(tr("Experimental history requires automatic sync off and no primary or backup assignment. Use an isolated test profile.")); return;
 	}
 	clearStorageReview(providerId); setError({});
+	if (historyReports.remove(providerId)) emit providersChanged();
 	syncLocalPayload = serializeCurrentDiveLog();
 	if (syncLocalPayload.isEmpty()) return;
 	syncLocalSha256 = CloudSyncManifest::sha256(syncLocalPayload);

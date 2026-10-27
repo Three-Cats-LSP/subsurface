@@ -410,9 +410,15 @@ Kirigami.ScrollablePage {
 								onClicked: CloudSync.runHistory(modelData.id, "list")
 							}
 							Components.NeoButton {
+								objectName: "reviewHistoryBranches-" + modelData.id
+								text: qsTr("Review branches"); compact: true; Layout.fillWidth: true
+								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
+								onClicked: CloudSync.runHistory(modelData.id, "review-roots")
+							}
+							Components.NeoButton {
 								objectName: "initializeHistory-" + modelData.id
 								text: qsTr("Initialize history"); compact: true; Layout.fillWidth: true
-								visible: !modelData.history.initialized
+								visible: !modelData.history.initialized && !modelData.history.branchesReviewed
 								enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 								onClicked: CloudSync.runHistory(modelData.id, "migrate")
 							}
@@ -427,6 +433,33 @@ Kirigami.ScrollablePage {
 								text: qsTr("Cancel"); compact: true; variant: "ghost"
 								visible: CloudSync.historyInProgress
 								onClicked: CloudSync.cancelHistory()
+							}
+						}
+						ColumnLayout {
+							objectName: "historyBranchesResult-" + modelData.id
+							property var report: providerCard.modelData.history
+							visible: !!report.branchesReviewed
+							Layout.fillWidth: true
+							Text {
+								text: parent.report.branchesReviewed
+									? qsTr("Found %1 histories. Every branch is kept. This review does not select or combine them.").arg((parent.report.branches || []).length) : ""
+								color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true
+							}
+							Text {
+								visible: !!parent.report.knownRootMissing || !!parent.report.checkpointConflict
+								text: qsTr("The history saved on this device is missing or has changed unexpectedly. History writes remain paused; recovery records are kept.")
+								color: tokens.textPrimary; wrapMode: Text.WordWrap; Layout.fillWidth: true
+							}
+							Repeater {
+								model: parent.report.branches || []
+								delegate: Text {
+									required property int index
+									required property var modelData
+									text: qsTr("History %1: %2 versions · %3 pending uploads · %4 active restores%5")
+										.arg(index + 1).arg(modelData.versions).arg(modelData.pendingUploads).arg(modelData.activeReservations)
+										.arg(modelData.matchesCheckpoint ? qsTr(" · Matches this device’s recovery record") : "")
+									color: tokens.textPrimary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+								}
 							}
 						}
 						Text {

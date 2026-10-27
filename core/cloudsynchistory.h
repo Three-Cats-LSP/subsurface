@@ -70,7 +70,10 @@ signals:
 	void failed(const QString &message, bool tokenRejected);
 private:
 	enum class Step { Idle, Legacy, Root, MigrationPayload, CheckLegacy, VerifyRoot,
-		Upload, VerifyPayload, RestorePayload, VerifyReservation, RetryInitialization, VerifyPristineAlias };
+		Upload, VerifyPayload, RestorePayload, VerifyReservation, RetryInitialization, VerifyPristineAlias,
+		ReviewList, ReviewRoot, VerifyReviewRoot, VerifyReviewList };
+	void reviewNextRoot();
+	void completeRootReview();
 	void read(const QString &name, Step next);
 	void received(const QString &name, const QByteArray &data, const QString &version, const QString &id);
 	void processRoot();
@@ -88,6 +91,10 @@ private:
 	QString token, account, epoch, action, revision, legacyHash, rootVersion, rootId, expectedHead, uploadId, reservationId;
 	QString legacyPayload, legacyPayloadHash;
 	CloudHistoryRecord root, pendingRoot;
+	struct ReviewedRoot { QString id, version; CloudHistoryRecord record; };
+	QList<ReviewedRoot> reviewedRoots;
+	QStringList reviewIds;
+	int reviewIndex = 0;
 	QByteArray local, payload;
 	Step step = Step::Idle;
 	Step aliasStep = Step::Idle;

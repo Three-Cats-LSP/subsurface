@@ -147,6 +147,62 @@ void CloudSyncFileStore::setHistoryRootRecovery(const QString &name,
 	historyRootRequiredId = requiredId;
 }
 
+void CloudSyncFileStore::findHistoryRoots(const QString &accessToken, const QString &fileName)
+{
+	static const QRegularExpression pattern(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.json$"));
+	if (accessToken.isEmpty() || !pattern.match(fileName).hasMatch()) {
+		emit operationError(CloudSyncProviderType::GoogleDrive, fileName, tr("History review requires a valid namespace.")); return;
+	}
+	googleFindHistoryRoots(accessToken, fileName, {}, {}, {});
+}
+
+void CloudSyncFileStore::googleFindHistoryRoots(const QString &accessToken, const QString &fileName,
+	const QString &cursor, const QSet<QString> &cursors, const QStringList &ids)
+{
+	QUrl url(QStringLiteral("https://www.googleapis.com/drive/v3/files"));
+	QUrlQuery query;
+	query.addQueryItem("spaces", "appDataFolder");
+	query.addQueryItem("q", QStringLiteral("name='%1' and trashed=false").arg(fileName));
+	query.addQueryItem("pageSize", "100");
+	query.addQueryItem("fields", "nextPageToken,incompleteSearch,files(id,name,mimeType)");
+	if (!cursor.isEmpty()) query.addQueryItem("pageToken", cursor);
+	url.setQuery(query);
+	auto *reply = networkManager->get(authorizedRequest(url, accessToken));
+	trackReply(CloudSyncProviderType::GoogleDrive, reply);
+	connect(reply, &QNetworkReply::finished, this, [this, reply, accessToken, fileName, cursors, ids] {
+		const auto bytes = reply->readAll(); reply->deleteLater();
+		if (reply->error() != QNetworkReply::NoError) {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName, replyError(reply, bytes),
+				reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401); return;
+		}
+		const auto invalid = [this, fileName] {
+			emit operationError(CloudSyncProviderType::GoogleDrive, fileName,
+				tr("History review is incomplete or changed. All branches were kept; review again before recovery."));
+		};
+		QJsonParseError error;
+		const auto document = QJsonDocument::fromJson(bytes, &error); const auto page = document.object();
+		if (error.error != QJsonParseError::NoError || !document.isObject() || !page.value("files").isArray() ||
+		    !page.value("incompleteSearch").isBool() || page.value("incompleteSearch").toBool() ||
+		    (page.contains("nextPageToken") && !page.value("nextPageToken").isString())) { invalid(); return; }
+		auto found = ids;
+		static const QRegularExpression idPattern(QStringLiteral("^[A-Za-z0-9_-]+$"));
+		for (const auto &entry : page.value("files").toArray()) {
+			const auto file = entry.toObject(); const auto id = file.value("id").toString();
+			const auto type = file.value("mimeType").toString();
+			if (!idPattern.match(id).hasMatch() || found.contains(id) || file.value("name").toString() != fileName ||
+			    (type != "application/json" && type != "application/octet-stream" && type != "text/plain") || found.size() >= 16) { invalid(); return; }
+			found.append(id);
+		}
+		const auto next = page.value("nextPageToken").toString();
+		if (!next.isEmpty()) {
+			if (next.size() > 2048 || cursors.contains(next) || cursors.size() >= 16) { invalid(); return; }
+			auto visited = cursors; visited.insert(next);
+			googleFindHistoryRoots(accessToken, fileName, next, visited, found); return;
+		}
+		found.sort(); emit historyRootsFound(found);
+	});
+}
+
 void CloudSyncFileStore::googleFindFile(const QString &accessToken, const QString &fileName,
 					const std::function<void(const QString &)> &continuation, int recoveryAttempt)
 {
