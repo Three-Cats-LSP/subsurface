@@ -1591,7 +1591,19 @@ void TestCloudSyncManager::testWorkspaceSelection()
 		} else {
 			manager.runWorkspace(provider, "review"); QTRY_COMPARE(completed.size(), 2); QCOMPARE(network.puts, puts); QCOMPARE(readFile(choiceFile), choiceBytes);
 			if (mode == 1) { join(); QTRY_COMPARE(completed.size(), 3); QCOMPARE(readFile(choiceFile), choiceBytes); QCOMPARE(network.puts, puts); }
-			if (mode == 0) { CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path(); QVERIFY(restarted.workspaceReport(provider).value("selected").toBool()); QVERIFY(!restarted.workspaceReport(provider).value("verified").toBool()); }
+			if (mode == 0) {
+				CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path();
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
+				QCOMPARE(restarted.tokens.value(provider).accountId, token.accountId);
+#else
+				// These platforms deliberately have no credential persistence backend.
+				// Restore a synthetic in-memory session to inspect the durable choice.
+				QVERIFY(!restarted.tokens.contains(provider));
+				restarted.tokens.insert(provider, manager.tokens.value(provider));
+#endif
+				QVERIFY(restarted.workspaceReport(provider).value("selected").toBool());
+				QVERIFY(!restarted.workspaceReport(provider).value("verified").toBool());
+			}
 		}
 		QCOMPARE(network.puts, puts);
 	} else if (mode == 2 || mode == 3) {
