@@ -124,7 +124,7 @@ protected:
 				if (create) { add(name, data); index = files.size() - 1; }
 				else { files[index].data = data; files[index].rev = "rev-" + QString::number(++serial); }
 				body = json({{"id", google ? files[index].id.mid(3) : files[index].id}, {"rev", files[index].rev}});
-			if (fault == 3 && publish) { status = 503; fault = 0; }
+				if (fault == 3 && publish) { status = 503; fault = 0; }
 				if (fault == 7 && !root) { auto m = CloudSyncManifest::forPayload(B); files[find(Legacy)].data = m.toJson(); fault = 0; }
 				if (fault == 8 && !root) guard = false;
 				if (fault == 11 && !root) defer = true;
@@ -310,6 +310,30 @@ void TestCloudSyncHistory::initialRootRecovery()
 	QCOMPARE(n.files[archived].data, pristine.json()); // Rename retains exact bytes and object identity.
 	QCOMPARE(n.files[2].id, firstId); QCOMPARE(n.files[3].id, secondId);
 	if (scenario == 1 || scenario == 8) QCOMPARE(r.value["tickets"].toObject().size(), 2); // Pending work stays protected.
+}
+void TestCloudSyncHistory::initializationRetryGuard_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	for (bool g : {false, true}) for (int s = 0; s < 3; ++s)
+		QTest::newRow(qPrintable(QString("%1-retry-guard%2").arg(g).arg(s))) << g << s;
+}
+void TestCloudSyncHistory::initializationRetryGuard()
+{
+	QFETCH(bool, google); QFETCH(int, scenario); Network n; n.seed(); n.fault = 4;
+	const auto legacy = n.content(Legacy); const auto epoch = uid();
+	const auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	CloudSyncHistory client(&n); QSignalSpy done(&client, &CloudSyncHistory::finished), errors(&client, &CloudSyncHistory::failed);
+	client.start(provider, "token", Account, epoch, "migrate", {}, A, [&] { return n.guard; });
+	QTRY_COMPARE(n.mutations, 2); // Root creation succeeded, registration conflicted; retry is waiting.
+	if (scenario == 0) client.cancel();
+	if (scenario == 1) n.guard = false;
+	if (scenario == 2) client.start(provider, "token", Account, epoch, "list", {}, A, [] { return true; });
+	QTest::qWait(650); // Beyond the first retry's maximum delay; no stale timer may write.
+	QCOMPARE(n.mutations, 2); QCOMPARE(done.size(), scenario == 2 ? 1 : 0); QCOMPARE(errors.size(), scenario == 1 ? 1 : 0);
+	n.guard = true;
+	client.start(provider, "token", Account, epoch, "migrate", {}, A, [] { return true; });
+	QTRY_COMPARE(done.size(), scenario == 2 ? 2 : 1);
+	QCOMPARE(n.content(Legacy), legacy); QVERIFY(n.allowed);
 }
 void TestCloudSyncHistory::restoreRejection_data()
 {
