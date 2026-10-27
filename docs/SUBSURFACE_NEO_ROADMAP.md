@@ -730,6 +730,8 @@ At `9c3d3dcf0`, the [development-gated coordinated history workflow](NEO_CLOUD_H
 
 ---
 
+On 2026-10-27, `a0f5b0d41` passed Windows launch/Clean/Modern/lifecycle, all 38 desktop and 35 mobile-target regression suites, planner, QML and Android compilation. Sixteen live Windows stages validated simultaneous history initialization/restart on both providers, additional unseeded Google setup and explicit legacy-branch copying. Independent audits reproduced all original 47 Google/nine Dropbox inventory digests and preserved credentials/baselines/local XML. New history objects and pending attempts were retained. Screenshot review found a narrow confirmation-footer defect; `8b620b6bd` fixes it and implements persistent local history authority checkpoints, with protocol/QML tests passed and full native/Windows checks pending. [Disposable deletion probes](NEO_CLOUD_DELETE_PROBES.md) separately verified conditional Google v2/Dropbox deletion and found Google v3 ignored a stale precondition. No application cleanup is enabled. Multiple-active-root resolution, production migration, retention state/fences and the deferred device/account gates remain open; see [the continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md).
+
 ## Milestone 14 — Web / WebAssembly & Deployment
 
 **Goal:** deploy a useful browser version while maximizing code sharing.
