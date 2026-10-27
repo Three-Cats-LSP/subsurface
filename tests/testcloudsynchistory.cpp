@@ -71,6 +71,7 @@ public:
 	QList<File> files;
 	int serial = 0, fault = 0, mutations = 0, renames = 0;
 	int writeFailureStatus = 0;
+	int readFailureStatus = 0;
 	QString archiveEpoch;
 	int archiveFailureStatus = 0;
 	bool loseArchiveAck = false, deferArchive = false;
@@ -186,6 +187,7 @@ protected:
 				if (fault == 5 && name.startsWith("subsurface-neo-history-") && name.endsWith(".xml")) { if (google) files[index].rev += "changed"; else meta = "{}"; }
 			}
 		}
+		if (!write && readFailureStatus) status = readFailureStatus;
 		if (response) body = response(r, body);
 		if (metadataResponse) {
 			if (google && path.startsWith("/drive/v2/files/") && op == GetOperation) body = metadataResponse(body);
@@ -933,6 +935,137 @@ void TestCloudSyncHistory::workspaceSelection()
 		const auto before = read(path); QVERIFY(!selection.select(first.key(), second)); QCOMPARE(read(path), before);
 	}
 	QCOMPARE(read(oldCheckpoint), QByteArray("preserve old checkpoint"));
+}
+
+void TestCloudSyncHistory::workspaceRecord_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"transitions", "future-envelope", "unknown-field", "foreign-account", "foreign-epoch", "bad-schema", "tickets-array",
+		"legacy-payload-name", "other-root-payload-name", "unsafe-object", "root-as-payload", "unsafe-revision", "rollback", "rebound-root",
+		"foreign-provider", "unknown-ticket-field", "oversized-record", "distinct-pristine-roots", "lost-pending-ticket", "advanced-sequence", "future-journal", "bad-reference"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceRecord()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid(), first = uid(), pending = uid(), reservation = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-a" : "id:root-a");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("legacy")); QVERIFY(root.valid()); const auto pristine = root;
+	QVERIFY(root.registerUpload(first, {}, CloudSyncManifest::sha256(A), A.size()));
+	QVERIFY(root.completeUpload(first, google ? "payload-a" : "id:payload-a", "payload-revision")); QVERIFY(root.publish(first, {}));
+	const auto committed = root;
+	QVERIFY(root.registerUpload(pending, first, CloudSyncManifest::sha256(B), B.size())); QVERIFY(root.reserve(reservation, first));
+	const auto original = root;
+	const auto changeJournal = [&](const char *field, const QJsonValue &value) { auto j = root.value["journal"].toObject(); j[QLatin1String(field)] = value; root.value["journal"] = j; };
+	const auto changeTicket = [&](const char *field, const QJsonValue &value) {
+		auto j = root.value["journal"].toObject(); auto tickets = j["tickets"].toObject(); auto t = tickets[first].toObject();
+		t[QLatin1String(field)] = value; tickets[first] = t; j["tickets"] = tickets; root.value["journal"] = j;
+	};
+	if (scenario == 0) {
+		QVERIFY(root.follows(pristine)); QVERIFY(root.follows(committed));
+		QCOMPARE(root.ticket(first)["name"].toString(), ref.payloadName(first));
+		const auto restored = uid(); QVERIFY(root.registerUpload(restored, first, CloudSyncManifest::sha256(A), A.size(), first, reservation));
+		QVERIFY(!root.release(reservation)); // An in-flight restore still requires its reservation.
+		QVERIFY(root.completeUpload(restored, google ? "restored-a" : "id:restored-a", "restore-revision")); QVERIFY(root.publish(restored, first));
+		QVERIFY(root.release(reservation)); QVERIFY(!root.publish(pending, first));
+		QCOMPARE(root.ticket(pending), original.ticket(pending)); QVERIFY(root.follows(original));
+		QCOMPARE(CloudWorkspaceRecord::parse(root.json()).json(), root.json());
+		QVERIFY(!CloudHistoryRecord::parse(root.json()).valid()); // Old history cannot write this format.
+		const auto before = root.json(); QVERIFY(!root.registerUpload(uid(), {}, CloudSyncManifest::sha256(B), B.size())); QCOMPARE(root.json(), before); return;
+	}
+	if (scenario == 12 || scenario == 17 || scenario == 18 || scenario == 19) {
+		if (scenario == 12) root = committed;
+		if (scenario == 17) root = CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-b" : "id:root-b"), CloudSyncManifest::sha256("legacy"));
+		if (scenario == 18) { auto tickets = root.value["journal"].toObject()["tickets"].toObject(); tickets.remove(pending); changeJournal("tickets", tickets); }
+		if (scenario == 19) changeJournal("sequence", root.value["journal"].toObject()["sequence"].toInt() + 1);
+		QVERIFY(root.valid());
+		if (scenario == 19) { QVERIFY(root.follows(original)); QVERIFY(!original.follows(root)); }
+		else QVERIFY(!root.follows(original));
+		if (scenario == 17) QVERIFY(!root.follows(pristine)); return;
+	}
+	if (scenario == 1) root.value["format"] = "unknown-future-workspace";
+	if (scenario == 2) root.value["unknown_safety_field"] = true;
+	if (scenario == 3) changeJournal("account", CloudSyncManifest::sha256("other-account"));
+	if (scenario == 4) changeJournal("epoch", uid());
+	if (scenario == 5) root.value["schema"] = 3;
+	if (scenario == 6) changeJournal("tickets", QJsonArray());
+	if (scenario == 7) changeTicket("name", CloudHistoryRecord::payloadName(epoch, first));
+	if (scenario == 8) changeTicket("name", CloudWorkspaceReference::create(provider, Account, epoch, google ? "root-b" : "id:root-b").payloadName(first));
+	if (scenario == 9) changeTicket("object", "unsafe/id");
+	if (scenario == 10) changeTicket("object", ref.value["root_id"]);
+	if (scenario == 11) changeTicket("version", "unsafe\nrevision");
+	if (scenario == 13) { auto changed = ref.value; changed["root_id"] = google ? "root-b" : "id:root-b"; root.value["workspace"] = changed; }
+	if (scenario == 14) changeJournal("provider", google ? "dropbox" : "google-drive");
+	if (scenario == 15) changeTicket("unknown_safety_field", true);
+	if (scenario == 16) {
+		QVERIFY(!CloudWorkspaceRecord::parse(root.json() + QByteArray(1024 * 1024 + 3073, ' ')).valid()); return;
+	}
+	if (scenario == 20) changeJournal("format", "unknown-future-journal");
+	if (scenario == 21) { auto changed = ref.value; changed["unknown_safety_field"] = true; root.value["workspace"] = changed; }
+	QVERIFY(!root.valid()); QVERIFY(!CloudWorkspaceRecord::parse(root.json()).valid()); QVERIFY(!root.follows(original));
+	const auto invalid = root.json(); QVERIFY(!root.registerUpload(uid(), first, CloudSyncManifest::sha256(B), B.size())); QCOMPARE(root.json(), invalid);
+}
+void TestCloudSyncHistory::workspaceOpen_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"verified", "foreign-account", "foreign-provider", "wrong-self-id", "wrong-epoch", "missing-root", "former-name-replaced", "future-format",
+		"server-error", "token-rejected", "cancel", "scope-changes", "guard-refused", "rollback", "foreign-checkpoint", "invalid-checkpoint", "pending-advance",
+		"wrong-metadata-id", "missing-revision", "same-name-root", "malformed-json", "oversized-root", "new-device", "empty-token", "missing-scope-guard"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-open-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceOpen()
+{
+	QFETCH(bool, google); QFETCH(int, scenario); Network n; n.seed();
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid(), first = uid();
+	n.add(CloudWorkspaceReference::create(provider, Account, epoch, google ? "temporary" : "id:temporary").rootName(), {});
+	const auto id = google ? n.files[2].id.mid(3) : n.files[2].id;
+	const auto ref = CloudWorkspaceReference::create(provider, Account, epoch, id);
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("legacy"));
+	QVERIFY(root.registerUpload(first, {}, CloudSyncManifest::sha256(A), A.size()));
+	QVERIFY(root.completeUpload(first, google ? "payload-a" : "id:payload-a", "v1")); QVERIFY(root.publish(first, {}));
+	auto checkpoint = root;
+	if (scenario == 3 || scenario == 4) root = CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, scenario == 4 ? uid() : epoch,
+		scenario == 3 ? (google ? "wrong-root" : "id:wrong-root") : id), CloudSyncManifest::sha256("legacy"));
+	if (scenario == 7) root.value["format"] = "unknown-future-root";
+	if (scenario == 13) QVERIFY(checkpoint.registerUpload(uid(), first, CloudSyncManifest::sha256(B), B.size()));
+	if (scenario == 14) checkpoint = CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, epoch, google ? "other-root" : "id:other-root"), CloudSyncManifest::sha256("legacy"));
+	if (scenario == 15) checkpoint.value["unknown_safety_field"] = true;
+	if (scenario == 16) QVERIFY(root.registerUpload(uid(), first, CloudSyncManifest::sha256(B), B.size()));
+	n.files[2].data = root.json();
+	if (scenario == 5) n.files.removeAt(2);
+	if (scenario == 6) { n.files[2].name = "preserved-elsewhere.json"; n.add(ref.rootName(), root.json()); }
+	if (scenario == 8 || scenario == 9) n.readFailureStatus = scenario == 8 ? 503 : 401;
+	if (scenario == 10) n.deferReads = true;
+	if (scenario == 12) n.guard = false;
+	if (scenario == 17 || scenario == 18) n.metadataResponse = [&](const QByteArray &bytes) {
+		auto m = QJsonDocument::fromJson(bytes).object(); m[scenario == 17 ? "id" : (google ? "etag" : "rev")] = scenario == 17 ? "wrong-id" : ""; return n.json(m);
+	};
+	if (scenario == 19) n.add(ref.rootName(), CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, epoch, google ? "other-root" : "id:other-root"), CloudSyncManifest::sha256("legacy")).json());
+	if (scenario == 20) n.files[2].data = "invalid-json";
+	if (scenario == 21) n.files[2].data = QByteArray(1024 * 1024 + 3073, ' ');
+	int requests = 0, lookups = 0;
+	n.requested = [&](const QNetworkRequest &request) {
+		++requests; if (request.url().path() == "/drive/v3/files") ++lookups;
+		if (scenario == 11) n.guard = false;
+	};
+	const auto before = n.files;
+	CloudWorkspaceOpen client(&n); QSignalSpy done(&client, &CloudWorkspaceOpen::finished), errors(&client, &CloudWorkspaceOpen::failed);
+	if (scenario == 22) checkpoint.value = {};
+	const std::function<bool()> guard = scenario == 24 ? std::function<bool()>() : [&] { return n.guard; };
+	client.start(scenario == 23 ? "" : "token", scenario == 2 ? (google ? "dropbox" : "google-drive") : provider,
+		scenario == 1 ? CloudSyncManifest::sha256("other-account") : Account, ref, guard, checkpoint);
+	if (scenario == 10) {
+		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0);
+	} else {
+		QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = scenario == 0 || scenario == 16 || scenario == 19 || scenario == 22;
+		QCOMPARE(done.size(), int(success));
+		if (success) { QCOMPARE(done.first()[0].toJsonObject(), root.value); QCOMPARE(done.first()[1].toString(), n.files[2].rev); }
+		if (scenario == 9) QVERIFY(errors.first()[1].toBool());
+	}
+	if (scenario == 1 || scenario == 2 || scenario == 12 || scenario == 14 || scenario == 15 || scenario == 23 || scenario == 24) QCOMPARE(requests, 0);
+	QCOMPARE(lookups, 0); QCOMPARE(n.mutations, 0); QCOMPARE(n.files.size(), before.size());
+	for (int i = 0; i < before.size(); ++i) { QCOMPARE(n.files[i].data, before[i].data); QCOMPARE(n.files[i].name, before[i].name); QCOMPARE(n.files[i].rev, before[i].rev); }
+	QVERIFY(n.allowed);
 }
 
 void TestCloudSyncHistory::invalidRecords_data()

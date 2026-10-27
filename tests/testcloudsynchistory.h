@@ -26,6 +26,10 @@ private slots:
 	void workspaceReference();
 	void workspaceSelection_data();
 	void workspaceSelection();
+	void workspaceRecord_data();
+	void workspaceRecord();
+	void workspaceOpen_data();
+	void workspaceOpen();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();

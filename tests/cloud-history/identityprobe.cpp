@@ -6,6 +6,7 @@
 #include "core/cloudsyncfilestore.h"
 #include "core/cloudsyncmanifest.h"
 #include "core/cloudsynchistory.h"
+#include "core/cloudsyncworkspace.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonDocument>
@@ -34,15 +35,39 @@ int main(int argc, char **argv)
 	const auto name = get("name"), id = get("id"), token = get("token"), version = get("version"), mode = get("mode");
 	const auto body = get("body").toUtf8();
 	const bool archival = mode == "archive";
+	const bool workspace = mode == "workspace-open";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
-	if (!valid || (!google && get("provider") != "dropbox") || !(archival ? rootFixture : fixture).match(name).hasMatch() ||
-	    (mode != "read" && mode != "write" && !archival) || token.isEmpty() || token.size() > 8192 ||
+	const QRegularExpression workspaceFixture(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
+	if (!valid || (!google && get("provider") != "dropbox") || !(workspace ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch() ||
+	    (mode != "read" && mode != "write" && !archival && !workspace) || token.isEmpty() || token.size() > 8192 ||
 	    !QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(get("before_sha256")).hasMatch() ||
-	    (archival && (!google || version.isEmpty() || body.size() > 8192)) ||
+	    ((archival || workspace) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
 	QNetworkAccessManager network;
+	if (workspace) {
+		const auto payload = QJsonDocument::fromJson(body).object();
+		CloudWorkspaceReference ref; ref.value = payload.value("reference").toObject();
+		CloudWorkspaceRecord checkpoint; checkpoint.value = payload.value("checkpoint").toObject();
+		if (payload.size() != 3 || !payload.value("checkpoint").isObject() || !ref.valid() || ref.value.value("root_id").toString() != id ||
+		    ref.rootName() != name) return output({{"ok", false}, {"phase", "input"}}, 2);
+		CloudWorkspaceOpen open(&network);
+		QObject::connect(&open, &CloudWorkspaceOpen::finished, &app, [&](const QJsonObject &root, const QString &actualVersion) {
+			CloudWorkspaceRecord record; record.value = root;
+			const auto marker = CloudSyncManifest::sha256(("neo-workspace-probe:legacy:" + ref.value.value("epoch").toString()).toUtf8());
+			const auto hash = CloudSyncManifest::sha256(record.json());
+			const bool confirmed = hash == get("before_sha256") && (version.isEmpty() || version == actualVersion) &&
+				root.value("journal").toObject().value("legacy_sha256").toString() == marker;
+			output({{"ok", confirmed}, {"phase", "workspace-verified"}, {"sha256", hash}, {"version", actualVersion}, {"workspace_key", ref.key()}}, confirmed ? 0 : 2);
+			app.exit(confirmed ? 0 : 2);
+		});
+		QObject::connect(&open, &CloudWorkspaceOpen::failed, &app, [&](const QString &, bool rejected) {
+			output({{"ok", false}, {"phase", "workspace-open"}, {"tokenRejected", rejected}}, 2); app.exit(2);
+		});
+		QTimer::singleShot(0, &app, [&] { open.start(token, get("provider"), payload.value("account").toString(), ref, [] { return true; }, checkpoint); });
+		return app.exec();
+	}
 	if (archival) {
 		const auto payload = QJsonDocument::fromJson(body).object();
 		CloudHistoryFence source, coordinator; source.value = payload.value("source").toObject(); coordinator.value = payload.value("coordinator").toObject();
