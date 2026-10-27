@@ -15,6 +15,7 @@ on:
       - 'tests/testcloudsyncmanager.*'
       - 'tests/testcloudsyncreview.*'
       - 'tests/testcloudsynchistory.*'
+      - 'tests/cloud-history/**'
       - 'tests/testqPrefCloudStorage.*'
       - 'tests/CMakeLists.txt'
   workflow_dispatch:
@@ -22,8 +23,22 @@ on:
 permissions: read-all
 
 jobs:
+  history-protocol:
+    name: History protocol interleavings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Qt protocol test dependencies
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev
+      - name: Build and test history protocol
+        run: |
+          cmake -S tests/cloud-history -B build-history -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-history --parallel 2
+          ctest --test-dir build-history --output-on-failure
+
   native-cloud-sync-tests:
     name: Native Qt 6 cloud sync tests
+    needs: history-protocol
     uses: ./.github/workflows/linux-debian-generic-qt6.yml
     with:
       container-image: debian:trixie
