@@ -881,7 +881,7 @@ void TestCloudSyncHistory::workspaceReference()
 void TestCloudSyncHistory::workspaceSelection_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
-	const QStringList cases = {"switch-and-restart", "stale-process", "foreign-account", "corrupt-file", "future-format", "lock", "blocked-parent", "oversized-file", "tampered-reference", "retain-bound", "new-parent", "invalid-reference"};
+	const QStringList cases = {"switch-and-restart", "stale-process", "foreign-account", "corrupt-file", "future-format", "lock", "blocked-parent", "oversized-file", "tampered-reference", "retain-bound", "new-parent", "invalid-reference", "away-and-back-race", "old-format", "bad-choice-version", "bad-expected-version"};
 	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
 }
 void TestCloudSyncHistory::workspaceSelection()
@@ -898,27 +898,33 @@ void TestCloudSyncHistory::workspaceSelection()
 	const auto oldCheckpoint = temporary.filePath("old-history-checkpoint.json"); QVERIFY(write(oldCheckpoint, "preserve old checkpoint"));
 	CloudWorkspaceSelection selection(path, provider, Account); QVERIFY(selection.load()); QVERIFY(!selection.selected().valid());
 	if (scenario == 10) QVERIFY(!QFileInfo::exists(QFileInfo(path).absolutePath()));
-	QVERIFY(selection.select({}, first)); const auto originalBytes = read(path);
+	QVERIFY(selection.select({}, first)); const auto originalBytes = read(path); const auto firstVersion = selection.version(); QVERIFY(CloudHistoryRecord::validEpoch(firstVersion));
 	if (scenario == 0 || scenario == 10) {
 		QVERIFY(selection.select({}, first)); QCOMPARE(read(path), originalBytes); // Lost local acknowledgement, no replay.
-		QVERIFY(selection.select(first.key(), second)); QVERIFY(selection.select(second.key(), first));
+		QVERIFY(selection.select(selection.version(), second)); QVERIFY(selection.select(selection.version(), first)); QVERIFY(selection.version() != firstVersion);
 		CloudWorkspaceSelection restarted(path, provider, Account); QVERIFY(restarted.load()); QCOMPARE(restarted.selected().key(), first.key());
+		QCOMPARE(restarted.version(), selection.version());
 		QCOMPARE(restarted.knownReferences().size(), 2); QCOMPARE(restarted.knownReferences()[second.key()].toObject(), second.value);
 	} else if (scenario == 1) {
-		CloudWorkspaceSelection other(path, provider, Account); QVERIFY(other.load()); QVERIFY(other.select(first.key(), second)); const auto changed = read(path);
-		QVERIFY(!selection.select(first.key(), third)); QCOMPARE(selection.selected().key(), second.key()); QCOMPARE(read(path), changed);
-		QVERIFY(selection.select(second.key(), third)); QCOMPARE(selection.knownReferences().size(), 3);
+		CloudWorkspaceSelection other(path, provider, Account); QVERIFY(other.load()); QVERIFY(other.select(other.version(), second)); const auto changed = read(path);
+		QVERIFY(!selection.select(firstVersion, third)); QCOMPARE(selection.selected().key(), second.key()); QCOMPARE(read(path), changed);
+		QVERIFY(selection.select(selection.version(), third)); QCOMPARE(selection.knownReferences().size(), 3);
 	} else if (scenario == 6) {
 		const auto blocker = temporary.filePath("blocked"); QVERIFY(write(blocker, "unrelated blocker"));
 		CloudWorkspaceSelection blocked(blocker + "/choice.json", provider, Account); QVERIFY(!blocked.select({}, second)); QCOMPARE(read(blocker), QByteArray("unrelated blocker"));
 	} else if (scenario == 9) {
 		for (int i = 1; i < 32; ++i) {
 			const auto next = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root-" + QString::number(i) : "id:root-" + QString::number(i));
-			QVERIFY(selection.select(selection.selected().key(), next));
+			QVERIFY(selection.select(selection.version(), next));
 		}
-		const auto full = read(path); QVERIFY(!selection.select(selection.selected().key(), second)); QCOMPARE(read(path), full);
-		QVERIFY(selection.select(selection.selected().key(), first)); QCOMPARE(selection.knownReferences().size(), 32);
+		const auto full = read(path); QVERIFY(!selection.select(selection.version(), second)); QCOMPARE(read(path), full);
+		QVERIFY(selection.select(selection.version(), first)); QCOMPARE(selection.knownReferences().size(), 32);
 		QCOMPARE(selection.knownReferences()[first.key()].toObject(), first.value);
+	} else if (scenario == 12) {
+		CloudWorkspaceSelection other(path, provider, Account); QVERIFY(other.load()); QVERIFY(other.select(other.version(), second)); QVERIFY(other.select(other.version(), first));
+		const auto changed = read(path); QCOMPARE(other.selected().key(), first.key()); QVERIFY(other.version() != firstVersion);
+		QVERIFY(!selection.select(firstVersion, third)); QCOMPARE(read(path), changed); QCOMPARE(selection.version(), other.version());
+		QVERIFY(selection.select(firstVersion, first)); QCOMPARE(read(path), changed); // Same current choice needs no write.
 	} else {
 		std::unique_ptr<QLockFile> held;
 		if (scenario == 2) second.value["account"] = CloudSyncManifest::sha256("other-account");
@@ -932,7 +938,13 @@ void TestCloudSyncHistory::workspaceSelection()
 		if (scenario == 5) { held = std::make_unique<QLockFile>(path + ".lock"); QVERIFY(held->tryLock(0)); }
 		if (scenario == 7) QVERIFY(write(path, QByteArray(64 * 1024 + 1, ' ')));
 		if (scenario == 11) second.value["unknown_field"] = true;
-		const auto before = read(path); QVERIFY(!selection.select(first.key(), second)); QCOMPARE(read(path), before);
+		if (scenario == 13 || scenario == 14) {
+			auto value = QJsonDocument::fromJson(read(path)).object();
+			if (scenario == 13) { value["format"] = "neo-workspace-selection-development-1"; value.remove("version"); }
+			else value["version"] = "invalid-choice-version";
+			QVERIFY(write(path, QJsonDocument(value).toJson(QJsonDocument::Compact)));
+		}
+		const auto before = read(path); QVERIFY(!selection.select(scenario == 15 ? QString("invalid-expected-version") : firstVersion, second)); QCOMPARE(read(path), before);
 	}
 	QCOMPARE(read(oldCheckpoint), QByteArray("preserve old checkpoint"));
 }

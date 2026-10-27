@@ -8,6 +8,7 @@
 #include <QLockFile>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QUuid>
 
 namespace {
 constexpr int ReferenceLimit = 2048, SelectionLimit = 64 * 1024, WorkspaceLimit = 32;
@@ -241,7 +242,7 @@ CloudWorkspaceReference CloudWorkspaceSelection::selected() const
 }
 bool CloudWorkspaceSelection::readUnlocked()
 {
-	selectedKey.clear(); references = {};
+	selectedKey.clear(); choiceVersion.clear(); references = {};
 	if (!providerValid(provider) || !hash(account)) return false;
 	const QFileInfo info(fileName);
 	if (!info.exists()) return !info.isSymLink();
@@ -250,37 +251,38 @@ bool CloudWorkspaceSelection::readUnlocked()
 	const auto bytes = file.read(SelectionLimit + 1);
 	if (bytes.size() > SelectionLimit || file.error() != QFileDevice::NoError) return false;
 	const auto root = QJsonDocument::fromJson(bytes).object();
-	if (!fields(root, {"schema", "format", "provider", "account", "selected", "references"}) || root.value("schema") != QJsonValue(1) ||
-	    string(root, "format") != "neo-workspace-selection-development-1" || string(root, "provider") != provider || string(root, "account") != account ||
-	    !root.value("references").isObject() || !hash(string(root, "selected"))) return false;
+	if (!fields(root, {"schema", "format", "provider", "account", "selected", "version", "references"}) || root.value("schema") != QJsonValue(1) ||
+	    string(root, "format") != "neo-workspace-selection-development-2" || string(root, "provider") != provider || string(root, "account") != account ||
+	    !root.value("references").isObject() || !hash(string(root, "selected")) || !uuid(string(root, "version"))) return false;
 	const auto known = root.value("references").toObject();
 	if (known.isEmpty() || known.size() > WorkspaceLimit || !known.contains(string(root, "selected"))) return false;
 	for (auto it = known.begin(); it != known.end(); ++it) {
 		CloudWorkspaceReference reference; reference.value = it.value().toObject();
 		if (!reference.matches(provider, account) || reference.key() != it.key()) return false;
 	}
-	references = known; selectedKey = string(root, "selected"); return true;
+	references = known; selectedKey = string(root, "selected"); choiceVersion = string(root, "version"); return true;
 }
 bool CloudWorkspaceSelection::load()
 {
-	selectedKey.clear(); references = {};
+	selectedKey.clear(); choiceVersion.clear(); references = {};
 	if (fileName.isEmpty()) return false;
 	if (!QFileInfo(QFileInfo(fileName).absolutePath()).exists()) return readUnlocked();
 	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && readUnlocked();
 }
-bool CloudWorkspaceSelection::select(const QString &expectedKey, const CloudWorkspaceReference &reference)
+bool CloudWorkspaceSelection::select(const QString &expectedVersion, const CloudWorkspaceReference &reference)
 {
-	if (fileName.isEmpty() || !reference.matches(provider, account) || (!expectedKey.isEmpty() && !hash(expectedKey)) ||
+	if (fileName.isEmpty() || !reference.matches(provider, account) || (!expectedVersion.isEmpty() && !uuid(expectedVersion)) ||
 	    !QDir().mkpath(QFileInfo(fileName).absolutePath())) return false;
 	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !readUnlocked()) return false;
 	const auto key = reference.key();
 	if (selectedKey == key) return true; // Reconcile an already completed local choice without rewriting it.
-	if (selectedKey != expectedKey || (!references.contains(key) && references.size() == WorkspaceLimit)) return false;
+	if (choiceVersion != expectedVersion || (!references.contains(key) && references.size() == WorkspaceLimit)) return false;
 	auto next = references; next[key] = reference.value;
-	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", "neo-workspace-selection-development-1"}, {"provider", provider},
-		{"account", account}, {"selected", key}, {"references", next}}).toJson(QJsonDocument::Compact);
+	const auto nextVersion = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", "neo-workspace-selection-development-2"}, {"provider", provider},
+		{"account", account}, {"selected", key}, {"version", nextVersion}, {"references", next}}).toJson(QJsonDocument::Compact);
 	if (bytes.size() > SelectionLimit) return false;
 	QSaveFile file(fileName);
 	if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return false;
-	return readUnlocked() && selectedKey == key && references == next;
+	return readUnlocked() && selectedKey == key && choiceVersion == nextVersion && references == next;
 }

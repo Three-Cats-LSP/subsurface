@@ -28,12 +28,13 @@ class CloudWorkspaceSelection {
 public:
 	CloudWorkspaceSelection(const QString &fileName, const QString &provider, const QString &account);
 	bool load();
-	bool select(const QString &expectedKey, const CloudWorkspaceReference &reference);
+	bool select(const QString &expectedVersion, const CloudWorkspaceReference &reference);
 	CloudWorkspaceReference selected() const;
+	QString version() const { return choiceVersion; }
 	QJsonObject knownReferences() const { return references; }
 private:
 	bool readUnlocked();
-	QString fileName, provider, account, selectedKey;
+	QString fileName, provider, account, selectedKey, choiceVersion;
 	QJsonObject references;
 };
 

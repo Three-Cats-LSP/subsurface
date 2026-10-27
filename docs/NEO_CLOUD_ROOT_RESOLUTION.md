@@ -1,6 +1,8 @@
-# Active history-root resolution: next protocol gate
+# Active history-root resolution: development foundations
 
 Design constraints, 2026-10-27; proof follow-up 2026-10-28 JST. The complete resolution protocol is **not implemented or proved**. Native fence/handoff, exact-ID update and local-proof foundations exist; no application action publishes fences or resolves roots. [Branch review](NEO_CLOUD_BRANCH_REVIEW.md) is implemented and Windows-validated; it deliberately refuses to elect between active roots. [Local checkpoints](NEO_CLOUD_AUTHORITY.md) protect an established profile but do not establish global authority for a new device.
+
+**Product direction updated 2026-10-28 JST:** the owner chose [explicit workspace selection](NEO_CLOUD_AUTHORITY_CHOICES.md), retaining private storage permissions and adding no coordination service. Production work now follows [self-bound physical workspaces](NEO_CLOUD_WORKSPACES.md), not automatic per-account election or automatic absorption of every same-name root. Concurrent creators may leave separate protected workspaces; user selection and copy migration preserve other branches. The fence/handoff rules below remain constraints/evidence for the older experimental format, not approval to expose an unfinished resolver or a prerequisite to implement a global election service. Existing ordinary sync and all original roots remain unchanged.
 
 ## Record-level foundation
 

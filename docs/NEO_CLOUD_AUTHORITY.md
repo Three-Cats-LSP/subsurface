@@ -2,6 +2,8 @@
 
 Implemented and Windows-validated at `8b620b6bd` on 2026-10-27. This is another development-gated increment of [coordinated cloud history](NEO_CLOUD_HISTORY.md). It does not migrate ordinary synchronization or enable cleanup.
 
+The later [explicit workspace decision](NEO_CLOUD_AUTHORITY_CHOICES.md) uses immutable provider/account/epoch/physical-root references and separate [per-workspace checkpoints](NEO_CLOUD_WORKSPACES.md). It does not broaden the pristine-alias exception described here. These older development history checkpoints and sources remain protected during any future copy migration.
+
 ## Stored state and boundaries
 
 Before using a history root, native Neo records its exact provider object identity and complete validated control record in local application data under `neo-history-authority/`. The filename hashes the settings/profile scope, provider, verified account hash and namespace epoch. The checkpoint contains version/ticket/reservation metadata, never XML payloads, account email addresses or OAuth credentials. OAuth tokens retain their existing secure-store path.
