@@ -22,6 +22,7 @@ add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory -o "${CMAKE_CURR
 # Explicit developer tool: no credentials or live calls are part of CTest.
 # Its caller verifies the disposable account and newly created fixture IDs.
 add_executable(NeoCloudIdentityProbe identityprobe.cpp
+	${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
     ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
     ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
     ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)

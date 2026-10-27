@@ -34,6 +34,10 @@ public:
 	// create mode. Confirm the current identity/body again before publication.
 	void uploadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId);
+	// Transport primitive for a verified sealed history source. Caller must
+	// verify its fence/body and durable coordinator intent before invoking it.
+	// Google v2 ETag CAS only; never looks up a name, moves a folder or deletes.
+	void archiveGoogleHistory(const QString &accessToken, const QString &rootName, const QString &fileId, const QString &version);
 	void downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName);
 	// History uses strict reads: duplicate legacy names must never trigger a rename.
 	void setStrictReads(bool enabled) { strictReads = enabled; }
@@ -62,6 +66,7 @@ signals:
 		const QByteArray &data, const QString &version, const QString &fileId);
 	void writeConflict(CloudSyncProviderType provider, const QString &fileName);
 	void historyRootsFound(const QStringList &ids);
+	void historyRootArchived(const QString &archiveName, const QString &fileId);
 
 private:
 	struct GoogleRecoveryFile { QString id, version; };

@@ -61,6 +61,7 @@ public:
 	bool acknowledge(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name);
 	bool acknowledges(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const;
 private:
+	friend class CloudHistoryArchive;
 	bool matchesSource(const QString &sourceId, const CloudHistoryFence &source, const QString &version, const QString &name) const;
 	bool replace(const QJsonObject &candidate);
 };
@@ -88,6 +89,36 @@ private:
 	bool writeUnlocked(const QString &id, const CloudHistoryRecord &root);
 	QString fileName, rootId;
 	CloudHistoryRecord checkpoint;
+};
+
+// Archive one already sealed Google source, retaining its complete body/ID.
+// Does not elect, seal, acknowledge, rebind or activate an authority. The caller
+// supplies fresh verified account scope and a durable coordinator intent.
+class CloudHistoryArchive : public QObject {
+	Q_OBJECT
+public:
+	explicit CloudHistoryArchive(QNetworkAccessManager *network, QObject *parent = nullptr);
+	~CloudHistoryArchive() override;
+	void start(const QString &token, const QString &account, const QString &sourceId, const CloudHistoryFence &source,
+		const QString &sealedVersion, const QString &targetId, const CloudHistoryFence &coordinator, const std::function<bool()> &scopeCurrent);
+	void cancel();
+signals:
+	// Fresh coordinator/control revision and exact archived-source revision.
+	// Publication of a matching acknowledgement is a separate target CAS.
+	void finished(const QJsonObject &coordinator, const QString &targetVersion, const QString &sourceVersion);
+	void failed(const QString &message, bool tokenRejected);
+private:
+	enum class Step { Idle, CoordinatorBefore, ArchivedBefore, OriginalBefore, Rename, ArchivedAfter, CoordinatorAfter };
+	bool current();
+	void read(const QString &name, const QString &id, Step next);
+	void received(const QString &name, const QByteArray &data, const QString &version, const QString &id);
+	void fail(bool rejected = false);
+	CloudSyncFileStore files;
+	QTimer deadline;
+	CloudHistoryFence source, coordinator;
+	QString token, sourceId, targetId, rootName, archiveName, sealedVersion, archivedVersion;
+	std::function<bool()> scopeCurrent;
+	Step step = Step::Idle;
 };
 
 class CloudSyncHistory : public QObject {

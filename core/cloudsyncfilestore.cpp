@@ -617,6 +617,33 @@ void CloudSyncFileStore::uploadIdentity(CloudSyncProviderType provider, const QS
 	else dropboxUpload(accessToken, fileName, data, true, version, fileId);
 }
 
+void CloudSyncFileStore::archiveGoogleHistory(const QString &accessToken, const QString &rootName, const QString &fileId, const QString &version)
+{
+	const QRegularExpression pattern(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
+	if (accessToken.isEmpty() || !pattern.match(rootName).hasMatch() || fileId.size() > 512 ||
+	    !QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(fileId).hasMatch() || version.isEmpty() ||
+	    version.size() > 512 || version.contains(QChar::Null) || version.contains('\r') || version.contains('\n')) {
+		emit operationError(CloudSyncProviderType::GoogleDrive, rootName, tr("History archive identity is incomplete. Review the branches before retrying.")); return;
+	}
+	const auto archived = rootName.chopped(5) + "-sealed-" + CloudSyncManifest::sha256(fileId.toUtf8()) + ".json";
+	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://www.googleapis.com/drive/v2/files/%1?fields=id,title,etag").arg(fileId)), accessToken);
+	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+	request.setRawHeader("If-Match", version.toUtf8());
+	auto *reply = networkManager->sendCustomRequest(request, "PATCH", compactJson({{"title", archived}}));
+	trackReply(CloudSyncProviderType::GoogleDrive, reply);
+	connect(reply, &QNetworkReply::finished, this, [this, reply, rootName, archived, fileId] {
+		const auto bytes = reply->readAll(); const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		reply->deleteLater();
+		if (reply->error() == QNetworkReply::NoError) {
+			const auto metadata = QJsonDocument::fromJson(bytes).object();
+			if (metadata.value("id").toString() == fileId && metadata.value("title").toString() == archived && !metadata.value("etag").toString().isEmpty())
+				emit historyRootArchived(archived, fileId);
+			else emit operationError(CloudSyncProviderType::GoogleDrive, rootName, tr("Google Drive could not confirm the archived identity. Review the branches before retrying."));
+		} else if (status == 412 || status == 404) emit writeConflict(CloudSyncProviderType::GoogleDrive, rootName);
+		else emit operationError(CloudSyncProviderType::GoogleDrive, rootName, replyError(reply, bytes), status == 401);
+	});
+}
+
 void CloudSyncFileStore::downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName)
 {
 	if (safeRemoteName(fileName).isEmpty() || accessToken.isEmpty()) {

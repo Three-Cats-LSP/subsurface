@@ -507,6 +507,91 @@ QVariantMap CloudHistoryRecord::report() const
 	return {{"initialized", !head().isEmpty()}, {"versions", versions}, {"legacyChanged", false}};
 }
 
+CloudHistoryArchive::CloudHistoryArchive(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
+{
+	files.setStrictReads(true); files.setResponseLimit(RecordLimit);
+	deadline.setSingleShot(true); deadline.setInterval(180000);
+	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
+	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this,
+		[this](CloudSyncProviderType, const QString &name, const QByteArray &data, const QString &version, const QString &id) { received(name, data, version, id); });
+	connect(&files, &CloudSyncFileStore::historyRootArchived, this, [this](const QString &name, const QString &id) {
+		if (!current()) return;
+		if (step != Step::Rename || name != archiveName || id != sourceId) { fail(); return; }
+		read(archiveName, sourceId, Step::ArchivedAfter);
+	});
+	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &) {
+		if (!current()) return;
+		if (step == Step::ArchivedBefore) read(rootName, sourceId, Step::OriginalBefore);
+		else if (step == Step::Rename) read(archiveName, sourceId, Step::ArchivedAfter);
+		else fail();
+	});
+	connect(&files, &CloudSyncFileStore::operationError, this, [this](CloudSyncProviderType, const QString &, const QString &, bool rejected) {
+		if (step == Step::Idle) return;
+		// Never replay an uncertain rename or select a replacement by name.
+		if (step == Step::Rename && !rejected && current()) read(archiveName, sourceId, Step::ArchivedAfter);
+		else fail(rejected);
+	});
+	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &) { fail(); });
+}
+CloudHistoryArchive::~CloudHistoryArchive() { cancel(); }
+void CloudHistoryArchive::cancel()
+{
+	step = Step::Idle; deadline.stop(); files.cancel(CloudSyncProviderType::GoogleDrive);
+	token.clear(); sourceId.clear(); targetId.clear(); rootName.clear(); archiveName.clear(); sealedVersion.clear(); archivedVersion.clear();
+	source.value = {}; coordinator.value = {}; scopeCurrent = {};
+}
+void CloudHistoryArchive::fail(bool rejected)
+{
+	if (step == Step::Idle) return;
+	cancel(); emit failed(tr("History source verification failed. Review the branches before retrying."), rejected);
+}
+bool CloudHistoryArchive::current()
+{
+	if (step == Step::Idle) return false;
+	if (!scopeCurrent || !scopeCurrent()) { fail(); return false; }
+	return true;
+}
+void CloudHistoryArchive::start(const QString &accessToken, const QString &account, const QString &id, const CloudHistoryFence &sealed,
+	const QString &version, const QString &destinationId, const CloudHistoryFence &destination, const std::function<bool()> &guard)
+{
+	cancel(); step = Step::CoordinatorBefore;
+	token = accessToken; sourceId = id; targetId = destinationId; source = sealed; coordinator = destination; sealedVersion = version; scopeCurrent = guard;
+	const auto root = source.record();
+	rootName = CloudHistoryRecord::rootName(string(root.value, "epoch"));
+	archiveName = CloudHistoryFence::archiveName(string(root.value, "epoch"), sourceId);
+	if (token.isEmpty() || !hash(account) || string(root.value, "provider") != "google-drive" || string(root.value, "account") != account ||
+	    string(coordinator.value, "id") != targetId || !coordinator.matchesSource(sourceId, source, sealedVersion, archiveName)) { fail(); return; }
+	deadline.start(); read(rootName, targetId, Step::CoordinatorBefore);
+}
+void CloudHistoryArchive::read(const QString &name, const QString &id, Step next)
+{
+	if (!current()) return;
+	step = next; files.downloadIdentity(CloudSyncProviderType::GoogleDrive, token, name, id);
+}
+void CloudHistoryArchive::received(const QString &name, const QByteArray &data, const QString &version, const QString &id)
+{
+	if (!current()) return;
+	if (step == Step::CoordinatorBefore || step == Step::CoordinatorAfter) {
+		const auto observed = CloudHistoryFence::parse(data);
+		if (name != rootName || id != targetId || string(observed.value, "id") != targetId || !observed.follows(coordinator) ||
+		    !observed.matchesSource(sourceId, source, sealedVersion, archiveName)) { fail(); return; }
+		coordinator = observed;
+		if (step == Step::CoordinatorBefore) { read(archiveName, sourceId, Step::ArchivedBefore); return; }
+		if (string(coordinator.intent(sourceId), "state") == "acknowledged" && !coordinator.acknowledges(sourceId, source, archivedVersion, archiveName)) { fail(); return; }
+		const auto confirmed = coordinator.value; const auto targetVersion = version, sourceVersion = archivedVersion;
+		cancel(); emit finished(confirmed, targetVersion, sourceVersion); return;
+	}
+	if (id != sourceId || data != source.json() || !revision(version)) { fail(); return; }
+	if (step == Step::OriginalBefore) {
+		if (name != rootName || version != sealedVersion) { fail(); return; }
+		step = Step::Rename;
+		if (current()) files.archiveGoogleHistory(token, rootName, sourceId, sealedVersion);
+	} else if (step == Step::ArchivedBefore || step == Step::ArchivedAfter) {
+		if (name != archiveName || (step == Step::ArchivedAfter && version == sealedVersion)) { fail(); return; }
+		archivedVersion = version; read(rootName, targetId, Step::CoordinatorAfter);
+	} else fail();
+}
+
 CloudSyncHistory::CloudSyncHistory(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
 {
 	files.setStrictReads(true);

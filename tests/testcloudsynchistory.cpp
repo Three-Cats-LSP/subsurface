@@ -70,6 +70,9 @@ public:
 	QList<File> files;
 	int serial = 0, fault = 0, mutations = 0, renames = 0;
 	int writeFailureStatus = 0;
+	QString archiveEpoch;
+	int archiveFailureStatus = 0;
+	bool loseArchiveAck = false, deferArchive = false;
 	bool allowed = true, guard = true;
 	QPointer<Reply> deferred;
 	std::function<void(const QString &)> wrote;
@@ -126,16 +129,20 @@ protected:
 			++mutations; ++renames;
 			const auto target = QJsonDocument::fromJson(sent).object().value("title").toString();
 			const auto old = index < 0 ? CloudHistoryRecord() : CloudHistoryRecord::parse(files[index].data);
-			allowed &= old.valid() && old.value["sequence"].toInt() == 0 && old.value["tickets"].toObject().isEmpty() &&
+			if (archiveEpoch.isEmpty()) allowed &= old.valid() && old.value["sequence"].toInt() == 0 && old.value["tickets"].toObject().isEmpty() &&
 				target == CloudHistoryRecord::rootName(old.value["epoch"].toString()).chopped(5) + "-recovered-" + files[index].id.mid(3) + ".json";
+			else allowed &= target == CloudHistoryFence::archiveName(archiveEpoch, path.section('/', -1));
 			if (fault == 15 && index >= 0) {
 				auto active = old; active.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size());
 				files[index].data = active.json(); files[index].rev = "concurrent-registration"; fault = 0;
 			}
-			if (index < 0 || files[index].rev != expected) status = 412;
+			if (archiveFailureStatus) status = archiveFailureStatus;
+			else if (index < 0 || files[index].rev != expected) status = 412;
 			else {
 				files[index].name = target; files[index].rev = "rev-" + QString::number(++serial);
-				body = json({{"id", files[index].id.mid(3)}, {"title", target}});
+				body = json({{"id", files[index].id.mid(3)}, {"title", target}, {"etag", files[index].rev}});
+				if (loseArchiveAck) { status = 503; loseArchiveAck = false; }
+				if (deferArchive) defer = true;
 				if (fault == 14) { status = 503; fault = 0; }
 				if (fault == 16) defer = true;
 			}
@@ -701,6 +708,139 @@ void TestCloudSyncHistory::handoffProof()
 	QCOMPARE(readBytes(path), checkpointBytes);
 	QCOMPARE(restarted.preserveHandoff(sourceId, source, "sealed-revision", archived, targetId, target, "another-target-revision"), expectedPath);
 	QCOMPARE(readBytes(expectedPath), proofBytes);
+}
+
+void TestCloudSyncHistory::archiveTransport_data()
+{
+	QTest::addColumn<int>("scenario");
+	const QStringList cases = {"rename", "legacy-name", "bad-epoch", "empty-token", "missing-id", "unsafe-id", "empty-revision", "newline-revision", "long-revision", "stale-revision", "lost-ack", "bad-ack", "missing-object"};
+	for (int i = 0; i < cases.size(); ++i) QTest::newRow(qPrintable(cases[i])) << i;
+}
+void TestCloudSyncHistory::archiveTransport()
+{
+	QFETCH(int, scenario); Network n; n.seed(); const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch);
+	n.archiveEpoch = epoch; n.add(name, A); const auto before = n.files;
+	QString token = "token", id = n.files[2].id.mid(3), version = n.files[2].rev, expectedName = name;
+	if (scenario == 1) expectedName = Legacy;
+	if (scenario == 2) expectedName = "subsurface-neo-history-invalid.json";
+	if (scenario == 3) token.clear();
+	if (scenario == 4) id.clear();
+	if (scenario == 5) id = "unsafe/id";
+	if (scenario == 6) version.clear();
+	if (scenario == 7) version += '\n';
+	if (scenario == 8) version = QString(513, 'v');
+	if (scenario == 9) version = "stale";
+	if (scenario == 10) n.loseArchiveAck = true;
+	if (scenario == 11) n.response = [](const QNetworkRequest &, const QByteArray &) { return QByteArray("{}"); };
+	if (scenario == 12) id = "missing-object";
+	CloudSyncFileStore files(&n); QSignalSpy done(&files, &CloudSyncFileStore::historyRootArchived), errors(&files, &CloudSyncFileStore::operationError), conflicts(&files, &CloudSyncFileStore::writeConflict);
+	files.archiveGoogleHistory(token, expectedName, id, version);
+	QTRY_COMPARE(done.size() + errors.size() + conflicts.size(), 1);
+	const bool validRequest = scenario == 0 || scenario >= 9;
+	QCOMPARE(n.renames, int(validRequest)); QCOMPARE(n.mutations, int(validRequest));
+	QCOMPARE(done.size(), int(scenario == 0));
+	for (int i = 0; i < before.size(); ++i) {
+		QCOMPARE(n.files[i].id, before[i].id); QCOMPARE(n.files[i].data, before[i].data);
+		if (i != 2 || (scenario != 0 && scenario != 10 && scenario != 11)) {
+			QCOMPARE(n.files[i].name, before[i].name); QCOMPARE(n.files[i].rev, before[i].rev);
+		}
+	}
+	if (scenario == 0 || scenario == 10 || scenario == 11) QCOMPARE(n.files[2].name, CloudHistoryFence::archiveName(epoch, id));
+	QVERIFY(n.allowed);
+}
+void TestCloudSyncHistory::archiveWorkflow_data()
+{
+	QTest::addColumn<int>("scenario");
+	const QStringList cases = {"archive", "already-archived", "lost-rename-response", "stale-source-body", "stale-source-revision",
+		"source-cas-race", "concurrent-archiver", "target-before-lost-intent", "target-after-lost-intent", "target-advances", "bad-source-scope",
+		"bad-source-identity", "bad-target-identity", "scope-changes", "cancel-read", "cancel-committed-rename", "throttle-retry", "server-error-retry",
+		"rejected-token", "bad-ack-recovery", "missing-source", "source-name-replaced", "missing-target", "unknown-source", "unknown-target",
+		"changed-archived-body", "acknowledged-source", "mismatched-receipt", "unknown-target-after", "bad-account"};
+	for (int i = 0; i < cases.size(); ++i) QTest::newRow(qPrintable(cases[i])) << i;
+}
+void TestCloudSyncHistory::archiveWorkflow()
+{
+	QFETCH(int, scenario); Network n; n.seed(); const auto legacy = n.files;
+	const auto epoch = uid(), name = CloudHistoryRecord::rootName(epoch);
+	n.archiveEpoch = epoch;
+	const auto root = fencedBranch("google-drive", epoch); QVERIFY(root.valid());
+	n.add(name, root.json()); n.add(name, root.json());
+	const auto targetId = n.files[2].id.mid(3), sourceId = n.files[3].id.mid(3), archived = CloudHistoryFence::archiveName(epoch, sourceId);
+	auto target = CloudHistoryFence::freeze(targetId, root); QVERIFY(target.intend(sourceId));
+	auto source = CloudHistoryFence::seal(sourceId, root, "before-seal", target); QVERIFY(source.valid());
+	n.files[2].data = target.json(); n.files[3].data = source.json(); const auto sealedVersion = n.files[3].rev;
+	if (scenario == 1 || scenario == 26 || scenario == 27) { n.files[3].name = archived; n.files[3].rev += "-archived"; }
+	if (scenario == 26 || scenario == 27) {
+		QVERIFY(target.acknowledge(sourceId, source, n.files[3].rev, archived));
+		if (scenario == 27) { auto entries = target.value["sources"].toArray(); auto entry = entries.first().toObject(); entry["version"] = "wrong-version"; entries[0] = entry; target.value["sources"] = entries; }
+		n.files[2].data = target.json();
+	}
+	if (scenario == 2) n.loseArchiveAck = true;
+	if (scenario == 3) { auto changed = root; QVERIFY(changed.registerUpload(uid(), changed.head(), CloudSyncManifest::sha256(B), B.size())); auto sealed = source; sealed.value["record"] = changed.value; n.files[3].data = sealed.json(); n.files[3].rev += "-changed"; }
+	if (scenario == 4) n.files[3].rev += "-metadata-change";
+	if (scenario == 7) { auto changed = target; changed.value["sources"] = QJsonArray(); changed.value["sequence"] = 2; n.files[2].data = changed.json(); }
+	if (scenario == 10) { auto changed = source.record(); changed.value["account"] = CloudSyncManifest::sha256("other"); source.value["record"] = changed.value; }
+	if (scenario == 14) n.deferReads = true;
+	if (scenario == 15) n.deferArchive = true;
+	if (scenario == 16 || scenario == 17 || scenario == 18) n.archiveFailureStatus = scenario == 16 ? 429 : scenario == 17 ? 503 : 401;
+	if (scenario == 19) n.response = [](const QNetworkRequest &request, const QByteArray &bytes) { return request.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray() == "PATCH" ? QByteArray("{}") : bytes; };
+	if (scenario == 21) { n.files[3].name = "preserved-elsewhere.json"; n.add(name, source.json()); }
+	if (scenario == 23) source.value["unknown_safety_field"] = true;
+	if (scenario == 24) { auto future = target; future.value["format"] = "unknown-future"; n.files[2].data = future.json(); }
+	if (scenario == 20) n.files.removeAt(3);
+	if (scenario == 22) n.files.removeAt(2);
+	int targetMetadataReads = 0, nameLookups = 0;
+	n.requested = [&](const QNetworkRequest &request) {
+		const auto path = request.url().path();
+		if (path == "/drive/v3/files") ++nameLookups;
+		if (path == "/drive/v2/files/" + targetId && request.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray().isEmpty() && ++targetMetadataReads == 3) {
+			if (scenario == 8 || scenario == 9 || scenario == 28) {
+				auto changed = target;
+				if (scenario == 9) QVERIFY(changed.intend("another-source"));
+				else if (scenario == 8) { changed.value["sources"] = QJsonArray(); changed.value["sequence"] = 2; }
+				else changed.value["format"] = "unknown-future";
+				n.files[2].data = changed.json(); n.files[2].rev += "-target-advanced";
+			}
+		}
+		if (path == "/drive/v2/files/" + sourceId && request.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray() == "PATCH") {
+			if (scenario == 5) { auto changed = root; QVERIFY(changed.registerUpload(uid(), changed.head(), CloudSyncManifest::sha256(B), B.size())); auto newer = source; newer.value["record"] = changed.value; n.files[3].data = newer.json(); n.files[3].rev += "-source-advanced"; }
+			if (scenario == 6) { n.files[3].name = archived; n.files[3].rev += "-another-archiver"; }
+		}
+		if (scenario == 13 && path == "/drive/v3/files/" + sourceId) n.guard = false;
+		if (scenario == 25 && n.renames && path == "/drive/v2/files/" + sourceId) { auto unknown = source; unknown.value["unknown_safety_field"] = true; n.files[3].data = unknown.json(); n.files[3].rev += "-changed-after-rename"; }
+	};
+	const auto originalSource = scenario == 20 ? QByteArray() : n.files[scenario == 22 ? 2 : 3].data;
+	const auto allBefore = n.files;
+	CloudHistoryArchive client(&n); QSignalSpy done(&client, &CloudHistoryArchive::finished), errors(&client, &CloudHistoryArchive::failed);
+	const auto observedSource = scenario == 11 ? QString("wrong-source") : sourceId, observedTarget = scenario == 12 ? QString("wrong-target") : targetId;
+	const auto start = [&] { client.start("token", scenario == 29 ? CloudSyncManifest::sha256("wrong-account") : Account, observedSource, source, sealedVersion, observedTarget, target, [&] { return n.guard; }); };
+	start();
+	if (scenario == 14 || scenario == 15) {
+		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); QTest::qWait(20);
+		QCOMPARE(done.size(), 0); QCOMPARE(errors.size(), 0);
+		if (scenario == 15) { n.deferArchive = false; start(); QTRY_COMPARE(done.size(), 1); }
+	} else {
+		const bool success = scenario == 0 || scenario == 1 || scenario == 2 || scenario == 6 || scenario == 9 || scenario == 19 || scenario == 26;
+		QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), int(success));
+		if (scenario == 18) QVERIFY(errors.first()[1].toBool());
+		if (scenario == 16 || scenario == 17) { n.archiveFailureStatus = 0; start(); QTRY_COMPARE(done.size(), 1); QCOMPARE(errors.size(), 1); }
+	}
+	QCOMPARE(nameLookups, 0); QCOMPARE(n.mutations, n.renames);
+	const QList<int> attempted = {0, 2, 5, 6, 8, 9, 15, 16, 17, 18, 19, 25, 28};
+	QCOMPARE(n.renames, scenario == 16 || scenario == 17 ? 2 : int(attempted.contains(scenario)));
+	QCOMPARE(n.files.size(), allBefore.size());
+	if (scenario != 20) {
+		const auto &file = n.files[scenario == 22 ? 2 : 3]; QCOMPARE(file.id.mid(3), sourceId);
+		if (scenario != 5 && scenario != 25) QCOMPARE(file.data, originalSource);
+	}
+	if (!done.isEmpty()) {
+		QCOMPARE(n.files[3].name, archived); QCOMPARE(done.last()[2].toString(), n.files[3].rev);
+		QCOMPARE(done.last()[0].toJsonObject(), QJsonDocument::fromJson(n.files[2].data).object()); QCOMPARE(done.last()[1].toString(), n.files[2].rev);
+	}
+	for (int i = 0; i < legacy.size(); ++i) { QCOMPARE(n.files[i].id, legacy[i].id); QCOMPARE(n.files[i].rev, legacy[i].rev); QCOMPARE(n.files[i].data, legacy[i].data); }
+	if (scenario == 21) { QCOMPARE(n.files.last().id, allBefore.last().id); QCOMPARE(n.files.last().rev, allBefore.last().rev); QCOMPARE(n.files.last().data, allBefore.last().data); }
+	if (scenario != 22 && scenario != 8 && scenario != 9 && scenario != 28) { QCOMPARE(n.files[2].data, allBefore[2].data); QCOMPARE(n.files[2].rev, allBefore[2].rev); }
+	QVERIFY(n.allowed);
 }
 
 void TestCloudSyncHistory::invalidRecords_data()

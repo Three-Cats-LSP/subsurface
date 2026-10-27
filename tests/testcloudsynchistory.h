@@ -18,6 +18,10 @@ private slots:
 	void handoffReceipt();
 	void handoffProof_data();
 	void handoffProof();
+	void archiveTransport_data();
+	void archiveTransport();
+	void archiveWorkflow_data();
+	void archiveWorkflow();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();
