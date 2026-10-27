@@ -66,7 +66,7 @@ ColumnLayout {
 		}
 		Text {
 			visible: !!panel.report.copyReview
-			text: qsTr("Cloud log reviewed · %1 bytes. Copying adds a protected version to this workspace and keeps your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
+			text: qsTr("Cloud log reviewed · %1 bytes. Keep a verified copy in this workspace while preserving your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
@@ -157,20 +157,27 @@ ColumnLayout {
 		enabled: panel.available && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
 	}
-	Dialog {
+	Popup {
 		id: copyDialog; objectName: "workspaceCopyDialog-" + panel.provider.id
-		parent: Overlay.overlay; anchors.centerIn: parent; modal: true
-		width: Math.min(460, parent ? parent.width - 32 : panel.width)
-		title: qsTr("Copy cloud log into this workspace?")
+		parent: Overlay.overlay; anchors.centerIn: parent; modal: true; focus: true; padding: 16
+		closePolicy: Popup.CloseOnEscape
+		width: Math.max(280, Math.min(460, parent ? parent.width - 32 : panel.width))
 		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
-		contentItem: Text {
-			text: qsTr("Copy the reviewed cloud log (%1 bytes) as a new protected version. Your local dive log and original cloud files are kept. This does not activate workspace synchronization.").arg(panel.pendingCopy.bytes || 0)
-			color: tokens.textSecondary; textFormat: Text.PlainText; wrapMode: Text.WordWrap
-		}
-		footer: Item {
-			width: copyDialog.width; implicitHeight: copyButtons.implicitHeight + 16
-			GridLayout {
-				id: copyButtons; anchors.fill: parent; anchors.margins: 8; columns: width > 350 ? 2 : 1; rowSpacing: 8; columnSpacing: 8
+		contentItem: Rectangle {
+			objectName: "workspaceCopyBody-" + panel.provider.id
+			color: tokens.surfaceRaised; implicitHeight: copyContent.implicitHeight
+			Accessible.role: Accessible.Dialog; Accessible.name: copyTitle.text
+			ColumnLayout {
+				id: copyContent; width: parent.width; spacing: 12
+				Text {
+					id: copyTitle; text: qsTr("Copy cloud log into this workspace?")
+					color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; textFormat: Text.PlainText
+					Layout.fillWidth: true; wrapMode: Text.WordWrap
+				}
+				Text {
+					text: qsTr("Keep a verified copy of the reviewed cloud log (%1 bytes) in this workspace. Your local dive log and original cloud files are kept. This does not activate workspace synchronization.").arg(panel.pendingCopy.bytes || 0)
+					color: tokens.textSecondary; textFormat: Text.PlainText; wrapMode: Text.WordWrap; Layout.fillWidth: true
+				}
 				NeoButton { objectName: "cancelWorkspaceCopy-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: copyDialog.close() }
 				NeoButton {
 					objectName: "confirmWorkspaceCopy-" + panel.provider.id; text: qsTr("Copy cloud log"); Layout.fillWidth: true; enabled: panel.available
