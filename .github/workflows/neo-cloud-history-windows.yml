@@ -1,0 +1,44 @@
+name: Neo Windows history protocol
+
+on:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-cloud-history-windows.yml'
+      - 'core/cloudsynchistory.*'
+      - 'core/cloudsyncfilestore.*'
+      - 'core/cloudsyncmanifest.*'
+      - 'core/cloudsyncprovider.*'
+      - 'tests/testcloudsynchistory.*'
+      - 'tests/cloud-history/**'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  history-protocol:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Qt protocol test dependencies
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Build and test history protocol on Windows
+        shell: pwsh
+        run: |
+          cmake -S tests/cloud-history -B build-history -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-history --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-history --build-config Release --output-on-failure
+          exit $LASTEXITCODE
+      - name: Preserve protocol test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Neo-Windows-history-protocol-evidence
+          path: build-history/Testing/Temporary/*.log
+          if-no-files-found: ignore
