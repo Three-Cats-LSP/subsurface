@@ -2,13 +2,16 @@
 // Developer-only native provider probe. Token input uses stdin, never argv/files.
 // Operates only on explicitly named synthetic fixtures, with a hash/revision
 // precondition before writes. Archive mode admits only marked synthetic fences.
-// No credential persistence, object creation or deletion API.
+// Creation mode admits only marked fresh workspace intents. No credential
+// persistence, ordinary-log writes or object deletion API.
 #include "core/cloudsyncfilestore.h"
 #include "core/cloudsyncmanifest.h"
 #include "core/cloudsynchistory.h"
 #include "core/cloudsyncworkspace.h"
 #include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -36,16 +39,36 @@ int main(int argc, char **argv)
 	const auto body = get("body").toUtf8();
 	const bool archival = mode == "archive";
 	const bool workspace = mode == "workspace-open";
+	const bool creation = mode == "workspace-create";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
 	const QRegularExpression workspaceFixture(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
-	if (!valid || (!google && get("provider") != "dropbox") || !(workspace ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch() ||
-	    (mode != "read" && mode != "write" && !archival && !workspace) || token.isEmpty() || token.size() > 8192 ||
+	if (!valid || (!google && get("provider") != "dropbox") || !((workspace || creation) ? workspaceFixture : (archival ? rootFixture : fixture)).match(name).hasMatch() ||
+	    (mode != "read" && mode != "write" && !archival && !workspace && !creation) || token.isEmpty() || token.size() > 8192 ||
 	    !QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(get("before_sha256")).hasMatch() ||
-	    ((archival || workspace) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
+	    ((archival || workspace || creation) && body.size() > 8192) || (archival && (!google || version.isEmpty())) ||
 	    (mode == "write" && (version.isEmpty() || !body.startsWith("neo-identity-probe:") || body.size() > 4096)))
 		return output({{"ok", false}, {"phase", "input"}}, 2);
 	QNetworkAccessManager network;
+	if (creation) {
+		const auto payload = QJsonDocument::fromJson(body).object(); const auto epoch = payload.value("epoch").toString(), nonce = payload.value("nonce").toString();
+		const auto intentFile = payload.value("intent_file").toString(), directory = payload.value("checkpoint_directory").toString();
+		const QFileInfo info(intentFile); const QDir parent(info.absolutePath());
+		const auto marker = CloudSyncManifest::sha256(("neo-workspace-create-probe:origin:" + epoch + ":" + nonce).toUtf8());
+		if (payload.size() != 5 || !CloudHistoryRecord::validEpoch(epoch) || !CloudHistoryRecord::validEpoch(nonce) || !id.isEmpty() || !version.isEmpty() ||
+		    name != "subsurface-neo-workspace-" + epoch + ".json" || marker != get("before_sha256") || !info.isAbsolute() || info.fileName() != "creation.json" ||
+		    parent.dirName() != "neo-workspace-probe-" + epoch + "-" + nonce || QDir::cleanPath(directory) != parent.filePath("checkpoints"))
+			return output({{"ok", false}, {"phase", "input"}}, 2);
+		CloudWorkspaceCreate create(&network);
+		QObject::connect(&create, &CloudWorkspaceCreate::finished, &app, [&](const QJsonObject &root, const QString &actualVersion, const QString &checkpoint) {
+			output({{"ok", true}, {"phase", "workspace-created"}, {"record", root}, {"version", actualVersion}, {"checkpoint_file", checkpoint}}, 0); app.exit(0);
+		});
+		QObject::connect(&create, &CloudWorkspaceCreate::failed, &app, [&](const QString &, bool rejected) {
+			output({{"ok", false}, {"phase", "workspace-create"}, {"tokenRejected", rejected}}, 2); app.exit(2);
+		});
+		QTimer::singleShot(0, &app, [&] { create.start(intentFile, directory, get("provider"), token, payload.value("account").toString(), epoch, nonce, marker, [] { return true; }); });
+		return app.exec();
+	}
 	if (workspace) {
 		const auto payload = QJsonDocument::fromJson(body).object();
 		CloudWorkspaceReference ref; ref.value = payload.value("reference").toObject();

@@ -13,6 +13,7 @@
 #include <QNetworkRequest>
 #include <QUrlQuery>
 #include <QTimer>
+#include <QUuid>
 #include <memory>
 
 namespace {
@@ -615,6 +616,46 @@ void CloudSyncFileStore::uploadIdentity(CloudSyncProviderType provider, const QS
 	}
 	if (google) uploadConditional(provider, accessToken, fileName, data, version, fileId);
 	else dropboxUpload(accessToken, fileName, data, true, version, fileId);
+}
+
+void CloudSyncFileStore::createWorkspaceIdentity(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QByteArray &bootstrap)
+{
+	const bool google = provider == CloudSyncProviderType::GoogleDrive;
+	const QRegularExpression pattern(QStringLiteral("^subsurface-neo-workspace-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
+	if ((!google && provider != CloudSyncProviderType::Dropbox) || accessToken.isEmpty() || !pattern.match(fileName).hasMatch() ||
+	    bootstrap.isEmpty() || bootstrap.size() > 8192) {
+		emit operationError(provider, fileName, tr("Workspace creation requires a new valid namespace.")); return;
+	}
+	QNetworkRequest request; QByteArray body = bootstrap;
+	if (google) {
+		request = authorizedRequest(QUrl(QStringLiteral("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name")), accessToken, bootstrap.size());
+		const auto boundary = "neo_workspace_" + QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
+		const auto metadata = compactJson({{"name", fileName}, {"parents", QJsonArray{QStringLiteral("appDataFolder")}}});
+		body = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata +
+			"\r\n--" + boundary + "\r\nContent-Type: application/octet-stream\r\n\r\n" + bootstrap + "\r\n--" + boundary + "--\r\n";
+		request.setHeader(QNetworkRequest::ContentTypeHeader, "multipart/related; boundary=" + boundary);
+	} else {
+		request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/upload")), accessToken, bootstrap.size());
+		request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
+		request.setRawHeader("Dropbox-API-Arg", compactJson({{"path", "/" + fileName}, {"mode", "add"},
+			{"strict_conflict", true}, {"autorename", false}, {"mute", true}}));
+	}
+	auto *reply = networkManager->post(request, body); trackReply(provider, reply, bootstrap.size(), fileName);
+	connect(reply, &QNetworkReply::finished, this, [this, reply, provider, google, fileName] {
+		const auto bytes = reply->readAll(); const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+		const bool ok = reply->error() == QNetworkReply::NoError; reply->deleteLater();
+		if (ok) {
+			const auto metadata = QJsonDocument::fromJson(bytes).object(); const auto id = metadata.value("id").toString();
+			const QRegularExpression idPattern(google ? QStringLiteral("^[A-Za-z0-9_-]+$") : QStringLiteral("^id:[A-Za-z0-9_-]+$"));
+			if (metadata.value("name").toString() == fileName && id.size() <= 512 && idPattern.match(id).hasMatch()) {
+				emit workspaceIdentityCreated(provider, fileName, id); return;
+			}
+		} else if (!google && status == 409 && QJsonDocument::fromJson(bytes).object().value("error_summary").toString().startsWith("path/conflict/")) {
+			emit writeConflict(provider, fileName); return;
+		}
+		emit operationError(provider, fileName, tr("Workspace creation was not confirmed. Keep all files and review the creation attempt before trying again."), status == 401);
+	});
 }
 
 void CloudSyncFileStore::archiveGoogleHistory(const QString &accessToken, const QString &rootName, const QString &fileId, const QString &version)

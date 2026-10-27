@@ -80,6 +80,57 @@ private:
 	CloudWorkspaceRecord checkpoint;
 };
 
+// Durable creation state; submitted without an identity is uncertain forever.
+// Never resubmit that intent or replace a known identity through a filename.
+class CloudWorkspaceCreationIntent {
+public:
+	CloudWorkspaceCreationIntent(const QString &fileName, const QString &provider, const QString &account,
+		const QString &epoch, const QString &nonce, const QString &originHash);
+	bool prepare();
+	bool submit();
+	bool identify(const QString &id);
+	bool bind();
+	QString state() const;
+	QString id() const;
+	QString rootName() const;
+	QByteArray bootstrap() const;
+	CloudWorkspaceReference reference() const;
+private:
+	bool readUnlocked();
+	bool writeUnlocked(const QJsonObject &next);
+	bool advance(const QString &state, const QString &id = {});
+	QString fileName;
+	QJsonObject scope, saved;
+};
+
+// Create/bind an empty workspace; no payload publication, local selection,
+// migration, XML replacement or credentials. The caller supplies verified scope.
+class CloudWorkspaceCreate : public QObject {
+	Q_OBJECT
+public:
+	explicit CloudWorkspaceCreate(QNetworkAccessManager *network, QObject *parent = nullptr);
+	~CloudWorkspaceCreate() override;
+	void start(const QString &intentFile, const QString &checkpointDirectory, const QString &provider, const QString &token,
+		const QString &account, const QString &epoch, const QString &nonce, const QString &originHash, const std::function<bool()> &scopeCurrent);
+	void cancel();
+signals:
+	void finished(const QJsonObject &record, const QString &version, const QString &checkpointFile);
+	void failed(const QString &message, bool tokenRejected);
+private:
+	enum class Step { Idle, Create, Read, Bind, Confirm };
+	bool current();
+	void read(Step step);
+	void received(CloudSyncProviderType provider, const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
+	void fail(bool rejected = false);
+	CloudSyncFileStore files;
+	QTimer deadline;
+	std::unique_ptr<CloudWorkspaceCreationIntent> intent;
+	std::function<bool()> scopeCurrent;
+	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
+	QString token, checkpointDirectory, originHash;
+	Step step = Step::Idle;
+};
+
 // Read-only exact-root verification. The caller must supply a freshly verified
 // provider/account and retain/recheck scope before recording an explicit choice.
 // No filename lookup, creation, local binding, XML application or cloud write.

@@ -34,6 +34,11 @@ public:
 	// create mode. Confirm the current identity/body again before publication.
 	void uploadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId);
+	// Create a new workspace bootstrap without lookup, rename or overwrite.
+	// Google supplies the physical ID first; its revision must be read by ID.
+	// An unconfirmed result must never cause an automatic create replay.
+	void createWorkspaceIdentity(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QByteArray &bootstrap);
 	// Transport primitive for a verified sealed history source. Caller must
 	// verify its fence/body and durable coordinator intent before invoking it.
 	// Google v2 ETag CAS only; never looks up a name, moves a folder or deletes.
@@ -67,6 +72,7 @@ signals:
 	void writeConflict(CloudSyncProviderType provider, const QString &fileName);
 	void historyRootsFound(const QStringList &ids);
 	void historyRootArchived(const QString &archiveName, const QString &fileId);
+	void workspaceIdentityCreated(CloudSyncProviderType provider, const QString &fileName, const QString &fileId);
 
 private:
 	struct GoogleRecoveryFile { QString id, version; };

@@ -83,6 +83,7 @@ public:
 	std::function<QByteArray(const QByteArray &)> metadataResponse;
 	bool deferReads = false;
 	bool loseWriteAck = false;
+	bool workspaceWrites = false;
 	QByteArray json(const QJsonObject &o) { return QJsonDocument(o).toJson(QJsonDocument::Compact); }
 	int find(const QString &name) const { for (int i = 0; i < files.size(); ++i) if (files[i].name == name) return i; return -1; }
 	void add(const QString &name, const QByteArray &data) {
@@ -149,7 +150,7 @@ protected:
 				if (fault == 16) defer = true;
 			}
 		} else if (write) {
-			++mutations; allowed &= name.startsWith("subsurface-neo-history-") || (!create && index < 0);
+			++mutations; allowed &= name.startsWith("subsurface-neo-history-") || (workspaceWrites && name.startsWith("subsurface-neo-workspace-") && name.endsWith(".json")) || (!create && index < 0);
 			const bool root = name.endsWith(".json");
 			if (!root && (create || index >= 0)) {
 				const QString epoch = name.mid(23, 36), ticket = name.mid(60, 36);
@@ -1147,6 +1148,189 @@ void TestCloudSyncHistory::workspaceAuthority()
 		const auto before = read(path); QVERIFY(!authority.observe(root, revision)); QCOMPARE(read(path), before);
 	}
 	QCOMPARE(read(selection), QByteArray("preserve selected workspace")); QCOMPARE(read(baseline), QByteArray("preserve schema 2 baseline")); QCOMPARE(read(local), A);
+}
+
+void TestCloudSyncHistory::workspaceCreationIntent_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"transitions-and-restart", "submitted-never-resubmits", "competing-submit", "different-nonce", "different-account", "different-origin",
+		"corrupt", "future-format", "lock", "oversized", "blocked-parent", "unsafe-id", "immutable-id", "cannot-bind-before-id", "invalid-scope", "unknown-state", "unknown-field", "new-parent"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-intent-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceCreationIntent()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid(), nonce = uid(), origin = CloudSyncManifest::sha256("origin"), id = QString(google ? "root-a" : "id:root-a");
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); const auto path = temporary.filePath(scenario == 17 ? "new/parent/intent.json" : "intent.json");
+	const auto read = [&] { QFile f(path); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
+	const auto write = [&](const QByteArray &bytes) { QFile f(path); return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size(); };
+	CloudWorkspaceCreationIntent intent(path, provider, Account, epoch, nonce, origin); QVERIFY(intent.prepare()); const auto initial = read();
+	QCOMPARE(intent.state(), QString("prepared")); QVERIFY(intent.id().isEmpty()); QVERIFY(!CloudWorkspaceRecord::parse(intent.bootstrap()).valid());
+	QVERIFY(intent.bootstrap().contains(nonce.toUtf8())); QVERIFY(!intent.bootstrap().contains("tickets"));
+	if (scenario == 0 || scenario == 17) {
+		QVERIFY(intent.prepare()); QCOMPARE(read(), initial); QVERIFY(intent.submit()); QVERIFY(intent.identify(id)); const auto identified = read();
+		QVERIFY(intent.identify(id)); QCOMPARE(read(), identified); QVERIFY(intent.bind()); const auto bound = read(); QVERIFY(intent.bind()); QCOMPARE(read(), bound);
+		CloudWorkspaceCreationIntent restarted(path, provider, Account, epoch, nonce, origin); QVERIFY(restarted.prepare()); QCOMPARE(restarted.state(), QString("bound")); QCOMPARE(restarted.reference().value, intent.reference().value);
+	} else if (scenario == 1 || scenario == 2) {
+		CloudWorkspaceCreationIntent other(path, provider, Account, epoch, nonce, origin); QVERIFY(other.prepare()); QVERIFY(other.submit()); const auto submitted = read();
+		QVERIFY(!intent.submit()); QCOMPARE(read(), submitted); QVERIFY(intent.prepare()); QCOMPARE(intent.state(), QString("submitted")); QVERIFY(!intent.submit()); QCOMPARE(read(), submitted);
+	} else if (scenario == 3 || scenario == 4 || scenario == 5 || scenario == 14) {
+		CloudWorkspaceCreationIntent other(path, provider, scenario == 4 ? CloudSyncManifest::sha256("other-account") : Account, scenario == 14 ? QString("invalid-epoch") : epoch,
+			scenario == 3 ? uid() : nonce, scenario == 5 ? CloudSyncManifest::sha256("other-origin") : origin);
+		QVERIFY(!other.prepare()); QCOMPARE(read(), initial);
+	} else if (scenario == 10) {
+		const auto blocker = temporary.filePath("blocker"); QFile f(blocker); QVERIFY(f.open(QIODevice::WriteOnly)); QCOMPARE(f.write("preserve"), qint64(8)); f.close();
+		CloudWorkspaceCreationIntent blocked(blocker + "/intent.json", provider, Account, epoch, nonce, origin); QVERIFY(!blocked.prepare());
+		QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("preserve"));
+	} else if (scenario == 11 || scenario == 12 || scenario == 13) {
+		if (scenario == 13) { QVERIFY(!intent.bind()); QCOMPARE(read(), initial); }
+		else {
+			QVERIFY(intent.submit()); if (scenario == 12) QVERIFY(intent.identify(id)); const auto before = read();
+			QVERIFY(!intent.identify(scenario == 11 ? QString("unsafe/id") : (google ? QString("other-id") : QString("id:other-id")))); QCOMPARE(read(), before);
+		}
+	} else {
+		std::unique_ptr<QLockFile> held;
+		if (scenario == 6) QVERIFY(write("invalid intent"));
+		if (scenario == 9) QVERIFY(write(QByteArray(8193, ' ')));
+		if (scenario == 7 || scenario == 15 || scenario == 16) {
+			auto value = QJsonDocument::fromJson(read()).object();
+			if (scenario == 7) value["format"] = "future-intent"; if (scenario == 15) value["state"] = "unknown"; if (scenario == 16) value["unknown_field"] = true;
+			QVERIFY(write(QJsonDocument(value).toJson(QJsonDocument::Compact)));
+		}
+		if (scenario == 8) { held = std::make_unique<QLockFile>(path + ".lock"); QVERIFY(held->tryLock(0)); }
+		const auto before = read(); QVERIFY(!intent.prepare()); QVERIFY(!intent.submit()); QCOMPARE(read(), before);
+	}
+}
+void TestCloudSyncHistory::workspaceCreateTransport_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"create", "ordinary-name", "bad-epoch", "empty-token", "empty-body", "oversized-body", "bad-provider", "lost-ack",
+		"missing-id", "wrong-name", "unsafe-id", "same-name", "rejected-token", "cancel"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-create-transport-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceCreateTransport()
+{
+	QFETCH(bool, google); QFETCH(int, scenario); Network n; n.seed(); n.workspaceWrites = true; const auto old = n.files;
+	const auto type = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	const auto epoch = uid(), name = "subsurface-neo-workspace-" + epoch + ".json"; QString target = name, token = "token"; QByteArray body = "synthetic-bootstrap";
+	if (scenario == 1) target = Legacy; if (scenario == 2) target = "subsurface-neo-workspace-invalid.json"; if (scenario == 3) token.clear();
+	if (scenario == 4) body.clear(); if (scenario == 5) body = QByteArray(8193, ' '); if (scenario == 7) n.loseWriteAck = true;
+	if (scenario == 8 || scenario == 9 || scenario == 10) n.response = [&](const QNetworkRequest &, const QByteArray &bytes) {
+		auto m = QJsonDocument::fromJson(bytes).object(); m[scenario == 9 ? "name" : "id"] = scenario == 8 ? "" : scenario == 9 ? "wrong-name" : "unsafe/id"; return n.json(m);
+	};
+	if (scenario == 11) n.add(name, "preserve competing root"); if (scenario == 12) n.writeFailureStatus = 401; if (scenario == 13) n.deferReads = true;
+	int lookups = 0; n.requested = [&](const QNetworkRequest &r) { if (r.url().path() == "/drive/v3/files") ++lookups; };
+	CloudSyncFileStore files(&n); QSignalSpy done(&files, &CloudSyncFileStore::workspaceIdentityCreated), errors(&files, &CloudSyncFileStore::operationError), conflicts(&files, &CloudSyncFileStore::writeConflict);
+	files.createWorkspaceIdentity(scenario == 6 ? CloudSyncProviderType::SubsurfaceCloud : type, token, target, body);
+	if (scenario == 13) { QTRY_VERIFY(n.deferred); files.cancel(type); if (n.deferred) n.deferred->complete(); QTest::qWait(20); QCOMPARE(done.size() + errors.size() + conflicts.size(), 0); }
+	else { QTRY_COMPARE(done.size() + errors.size() + conflicts.size(), 1); QCOMPARE(done.size(), int(scenario == 0 || (scenario == 11 && google))); }
+	QCOMPARE(n.mutations, int(scenario == 0 || scenario >= 7)); QCOMPARE(lookups, 0);
+	if (scenario == 11) QCOMPARE(n.files[2].data, QByteArray("preserve competing root"));
+	if (scenario == 12) QVERIFY(errors.first()[3].toBool());
+	for (int i = 0; i < old.size(); ++i) { QCOMPARE(n.files[i].data, old[i].data); QCOMPARE(n.files[i].rev, old[i].rev); QCOMPARE(n.files[i].name, old[i].name); }
+	QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspaceCreate_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"create-restart", "submitted-unknown", "lost-create-ack", "bad-create-ack", "wrong-create-id", "lost-bind-ack", "bad-bind-ack",
+		"bind-cas-race", "two-creators", "scope-before", "scope-after-create", "scope-after-bind", "cancel-create", "cancel-known-read", "cancel-bind",
+		"token-create", "token-bind", "corrupt-checkpoint", "missing-checkpoint", "unknown-bootstrap", "wrong-bootstrap-nonce", "moved-id-with-replacement",
+		"blocked-intent-parent", "corrupt-intent", "locked-intent", "bad-scope", "blocked-checkpoint-directory", "bound-root-reset", "checkpoint-rollback", "same-name-root", "missing-established-root", "future-intent", "ack-points-at-original"};
+	for (bool g : {false, true}) for (int s = 0; s < cases.size(); ++s) QTest::newRow(qPrintable(QString("%1-create-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::workspaceCreate()
+{
+	QFETCH(bool, google); QFETCH(int, scenario); Network n; n.seed(); n.workspaceWrites = true; const auto old = n.files;
+	const auto provider = QString(google ? "google-drive" : "dropbox"), epoch = uid(), nonce = uid(), origin = CloudSyncManifest::sha256("origin");
+	const auto name = "subsurface-neo-workspace-" + epoch + ".json";
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); QString intentFile = temporary.filePath("intent.json"), directory = temporary.filePath("checkpoints");
+	const auto write = [](const QString &path, const QByteArray &bytes) { QFile f(path); return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size(); };
+	const auto readFile = [](const QString &path) { QFile f(path); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
+	const auto selection = temporary.filePath("selection.json"), baseline = temporary.filePath("old-baseline.json"), local = temporary.filePath("divelog.xml");
+	QVERIFY(write(selection, "preserve selection")); QVERIFY(write(baseline, "preserve baseline")); QVERIFY(write(local, A));
+	if (scenario == 1 || scenario == 31) {
+		CloudWorkspaceCreationIntent prepared(intentFile, provider, Account, epoch, nonce, origin); QVERIFY(prepared.prepare());
+		if (scenario == 1) QVERIFY(prepared.submit()); else { auto v = QJsonDocument::fromJson(readFile(intentFile)).object(); v["format"] = "unknown-future-intent"; QVERIFY(write(intentFile, n.json(v))); }
+	}
+	if (scenario == 2) n.loseWriteAck = true;
+	if (scenario == 3 || scenario == 4 || scenario == 6 || scenario == 32) n.response = [&](const QNetworkRequest &r, const QByteArray &bytes) {
+		const bool update = r.url().path().startsWith("/upload/drive/v2/") || (!google && QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["mode"].isObject());
+		const bool create = (google ? r.url().path() == "/upload/drive/v3/files" : r.url().path() == "/2/files/upload" && !update);
+		if ((scenario == 6 && update) || ((scenario == 3 || scenario == 4 || scenario == 32) && create)) {
+			if (scenario == 3 || scenario == 6) return QByteArray("{}");
+			auto m = QJsonDocument::fromJson(bytes).object(); m["id"] = scenario == 32 ? (google ? "1" : "id:1") : (google ? "wrong-id" : "id:wrong-id"); return n.json(m);
+		} return bytes;
+	};
+	if (scenario == 9) n.guard = false; if (scenario == 12) n.deferReads = true; if (scenario == 15) n.writeFailureStatus = 401;
+	std::unique_ptr<QLockFile> held;
+	if (scenario == 22) { const auto blocker = temporary.filePath("blocker"); QVERIFY(write(blocker, "preserve blocker")); intentFile = blocker + "/intent.json"; }
+	if (scenario == 23) QVERIFY(write(intentFile, "corrupt intent"));
+	if (scenario == 24) { held = std::make_unique<QLockFile>(intentFile + ".lock"); QVERIFY(held->tryLock(0)); }
+	if (scenario == 26) { directory = temporary.filePath("blocked-directory"); QVERIFY(write(directory, "preserve blocker")); }
+	if (scenario == 29) n.add(name, "preserve competing root");
+	int creates = 0, binds = 0, lookups = 0, reads = 0; bool injected = false;
+	n.requested = [&](const QNetworkRequest &r) {
+		const auto path = r.url().path(); const auto arg = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object();
+		const bool update = path.startsWith("/upload/drive/v2/") || (!google && path == "/2/files/upload" && arg["mode"].isObject());
+		if (path == "/drive/v3/files") ++lookups;
+		if (update) {
+			++binds; if (scenario == 5) n.loseWriteAck = true; if (scenario == 16 && !injected) { n.writeFailureStatus = 401; injected = true; }
+			if (scenario == 7 && !injected) { n.files.last().rev += "-raced"; injected = true; }
+		} else if (path == "/upload/drive/v3/files" || (!google && path == "/2/files/upload")) {
+			++creates; const auto state = QJsonDocument::fromJson(readFile(intentFile)).object(); QCOMPARE(state["state"].toString(), QString("submitted"));
+			QCOMPARE(state["nonce"].toString(), nonce);
+		}
+		else {
+			++reads; const auto state = QJsonDocument::fromJson(readFile(intentFile)).object(); QVERIFY(!state["id"].toString().isEmpty());
+			QVERIFY(state["state"].toString() == "identified" || state["state"].toString() == "bound");
+			if (scenario == 13 && !injected) { n.deferReads = true; injected = true; }
+		}
+	};
+	n.wrote = [&](const QString &) {
+		const bool bound = CloudWorkspaceRecord::parse(n.files.last().data).valid();
+		if ((scenario == 10 && !bound) || (scenario == 11 && bound)) n.guard = false;
+		if (scenario == 14 && bound) n.deferReads = true;
+		if (scenario == 17 && !bound) {
+			const auto id = google ? n.files.last().id.mid(3) : n.files.last().id;
+			const auto ref = CloudWorkspaceReference::create(provider, Account, epoch, id); QVERIFY(QDir().mkpath(directory)); QVERIFY(write(QDir(directory).filePath(ref.key() + ".json"), "corrupt checkpoint"));
+		}
+		if ((scenario == 19 || scenario == 20) && !bound) { auto v = QJsonDocument::fromJson(n.files.last().data).object(); v[scenario == 19 ? "format" : "nonce"] = scenario == 19 ? "unknown-bootstrap" : uid(); n.files.last().data = n.json(v); }
+		if (scenario == 21 && !bound) { const auto bytes = n.files.last().data; n.files.last().name = "preserved-elsewhere.json"; n.add(name, bytes); }
+	};
+	CloudWorkspaceCreate client(&n), other(&n); QSignalSpy done(&client, &CloudWorkspaceCreate::finished), errors(&client, &CloudWorkspaceCreate::failed), otherDone(&other, &CloudWorkspaceCreate::finished), otherErrors(&other, &CloudWorkspaceCreate::failed);
+	const auto start = [&](CloudWorkspaceCreate &target) { target.start(intentFile, directory, provider, "token", scenario == 25 ? QString("invalid-account") : Account, epoch, nonce, origin, [&] { return n.guard; }); };
+	start(client);
+	if (scenario == 8) { start(other); QTRY_COMPARE(otherErrors.size(), 1); }
+	if (scenario == 12 || scenario == 13 || scenario == 14) {
+		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0); start(client);
+	} else if (scenario == 7 || scenario == 10 || scenario == 11 || scenario == 16) {
+		QTRY_COMPARE(errors.size(), 1); n.guard = true; n.writeFailureStatus = 0; n.wrote = {}; start(client);
+	}
+	const bool success = scenario == 0 || scenario == 5 || scenario == 6 || scenario == 7 || scenario == 8 || scenario == 10 || scenario == 11 || scenario == 13 || scenario == 14 || scenario == 16 || scenario == 18 || scenario == 27 || scenario == 28 || scenario == 30 || (scenario == 29 && google);
+	QTRY_COMPARE(done.size() + errors.size(), (scenario == 7 || scenario == 10 || scenario == 11 || scenario == 16) ? 2 : 1); QCOMPARE(done.size(), int(success));
+	if (scenario == 15) QVERIFY(errors.first()[1].toBool());
+	if (success) {
+		CloudWorkspaceRecord root; root.value = done.first()[0].toJsonObject(); QVERIFY(root.valid()); const auto checkpointFile = done.first()[2].toString();
+		CloudWorkspaceAuthority authority(checkpointFile, root.reference()); QVERIFY(authority.load()); QCOMPARE(authority.record().json(), root.json());
+		const auto state = QJsonDocument::fromJson(readFile(intentFile)).object(); QCOMPARE(state["state"].toString(), QString("bound")); QCOMPARE(state["id"].toString(), root.reference().value["root_id"].toString());
+		const auto mutations = n.mutations, requests = reads; const auto checkpoint = readFile(checkpointFile); n.wrote = {};
+		if (scenario == 18) QVERIFY(QFile::remove(checkpointFile));
+		if (scenario == 27) { CloudWorkspaceCreationIntent original(intentFile, provider, Account, epoch, nonce, origin); QVERIFY(original.prepare()); n.files.last().data = original.bootstrap(); n.files.last().rev += "-reset"; }
+		if (scenario == 28) { auto advanced = root; QVERIFY(advanced.registerUpload(uid(), {}, CloudSyncManifest::sha256(A), A.size())); QVERIFY(authority.observe(advanced, "advanced-revision")); }
+		if (scenario == 30) n.files.removeLast();
+		start(client); QTRY_COMPARE(done.size() + errors.size(), (scenario == 7 || scenario == 10 || scenario == 11 || scenario == 16) ? 3 : 2);
+		QCOMPARE(n.mutations, mutations);
+		if (scenario == 18 || scenario == 27 || scenario == 28 || scenario == 30) { QCOMPARE(done.size(), 1); if (scenario == 18) QCOMPARE(reads, requests); }
+		else { QCOMPARE(done.size(), 2); QCOMPARE(readFile(checkpointFile), checkpoint); }
+		if (scenario == 8) { start(other); QTRY_COMPARE(otherDone.size(), 1); QCOMPARE(n.mutations, mutations); }
+	}
+	if (scenario == 2 || scenario == 3) { const auto mutations = n.mutations; start(client); QTRY_COMPARE(errors.size(), 2); QCOMPARE(n.mutations, mutations); }
+	QCOMPARE(lookups, 0); QVERIFY(creates <= 1); if (scenario != 7) QVERIFY(binds <= 1);
+	for (int i = 0; i < old.size(); ++i) { QCOMPARE(n.files[i].data, old[i].data); QCOMPARE(n.files[i].rev, old[i].rev); QCOMPARE(n.files[i].name, old[i].name); }
+	if (scenario == 29) QCOMPARE(n.files[2].data, QByteArray("preserve competing root"));
+	QCOMPARE(readFile(selection), QByteArray("preserve selection")); QCOMPARE(readFile(baseline), QByteArray("preserve baseline")); QCOMPARE(readFile(local), A); QVERIFY(n.allowed);
 }
 
 void TestCloudSyncHistory::invalidRecords_data()
