@@ -7,6 +7,7 @@
 #include "cloudsyncreview.h"
 #include "cloudsynchistory.h"
 #include "cloudsyncworkspace.h"
+#include "cloudsyncworkspacecopy.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -157,9 +158,11 @@ private:
 	void clearStorageReview(const QString &providerId);
 	QString workspaceDirectory(const QString &providerId, const QString &account) const;
 	QList<QJsonObject> workspaceCreations(const QString &directory, const QString &providerId, const QString &account, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QList<QJsonObject> workspaceCopies(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QVariantMap workspaceReport(const QString &providerId) const;
-	bool workspaceScopeCurrent() const;
+	bool workspaceScopeCurrent();
 	void finishWorkspace(const QJsonObject &record, const QString &version);
+	void finishWorkspaceSource(const QJsonObject &source);
 	void failWorkspace(const QString &message, bool rejected = false);
 
 	QNetworkAccessManager *networkManager;
@@ -169,6 +172,8 @@ private:
 	CloudSyncHistory historyClient;
 	CloudWorkspaceOpen workspaceReader;
 	CloudWorkspaceCreate workspaceCreator;
+	CloudWorkspaceSourceReview workspaceSource;
+	CloudWorkspaceCopy workspaceCopy;
 	const QString historyEpoch = qEnvironmentVariable("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
 	QHash<QString, QVariantMap> historyReports;
 	QHash<QString, QVariantMap> storageReviews;
@@ -177,6 +182,14 @@ private:
 	CloudWorkspaceReference workspaceReference;
 	bool workspaceCheckpointRequired = false;
 	quint64 workspaceSerial = 0;
+	struct WorkspaceCopyReview {
+		QString id, choiceVersion, localSha256, parent;
+		CloudWorkspaceReference reference;
+		CloudWorkspaceCopySource source;
+	};
+	QHash<QString, WorkspaceCopyReview> workspaceCopyReviews;
+	WorkspaceCopyReview workspaceCopyReview;
+	bool workspaceLegacyChanged = false;
 	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;

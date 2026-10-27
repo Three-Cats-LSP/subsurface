@@ -91,13 +91,21 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	storageReviewClient(networkManager, this),
 	historyClient(networkManager, this),
 	workspaceReader(networkManager, this),
-	workspaceCreator(networkManager, this)
+	workspaceCreator(networkManager, this),
+	workspaceSource(networkManager, this),
+	workspaceCopy(networkManager, this)
 {
 	Q_ASSERT(networkManager);
 	connect(&workspaceReader, &CloudWorkspaceOpen::finished, this, &CloudSyncManager::finishWorkspace);
 	connect(&workspaceCreator, &CloudWorkspaceCreate::finished, this, [this](const QJsonObject &root, const QString &version, const QString &) { finishWorkspace(root, version); });
 	connect(&workspaceReader, &CloudWorkspaceOpen::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceCreator, &CloudWorkspaceCreate::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceSource, &CloudWorkspaceSourceReview::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceCopy, &CloudWorkspaceCopy::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceSource, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &source, const QByteArray &) { finishWorkspaceSource(source); });
+	connect(&workspaceCopy, &CloudWorkspaceCopy::finished, this, [this](const QJsonObject &root, const QString &version, const QString &, bool changed) {
+		workspaceLegacyChanged = changed; finishWorkspace(root, version);
+	});
 	connect(&historyClient, &CloudSyncHistory::finished, this, [this](const QVariantMap &report, const QByteArray &restored) {
 		if (!historyInProgress()) return;
 		const QString providerId = syncProviderId;
@@ -875,6 +883,7 @@ void CloudSyncManager::checkAccount(const QString &providerId)
 
 void CloudSyncManager::clearStorageReview(const QString &providerId)
 {
+	workspaceCopyReviews.remove(providerId);
 	if (workspaceReports.remove(providerId)) emit providersChanged();
 	if (historyReports.remove(providerId)) emit providersChanged();
 	if (storageReviews.remove(providerId)) emit providersChanged();
@@ -1226,8 +1235,9 @@ void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
-	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); ++workspaceSerial; }
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
+	workspaceCopyReview = {}; workspaceLegacyChanged = false;
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

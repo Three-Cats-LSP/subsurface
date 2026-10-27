@@ -110,7 +110,7 @@ protected:
 // injected failures before or after the remote commit. No real network or keys.
 class MemoryCloud : public QNetworkAccessManager {
 public:
-	bool workspaceMode = false, workspaceReadDeferred = false;
+	bool workspaceMode = false, workspaceReadDeferred = false, workspacePayloadAckLost = false;
 	int workspaceRequests = 0, accountRequests = 0;
 	std::function<void(const QNetworkRequest &)> requested;
 	struct File { QString name, id, version; QByteArray data; QString created; };
@@ -223,6 +223,7 @@ protected:
 				else { files[index].data = data; files[index].version = "rev-" + QString::number(++serial); }
 				body = json({{"id", workspaceMode && !google ? "id:" + files[index].id : files[index].id}, {"rev", files[index].version}});
 				if (workspaceMode) { auto metadata = QJsonDocument::fromJson(body).object(); metadata["name"] = files[index].name; body = json(metadata); }
+				if (workspacePayloadAckLost && create && name.startsWith("subsurface-neo-workspace-") && name.endsWith(".xml")) status = 503;
 				if (failStage == 3 && commit) status = 503;
 			}
 		} else if (body.isEmpty()) {
@@ -1613,6 +1614,110 @@ void TestCloudSyncManager::testWorkspaceSelection()
 	QCOMPARE(manager.serializeCurrentDiveLog(), expectedLocal);
 	if (mode != 7) QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(provider)), baseline);
 	if (mode != 0 && mode != 14) QCOMPARE(network.files[0].data, initial.json());
+}
+
+void TestCloudSyncManager::testWorkspaceCopy_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"copy-idempotent-restart", "unreviewed", "wrong-review", "edited-before-confirmation", "choice-away-back", "missing-checkpoint",
+		"changed-source", "replaced-source", "cancel-copy", "disconnect-copy", "edit-during-copy", "choice-during-copy", "assignment-during-copy",
+		"unknown-payload-ack", "resume-registered", "resume-identified", "submitted-no-replay", "corrupt-proof", "checkpoint-lost-during-copy", "restart-forgets-confirmation",
+		"cancel-review", "edit-during-review", "assigned-before-confirmation", "stale-parent"};
+	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode) QTest::newRow(qPrintable(QString("%1-%2").arg(google).arg(cases[mode]))) << google << mode;
+}
+void TestCloudSyncManager::testWorkspaceCopy()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	const auto previous = qgetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	const auto restore = qScopeGuard([&] { if (previous.isNull()) qunsetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH"); else qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", previous); });
+	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
+	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
+	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
+	const auto local = manager.serializeCurrentDiveLog(); auto expectedLocal = local;
+	manager.saveLastSyncManifest(provider, CloudSyncManifest::forPayload(local)); const auto baseline = CloudCredentialStore::load(manager.syncStateCredentialKey(provider));
+	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
+	const auto epoch = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	const auto ref = CloudWorkspaceReference::create(provider, account, epoch, google ? "1" : "id:1");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); network.add(ref.rootName(), root.json());
+	auto manifest = CloudSyncManifest::forPayload(local); manifest.schemaVersion = 2; manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml";
+	network.add("subsurface-neo-sync.json", manifest.toJson()); network.add(manifest.payloadFileName(), local);
+	const auto checkpointFile = QDir(directory).filePath("roots/" + ref.key() + ".json"); CloudWorkspaceAuthority checkpoint(checkpointFile, ref); QVERIFY(checkpoint.observe(root, network.files[0].version));
+	CloudWorkspaceSelection choice(choiceFile, provider, account); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), ref));
+	QFile choiceRead(choiceFile); QVERIFY(choiceRead.open(QIODevice::ReadOnly)); const auto choiceBytes = choiceRead.readAll(); choiceRead.close();
+	const auto edit = [&] { ::divelog.dives[0]->notes = "Edits must survive workspace copy."; expectedLocal = manager.serializeCurrentDiveLog(); };
+	const auto changeChoice = [&] {
+		const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "another-root" : "id:another-root");
+		CloudWorkspaceSelection changed(choiceFile, provider, account); QVERIFY(changed.load()); QVERIFY(changed.select(changed.version(), other));
+		if (mode == 4) { QVERIFY(changed.load()); QVERIFY(changed.select(changed.version(), ref)); }
+	};
+	QSignalSpy done(&manager, &CloudSyncManager::workspaceFinished);
+	if (mode == 1) {
+		manager.runWorkspace(provider, "copy", QUuid::createUuid().toString(QUuid::WithoutBraces)); QCOMPARE(network.accountRequests, 0); QCOMPARE(network.puts, 0); QVERIFY(!manager.syncInProgress()); return;
+	}
+	if (mode == 20 || mode == 21) network.workspaceReadDeferred = true;
+	manager.runWorkspace(provider, "inspect-copy");
+	if (mode == 20 || mode == 21) {
+		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply;
+		if (mode == 20) manager.cancelWorkspace(); else edit();
+		network.workspaceReadDeferred = false; late->complete(); QTRY_VERIFY(!manager.syncInProgress());
+		QCOMPARE(done.size(), 0); QVERIFY(manager.workspaceCopyReviews.value(provider).id.isEmpty()); QCOMPARE(network.puts, 0); QCOMPARE(manager.serializeCurrentDiveLog(), expectedLocal); return;
+	}
+	QTRY_COMPARE(done.size(), 1); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, 0);
+	const auto review = manager.workspaceCopyReviews.value(provider); QVERIFY(CloudHistoryRecord::validEpoch(review.id)); QVERIFY(review.source.valid()); QCOMPARE(review.parent, QString());
+	QVERIFY(manager.workspaceReport(provider).value("copyReview").toMap().value("id").toString() == review.id);
+	if (mode == 2) { manager.runWorkspace(provider, "copy", QUuid::createUuid().toString(QUuid::WithoutBraces)); QCOMPARE(network.puts, 0); QCOMPARE(done.size(), 1); return; }
+	if (mode == 3) edit(); if (mode == 4) changeChoice(); if (mode == 5) QVERIFY(QFile::remove(checkpointFile));
+	if (mode == 6) { manifest.createdAtUtc = manifest.createdAtUtc.addSecs(1); network.files[1].data = manifest.toJson(); }
+	if (mode == 7) { const auto body = network.files[1].data; network.files.removeAt(1); network.add("subsurface-neo-sync.json", body); }
+	if (mode == 13) network.workspacePayloadAckLost = true;
+	QString action = "copy", argument = review.id, savedTicket;
+	if (mode >= 14 && mode <= 17) {
+		action = "resume-copy"; savedTicket = QUuid::createUuid().toString(QUuid::WithoutBraces); argument = savedTicket;
+		const auto copyPath = QDir(directory).filePath("copies/" + ref.key() + "/" + savedTicket);
+		QVERIFY(review.source.preserve(QDir(copyPath).filePath("source.json")));
+		CloudWorkspaceCopyIntent intent(QDir(copyPath).filePath("intent.json"), ref, review.source, savedTicket, {}); QVERIFY(intent.prepare()); QVERIFY(intent.beginRegistration());
+		QVERIFY(root.registerCopy(savedTicket, {}, review.source)); network.files[0].data = root.json(); network.files[0].version = "registered-revision"; QVERIFY(intent.registerTicket());
+		if (mode == 15 || mode == 16) QVERIFY(intent.submit());
+		if (mode == 15) { network.add(ref.payloadName(savedTicket), local); QVERIFY(intent.identify(google ? network.files.last().id : "id:" + network.files.last().id)); }
+		if (mode == 17) { QFile proof(QDir(copyPath).filePath("source.json")); QVERIFY(proof.open(QIODevice::WriteOnly)); proof.write("bad proof"); proof.close(); }
+	}
+	if (mode == 19) {
+		CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path(); restarted.tokens.insert(provider, manager.tokens.value(provider));
+		const auto requests = network.accountRequests; restarted.runWorkspace(provider, "copy", review.id); QCOMPARE(network.accountRequests, requests); QVERIFY(!restarted.syncInProgress()); QCOMPARE(network.puts, 0); return;
+	}
+	if (mode == 22) manager.setPrimaryProvider(provider);
+	if (mode == 23) {
+		const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces); QVERIFY(root.registerUpload(ticket, {}, CloudSyncManifest::sha256(local), local.size()));
+		network.add(ref.payloadName(ticket), local); QVERIFY(root.completeUpload(ticket, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(ticket, {}));
+		network.files[0].data = root.json(); network.files[0].version = "competing-head";
+	}
+	if ((mode >= 8 && mode <= 12) || mode == 18) network.workspaceReadDeferred = true;
+	manager.runWorkspace(provider, action, argument);
+	if ((mode >= 8 && mode <= 12) || mode == 18) {
+		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply;
+		if (mode == 8) manager.cancelWorkspace(); if (mode == 9) manager.disconnectProvider(provider); if (mode == 10) edit(); if (mode == 11) changeChoice();
+		if (mode == 12) manager.setPrimaryProvider(provider); if (mode == 18) QVERIFY(QFile::remove(checkpointFile));
+		network.workspaceReadDeferred = false; late->complete();
+	}
+	QTRY_VERIFY(!manager.syncInProgress());
+	const bool success = mode == 0 || mode == 14 || mode == 15;
+	QCOMPARE(done.size(), success ? 2 : 1);
+	if (success) {
+		QVERIFY(manager.lastError().isEmpty()); QVERIFY(manager.workspaceReport(provider).value("copied").toBool());
+		const auto copied = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(copied.valid()); QCOMPARE(copied.value["journal"].toObject()["history"].toArray().size(), 1);
+		QCOMPARE(copied.copySource(copied.head()).key(), review.source.key()); if (!savedTicket.isEmpty()) QCOMPARE(copied.head(), savedTicket);
+		const auto puts = network.puts; manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(done.size(), 3);
+		manager.runWorkspace(provider, "copy", manager.workspaceCopyReviews.value(provider).id); QTRY_COMPARE(done.size(), 4); QCOMPARE(network.puts, puts);
+	} else if (mode == 13) {
+		const auto copies = manager.workspaceReport(provider).value("copies").toList(); QCOMPARE(copies.size(), 1); QVERIFY(copies[0].toMap().value("uncertain").toBool());
+	} else { QCOMPARE(network.puts, 0); }
+	if (mode == 16) { const auto copies = manager.workspaceReport(provider).value("copies").toList(); QCOMPARE(copies.size(), 1); QVERIFY(!copies[0].toMap().value("canResume").toBool()); }
+	if (mode == 17) QVERIFY(manager.workspaceReport(provider).value("copyRecoveryRequired").toBool());
+	QCOMPARE(manager.serializeCurrentDiveLog(), expectedLocal); if (mode != 9) QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(provider)), baseline);
+	if (mode != 4 && mode != 11) { QVERIFY(choiceRead.open(QIODevice::ReadOnly)); QCOMPARE(choiceRead.readAll(), choiceBytes); }
+	if (mode == 5 || mode == 18) QVERIFY(!QFileInfo::exists(checkpointFile));
 }
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)
