@@ -490,12 +490,12 @@ void CloudSyncFileStore::googleDownload(const QString &accessToken, const QStrin
 }
 
 void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
-				     bool conditional, const QString &version)
+				     bool conditional, const QString &version, const QString &fileId)
 {
 	QNetworkRequest request = authorizedRequest(QUrl(QStringLiteral("https://content.dropboxapi.com/2/files/upload")), accessToken, data.size());
 	request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
 	request.setRawHeader("Dropbox-API-Arg", compactJson({
-		{QStringLiteral("path"), QStringLiteral("/") + fileName},
+		{QStringLiteral("path"), fileId.isEmpty() ? QStringLiteral("/") + fileName : fileId},
 		{QStringLiteral("mode"), !conditional ? QJsonValue(QStringLiteral("overwrite")) : version.isEmpty()
 			? QJsonValue(QStringLiteral("add")) : QJsonValue(QJsonObject{{QStringLiteral(".tag"), QStringLiteral("update")},
 				{QStringLiteral("update"), version}})},
@@ -505,14 +505,23 @@ void CloudSyncFileStore::dropboxUpload(const QString &accessToken, const QString
 	}));
 	QNetworkReply *reply = networkManager->post(request, data);
 	trackReply(CloudSyncProviderType::Dropbox, reply, data.size(), fileName);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, conditional]() {
+	connect(reply, &QNetworkReply::finished, this, [this, reply, fileName, conditional, fileId]() {
 		const QByteArray payload = reply->readAll();
 		const bool ok = reply->error() == QNetworkReply::NoError;
 		const QString error = ok ? QString() : replyError(reply, payload);
 		reply->deleteLater();
-		if (ok)
+		if (ok) {
+			if (!fileId.isEmpty()) {
+				const auto metadata = QJsonDocument::fromJson(payload).object();
+				if (metadata.value("id").toString() != fileId || metadata.value("name").toString() != fileName ||
+				    metadata.value("rev").toString().isEmpty()) {
+					emit operationError(CloudSyncProviderType::Dropbox, fileName,
+						tr("Dropbox could not confirm the updated file identity. Reload before continuing."));
+					return;
+				}
+			}
 			emit uploadFinished(CloudSyncProviderType::Dropbox, fileName);
-		else if (conditional && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 409 &&
+		} else if (conditional && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 409 &&
 			 QJsonDocument::fromJson(payload).object().value(QStringLiteral("error_summary")).toString().startsWith(QStringLiteral("path/conflict/")))
 			emit writeConflict(CloudSyncProviderType::Dropbox, fileName);
 		else
@@ -592,6 +601,20 @@ void CloudSyncFileStore::uploadConditional(CloudSyncProviderType provider, const
 	} else {
 		emit operationError(provider, fileName, tr("Cloud update is missing its expected file revision."));
 	}
+}
+
+void CloudSyncFileStore::uploadIdentity(CloudSyncProviderType provider, const QString &accessToken,
+	const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId)
+{
+	const bool google = provider == CloudSyncProviderType::GoogleDrive;
+	const auto pattern = google ? QStringLiteral("^[A-Za-z0-9_-]+$") : QStringLiteral("^id:[A-Za-z0-9_-]+$");
+	if ((provider != CloudSyncProviderType::Dropbox && !google) || accessToken.isEmpty() || fileName.isEmpty() ||
+	    safeRemoteName(fileName) != fileName || version.isEmpty() || version.size() > 512 || version.contains(QChar::Null) ||
+	    version.contains('\r') || version.contains('\n') || fileId.size() > 512 || !QRegularExpression(pattern).match(fileId).hasMatch()) {
+		emit operationError(provider, fileName, tr("Cloud update identity or revision is incomplete. Reload before continuing.")); return;
+	}
+	if (google) uploadConditional(provider, accessToken, fileName, data, version, fileId);
+	else dropboxUpload(accessToken, fileName, data, true, version, fileId);
 }
 
 void CloudSyncFileStore::downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName)

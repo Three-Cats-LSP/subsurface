@@ -12,6 +12,8 @@ private slots:
 	void fenceRejection();
 	void fenceCas_data();
 	void fenceCas();
+	void identityWrite_data();
+	void identityWrite();
 	void invalidRecords_data();
 	void invalidRecords();
 	void workflow_data();

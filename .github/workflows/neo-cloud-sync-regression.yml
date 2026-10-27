@@ -40,7 +40,8 @@ jobs:
         run: |
           cmake -S tests/cloud-history -B build-history -DCMAKE_BUILD_TYPE=Debug
           cmake --build build-history --parallel 2
-          ctest --test-dir build-history --output-on-failure
+          ctest --test-dir build-history --output-on-failure || { cat build-history/history-results.txt; exit 1; }
+          cat build-history/history-results.txt
 
   windows-history-protocol:
     name: Windows history protocol

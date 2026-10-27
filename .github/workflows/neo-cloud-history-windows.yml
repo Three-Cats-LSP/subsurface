@@ -24,11 +24,28 @@ jobs:
           cmake --build build-history --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ctest --test-dir build-history --build-config Release --output-on-failure
+          $historyTestExit = $LASTEXITCODE
+          if (Test-Path build-history/history-results.txt) { Get-Content build-history/history-results.txt }
+          exit $historyTestExit
+      - name: Stage isolated native identity probe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build-history/identity-probe | Out-Null
+          Copy-Item build-history/Release/NeoCloudIdentityProbe.exe build-history/identity-probe/
+          windeployqt --no-translations --dir build-history/identity-probe build-history/identity-probe/NeoCloudIdentityProbe.exe
           exit $LASTEXITCODE
+      - name: Preserve native identity probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Neo-Windows-cloud-identity-probe
+          path: build-history/identity-probe/
+          if-no-files-found: error
       - name: Preserve protocol test evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: Neo-Windows-history-protocol-evidence
-          path: build-history/Testing/Temporary/*.log
+          path: |
+            build-history/Testing/Temporary/*.log
+            build-history/history-results.txt
           if-no-files-found: ignore

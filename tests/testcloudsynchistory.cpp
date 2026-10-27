@@ -68,6 +68,7 @@ public:
 	struct File { QString name, id, rev; QByteArray data; };
 	QList<File> files;
 	int serial = 0, fault = 0, mutations = 0, renames = 0;
+	int writeFailureStatus = 0;
 	bool allowed = true, guard = true;
 	QPointer<Reply> deferred;
 	std::function<void(const QString &)> wrote;
@@ -138,9 +139,9 @@ protected:
 				if (fault == 16) defer = true;
 			}
 		} else if (write) {
-			++mutations; allowed &= name.startsWith("subsurface-neo-history-");
+			++mutations; allowed &= name.startsWith("subsurface-neo-history-") || (!create && index < 0);
 			const bool root = name.endsWith(".json");
-			if (!root) {
+			if (!root && (create || index >= 0)) {
 				const QString epoch = name.mid(23, 36), ticket = name.mid(60, 36);
 				auto control = CloudHistoryRecord::parse(content(CloudHistoryRecord::rootName(epoch)));
 				if (!control.valid()) control = CloudHistoryFence::parse(content(CloudHistoryRecord::rootName(epoch))).record();
@@ -151,13 +152,14 @@ protected:
 			const auto candidate = CloudHistoryRecord::parse(data);
 			const bool publish = root && candidate.valid() && !candidate.head().isEmpty() &&
 				(index < 0 || candidate.head() != CloudHistoryRecord::parse(files[index].data).head());
-			if ((fault == 1 && root && create) || (fault == 2 && !root)) status = 503;
+			if (writeFailureStatus) status = writeFailureStatus;
+			else if ((fault == 1 && root && create) || (fault == 2 && !root)) status = 503;
 			else if (fault == 4 && root && !create) { status = google ? 412 : 409; fault = 0; }
 			else if ((!create && (index < 0 || files[index].rev != expected)) || (!google && create && index >= 0)) status = google ? 412 : 409;
 			else {
 				if (create) { add(name, data); index = files.size() - 1; }
 				else { files[index].data = data; files[index].rev = "rev-" + QString::number(++serial); }
-				body = json({{"id", google ? files[index].id.mid(3) : files[index].id}, {"rev", files[index].rev}});
+				body = json({{"id", google ? files[index].id.mid(3) : files[index].id}, {"rev", files[index].rev}, {"name", files[index].name}});
 				if (fault == 3 && publish) { status = 503; fault = 0; }
 				if (loseWriteAck) { status = 503; loseWriteAck = false; }
 				if (fault == 7 && !root) { auto m = CloudSyncManifest::forPayload(B); files[find(Legacy)].data = m.toJson(); fault = 0; }
@@ -364,7 +366,7 @@ void TestCloudSyncHistory::fenceCas()
 		conflicts(&files, &CloudSyncFileStore::writeConflict), read(&files, &CloudSyncFileStore::versionedDownloadFinished);
 	int stage = 0;
 	const auto write = [&](int index, const QByteArray &bytes, const QString &version) {
-		files.uploadConditional(provider, "token", n.files[index].name, bytes, version, id(index));
+		files.uploadIdentity(provider, "token", n.files[index].name, bytes, version, id(index));
 	};
 	const auto persist = [&](int index, const QByteArray &bytes) {
 		const int writes = written.size(), failures = errors.size(), reads = read.size();
@@ -467,6 +469,92 @@ void TestCloudSyncHistory::fenceCas()
 		QCOMPARE(n.files[i].id, original[i].id); QCOMPARE(n.files[i].rev, original[i].rev); QCOMPARE(n.files[i].data, original[i].data);
 	}
 	QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::identityWrite_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
+	const QStringList cases = {"exact-id", "moved-with-replacement", "stale-revision", "missing-id", "lost-response", "name-mismatch",
+		"invalid-id", "empty-revision", "empty-id", "legacy-provider", "unsafe-name", "empty-token", "newline-revision",
+		"long-id", "long-revision", "empty-name", "null-revision", "cancel-after-commit", "throttle", "unauthorized", "server-error",
+		"wrong-ack-id", "wrong-ack-name", "missing-ack-revision"};
+	for (bool g : {false, true}) for (int s = 0; s < (g ? 21 : cases.size()); ++s)
+		QTest::newRow(qPrintable(QString("%1-%2").arg(g).arg(cases[s]))) << g << s;
+}
+void TestCloudSyncHistory::identityWrite()
+{
+	QFETCH(bool, google); QFETCH(int, scenario);
+	Network n; n.seed(); const auto name = CloudHistoryRecord::rootName(uid()); n.add(name, A);
+	const auto targetId = google ? n.files[2].id.mid(3) : n.files[2].id;
+	auto provider = google ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	QString expectedName = name, expectedId = targetId, expectedVersion = n.files[2].rev, token = "token";
+	if (scenario == 1 || scenario == 5) {
+		n.files[2].name = name.chopped(5) + "-moved.json";
+		n.add(name, "preserved replacement");
+		if (scenario == 1) expectedName = n.files[2].name;
+	}
+	if (scenario == 2) n.files[2].rev += "-racing-writer";
+	if (scenario == 3) expectedId = google ? "missing-id" : "id:missing-id";
+	if (scenario == 4) n.loseWriteAck = true;
+	if (scenario == 6) expectedId = "invalid/id";
+	if (scenario == 7) expectedVersion.clear();
+	if (scenario == 8) expectedId.clear();
+	if (scenario == 9) provider = CloudSyncProviderType::SubsurfaceCloud;
+	if (scenario == 10) expectedName = "unsafe/path.json";
+	if (scenario == 11) token.clear();
+	if (scenario == 12) expectedVersion += '\n';
+	if (scenario == 13) expectedId += QString(513, 'x');
+	if (scenario == 14) expectedVersion = QString(513, 'x');
+	if (scenario == 15) expectedName.clear();
+	if (scenario == 16) expectedVersion += QChar::Null;
+	if (scenario == 17) n.deferReads = true;
+	if (scenario >= 18 && scenario <= 20) n.writeFailureStatus = scenario == 18 ? 429 : scenario == 19 ? 401 : 503;
+	if (scenario >= 21) n.response = [&](const QNetworkRequest &request, const QByteArray &bytes) {
+		if (!request.url().path().endsWith("/upload")) return bytes;
+		auto ack = QJsonDocument::fromJson(bytes).object();
+		if (scenario == 21) ack["id"] = "id:different-id";
+		if (scenario == 22) ack["name"] = "wrong-name.json";
+		if (scenario == 23) ack.remove("rev");
+		return QJsonDocument(ack).toJson(QJsonDocument::Compact);
+	};
+	const auto before = n.files; QStringList uploadTargets; int nameLookups = 0;
+	n.requested = [&](const QNetworkRequest &request) {
+		if (request.url().path() == "/drive/v3/files") ++nameLookups;
+		if (request.url().path() == "/2/files/upload") uploadTargets.append(QJsonDocument::fromJson(request.rawHeader("Dropbox-API-Arg")).object()["path"].toString());
+		else if (request.url().path().startsWith("/upload/drive/v2/files/")) uploadTargets.append(request.url().path().section('/', -1));
+	};
+	CloudSyncFileStore files(&n);
+	QSignalSpy written(&files, &CloudSyncFileStore::uploadFinished), errors(&files, &CloudSyncFileStore::operationError),
+		conflicts(&files, &CloudSyncFileStore::writeConflict), read(&files, &CloudSyncFileStore::versionedDownloadFinished);
+	files.uploadIdentity(provider, token, expectedName, B, expectedVersion, expectedId);
+	if (scenario >= 6 && scenario <= 16) {
+		QCOMPARE(errors.size(), 1); QCOMPARE(written.size(), 0); QCOMPARE(n.mutations, 0); QVERIFY(uploadTargets.isEmpty()); return;
+	}
+	if (scenario == 17) {
+		QTRY_VERIFY(n.deferred); files.cancel(provider); n.deferReads = false; QTest::qWait(20);
+		QCOMPARE(written.size(), 0); QCOMPARE(errors.size(), 0); QCOMPARE(conflicts.size(), 0);
+	} else {
+		QTRY_COMPARE(written.size() + errors.size() + conflicts.size(), 1);
+		const bool rejected = scenario == 2 || scenario == 3 || scenario == 4 || scenario >= 18 || (!google && scenario == 5);
+		QCOMPARE(written.size(), int(!rejected));
+		if (scenario == 19) { QCOMPARE(errors.size(), 1); QVERIFY(errors.first()[3].toBool()); }
+	}
+	QCOMPARE(n.mutations, 1); QCOMPARE(uploadTargets, QStringList{expectedId}); QCOMPARE(nameLookups, 0); QVERIFY(n.allowed);
+	const bool unchanged = scenario == 2 || scenario == 3 || (scenario >= 18 && scenario <= 20);
+	QCOMPARE(n.files[2].data, unchanged ? A : B);
+	for (int i = 0; i < before.size(); ++i) {
+		QCOMPARE(n.files[i].id, before[i].id); QCOMPARE(n.files[i].name, before[i].name);
+		if (i != 2 || unchanged) { QCOMPARE(n.files[i].data, before[i].data); QCOMPARE(n.files[i].rev, before[i].rev); }
+	}
+	if (scenario == 5) {
+		const int failures = errors.size() + conflicts.size();
+		files.downloadIdentity(provider, "token", expectedName, targetId);
+		QTRY_COMPARE(errors.size() + conflicts.size(), failures + 1); QCOMPARE(read.size(), 0);
+	} else {
+		files.downloadIdentity(provider, "token", n.files[2].name, targetId); QTRY_COMPARE(read.size(), 1);
+		QCOMPARE(read.first()[2].toByteArray(), unchanged ? A : B); QCOMPARE(read.first()[4].toString(), targetId);
+	}
+	QCOMPARE(n.mutations, 1); QCOMPARE(n.files.size(), before.size());
 }
 
 void TestCloudSyncHistory::invalidRecords_data()

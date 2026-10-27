@@ -17,4 +17,13 @@ add_executable(TestCloudSyncHistory
 target_include_directories(TestCloudSyncHistory PRIVATE ${NEO_ROOT})
 target_link_libraries(TestCloudSyncHistory PRIVATE Qt6::Core Qt6::Network Qt6::Test)
 enable_testing()
-add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory)
+add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory -o "${CMAKE_CURRENT_BINARY_DIR}/history-results.txt,txt")
+
+# Explicit developer tool: no credentials or live calls are part of CTest.
+# Its caller verifies the disposable account and newly created fixture IDs.
+add_executable(NeoCloudIdentityProbe identityprobe.cpp
+    ${NEO_ROOT}/core/cloudsyncfilestore.cpp ${NEO_ROOT}/core/cloudsyncfilestore.h
+    ${NEO_ROOT}/core/cloudsyncmanifest.cpp ${NEO_ROOT}/core/cloudsyncmanifest.h
+    ${NEO_ROOT}/core/cloudsyncprovider.cpp ${NEO_ROOT}/core/cloudsyncprovider.h)
+target_include_directories(NeoCloudIdentityProbe PRIVATE ${NEO_ROOT})
+target_link_libraries(NeoCloudIdentityProbe PRIVATE Qt6::Core Qt6::Network)

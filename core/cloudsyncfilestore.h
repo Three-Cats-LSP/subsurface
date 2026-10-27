@@ -30,6 +30,10 @@ public:
 	// returned with the version; names alone are not unique in Drive.
 	void uploadConditional(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId = {});
+	// Update only this exact identity/revision, with no name-based fallback or
+	// create mode. Confirm the current identity/body again before publication.
+	void uploadIdentity(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QByteArray &data, const QString &version, const QString &fileId);
 	void downloadVersioned(CloudSyncProviderType provider, const QString &accessToken, const QString &fileName);
 	// History uses strict reads: duplicate legacy names must never trigger a rename.
 	void setStrictReads(bool enabled) { strictReads = enabled; }
@@ -76,7 +80,7 @@ private:
 	void googleUpload(const QString &accessToken, const QString &fileName, const QByteArray &data, bool createOnly = false);
 	void googleDownload(const QString &accessToken, const QString &fileName);
 	void dropboxUpload(const QString &accessToken, const QString &fileName, const QByteArray &data,
-		bool conditional = false, const QString &version = {});
+		bool conditional = false, const QString &version = {}, const QString &fileId = {});
 	void dropboxDownload(const QString &accessToken, const QString &fileName, bool versioned = false,
 		const QString &expectedId = {}, const QString &expectedVersion = {});
 	void googleDownloadVersioned(const QString &accessToken, const QString &fileName, int attempt = 0);
