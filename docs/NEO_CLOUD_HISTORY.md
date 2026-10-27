@@ -1,5 +1,7 @@
 # Experimental coordinated cloud history
 
+The later [explicit workspace workflow](NEO_CLOUD_WORKSPACES.md) now has Windows-validated shared create/join/verification controls and a separate read-only source-copy review. It preserves this history workflow and ordinary schema 1/2 sync. Joining does not copy data or activate workspace synchronization; guarded copy publication and automatic-sync integration remain open. See the [continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md) for current exact validation and preservation evidence.
+
 The next retention increment adds a gated history namespace with copy migration, explicit saves and restore. Normal schema 1/2 synchronization stays in place. This is a development workflow for isolated profiles; it is not the production migration of automatic sync. Deletion, retirement, reservation expiry and metadata compaction are absent.
 
 ## Development gate and workflow
