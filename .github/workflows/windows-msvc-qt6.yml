@@ -60,12 +60,28 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\vcpkg-cache"
 
+      - name: Identify vcpkg cache inputs
+        id: vcpkg-cache-inputs
+        shell: pwsh
+        run: |
+          $vcpkgCommit = git -C C:\vcpkg rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $vcpkgCommit -notmatch '^[a-f0-9]{40}$') { throw 'Cannot identify the installed vcpkg registry' }
+          $vcpkgImage = $env:ImageVersion
+          if ([string]::IsNullOrWhiteSpace($vcpkgImage)) { $vcpkgImage = 'unknown-image' }
+          "revision=$($vcpkgCommit.Trim())" >> $env:GITHUB_OUTPUT
+          "image=$vcpkgImage" >> $env:GITHUB_OUTPUT
+
       - name: Restore vcpkg cache
+        id: vcpkg-cache-restore
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/vcpkg-cache
-          key: windows-vcpkg-${{ hashFiles('.github/workflows/windows-msvc-qt6.yml') }}
-          restore-keys: windows-vcpkg-
+          key: windows-vcpkg-v2-${{ steps.vcpkg-cache-inputs.outputs.revision }}-${{ steps.vcpkg-cache-inputs.outputs.image }}-${{ hashFiles('.github/workflows/windows-msvc-qt6.yml') }}
+          restore-keys: |
+            windows-vcpkg-v2-${{ steps.vcpkg-cache-inputs.outputs.revision }}-${{ steps.vcpkg-cache-inputs.outputs.image }}-
+            windows-vcpkg-v2-${{ steps.vcpkg-cache-inputs.outputs.revision }}-
+            windows-vcpkg-v2-
+            windows-vcpkg-
 
       - name: Install vcpkg dependencies
         shell: pwsh
@@ -77,10 +93,10 @@ jobs:
 
       - name: Save vcpkg cache
         uses: actions/cache/save@v6
-        if: always()
+        if: success() && steps.vcpkg-cache-restore.outputs.cache-hit != 'true'
         with:
           path: ${{ github.workspace }}/vcpkg-cache
-          key: windows-vcpkg-${{ hashFiles('.github/workflows/windows-msvc-qt6.yml') }}
+          key: ${{ steps.vcpkg-cache-restore.outputs.cache-primary-key }}
 
       - name: load the documentation from cache
         uses: actions/cache@v6
