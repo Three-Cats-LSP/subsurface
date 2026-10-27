@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncworkspaceupload.h"
+#include "cloudsyncworkspaceread.h"
 #include "cloudsyncmanifest.h"
 #include <QDir>
 #include <QFile>
@@ -14,14 +15,26 @@ namespace {
 QString text(const QJsonObject &o, const char *key) { return o.value(QLatin1String(key)).toString(); }
 bool revision(const QString &v) { return !v.isEmpty() && v.size() <= 512 && !v.contains(QChar::Null) && !v.contains('\r') && !v.contains('\n'); }
 const QStringList States = {"prepared", "registering", "registered", "submitted", "identified", "verified", "uploaded", "committed"};
+bool validRestore(const QJsonObject &restore, const CloudWorkspaceReference &ref, const QString &ticket, const QString &hash, qint64 bytes)
+{
+	const auto source = text(restore, "source"), reservation = text(restore, "reservation"); const auto s = restore.value("snapshot").toObject();
+	return restore.size() == 3 && CloudHistoryRecord::validEpoch(source) && CloudHistoryRecord::validEpoch(reservation) &&
+		source != ticket && reservation != ticket && reservation != source && s.size() == 5 && text(s, "name") == ref.payloadName(source) &&
+		text(s, "object") != text(ref.value, "root_id") &&
+		CloudWorkspaceReference::create(text(ref.value, "provider"), text(ref.value, "account"), text(ref.value, "epoch"), text(s, "object")).valid() &&
+		revision(text(s, "version")) && s.value("sha256") == QJsonValue(hash) && s.value("bytes") == QJsonValue(double(bytes));
+}
 }
 CloudWorkspaceUploadIntent::CloudWorkspaceUploadIntent(const QString &file, const CloudWorkspaceReference &workspace, const QString &hash, qint64 bytes,
-	const QString &ticket, const QString &parent) : fileName(file), reference(workspace)
+	const QString &ticket, const QString &parent, const QJsonObject &restore) : fileName(file), reference(workspace)
 {
 	if (reference.valid() && QRegularExpression("^[a-f0-9]{64}$").match(hash).hasMatch() && bytes >= 1 && bytes <= 64 * 1024 * 1024 &&
-		CloudHistoryRecord::validEpoch(ticket) && (parent.isEmpty() || CloudHistoryRecord::validEpoch(parent)) && ticket != parent)
+		CloudHistoryRecord::validEpoch(ticket) && (parent.isEmpty() || CloudHistoryRecord::validEpoch(parent)) && ticket != parent &&
+		(restore.isEmpty() || (validRestore(restore, reference, ticket, hash, bytes) && text(restore, "reservation") != parent))) {
 		scope = {{"schema", 1}, {"format", "neo-workspace-upload-intent-development-1"}, {"workspace", reference.value},
 		    {"payload_sha256", hash}, {"payload_bytes", double(bytes)}, {"ticket", ticket}, {"parent", parent}};
+		if (!restore.isEmpty()) { scope["format"] = "neo-workspace-restore-intent-development-1"; scope["restore"] = restore; }
+	}
 }
 QString CloudWorkspaceUploadIntent::state() const { return text(saved, "state"); }
 QString CloudWorkspaceUploadIntent::id() const { return text(saved, "object"); }
@@ -111,7 +124,7 @@ void CloudWorkspaceUpload::cancel()
 {
 	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); intent.reset(); reference.value = {}; root.value = {}; pending.value = {};
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); rootVersion.clear(); payloadHash.clear(); payload.clear(); scopeCurrent = {}; continuation = {};
-	initialIntentFile.clear(); initialTicket.clear(); initialParent.clear();
+	initialIntentFile.clear(); initialTicket.clear(); initialParent.clear(); readIntentFile.clear(); restoreProof = {}; sourceContinuation = {};
 }
 void CloudWorkspaceUpload::fail(bool rejected)
 {
@@ -125,7 +138,34 @@ bool CloudWorkspaceUpload::current()
 	if (!scopeCurrent || !scopeCurrent()) { fail(); return false; }
 	if (!choice.load()) { if (step == Step::Starting) retryStartupOrFail(choiceFile); else fail(); return false; }
 	if (choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return false; }
+	if (!restoreCurrent()) return false;
 	return true;
+}
+bool CloudWorkspaceUpload::restoreCurrent()
+{
+	if (restoreProof.isEmpty()) return true;
+	CloudWorkspaceReadIntent source(readIntentFile, reference, text(restoreProof, "source"), text(restoreProof, "reservation"));
+	if (!source.reload()) { if (step == Step::Starting) retryStartupOrFail(readIntentFile); else fail(); return false; }
+	// An explicitly released source can only accompany read-only verification
+	// of a locally confirmed committed restore, never a pending publication.
+	const bool completed = intent && intent->state() == "committed" && (source.state() == "releasing" || source.state() == "released");
+	if ((source.state() != "verified" && !completed) || source.snapshot() != restoreProof.value("snapshot").toObject()) { fail(); return false; }
+	return true;
+}
+bool CloudWorkspaceUpload::restoreMatches(bool active) const
+{
+	if (restoreProof.isEmpty()) return true;
+	const auto source = text(restoreProof, "source"), reservation = text(restoreProof, "reservation"); const auto t = root.ticket(source);
+	const QJsonObject s = {{"name", t.value("name")}, {"object", t.value("object")}, {"version", t.value("version")}, {"sha256", t.value("sha256")}, {"bytes", t.value("bytes")}};
+	const auto reserved = root.value.value("journal").toObject().value("reservations").toObject().value(reservation).toObject();
+	return text(t, "state") == "committed" && s == restoreProof.value("snapshot").toObject() && text(reserved, "commit") == source &&
+		(!active || reserved.value("active") == QJsonValue(true));
+}
+void CloudWorkspaceUpload::readSource(const std::function<void()> &then)
+{
+	if (!current() || !restoreMatches(true)) { fail(); return; }
+	const auto s = restoreProof.value("snapshot").toObject(); sourceContinuation = then; step = Step::SourcePayload;
+	files.setResponseLimit(64 * 1024 * 1024); files.downloadExact(provider, token, text(s, "name"), text(s, "object"), text(s, "version"));
 }
 bool CloudWorkspaceUpload::accepts(const QByteArray &bytes) const
 {
@@ -135,17 +175,36 @@ bool CloudWorkspaceUpload::matchesTicket() const
 {
 	const auto t = root.ticket(intent->ticket());
 	return !t.isEmpty() && text(t, "name") == reference.payloadName(intent->ticket()) && text(t, "parent") == intent->parent() &&
-		text(t, "sha256") == payloadHash && t.value("bytes").toDouble() == payload.size() && text(t, "restore_source").isEmpty() &&
-		text(t, "reservation").isEmpty() && !root.copySource(intent->ticket()).valid();
+		text(t, "sha256") == payloadHash && t.value("bytes").toDouble() == payload.size() && text(t, "restore_source") == text(restoreProof, "source") &&
+		text(t, "reservation") == text(restoreProof, "reservation") && !root.copySource(intent->ticket()).valid() && restoreMatches(text(t, "state") != "committed");
 }
 void CloudWorkspaceUpload::start(const QString &accessToken, const CloudWorkspaceReference &workspace, const QByteArray &bytes,
 	const QString &choice, const QString &expectedChoice, const QString &checkpoint, const QString &intentFile,
 	const QString &ticket, const QString &parent, const std::function<bool()> &guard)
 {
+	startImpl(accessToken, workspace, bytes, choice, expectedChoice, checkpoint, intentFile, ticket, parent, {}, {}, {}, guard);
+}
+void CloudWorkspaceUpload::startRestore(const QString &accessToken, const CloudWorkspaceReference &workspace, const QByteArray &bytes,
+	const QString &choice, const QString &expectedChoice, const QString &checkpoint, const QString &intentFile,
+	const QString &ticket, const QString &parent, const QString &readFile, const QString &source, const QString &reservation, const std::function<bool()> &guard)
+{
+	if (readFile.isEmpty() || source.isEmpty() || reservation.isEmpty()) { cancel(); step = Step::Starting; fail(); return; }
+	startImpl(accessToken, workspace, bytes, choice, expectedChoice, checkpoint, intentFile, ticket, parent, readFile, source, reservation, guard);
+}
+void CloudWorkspaceUpload::startImpl(const QString &accessToken, const CloudWorkspaceReference &workspace, const QByteArray &bytes,
+	const QString &choice, const QString &expectedChoice, const QString &checkpoint, const QString &intentFile,
+	const QString &ticket, const QString &parent, const QString &readFile, const QString &source, const QString &reservation, const std::function<bool()> &guard)
+{
 	cancel(); reference = workspace; token = accessToken; payload = bytes; payloadHash = CloudSyncManifest::sha256(bytes);
 	choiceFile = choice; choiceVersion = expectedChoice; checkpointFile = checkpoint; scopeCurrent = guard;
 	initialIntentFile = intentFile; initialTicket = ticket; initialParent = parent;
 	provider = text(reference.value, "provider") == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox; step = Step::Starting;
+	if (!readFile.isEmpty() || !source.isEmpty() || !reservation.isEmpty()) {
+		CloudWorkspaceReadIntent read(readFile, reference, source, reservation);
+		if (readFile.isEmpty() || !read.inspect() || (read.state() != "verified" && read.state() != "releasing" && read.state() != "released")) { fail(); return; }
+		readIntentFile = readFile; restoreProof = {{"source", source}, {"reservation", reservation}, {"snapshot", read.snapshot()}};
+		if (!validRestore(restoreProof, reference, ticket, payloadHash, payload.size()) || readFile == intentFile) { fail(); return; }
+	}
 	if (token.isEmpty() || !reference.valid() || payload.isEmpty() || payload.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(payload) ||
 	    !CloudHistoryRecord::validEpoch(choiceVersion) || !scopeCurrent || !scopeCurrent()) { fail(); return; }
 	startupWait.start(); begin();
@@ -161,11 +220,15 @@ void CloudWorkspaceUpload::retryStartupOrFail(const QString &path)
 }
 void CloudWorkspaceUpload::begin()
 {
-	if (step != Step::Starting || !current()) return;
+	if (step != Step::Starting) return;
+	// Inspect an existing intent before checking a released source, so only an
+	// already committed restore can take the read-only reconciliation path.
+	intent = std::make_unique<CloudWorkspaceUploadIntent>(initialIntentFile, reference, payloadHash, payload.size(), initialTicket, initialParent, restoreProof);
+	intent->inspect();
+	if (!current()) return;
 	CloudWorkspaceAuthority authority(checkpointFile, reference);
 	if (!authority.load()) { retryStartupOrFail(checkpointFile); return; }
 	if (!authority.record().valid()) { fail(); return; }
-	intent = std::make_unique<CloudWorkspaceUploadIntent>(initialIntentFile, reference, payloadHash, payload.size(), initialTicket, initialParent);
 	if (!intent->prepare()) { retryStartupOrFail(initialIntentFile); return; }
 	if (intent->state() == "submitted") { fail(); return; }
 	startupRetry.stop(); startupWait.invalidate(); deadline.start(); readRoot(Step::InitialRoot);
@@ -178,6 +241,11 @@ void CloudWorkspaceUpload::readRoot(Step next)
 void CloudWorkspaceUpload::received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id)
 {
 	if (!current() || !intent->reload()) { fail(); return; }
+	if (step == Step::SourcePayload) {
+		const auto s = restoreProof.value("snapshot").toObject();
+		if (name != text(s, "name") || id != text(s, "object") || version != text(s, "version") || !accepts(bytes)) { fail(); return; }
+		readRoot(Step::SourceRoot); return;
+	}
 	if (step == Step::Payload || step == Step::PayloadBeforePublish || step == Step::PayloadAfter) {
 		const auto t = root.ticket(intent->ticket());
 		if (name != reference.payloadName(intent->ticket()) || id != intent->id() || !accepts(bytes)) { fail(); return; }
@@ -199,7 +267,11 @@ void CloudWorkspaceUpload::received(const QString &name, const QByteArray &bytes
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
 	if (step == Step::ConfirmRoot) { pending.value = {}; auto next = std::move(continuation); continuation = {}; next(); return; }
-	if (step == Step::PublishRoot) { publish(); return; }
+	if (step == Step::SourceRoot) {
+		if (!restoreMatches(true)) { fail(); return; }
+		auto next = std::move(sourceContinuation); sourceContinuation = {}; if (!next) { fail(); return; } next(); return;
+	}
+	if (step == Step::PublishRoot) { if (restoreProof.isEmpty()) publish(); else readSource([this] { publish(); }); return; }
 	if (step == Step::FinalRoot) {
 		const auto t = root.ticket(intent->ticket());
 		if (!matchesTicket() || text(t, "state") != "committed" || text(t, "object") != intent->id() || text(t, "version") != intent->version()) { fail(); return; }
@@ -207,7 +279,7 @@ void CloudWorkspaceUpload::received(const QString &name, const QByteArray &bytes
 		cancel(); emit finished(result, observedVersion, ticket, headMatches); return;
 	}
 	if (step != Step::InitialRoot) { fail(); return; }
-	continueUpload();
+	if (!restoreProof.isEmpty() && text(root.ticket(intent->ticket()), "state") != "committed") readSource([this] { continueUpload(); }); else continueUpload();
 }
 void CloudWorkspaceUpload::writeRoot(const CloudWorkspaceRecord &next, const std::function<void()> &then)
 {
@@ -223,7 +295,7 @@ void CloudWorkspaceUpload::continueUpload()
 	const auto t = root.ticket(intent->ticket());
 	if (t.isEmpty()) {
 		if ((intent->state() != "prepared" && intent->state() != "registering") || root.head() != intent->parent() || !intent->beginRegistration()) { fail(); return; }
-		auto next = root; if (!next.registerUpload(intent->ticket(), intent->parent(), payloadHash, payload.size())) { fail(); return; }
+		auto next = root; if (!next.registerUpload(intent->ticket(), intent->parent(), payloadHash, payload.size(), text(restoreProof, "source"), text(restoreProof, "reservation"))) { fail(); return; }
 		writeRoot(next, [this] { prepareUpload(); }); return;
 	}
 	if (!matchesTicket() || intent->state() == "prepared") { fail(); return; }

@@ -66,7 +66,8 @@ int main(int argc, char **argv)
 	const bool creation = mode == "workspace-create";
 	const bool sourceReview = mode == "workspace-source";
 	const bool copying = mode == "workspace-copy";
-	const bool uploading = mode == "workspace-upload";
+	const bool restoring = mode == "workspace-restore";
+	const bool uploading = mode == "workspace-upload" || restoring;
 	const bool reservedRead = mode == "workspace-reservation";
 	const QRegularExpression fixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-exact-id-[a-z0-9-]+\\.json$"));
 	const QRegularExpression rootFixture(QStringLiteral("^subsurface-neo-history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\\.json$"));
@@ -115,24 +116,30 @@ int main(int argc, char **argv)
 		const auto encoded = payload.value("payload_base64").toString().toLatin1(), bytes = QByteArray::fromBase64(encoded);
 		CloudWorkspaceAuthority authority(checkpoint, ref);
 		const auto marker = CloudSyncManifest::sha256(("neo-workspace-create-probe:origin:" + epoch + ":" + nonce).toUtf8());
-		if (payload.size() != 10 || !ref.matches(get("provider"), payload.value("account").toString()) || ref.rootName() != name || ref.value.value("root_id").toString() != id || !version.isEmpty() ||
+		if (payload.size() != (restoring ? 13 : 10) || !ref.matches(get("provider"), payload.value("account").toString()) || ref.rootName() != name || ref.value.value("root_id").toString() != id || !version.isEmpty() ||
 		    bytes.isEmpty() || bytes.size() > 2048 || bytes.toBase64() != encoded || !CloudHistoryRecord::validXml(bytes) || !payload.value("parent").isString() ||
 		    !CloudHistoryRecord::validEpoch(nonce) || !CloudHistoryRecord::validEpoch(ticket) || marker != get("before_sha256") ||
-		    !intent.isAbsolute() || intent.fileName() != "upload-" + ticket + ".json" || parent.dirName() != "neo-workspace-probe-" + epoch + "-" + nonce ||
+		    !intent.isAbsolute() || intent.fileName() != (restoring ? "restore-" : "upload-") + ticket + ".json" || parent.dirName() != "neo-workspace-probe-" + epoch + "-" + nonce ||
 		    QDir::cleanPath(checkpoint) != parent.filePath("checkpoints/" + ref.key() + ".json") || QDir::cleanPath(choice) != parent.filePath("choice.json") ||
 		    !authority.load() || !authority.record().valid() || authority.record().value.value("journal").toObject().value("legacy_sha256").toString() != marker)
 			return output({{"ok", false}, {"phase", "input"}}, 2);
+		if (restoring && (!CloudHistoryRecord::validEpoch(payload.value("source").toString()) || !CloudHistoryRecord::validEpoch(payload.value("reservation").toString()) ||
+		    QDir::cleanPath(payload.value("read_intent_file").toString()) != parent.filePath("read-" + payload.value("reservation").toString() + ".json")))
+			return output({{"ok", false}, {"phase", "input"}}, 2);
 		CloudWorkspaceUpload upload(&network);
 		QObject::connect(&upload, &CloudWorkspaceUpload::finished, &app, [&](const QJsonObject &record, const QString &actualVersion, const QString &uploadedTicket, bool headMatches) {
-			output({{"ok", true}, {"phase", "workspace-uploaded"}, {"record", record}, {"version", actualVersion}, {"ticket", uploadedTicket}, {"headMatches", headMatches},
+			output({{"ok", true}, {"phase", restoring ? "workspace-restored" : "workspace-uploaded"}, {"record", record}, {"version", actualVersion}, {"ticket", uploadedTicket}, {"headMatches", headMatches},
 				{"createRequests", network.creates}, {"updateRequests", network.updates}, {"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 0); app.exit(0);
 		});
 		QObject::connect(&upload, &CloudWorkspaceUpload::failed, &app, [&](const QString &, bool rejected) {
 			output({{"ok", false}, {"phase", "workspace-upload"}, {"tokenRejected", rejected}, {"createRequests", network.creates}, {"updateRequests", network.updates},
 				{"otherWrites", network.otherWrites}, {"readRequests", network.reads}, {"nameLookups", network.lookups}}, 2); app.exit(2);
 		});
-		QTimer::singleShot(0, &app, [&] { upload.start(token, ref, bytes, choice, payload.value("choice_version").toString(), checkpoint, intent.absoluteFilePath(),
-			ticket, payload.value("parent").toString(), [] { return true; }); });
+		QTimer::singleShot(0, &app, [&] {
+			if (restoring) upload.startRestore(token, ref, bytes, choice, payload.value("choice_version").toString(), checkpoint, intent.absoluteFilePath(), ticket, payload.value("parent").toString(),
+				payload.value("read_intent_file").toString(), payload.value("source").toString(), payload.value("reservation").toString(), [] { return true; });
+			else upload.start(token, ref, bytes, choice, payload.value("choice_version").toString(), checkpoint, intent.absoluteFilePath(), ticket, payload.value("parent").toString(), [] { return true; });
+		});
 		return app.exec();
 	}
 	if (copying) {
