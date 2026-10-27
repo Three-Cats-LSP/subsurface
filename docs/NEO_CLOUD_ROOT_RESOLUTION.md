@@ -1,0 +1,21 @@
+# Active history-root resolution: next protocol gate
+
+Design constraints, 2026-10-27. This protocol is **not implemented or proved**. [Branch review](NEO_CLOUD_BRANCH_REVIEW.md) is implemented and Windows-validated; it deliberately refuses to elect between active roots. [Local checkpoints](NEO_CLOUD_AUTHORITY.md) protect an established profile but do not establish global authority for a new device.
+
+## Required implementation boundaries
+
+- Use a new, explicitly versioned control format. A conditional transition must fence cached older writers; a rename or a separate advisory file cannot do that. Preserve each root's history, pending tickets, provenance and reservations. Existing schema 1/2 files and earlier development history objects stay protected.
+- Freeze the chosen coordinator before modifying another active root. Persist the exact source identity and a never-reused handoff intent in the coordinator before sealing that source. A source that advances before its seal must invalidate the stale CAS; reread it without dropping new state.
+- Read and confirm by exact provider object identity throughout resolution. Ordinary name-based lookup remains ambiguous while both roots exist, including after a successful coordinator CAS or a lost acknowledgement. Two equal discovery scans are observations, not a transaction or a fence against delayed creation.
+- Seal a source through a conditional control-record write that preserves all of its safety state and names the intended coordinator/session/nonce. Only then consider conditionally archiving its name. Confirm exact identity, expected name and sealed control-body hash afterward. Retain that source root permanently until a separate compaction protocol is validated; do not embed an unbounded second control record inside the coordinator.
+- The coordinator must durably acknowledge the exact sealed source, protecting every referenced snapshot, pending upload name and reservation. Unknown or unreadable sources, hash/revision mismatches and incomplete discovery block progress and all collection. Registration without a known uploaded object identity still protects the intended name; absence or age is not abandonment.
+- Rebinding an established profile requires the exact sealed source to extend its saved checkpoint and a matching acknowledged handoff in the destination. Preserve the old local checkpoint for recovery before replacing its active binding atomically. The pristine-alias exception must not be widened to accept an active replacement.
+- Authority election and selection of dive contents are separate decisions. Preserve access to every branch and keep the local log intact. Copying a selected branch/version creates a new payload/ticket with provenance; applying it locally still requires explicit confirmation and the existing local-edit guard. Do not concatenate branch histories/tickets: upload UUIDs and provider-object references may overlap between copied roots.
+
+## Concurrency questions to resolve in code and tests
+
+Competing coordinators, partially observed membership and late roots need an explicit recovery rule. A strictly ordered identity handoff is one possible way to prevent redirect cycles, but ordering alone does not settle nested intents, superseded sessions or sources sealed to an intermediate coordinator. This is an unresolved design question, not approval to implement that shortcut. Preserve and stop on an unproved case.
+
+At minimum, test a source writer committing during seal, target writes racing freeze, pending uploads completing after fencing, active readers, two resolvers, a third delayed root, local edits, metadata limits, stale account/epoch, and process failure/lost acknowledgement at every transition. Resume from the actual durable state without replaying a stale write or resetting an uncertain epoch. Unknown future formats must remain untouched.
+
+Production namespace discovery, fresh-epoch migration, legacy-namespace change handling, automatic-sync integration and rollback are subsequent gates. A confirmed resolution is not deletion permission. Provider-backed age evidence, pins/recovery roots, retirement/deleting/deleted fences and native conditional deletion adapters still need their own adversarial validation under [the retention design](NEO_CLOUD_RETENTION.md).
