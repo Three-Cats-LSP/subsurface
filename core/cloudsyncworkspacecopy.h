@@ -2,6 +2,7 @@
 #ifndef CLOUD_SYNC_WORKSPACE_COPY_H
 #define CLOUD_SYNC_WORKSPACE_COPY_H
 #include "cloudsyncworkspace.h"
+#include <QElapsedTimer>
 
 // Durable per-attempt metadata. A submitted payload without an acknowledged
 // physical ID cannot be replayed. No XML, token or credentials are stored here.
@@ -50,7 +51,9 @@ signals:
 	void finished(const QJsonObject &root, const QString &version, const QString &ticket, bool legacyChanged);
 	void failed(const QString &message, bool tokenRejected);
 private:
-	enum class Step { Idle, InitialRoot, SourceBefore, WriteRoot, ConfirmRoot, Upload, Payload, SourceBeforePublish, PayloadBeforePublish, PublishRoot, ExistingPayload, PayloadAfter, SourceAfter };
+	enum class Step { Idle, Starting, InitialRoot, SourceBefore, WriteRoot, ConfirmRoot, Upload, Payload, SourceBeforePublish, PayloadBeforePublish, PublishRoot, ExistingPayload, PayloadAfter, SourceAfter };
+	void begin();
+	void retryStartupOrFail(const QString &path);
 	bool current();
 	void fail(bool rejected = false);
 	void readRoot(Step next);
@@ -64,12 +67,15 @@ private:
 	CloudSyncFileStore files;
 	CloudWorkspaceSourceReview sourceReview;
 	QTimer deadline;
+	QTimer startupRetry;
+	QElapsedTimer startupWait;
 	std::unique_ptr<CloudWorkspaceCopyIntent> intent;
 	CloudWorkspaceReference reference;
 	CloudWorkspaceCopySource source;
 	CloudWorkspaceRecord root, pending;
 	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
 	QString token, choiceFile, choiceVersion, checkpointFile, rootVersion, resultTicket;
+	QString initialIntentFile, initialProofFile, initialTicket, initialParent;
 	QByteArray payload;
 	Step step = Step::Idle;
 	std::function<bool()> scopeCurrent;

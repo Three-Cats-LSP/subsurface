@@ -1377,7 +1377,8 @@ void TestCloudSyncHistory::workspaceCopyWorkflow_data()
 	const QStringList cases = {"copy-restart", "schema1", "scope-before", "missing-choice", "stale-choice", "missing-checkpoint", "corrupt-checkpoint", "corrupt-intent", "locked-intent", "submitted-unknown",
 		"register-ack-lost", "payload-ack-lost", "upload-ack-lost", "publish-ack-lost", "source-changed-before-publish", "source-changed-after-publish", "token-rejected", "cancel-upload",
 		"choice-during-upload", "scope-during-upload", "checkpoint-lost-during-upload", "missing-proof-on-resume", "resume-identified", "resume-uploaded", "fresh-attempt-idempotence", "rollback",
-		"fresh-after-unknown", "competing-head", "ack-points-at-root", "ack-points-at-source", "wrong-payload", "payload-changed-before-publish", "payload-changed-after-publish", "choice-away-back"};
+		"fresh-after-unknown", "competing-head", "ack-points-at-root", "ack-points-at-source", "wrong-payload", "payload-changed-before-publish", "payload-changed-after-publish", "choice-away-back",
+		"empty-choice-lock-released", "cancel-waiting-empty-lock", "empty-intent-lock-released", "empty-checkpoint-lock-released", "expired-empty-choice-lock", "choice-changed-while-waiting", "scope-changed-while-waiting", "live-choice-lock"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-copy-workflow-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceCopyWorkflow()
@@ -1450,11 +1451,19 @@ void TestCloudSyncHistory::workspaceCopyWorkflow()
 	};
 	CloudWorkspaceCopy client(&n); QSignalSpy done(&client, &CloudWorkspaceCopy::finished), errors(&client, &CloudWorkspaceCopy::failed);
 	const auto start = [&](CloudWorkspaceCopy &c, const QString &attemptTicket, const QString &file) { c.start("token", ref, source, choiceFile, mode == 4 ? uid() : choiceVersion, cpFile, file, proofFile, attemptTicket, {}, [&] { return n.guard; }); };
+	if (mode >= 34 && mode <= 40) {
+		const auto path = (mode == 36 ? intentFile : mode == 37 ? cpFile : choiceFile) + ".lock"; QFile orphan(path); QVERIFY(orphan.open(QIODevice::ReadWrite));
+		if (mode == 38) QVERIFY(orphan.setFileTime(QDateTime::currentDateTimeUtc().addSecs(-60), QFileDevice::FileModificationTime)); orphan.close();
+		if (mode != 38) QTimer::singleShot(40, &client, [&, path] { injectionFailed = !QFile::remove(path); if (mode == 39) changeChoice(false); if (mode == 40) n.guard = false; });
+		if (mode == 35) QTimer::singleShot(20, &client, [&] { client.cancel(); });
+	}
+	if (mode == 41) { lock = std::make_unique<QLockFile>(choiceFile + ".lock"); QVERIFY(lock->tryLock(0)); }
 	start(client, ticket, intentFile);
-	if (mode == 17 || mode == 22 || mode == 23) {
+	if (mode == 35) { QTest::qWait(250); QCOMPARE(done.size() + errors.size(), 0); QCOMPARE(requests, 0); }
+	else if (mode == 17 || mode == 22 || mode == 23) {
 		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0);
 		if (mode != 17) { start(client, ticket, intentFile); QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), 1); }
-	} else { QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = mode == 0 || mode == 1 || mode == 10 || mode == 12 || mode == 13 || mode == 15 || mode == 24; QCOMPARE(done.size(), int(success)); }
+	} else { QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = mode == 0 || mode == 1 || mode == 10 || mode == 12 || mode == 13 || mode == 15 || mode == 24 || mode == 34 || mode == 36 || mode == 37 || mode == 38; QCOMPARE(done.size(), int(success)); }
 	if (!done.isEmpty()) {
 		const auto completed = CloudWorkspaceRecord::parse(n.files[2].data); QVERIFY(completed.valid()); QCOMPARE(completed.head(), ticket); QCOMPARE(completed.copySource(ticket).json(), source.json());
 		QCOMPARE(completed.ticket(ticket)["state"].toString(), QString("committed")); QCOMPARE(n.files[n.find(ref.payloadName(ticket))].data, A); QCOMPARE(done.last()[3].toBool(), mode == 15);
@@ -1466,12 +1475,12 @@ void TestCloudSyncHistory::workspaceCopyWorkflow()
 		const auto fresh = uid(); CloudWorkspaceCopy retry(&n); QSignalSpy completed(&retry, &CloudWorkspaceCopy::finished); start(retry, fresh, dir.filePath("fresh-intent.json")); QTRY_COMPARE(completed.size(), 1);
 		const auto root = CloudWorkspaceRecord::parse(n.files[2].data); QCOMPARE(root.head(), fresh); QCOMPARE(root.ticket(ticket)["state"].toString(), QString("registered")); QCOMPARE(payloadCreates, 2);
 	}
-	if (mode == 2 || mode == 3 || mode == 4 || mode == 5 || mode == 6 || mode == 7 || mode == 8 || mode == 9 || mode == 21) QCOMPARE(requests, 0);
+	if (mode == 2 || mode == 3 || mode == 4 || mode == 5 || mode == 6 || mode == 7 || mode == 8 || mode == 9 || mode == 21 || mode == 39 || mode == 40 || mode == 41) QCOMPARE(requests, 0);
 	if (mode == 16) QVERIFY(errors.first()[1].toBool());
 	if (mode == 5 || mode == 20) QVERIFY(!QFileInfo::exists(cpFile)); if (mode == 6 || mode == 25) QCOMPARE(read(cpFile), cpBytes);
 	if (mode == 31) QVERIFY(CloudWorkspaceRecord::parse(n.files[2].data).head().isEmpty());
 	if (mode == 32) QCOMPARE(CloudWorkspaceRecord::parse(n.files[2].data).head(), ticket);
-	if (mode != 3 && mode != 18 && mode != 33) QCOMPARE(read(choiceFile), choiceBytes);
+	if (mode != 3 && mode != 18 && mode != 33 && mode != 39) QCOMPARE(read(choiceFile), choiceBytes);
 	if (mode != 21) QCOMPARE(read(proofFile), proofBytes);
 	QCOMPARE(read(localFile), B); QCOMPARE(read(baselineFile), QByteArray("preserve old baseline")); QCOMPARE(n.files[1].data, original[1].data);
 	if (!changedSource) QCOMPARE(n.files[0].data, original[0].data); QVERIFY(n.allowed); QVERIFY(!injectionFailed); QCOMPARE(n.renames, 0);

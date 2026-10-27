@@ -86,6 +86,7 @@ bool CloudWorkspaceCopyIntent::commit() { return advance("uploaded", "committed"
 CloudWorkspaceCopy::CloudWorkspaceCopy(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this), sourceReview(network, this)
 {
 	files.setStrictReads(true); files.setResponseLimit(64 * 1024 * 1024); deadline.setSingleShot(true); deadline.setInterval(600000);
+	startupRetry.setSingleShot(true); connect(&startupRetry, &QTimer::timeout, this, &CloudWorkspaceCopy::begin);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
 	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this,
 		[this](CloudSyncProviderType, const QString &name, const QByteArray &bytes, const QString &version, const QString &id) { received(name, bytes, version, id); });
@@ -121,8 +122,9 @@ CloudWorkspaceCopy::CloudWorkspaceCopy(QNetworkAccessManager *network, QObject *
 CloudWorkspaceCopy::~CloudWorkspaceCopy() { cancel(); }
 void CloudWorkspaceCopy::cancel()
 {
-	step = Step::Idle; deadline.stop(); files.cancel(provider); sourceReview.cancel(); intent.reset(); reference.value = {}; source.value = {}; root.value = {}; pending.value = {};
+	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); sourceReview.cancel(); intent.reset(); reference.value = {}; source.value = {}; root.value = {}; pending.value = {};
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); rootVersion.clear(); resultTicket.clear(); payload.clear(); scopeCurrent = {}; continuation = {};
+	initialIntentFile.clear(); initialProofFile.clear(); initialTicket.clear(); initialParent.clear();
 }
 void CloudWorkspaceCopy::fail(bool rejected)
 {
@@ -133,7 +135,9 @@ bool CloudWorkspaceCopy::current()
 {
 	if (step == Step::Idle) return false;
 	CloudWorkspaceSelection choice(choiceFile, text(reference.value, "provider"), text(reference.value, "account"));
-	if (!scopeCurrent || !scopeCurrent() || !choice.load() || choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return false; }
+	if (!scopeCurrent || !scopeCurrent()) { fail(); return false; }
+	if (!choice.load()) { if (step == Step::Starting) retryStartupOrFail(choiceFile); else fail(); return false; }
+	if (choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return false; }
 	return true;
 }
 void CloudWorkspaceCopy::start(const QString &accessToken, const CloudWorkspaceReference &workspace, const CloudWorkspaceCopySource &from,
@@ -141,14 +145,40 @@ void CloudWorkspaceCopy::start(const QString &accessToken, const CloudWorkspaceR
 	const QString &ticket, const QString &parent, const std::function<bool()> &guard)
 {
 	cancel(); reference = workspace; source = from; token = accessToken; choiceFile = choice; this->choiceVersion = choiceVersion; checkpointFile = checkpoint; scopeCurrent = guard;
-	provider = text(reference.value, "provider") == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox; step = Step::InitialRoot;
-	CloudWorkspaceAuthority authority(checkpointFile, reference);
-	const bool existingIntent = QFileInfo::exists(intentFile);
+	provider = text(reference.value, "provider") == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox; step = Step::Starting;
+	initialIntentFile = intentFile; initialProofFile = proofFile; initialTicket = ticket; initialParent = parent;
 	if (token.isEmpty() || !reference.valid() || !source.matches(text(reference.value, "provider"), text(reference.value, "account")) ||
-	    !CloudHistoryRecord::validEpoch(choiceVersion) || !current()) { fail(); return; }
-	if (!authority.load() || !authority.record().valid() || (existingIntent && CloudWorkspaceCopySource::load(proofFile).json() != source.json()) || !source.preserve(proofFile)) { fail(); return; }
-	intent = std::make_unique<CloudWorkspaceCopyIntent>(intentFile, reference, source, ticket, parent);
-	if (!intent->prepare() || intent->state() == "submitted") { fail(); return; }
+	    !CloudHistoryRecord::validEpoch(choiceVersion) || !scopeCurrent || !scopeCurrent()) { fail(); return; }
+	startupWait.start(); begin();
+}
+void CloudWorkspaceCopy::retryStartupOrFail(const QString &path)
+{
+	// A process can die between creating a lock file and writing its PID.
+	// Keep the normal lock fence; let QLockFile's own stale/native-lock checks
+	// resolve it. Never force-remove a file or wait for a known live owner.
+	QLockFile lock(path + ".lock"); const QFileInfo info(lock.fileName()); qint64 pid = 0; QString host, application;
+	if (startupWait.isValid() && !startupWait.hasExpired(35000) && info.isFile() && !info.isSymLink() && !lock.getLockInfo(&pid, &host, &application)) {
+		startupRetry.start(150); return;
+	}
+	fail();
+}
+void CloudWorkspaceCopy::begin()
+{
+	if (step != Step::Starting) return;
+	if (!scopeCurrent || !scopeCurrent()) { fail(); return; }
+	CloudWorkspaceSelection choice(choiceFile, text(reference.value, "provider"), text(reference.value, "account"));
+	if (!choice.load()) { retryStartupOrFail(choiceFile); return; }
+	if (choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return; }
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
+	if (!authority.load()) { retryStartupOrFail(checkpointFile); return; }
+	if (!authority.record().valid()) { fail(); return; }
+	const bool existingIntent = QFileInfo::exists(initialIntentFile);
+	if (existingIntent && CloudWorkspaceCopySource::load(initialProofFile).json() != source.json()) { fail(); return; }
+	if (!source.preserve(initialProofFile)) { retryStartupOrFail(initialProofFile); return; }
+	intent = std::make_unique<CloudWorkspaceCopyIntent>(initialIntentFile, reference, source, initialTicket, initialParent);
+	if (!intent->prepare()) { retryStartupOrFail(initialIntentFile); return; }
+	if (intent->state() == "submitted") { fail(); return; }
+	startupRetry.stop(); startupWait.invalidate();
 	deadline.start(); readRoot(Step::InitialRoot);
 }
 void CloudWorkspaceCopy::readRoot(Step next)
