@@ -12,6 +12,10 @@ ColumnLayout {
 	property var pendingAcceptance: ({})
 	property var pendingActivation: ({})
 	property var pendingRestore: ({})
+	property int versionOffset: 0
+	readonly property int versionPageSize: 20
+	readonly property string versionReviewKey: report.versionReview || ""
+	onVersionReviewKeyChanged: versionOffset = 0
 	property string pendingConflictReview: ""
 	property string shownConflictReview: ""
 	property bool conflictUiReady: false
@@ -56,7 +60,7 @@ ColumnLayout {
 		}
 	}
 	Text {
-		visible: panel.busy; text: qsTr("Working with workspace…")
+		visible: panel.busy; text: qsTr("Working with workspaceâ€¦")
 		color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
@@ -68,7 +72,7 @@ ColumnLayout {
 		Layout.fillWidth: true; visible: !!panel.report.selected
 		Text {
 			objectName: "workspaceStatus-" + panel.provider.id
-			text: panel.report.verified ? (panel.report.empty ? qsTr("Selected workspace verified · Empty") : qsTr("Selected workspace verified · %1 versions").arg(panel.report.versions)) : qsTr("A workspace is selected on this device. Verify it before use.")
+			text: panel.report.verified ? (panel.report.empty ? qsTr("Selected workspace verified Â· Empty") : qsTr("Selected workspace verified Â· %1 versions").arg(panel.report.versions)) : qsTr("A workspace is selected on this device. Verify it before use.")
 			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
@@ -82,7 +86,7 @@ ColumnLayout {
 			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
-			objectName: "resolveWorkspaceConflict-" + panel.provider.id; text: qsTr("Choose version…"); compact: true; Layout.fillWidth: true
+			objectName: "resolveWorkspaceConflict-" + panel.provider.id; text: qsTr("Choose versionâ€¦"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.syncConflict; enabled: panel.available
 			onClicked: panel.showConflict(true)
 		}
@@ -119,20 +123,38 @@ ColumnLayout {
 			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		Repeater {
-			model: panel.report.versionRows || []
+			model: (panel.report.versionRows || []).slice(panel.versionOffset, panel.versionOffset + panel.versionPageSize)
 			delegate: RowLayout {
 				required property var modelData
 				Layout.fillWidth: true
 				Text {
 					objectName: "workspaceVersionRow-" + panel.provider.id + "-" + modelData.number
-					text: qsTr("Version %1 · %2 bytes%3%4").arg(modelData.number).arg(modelData.bytes).arg(modelData.head ? qsTr(" · Current") : "").arg(modelData.restored ? qsTr(" · Restored copy") : "")
+					text: qsTr("Version %1 Â· %2 bytes%3%4").arg(modelData.number).arg(modelData.bytes).arg(modelData.head ? qsTr(" Â· Current") : "").arg(modelData.restored ? qsTr(" Â· Restored copy") : "")
 					color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 				}
 				NeoButton {
-					objectName: "restoreWorkspaceVersion-" + panel.provider.id + "-" + modelData.number; text: qsTr("Restore…"); compact: true
+					objectName: "restoreWorkspaceVersion-" + panel.provider.id + "-" + modelData.number; text: qsTr("Restoreâ€¦"); compact: true
 					enabled: panel.available && !panel.report.routeRecoveryRequired && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
 					onClicked: { panel.pendingRestore = { source: modelData.id, number: modelData.number, review: panel.report.versionReview }; restoreDialog.open() }
 				}
+			}
+		}
+		RowLayout {
+			visible: (panel.report.versionRows || []).length > panel.versionPageSize
+			Layout.fillWidth: true
+			NeoButton {
+				objectName: "newerWorkspaceVersions-" + panel.provider.id; text: qsTr("Newer"); compact: true
+				enabled: panel.available && panel.versionOffset > 0
+				onClicked: panel.versionOffset = Math.max(0, panel.versionOffset - panel.versionPageSize)
+			}
+			Text {
+				text: qsTr("%1–%2 of %3").arg(panel.versionOffset + 1).arg(Math.min(panel.versionOffset + panel.versionPageSize, (panel.report.versionRows || []).length)).arg((panel.report.versionRows || []).length)
+				color: tokens.textSecondary; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+			}
+			NeoButton {
+				objectName: "olderWorkspaceVersions-" + panel.provider.id; text: qsTr("Older"); compact: true
+				enabled: panel.available && panel.versionOffset + panel.versionPageSize < (panel.report.versionRows || []).length
+				onClicked: panel.versionOffset += panel.versionPageSize
 			}
 		}
 		NeoButton {
@@ -144,16 +166,16 @@ ColumnLayout {
 			visible: !!panel.report.copyReview
 			text: (panel.report.copyReview || {}).missing
 				? qsTr("No existing cloud log was found. Save your local log as a workspace version, then confirm the empty cloud account.")
-				: qsTr("Cloud log reviewed · %1 bytes. Keep a verified copy in this workspace while preserving your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
+				: qsTr("Cloud log reviewed Â· %1 bytes. Keep a verified copy in this workspace while preserving your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
-			objectName: "copyCloudToWorkspace-" + panel.provider.id; text: qsTr("Copy reviewed cloud log…"); compact: true; Layout.fillWidth: true
+			objectName: "copyCloudToWorkspace-" + panel.provider.id; text: qsTr("Copy reviewed cloud logâ€¦"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.copyReview && !(panel.report.copyReview || {}).missing; enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired
 			onClicked: { panel.pendingCopy = panel.report.copyReview; copyDialog.open() }
 		}
 		NeoButton {
-			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: (panel.report.copyReview || {}).missing ? qsTr("Confirm empty cloud account…") : qsTr("Accept copied cloud branch…"); compact: true; Layout.fillWidth: true
+			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: (panel.report.copyReview || {}).missing ? qsTr("Confirm empty cloud accountâ€¦") : qsTr("Accept copied cloud branchâ€¦"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).acceptancePossible && !(panel.report.copyReview || {}).alreadyAccepted
 			enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.acceptanceRecoveryRequired && !panel.report.acceptanceLimitReached
 			onClicked: { panel.pendingAcceptance = panel.report.copyReview; acceptanceDialog.open() }
@@ -164,7 +186,7 @@ ColumnLayout {
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
-			objectName: "activateWorkspace-" + panel.provider.id; text: qsTr("Activate workspace sync…"); compact: true; Layout.fillWidth: true
+			objectName: "activateWorkspace-" + panel.provider.id; text: qsTr("Activate workspace syncâ€¦"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).alreadyAccepted && !panel.report.routeActive
 			enabled: panel.available && !panel.report.activationRecoveryRequired && !panel.report.activationLimitReached
 			onClicked: { panel.pendingActivation = panel.report.copyReview; activationDialog.open() }
@@ -211,7 +233,7 @@ ColumnLayout {
 			required property int index
 			Layout.fillWidth: true
 			Text {
-				text: qsTr("Saved workspace %1%2").arg(index + 1).arg(modelData.current ? qsTr(" · Selected") : "")
+				text: qsTr("Saved workspace %1%2").arg(index + 1).arg(modelData.current ? qsTr(" Â· Selected") : "")
 				color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 			}
 			NeoButton {
@@ -346,7 +368,7 @@ ColumnLayout {
 			ColumnLayout {
 				id: conflictContent; width: parent.width; spacing: 12
 				Text { id: conflictTitle; text: qsTr("Which version do you want to keep?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-				Text { text: qsTr("Keep this device to upload its log to Google Drive. Keep cloud to replace this device’s log with the cloud version. A recovery copy is kept before replacement."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: qsTr("Keep this device to upload its log to Google Drive. Keep cloud to replace this deviceâ€™s log with the cloud version. A recovery copy is kept before replacement."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 				NeoButton {
 					objectName: "keepWorkspaceDevice-" + panel.provider.id; text: qsTr("Keep this device"); Layout.fillWidth: true
 					enabled: panel.available && panel.pendingConflictReview === panel.report.conflictReview

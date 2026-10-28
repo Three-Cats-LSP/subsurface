@@ -1,5 +1,22 @@
 # Windows cloud reliability continuation
 
+**Shared history review pagination.**
+Clean/Modern's actual `NeoWorkspacePanel.qml` now renders at most 20 version rows
+with Newer/Older navigation and resets to the newest page on a new review.
+The reproducible native Qt component probe traversed **605 versions / 31 pages**,
+verified the oldest version's original review/ID in the confirmation popup,
+cancellation without a backend action, reverse navigation and review reset.
+Run `scripts/test-neo-workspace-pagination.py --pyside-path <PySide6 directory>
+--output <evidence directory>`; local evidence is retained at
+`work/workspace-pagination-20261029-repeat/result.json`. This is actual component
+behavior with a synthetic read-only report, not live Google acceptance.
+
+Automatic archive candidate **9db0fa693** is in targeted protocol run
+**40738883128** (host and Windows). Resume it before an integrated full native /
+Windows package run. PDF correction **bea47f4c8 / 40737335739** is validating the
+actual native Clean/Modern/PDF flow; preserve that pending evidence too. No
+owner action or new authorization is currently required.
+
 **Automatic history rollover candidate, 29 October JST.**
 Archive reader/checkpoint **129527e1a / 40734458337 PASSED** 2,531 host and
 2,563 Windows protocol checks. Integrated coordinator **f993f59e0 /

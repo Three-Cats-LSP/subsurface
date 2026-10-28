@@ -179,3 +179,21 @@ repeating dispatch. The Windows tests now exercise actual page presets, both
 units, contingency/NDL, refused save, the Save button, canonical XML export,
 recorded saved chart/report, TXT/PDF and application restart. No Google writes
 are needed for these offline tests.
+
+## Integrated Windows save/restart and PDF acceptance, 29 October JST
+
+Full native run **40732896718 at 844260acd** passed **39 desktop and 36
+mobile-target host suites**, including LSP model save/XML round trips. Matching
+Windows **40732903652** passed actual Clean/Modern LSP calculations, complete
+preset persistence, gas-role actions, Save/reopen, disk restart and TXT/PDF
+content checks. UI evidence artifact 12837306436 and portable artifact
+12836208547 were downloaded and SHA-verified; exact digests and local paths are
+in the continuation checkpoint.
+
+Visual inspection of all four exported pages found an additional double-margin
+layout defect after the earlier lost-profile-page fix. **bea47f4c8** corrects
+painter coordinates and adds a content-stream geometry gate that fails the
+retained 844 PDFs for extending beyond the printable margin. Matching Windows
+**40737335739** must pass and its resulting pages must be inspected before
+claiming final PDF acceptance. No planner mathematics changed. These tests do
+not establish physical Android acceptance or unrestricted external parity.
