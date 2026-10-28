@@ -25,6 +25,8 @@ struct divetag {
 using tag_list = std::vector<const divetag *>;
 
 void taglist_add_tag(tag_list &list, const std::string &tag);
+// Isolated XML staging owns its tags until an accepted model is installed.
+void taglist_add_tag(tag_list &list, const std::string &tag, std::vector<std::unique_ptr<divetag>> &registry);
 
 /* cleans up a list: removes empty tags and duplicates */
 void taglist_cleanup(tag_list &list);

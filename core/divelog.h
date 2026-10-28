@@ -49,6 +49,8 @@ struct divelog {
 	/* divelist core logic functions */
 	process_imported_dives_result process_imported_dives(struct divelog &import_log, int flags); // import_log will be consumed
 	void process_loaded_dives();
+	// Sort/autogroup this log without global selection, index or UI resets.
+	void prepare_loaded_dives();
 	void add_imported_dives(struct divelog &log, int flags); // log will be consumed
 };
 

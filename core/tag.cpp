@@ -67,18 +67,22 @@ static void taglist_add_divetag(tag_list &list, const struct divetag *tag)
 		list.insert(it, tag);
 }
 
-static const divetag *register_tag(std::string s, std::string source)
+static const divetag *register_tag(std::string s, std::string source, std::vector<std::unique_ptr<divetag>> &registry = g_tag_list)
 {
 	// binary search
-	auto it = std::lower_bound(g_tag_list.begin(), g_tag_list.end(), s,
+	auto it = std::lower_bound(registry.begin(), registry.end(), s,
 				   [](const std::unique_ptr<divetag> &tag, const std::string &s)
 				   { return tag->name < s; });
-	if (it == g_tag_list.end() || (*it)->name != s)
-		it = g_tag_list.insert(it, std::make_unique<divetag>(std::move(s), std::move(source)));
+	if (it == registry.end() || (*it)->name != s)
+		it = registry.insert(it, std::make_unique<divetag>(std::move(s), std::move(source)));
 	return it->get();
 }
 
 void taglist_add_tag(tag_list &list, const std::string &tag)
+{
+	taglist_add_tag(list, tag, g_tag_list);
+}
+void taglist_add_tag(tag_list &list, const std::string &tag, std::vector<std::unique_ptr<divetag>> &registry)
 {
 	bool is_default_tag = std::find_if(std::begin(default_tags), std::end(default_tags),
 			[&tag] (const char *default_tag) { return tag == default_tag; });
@@ -87,7 +91,7 @@ void taglist_add_tag(tag_list &list, const std::string &tag)
 	/* TODO: Do we really want to translate user-supplied tags if they happen to be known!? */
 	std::string translation = is_default_tag ? translate("gettextFromC", tag.c_str()) : tag;
 	std::string source = is_default_tag ? tag : std::string();
-	const struct divetag *d_tag = register_tag(std::move(translation), std::move(source));
+	const struct divetag *d_tag = register_tag(std::move(translation), std::move(source), registry);
 
 	taglist_add_divetag(list, d_tag);
 }

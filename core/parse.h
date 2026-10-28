@@ -17,6 +17,7 @@
 struct xml_params;
 struct divelog;
 struct fingerprint_record;
+struct divetag;
 
 /*
  * Dive info as it is being built up..
@@ -86,6 +87,9 @@ struct parser_state {
 	struct units xml_parsing_units;
 	struct divelog *log = nullptr;				/* non-owning */
 	std::vector<fingerprint_record> *fingerprints = nullptr;
+	std::vector<std::unique_ptr<divetag>> *tag_registry = nullptr;
+	bool isolated_xml = false;
+	int xml_version = -1;
 								/* non-owning */
 
 	sqlite3 *sql_handle = nullptr;				/* for SQL based parsers */
@@ -143,6 +147,9 @@ void nonmatch(const char *type, const char *name, char *buffer);
 
 void parse_xml_init();
 int parse_xml_buffer(const char *url, const char *buf, int size, struct divelog *log, const struct xml_params *params);
+// Canonical-XML staging: caller-owned metadata, no global version reporting.
+int parse_xml_buffer_isolated(const char *buffer, int size, struct divelog *log,
+	std::vector<fingerprint_record> &fingerprints, std::vector<std::unique_ptr<divetag>> &tags, int &version);
 void parse_xml_exit();
 int parse_dm4_buffer(sqlite3 *handle, const char *url, const char *buf, int size, struct divelog *log);
 int parse_dm5_buffer(sqlite3 *handle, const char *url, const char *buf, int size, struct divelog *log);

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testcloudsyncmanager.h"
 #include "core/cloudsyncmanager.h"
+#include "core/cloudsyncworkspacemodel.h"
+#include "core/device.h"
+#include "core/tag.h"
+#include "core/trip.h"
+#include "core/version.h"
 #include "core/cloudcredentialstore.h"
 #include "core/subsurfacestartup.h"
 #include "core/divelog.h"
@@ -24,6 +29,7 @@
 #include <QSettings>
 #include <QUuid>
 #include <cstring>
+#include <algorithm>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -1731,3 +1737,61 @@ void TestCloudSyncManager::testWorkspaceCopy()
 }
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)
+
+
+void TestCloudSyncManager::testWorkspaceModel_data()
+{
+	QTest::addColumn<int>("mode");
+	const QStringList cases={"staged-real-model-install", "private-tags", "private-fingerprints", "normalized-xml-representation", "truncated", "dtd", "future-format", "changed-local-before-install", "different-explicit-baseline", "discarded-preview", "single-install", "invalid-new-preview-clears-old", "changed-fingerprints-before-install", "pure-trip-serialization", "stable-baseline-projection", "future-baseline", "unreadable-dive-preserved"};
+	for(int mode=0;mode<cases.size();++mode) QTest::newRow(qPrintable(cases[mode])) << mode;
+}
+void TestCloudSyncManager::testWorkspaceModel()
+{
+	QFETCH(int,mode); FakeNetwork network; CloudSyncManager manager(&network);
+	fingerprint_table oldFingerprints;
+	for(const auto &f:fingerprints) create_fingerprint_node(oldFingerprints,f.model,f.serial,f.raw_data.get(),f.fsize,f.fdeviceid,f.fdiveid);
+	std::vector<const divetag *> oldTags; for(const auto &t:g_tag_list) oldTags.push_back(t.get());
+	const auto oldVersion=last_xml_version,oldMinimum=get_min_datafile_version();
+	const auto restore=qScopeGuard([&] { fulltext_unregister_all(); select_single_dive(nullptr); ::divelog.clear(); fingerprints=std::move(oldFingerprints); g_tag_list.erase(std::remove_if(g_tag_list.begin(),g_tag_list.end(),[&](const auto &t) { return std::find(oldTags.begin(),oldTags.end(),t.get())==oldTags.end(); }),g_tag_list.end()); last_xml_version=oldVersion; clear_min_datafile_version(); if(oldMinimum) report_datafile_version(oldMinimum); });
+	const auto fpBytes=[] { QByteArray bytes; for(const auto &f:fingerprints) bytes+=QByteArray::number(f.model)+":"+QByteArray::number(f.serial)+":"+QByteArray::number(f.fdeviceid)+":"+QByteArray::number(f.fdiveid)+":"+QByteArray::fromStdString(f.get_data())+";"; return bytes; };
+	if(mode==13) { auto trip=std::make_unique<dive_trip>(); trip->location="Workspace preflight trip"; trip->add_dive(::divelog.dives[0].get()); trip->saved=false; ::divelog.trips.put(std::move(trip)); }
+	const auto original=CloudWorkspaceModel::currentXml(); QVERIFY(!original.isEmpty()); const auto originalFp=fpBytes(); const auto selected=current_dive;
+	if(mode==13) { QVERIFY(!::divelog.trips[0]->saved); auto legacy=manager.serializeCurrentDiveLog(); legacy.replace("\r\n","\n"); QCOMPARE(legacy,original); QVERIFY(::divelog.trips[0]->saved); ::divelog.trips[0]->saved=false; }
+	auto payload=original; payload.replace("Local notes must survive cloud failures.","Workspace staged replacement.");
+	if(mode==1 || mode==7 || mode==9 || mode==14) payload.replace("<dive ","<dive tags='private-workspace-staging-tag' ");
+	if(mode==2 || mode==9 || mode==14) payload.replace("</settings>","<fingerprint model='00001234' serial='00005678' deviceid='00000002' diveid='00000003' data='01020304'/></settings>");
+	if(mode==3) payload.prepend("\n");
+	if(mode==4) payload="<divelog><dives>";
+	if(mode==5) payload="<!DOCTYPE divelog><divelog/>";
+	if(mode==6) payload.replace("version='3'","version='999'");
+	if(mode==16) payload="<divelog><dives><dive/></dives></divelog>";
+	auto baseline=original;
+	if(mode==8) ::divelog.dives[0]->notes+=" Later local edit.";
+	if(mode==15) baseline.replace("version='3'","version='999'");
+	CloudWorkspaceModel staged;
+	const bool prepared=staged.prepare(payload,mode==8 || mode==15 ? baseline : QByteArray());
+	if(mode==4 || mode==5 || mode==6 || mode==15 || mode==16) {
+		QVERIFY(!prepared); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),original); QCOMPARE(fpBytes(),originalFp); QCOMPARE(current_dive,selected); QCOMPARE(last_xml_version,oldVersion); QCOMPARE(get_min_datafile_version(),oldMinimum); return;
+	}
+	QVERIFY(prepared); const auto normalized=staged.normalizedXml(); QVERIFY(!normalized.isEmpty());
+	QCOMPARE(fpBytes(),originalFp); QCOMPARE(g_tag_list.size(),oldTags.size()); for(size_t i=0;i<oldTags.size();++i) QCOMPARE(g_tag_list[i].get(),oldTags[i]);
+	QCOMPARE(last_xml_version,oldVersion); QCOMPARE(get_min_datafile_version(),oldMinimum); QCOMPARE(current_dive,selected);
+	if(mode!=8) QCOMPARE(CloudWorkspaceModel::currentXml(),original);
+	if(mode==13) QVERIFY(!::divelog.trips[0]->saved);
+	FullTextQuery query; query=QStringLiteral("survive"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dive_matches(selected));
+	if(mode==3) QVERIFY(normalized!=payload);
+	if(mode==7) { ::divelog.dives[0]->notes+=" Later local edit."; const auto edited=CloudWorkspaceModel::currentXml(); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),edited); QCOMPARE(g_tag_list.size(),oldTags.size()); return; }
+	if(mode==8) { const auto edited=CloudWorkspaceModel::currentXml(); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),edited); return; }
+	if(mode==9) { QVERIFY(!normalized.isEmpty()); QCOMPARE(fpBytes(),originalFp); QCOMPARE(g_tag_list.size(),oldTags.size()); return; }
+	if(mode==11) { QVERIFY(!staged.prepare("<divelog>")); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),original); return; }
+	if(mode==12 || mode==14) {
+		const unsigned char value[]={9,8,7,6}; create_fingerprint_node(fingerprints,0x98765432,0x12345678,value,4,1,2); const auto changed=CloudWorkspaceModel::currentXml(); const auto changedFp=fpBytes();
+		if(mode==14) { CloudWorkspaceModel again; QVERIFY(again.prepare(payload,original)); QCOMPARE(again.normalizedXml(),normalized); QVERIFY(!again.install()); }
+		QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),changed); QCOMPARE(fpBytes(),changedFp); return;
+	}
+	QVERIFY(staged.install()); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),normalized);
+	QCOMPARE(::divelog.dives.size(),1); QCOMPARE(QString::fromStdString(::divelog.dives[0]->notes),QString("Workspace staged replacement.")); QCOMPARE(current_dive,::divelog.dives[0].get());
+	query=QStringLiteral("replacement"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dive_matches(current_dive)); query=QStringLiteral("survive"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dives.empty());
+	if(mode==1) QCOMPARE(QString::fromStdString(taglist_get_tagstring(::divelog.dives[0]->tags)),QString("private-workspace-staging-tag"));
+	if(mode==2) { const auto value=get_fingerprint_data(fingerprints,0x1234,0x5678); QCOMPARE(value.first,4); QCOMPARE(value.second[0],(unsigned char)1); }
+}

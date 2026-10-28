@@ -465,16 +465,19 @@ divelog::process_imported_dives_result divelog::process_imported_dives(struct di
 	return res;
 }
 
-// TODO: This accesses global state, namely fulltext and selection.
-// TODO: Move up the call chain?
-void divelog::process_loaded_dives()
+void divelog::prepare_loaded_dives()
 {
 	dives.sort();
 	trips.sort();
 
 	/* Autogroup dives if desired by user. */
 	autogroup_dives(*this);
-
+}
+// TODO: This accesses global state, namely fulltext and selection.
+// TODO: Move up the call chain?
+void divelog::process_loaded_dives()
+{
+	prepare_loaded_dives();
 	fulltext_populate();
 
 	/* Inform frontend of reset data. This should reset all the models. */

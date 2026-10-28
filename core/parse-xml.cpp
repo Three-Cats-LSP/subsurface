@@ -103,7 +103,7 @@ enum ParseState {
 	FINDSTART,
 	FINDEND
 };
-static void divetags(const char *buffer, tag_list *tags)
+static void divetags(const char *buffer, tag_list *tags, struct parser_state *parser)
 {
 	int i = 0, start = 0, end = 0;
 	enum ParseState state = FINDEND;
@@ -118,7 +118,8 @@ static void divetags(const char *buffer, tag_list *tags)
 				if (i > 0 && buffer[i - 1] != '\\') {
 					std::string s(buffer + start, i - start);
 					state = FINDSTART;
-					taglist_add_tag(*tags, s.c_str());
+					if (parser->tag_registry) taglist_add_tag(*tags, s.c_str(), *parser->tag_registry);
+					else taglist_add_tag(*tags, s.c_str());
 				} else {
 					state = FINDSTART;
 				}
@@ -141,7 +142,8 @@ static void divetags(const char *buffer, tag_list *tags)
 			end = len - 1;
 		if (len > 0) {
 			std::string s(buffer + start, i - start);
-			taglist_add_tag(*tags, buffer + start);
+			if (parser->tag_registry) taglist_add_tag(*tags, buffer + start, *parser->tag_registry);
+			else taglist_add_tag(*tags, buffer + start);
 		}
 	}
 }
@@ -1281,7 +1283,7 @@ static void try_to_fill_dive(struct dive *dive, const char *name, char *buf, str
 		return;
 	if (MATCH("number", get_index, &dive->number))
 		return;
-	if (MATCH("tags", divetags, &dive->tags))
+	if (MATCH_STATE("tags", divetags, &dive->tags))
 		return;
 	if (MATCH("tripflag", get_notrip, &dive->notrip))
 		return;
@@ -1509,8 +1511,8 @@ static bool entry(const char *name, char *buf, struct parser_state *state)
 {
 	if (!strncmp(name, "version.program", sizeof("version.program") - 1) ||
 	    !strncmp(name, "version.divelog", sizeof("version.divelog") - 1)) {
-		last_xml_version = atoi(buf);
-		report_datafile_version(last_xml_version);
+		state->xml_version = atoi(buf);
+		if (!state->isolated_xml) { last_xml_version = state->xml_version; report_datafile_version(last_xml_version); }
 	}
 	if (state->in_userid) {
 		return true;
@@ -1742,17 +1744,17 @@ static void reset_all(struct parser_state *state)
 	state->import_source = parser_state::UNKNOWN;
 }
 
-int parse_xml_buffer(const char *url, const char *buffer, int, struct divelog *log,
-				const struct xml_params *params)
+static int parse_xml_staged(const char *url, const char *buffer, int size, struct divelog *log, const struct xml_params *params,
+	fingerprint_table &table, std::vector<std::unique_ptr<divetag>> *tags, int *version)
 {
 	xmlDoc *doc;
 	int ret = 0;
 	struct parser_state state;
 
 	state.log = log;
-	state.fingerprints = &fingerprints; // simply use the global table for now
-	doc = xmlReadMemory(buffer, strlen(buffer), url, NULL, XML_PARSE_HUGE);
-	if (!doc)
+	state.fingerprints = &table; state.tag_registry = tags; state.isolated_xml = version != nullptr;
+	doc = xmlReadMemory(buffer, size, url, NULL, XML_PARSE_HUGE | (version ? XML_PARSE_NONET : 0));
+	if (!doc && !version)
 		doc = xmlReadMemory(buffer, strlen(buffer), url, "latin1", XML_PARSE_HUGE);
 
 	if (!doc)
@@ -1760,14 +1762,24 @@ int parse_xml_buffer(const char *url, const char *buffer, int, struct divelog *l
 
 	reset_all(&state);
 	dive_start(&state);
-	doc = test_xslt_transforms(doc, params);
+	if (!version) doc = test_xslt_transforms(doc, params);
 	if (!traverse(xmlDocGetRootElement(doc), &state)) {
 		// we decided to give up on parsing... why?
 		ret = -1;
 	}
 	dive_end(&state);
 	xmlFreeDoc(doc);
+	if (version) *version = state.xml_version;
 	return ret;
+}
+int parse_xml_buffer(const char *url, const char *buffer, int, struct divelog *log, const struct xml_params *params)
+{
+	return parse_xml_staged(url, buffer, strlen(buffer), log, params, fingerprints, nullptr, nullptr);
+}
+int parse_xml_buffer_isolated(const char *buffer, int size, struct divelog *log,
+	fingerprint_table &table, std::vector<std::unique_ptr<divetag>> &tags, int &version)
+{
+	return parse_xml_staged("workspace-restore", buffer, size, log, nullptr, table, &tags, &version);
 }
 
 void parse_xml_init()

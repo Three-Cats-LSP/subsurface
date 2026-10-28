@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unordered_set>
 #include <fcntl.h>
 
 #include "device.h"
@@ -531,7 +532,7 @@ int save_dive(FILE *f, const struct dive &dive, bool anonymize)
 	return 0;
 }
 
-static void save_trip(struct membuffer *b, dive_trip &trip, bool anonymize)
+static void save_trip(struct membuffer *b, dive_trip &trip, bool anonymize, const dive_table &dives)
 {
 	put_format(b, "<trip");
 	show_date(b, trip.date());
@@ -545,7 +546,7 @@ static void save_trip(struct membuffer *b, dive_trip &trip, bool anonymize)
 	 * list in the trip, we just traverse the global dive array and
 	 * check the divetrip pointer..
 	 */
-	for (auto &dive: divelog.dives) {
+	for (auto &dive: dives) {
 		if (dive->divetrip == &trip)
 			save_one_dive_to_mb(b, *dive, anonymize);
 	}
@@ -578,12 +579,12 @@ int save_dives(const char *filename)
 	return save_dives_logic(filename, false, false);
 }
 
-static void save_filter_presets(struct membuffer *b)
+static void save_filter_presets(struct membuffer *b, const filter_preset_table &presets)
 {
-	if (divelog.filter_presets.empty())
+	if (presets.empty())
 		return;
 	put_format(b, "<filterpresets>\n");
-	for (auto &filter_preset: divelog.filter_presets) {
+	for (auto &filter_preset: presets) {
 		put_format(b, " <filterpreset");
 		show_utf8(b, filter_preset.name.c_str(), " name='", "'", 1);
 		put_format(b, ">\n");
@@ -638,26 +639,26 @@ static void save_one_dive_site(struct membuffer *b, const struct dive_site &ds, 
 	put_format(b, "</site>\n");
 }
 
-static void save_dives_buffer(struct membuffer *b, bool select_only, bool anonymize)
+static void save_log_buffer(struct membuffer *b, bool select_only, bool anonymize, struct divelog &log, const fingerprint_table &table, bool legacyTripFlags)
 {
 	put_format(b, "<divelog program='subsurface' version='%d'>\n<settings>\n", dataformat_version);
 
 	/* save the dive computer nicknames, if any */
-	for (auto &d: divelog.devices) {
+	for (auto &d: log.devices) {
 		if (!select_only || device_used_by_selected_dive(d))
 			save_one_device(b, d);
 	}
 	/* save the fingerprint data */
-	for (auto &fp: fingerprints)
+	for (auto &fp: table)
 		save_one_fingerprint(b, fp);
 
-	if (divelog.autogroup)
+	if (log.autogroup)
 		put_format(b, "  <autogroup state='1' />\n");
 	put_format(b, "</settings>\n");
 
 	/* save the dive sites */
 	put_format(b, "<divesites>\n");
-	for (const auto &ds: divelog.sites) {
+	for (const auto &ds: log.sites) {
 		/* Don't export empty dive sites */
 		if (ds->is_empty())
 			continue;
@@ -668,14 +669,14 @@ static void save_dives_buffer(struct membuffer *b, bool select_only, bool anonym
 		save_one_dive_site(b, *ds, anonymize);
 	}
 	put_format(b, "</divesites>\n<dives>\n");
-	for (auto &trip: divelog.trips)
-		trip->saved = 0;
+	if (legacyTripFlags) for (auto &trip: log.trips) trip->saved = 0;
+	std::unordered_set<const dive_trip *> savedTrips;
 
 	/* save the filter presets */
-	save_filter_presets(b);
+	save_filter_presets(b, log.filter_presets);
 
 	/* save the dives */
-	for (auto &dive: divelog.dives) {
+	for (auto &dive: log.dives) {
 		if (select_only) {
 			if (!dive->selected)
 				continue;
@@ -690,15 +691,23 @@ static void save_dives_buffer(struct membuffer *b, bool select_only, bool anonym
 			}
 
 			/* Have we already seen this trip (and thus saved this dive?) */
-			if (trip->saved)
+			if (legacyTripFlags ? trip->saved != 0 : savedTrips.count(trip) != 0)
 				continue;
 
 			/* We haven't seen this trip before - save it and all dives */
-			trip->saved = 1;
-			save_trip(b, *trip, anonymize);
+			if (legacyTripFlags) trip->saved = 1; else savedTrips.insert(trip);
+			save_trip(b, *trip, anonymize, log.dives);
 		}
 	}
 	put_format(b, "</dives>\n</divelog>\n");
+}
+static void save_dives_buffer(struct membuffer *b, bool selected, bool anonymize)
+{
+	save_log_buffer(b, selected, anonymize, divelog, fingerprints, true);
+}
+void serialize_divelog_xml(struct membuffer *buffer, struct divelog &log, const fingerprint_table &table)
+{
+	save_log_buffer(buffer, false, false, log, table, false);
 }
 
 static void save_backup(const char *name, const char *ext, const char *new_ext)

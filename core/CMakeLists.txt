@@ -83,6 +83,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncworkspaceread.h
 	cloudsyncworkspaceapply.cpp
 	cloudsyncworkspaceapply.h
+	cloudsyncworkspacemodel.cpp
+	cloudsyncworkspacemodel.h
 	oauth2pkce.cpp
 	oauth2pkce.h
 	oauth2tokenclient.cpp
