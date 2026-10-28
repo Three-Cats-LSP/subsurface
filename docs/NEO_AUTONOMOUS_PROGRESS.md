@@ -9,6 +9,27 @@ engine bundles and full presets imported, syntax translation reproducible,
 comparison, UI/save/export integration and package validation remain open.
 Do not relabel the still-native public planner as LSP before wiring it.
 
+LSP adoption implementation **`b2d1df52b`** is pushed. The first non-skipped
+validation source is **`ba0db8dc2`**. In LSP run **40705358571**, source/evidence
+hashes, reproducible syntax generation and original-Node reference reproduction
+passed, and the hosted native C++ test passed **55/55**. Its Windows C++ build
+passed but the process exited before any test output. Retained initial evidence:
+`work/lsp-adoption-evidence-ba0db8dc2-20261028/{host,windows}/LastTest.log`.
+Do not call that aggregate green or adjust expectations to hide its startup
+failure. Workflow repair **`91e130b5c`** deploys the actual Qt runtime and records
+the direct process exit code if needed; resume LSP run **40706143649**. The first
+manual dispatch of the new workflow returned 404 before it was registered by a
+non-skipped branch push; it started no run. The repair was successfully dispatched.
+The matching app Windows run **40705358568** and Android compile **40705358554**
+also continue on ba0; do not duplicate them. Physical Android is still deferred.
+After focused Windows checks pass, dispatch the full native application suite
+for the LSP-integrated source (the existing 1cc suite below predates LSP).
+
+Continue actual shared UI/save/export adaptation using the finite acceptance
+list in the LSP document, while preserving existing native plan identity. The
+original complete LSP preset library is exposed by the model, and the calculator
+is callable through `calculateLspPlan`; the public page is not routed there yet.
+
 The previous integrated `1cc711e7f` Windows run **40698501000 passed**, including
 Clean/Modern, launch, export, lifecycle and portable package. Targeted 50e native
 Windows protocol **40696305894 passed**; integrated 1cc protocol jobs in

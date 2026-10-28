@@ -98,3 +98,13 @@ claim that the C++ application build or package passed.
 The app's existing public planner still calls the Subsurface path until steps
 2–6 are implemented and validated. This checkpoint is concrete engine reuse,
 not a claim that the visible planner switch or the Windows release is complete.
+
+## CI checkpoint
+
+Implementation `b2d1df52b` is pushed; initial validation source `ba0db8dc2` ran
+in **40705358571**. Source reproduction and the hosted C++ regression passed
+**55/55**. The Windows executable compiled but exited before test output;
+its failed aggregate and LastTest log are retained. Repair `91e130b5c` deploys
+the Qt runtime before testing and adds direct startup exit diagnostics. Resume
+**40706143649** before claiming Windows C++ acceptance. Windows app/package
+**40705358568** is validating the same functional LSP source separately.
