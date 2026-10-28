@@ -180,3 +180,33 @@ Selection and a verified copy do not activate workspace sync. The next implement
 Workspace-native publication, reserved reads, restored publication and guarded local recovery are validated as unused components. Actual app model/persistence integration, shared controls and explicit activation are still required before routing ordinary or foreground synchronization through the new root. Preserve the existing initial-choice, concurrent-edit, conflict, cancellation, account-change and acknowledgement-loss protections. Activation must verify the current head's exact payload and local hash, and must not replace different local data without its separate confirmed preservation/replacement flow. Restart and independent Windows profiles must exercise the actual routing and persistence paths, including choice A → B → A.
 
 Copy proofs establish that a branch is protected; they do not establish which legacy observation is currently accepted for automatic sync. The copy coordinator can idempotently verify an already protected historical source even when another version is now head. Activation therefore cannot treat finding that source anywhere in `copies` as acknowledgement of a new legacy change. Its versioned control protocol must explicitly guard the accepted legacy observation and surface later changes, including returning to an older protected source, as branches requiring review. Keep every original object and unknown attempt protected through these transitions. This section records remaining implementation/test requirements; no activation, cleanup or new permission is enabled.
+
+## Bounded history pages (development candidate)
+
+The page wire format `neo-workspace-history-pages-development-1` retains a
+complete physical workspace reference, an exact immutable archive pin and a
+bounded monotonic delta. Pins include the exact name, object ID, revision,
+length, SHA-256 and expanded-model hash. Readers reconstruct and validate every
+intermediate transition, then reread the same root body and revision before
+returning a coherent view. Version-2 local checkpoints retain the verified page
+chain across restart. Unknown formats, missing/changed pages, rollback and
+lost pending ownership refuse access; ordinary schema 1/2 records stay intact.
+
+The current rollover candidate creates a new archive only after journalling
+its exact root/body/revision and nonce locally. It saves a directly acknowledged
+ID before any dependent read, verifies the exact page, and conditionally replaces
+only the captured root revision with a pinned delta. An uncertain POST is never
+replayed or looked up by name. A known-ID attempt can resume; a competing root
+change keeps the unused archive rather than rebasing the old snapshot. A lost
+root acknowledgement is reconciled through exact pinned-page/root verification.
+Upload, read/reservation, copy and legacy acceptance resume their existing
+reviewed operation after rollover. No XML is applied by archival and no object
+is deleted. Unsupported old clients must upgrade to read a paged workspace.
+
+Rollover starts at 448 delta entries or three-quarters of the wire-size bound.
+Each wire record remains bounded; the expanded view has explicit 64 MiB,
+65,536-entry and 256-page refusal limits. This preserves history instead of
+inferring expiration. It is not unlimited growth or an old-object cleanup policy.
+The [continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md) records pending native,
+Windows and live acceptance. Local receipt growth and UI pagination are separate
+unfinished gates; do not remove the development gate from this code alone.

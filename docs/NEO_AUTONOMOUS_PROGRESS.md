@@ -1,5 +1,31 @@
 # Windows cloud reliability continuation
 
+**Automatic history rollover candidate, 29 October JST.**
+Archive reader/checkpoint **129527e1a / 40734458337 PASSED** 2,531 host and
+2,563 Windows protocol checks. Integrated coordinator **f993f59e0 /
+40737511700** failed two new acceptance rows on the host: their intent shared a
+directory with unrelated choice/checkpoint files, correctly triggering the
+existing exclusive-directory fence. The new fixtures use a dedicated acceptance
+directory. Preserve that failed run; this is not a cloud-data failure.
+
+The next candidate adds direct-ID archive creation, a durable per-attempt
+intent before POST, exact page readback, original-root revision CAS and exact
+paged-root confirmation. Unknown create acknowledgements are never replayed or
+resolved by filename. Known-ID and published attempts resume; root races retain
+an orphan instead of rebasing or dropping pending state. Upload, reserved read,
+copy and acceptance invoke rollover at 448 delta entries or three-quarters of
+the wire bound, then continue the original guarded operation. Acceptance archive
+metadata is outside its deliberately exclusive receipt directory. Forty new
+provider-paired interruption/concurrency/refusal cases and twelve real
+coordinator boundary/600-ticket rows require targeted validation. No cloud
+deletions or live archive publication has been performed. Bounded local receipt
+compaction, shared history pagination, live Google gates and separate Neo
+metadata sync remain unfinished; this increment does not complete M13.
+
+Full native **40732896718 at 844260acd PASSED all 39 desktop and 36 mobile-target
+host suites**. The subsequent PDF-only margin fix is in Windows **40737335739**;
+no planner algorithms changed. Continue that pending run and inspect its PDFs.
+
 **Paged-history write/read workflow integration candidate.**
 Upload, reserved read/release, copy and legacy acceptance now use the same
 exact-root/page verifier as workspace join. Existing root CAS, reviewed-head,

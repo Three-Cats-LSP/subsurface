@@ -43,6 +43,10 @@ public:
 	// acknowledges one new identity; never looks up/replays an uncertain upload.
 	void createWorkspacePayloadIdentity(CloudSyncProviderType provider, const QString &accessToken,
 		const QString &fileName, const QByteArray &data);
+	// New immutable workspace archive, with direct physical-ID acknowledgement.
+	// The caller journals create intent and verifies the exact returned object.
+	void createWorkspaceArchiveIdentity(CloudSyncProviderType provider, const QString &accessToken,
+		const QString &fileName, const QByteArray &data);
 	// Transport primitive for a verified sealed history source. Caller must
 	// verify its fence/body and durable coordinator intent before invoking it.
 	// Google v2 ETag CAS only; never looks up a name, moves a folder or deletes.
@@ -78,9 +82,10 @@ signals:
 	void historyRootArchived(const QString &archiveName, const QString &fileId);
 	void workspaceIdentityCreated(CloudSyncProviderType provider, const QString &fileName, const QString &fileId);
 	void workspacePayloadCreated(CloudSyncProviderType provider, const QString &fileName, const QString &fileId);
+	void workspaceArchiveCreated(CloudSyncProviderType provider, const QString &fileName, const QString &fileId);
 
 private:
-	void createWorkspaceObjectIdentity(CloudSyncProviderType provider, const QString &token, const QString &name, const QByteArray &data, bool payload);
+	void createWorkspaceObjectIdentity(CloudSyncProviderType provider, const QString &token, const QString &name, const QByteArray &data, bool payload, bool archive = false);
 	struct GoogleRecoveryFile { QString id, version; };
 	void trackReply(CloudSyncProviderType provider, QNetworkReply *reply, qint64 uploadBytes = 0, const QString &fileName = {});
 	void googleFindFile(const QString &accessToken, const QString &fileName,

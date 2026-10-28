@@ -2,6 +2,7 @@
 #ifndef CLOUD_SYNC_WORKSPACE_COPY_H
 #define CLOUD_SYNC_WORKSPACE_COPY_H
 #include "cloudsyncworkspace.h"
+#include "cloudsyncworkspacearchive.h"
 #include <QElapsedTimer>
 
 // Durable per-attempt metadata. A submitted payload without an acknowledged
@@ -69,6 +70,7 @@ private:
 	void complete();
 	CloudSyncFileStore files;
 	CloudWorkspaceOpen rootReader;
+	CloudWorkspaceArchive archiver;
 	CloudWorkspaceSourceReview sourceReview;
 	QTimer deadline;
 	QTimer startupRetry;

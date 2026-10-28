@@ -38,6 +38,10 @@ private slots:
 	void workspacePagedAuthority();
 	void workspacePagedWorkflow_data();
 	void workspacePagedWorkflow();
+	void workspaceArchive_data();
+	void workspaceArchive();
+	void workspaceAutomaticArchive_data();
+	void workspaceAutomaticArchive();
 	void workspaceAuthority_data();
 	void workspaceAuthority();
 	void workspaceCreationIntent_data();

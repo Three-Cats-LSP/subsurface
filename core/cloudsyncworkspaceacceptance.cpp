@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncworkspaceacceptance.h"
+#include "cloudsyncmanifest.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -73,9 +74,11 @@ bool CloudWorkspaceAcceptanceIntent::committed() { return advance({"submitted"},
 bool CloudWorkspaceAcceptanceIntent::completed() { return advance({"committed"}, "completed"); }
 
 CloudWorkspaceAcceptance::CloudWorkspaceAcceptance(QNetworkAccessManager *network, QObject *parent) :
-	QObject(parent), files(network, this), rootReader(network, this), sourceReview(network, this)
+	QObject(parent), files(network, this), rootReader(network, this), archiver(network, this), sourceReview(network, this)
 {
 	connect(&rootReader, &CloudWorkspaceOpen::finished, this, &CloudWorkspaceAcceptance::receivedRoot);
+	connect(&archiver, &CloudWorkspaceArchive::finished, this, &CloudWorkspaceAcceptance::receivedRoot);
+	connect(&archiver, &CloudWorkspaceArchive::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	connect(&rootReader, &CloudWorkspaceOpen::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	files.setStrictReads(true); deadline.setSingleShot(true); deadline.setInterval(180000); startupRetry.setSingleShot(true);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
@@ -122,7 +125,7 @@ CloudWorkspaceAcceptance::CloudWorkspaceAcceptance(QNetworkAccessManager *networ
 CloudWorkspaceAcceptance::~CloudWorkspaceAcceptance() { cancel(); }
 void CloudWorkspaceAcceptance::cancel()
 {
-	++generation; step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); sourceReview.cancel(); intent.reset(); operationLock.reset();
+	++generation; step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); archiver.cancel(); sourceReview.cancel(); intent.reset(); operationLock.reset();
 	reference.value = {}; source.value = {}; root.value = {}; pending.value = {}; sourceChanged = false; missing = false; token.clear(); choiceFile.clear(); choiceVersion.clear();
 	checkpointFile.clear(); intentFile.clear(); localHash.clear(); event.clear(); previous.clear(); expectedHead.clear(); copyTicket.clear(); rootVersion.clear(); scopeCurrent = {};
 }
@@ -236,6 +239,13 @@ void CloudWorkspaceAcceptance::receivedRoot(const QJsonObject &value, const QStr
 	    (step == Step::ConfirmRoot && pending.valid() && !observed.follows(pending)) ||
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
+	if (root.needsArchive()) {
+		// Acceptance keeps a deliberately exclusive operation directory. Archive
+		// metadata belongs in a separate sibling directory, never that receipt.
+		const auto archiveIntent = QFileInfo(intentFile).absolutePath() + ".history/" + QFileInfo(intentFile).fileName() + "-" +
+			CloudSyncManifest::sha256(root.json() + version.toUtf8()) + ".json";
+		archiver.start(token, root, version, choiceFile, choiceVersion, checkpointFile, archiveIntent, scopeCurrent); return;
+	}
 	if (step == Step::FinalRoot) {
 		if (!eventPresent(root) || (!missing && root.copySource(copyTicket).json() != source.json()) ||
 		    (intent->state() != "committed" && intent->state() != "completed")) { fail(); return; }

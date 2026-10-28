@@ -84,9 +84,11 @@ bool CloudWorkspaceCopyIntent::verify(const QString &version) { return advance("
 bool CloudWorkspaceCopyIntent::upload() { return advance("verified", "uploaded"); }
 bool CloudWorkspaceCopyIntent::commit() { return advance("uploaded", "committed"); }
 
-CloudWorkspaceCopy::CloudWorkspaceCopy(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this), rootReader(network, this), sourceReview(network, this)
+CloudWorkspaceCopy::CloudWorkspaceCopy(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this), rootReader(network, this), archiver(network, this), sourceReview(network, this)
 {
 	connect(&rootReader, &CloudWorkspaceOpen::finished, this, &CloudWorkspaceCopy::receivedRoot);
+	connect(&archiver, &CloudWorkspaceArchive::finished, this, &CloudWorkspaceCopy::receivedRoot);
+	connect(&archiver, &CloudWorkspaceArchive::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	connect(&rootReader, &CloudWorkspaceOpen::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	files.setStrictReads(true); files.setResponseLimit(64 * 1024 * 1024); deadline.setSingleShot(true); deadline.setInterval(600000);
 	startupRetry.setSingleShot(true); connect(&startupRetry, &QTimer::timeout, this, &CloudWorkspaceCopy::begin);
@@ -125,7 +127,7 @@ CloudWorkspaceCopy::CloudWorkspaceCopy(QNetworkAccessManager *network, QObject *
 CloudWorkspaceCopy::~CloudWorkspaceCopy() { cancel(); }
 void CloudWorkspaceCopy::cancel()
 {
-	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); sourceReview.cancel(); intent.reset(); reference.value = {}; source.value = {}; root.value = {}; pending.value = {};
+	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); archiver.cancel(); sourceReview.cancel(); intent.reset(); reference.value = {}; source.value = {}; root.value = {}; pending.value = {};
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); rootVersion.clear(); resultTicket.clear(); payload.clear(); scopeCurrent = {}; continuation = {};
 	initialIntentFile.clear(); initialProofFile.clear(); initialTicket.clear(); initialParent.clear();
 }
@@ -226,6 +228,10 @@ void CloudWorkspaceCopy::receivedRoot(const QJsonObject &value, const QString &v
 	if (!observed.valid() || observed.reference().value != reference.value || (step == Step::ConfirmRoot && !observed.follows(pending)) ||
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
+	if (root.needsArchive()) {
+		const auto archiveIntent = initialIntentFile + ".history-" + CloudSyncManifest::sha256(root.json() + version.toUtf8()) + ".json";
+		archiver.start(token, root, version, choiceFile, choiceVersion, checkpointFile, archiveIntent, scopeCurrent); return;
+	}
 	if (step == Step::ConfirmRoot) { pending.value = {}; auto next = std::move(continuation); continuation = {}; next(); return; }
 	if (step == Step::PublishRoot) { publish(); return; }
 	if (step != Step::InitialRoot) { fail(); return; }

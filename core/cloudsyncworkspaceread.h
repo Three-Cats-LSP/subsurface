@@ -2,6 +2,7 @@
 #ifndef CLOUD_SYNC_WORKSPACE_READ_H
 #define CLOUD_SYNC_WORKSPACE_READ_H
 #include "cloudsyncworkspace.h"
+#include "cloudsyncworkspacearchive.h"
 #include <QElapsedTimer>
 
 // Durable ownership of one reservation and immutable snapshot metadata.
@@ -68,6 +69,7 @@ private:
 	void finishRelease();
 	CloudSyncFileStore files;
 	CloudWorkspaceOpen rootReader;
+	CloudWorkspaceArchive archiver;
 	QTimer deadline, startupRetry;
 	QElapsedTimer startupWait;
 	CloudWorkspaceReference reference;

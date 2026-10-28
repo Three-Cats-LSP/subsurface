@@ -2,6 +2,7 @@
 #ifndef CLOUD_SYNC_WORKSPACE_UPLOAD_H
 #define CLOUD_SYNC_WORKSPACE_UPLOAD_H
 #include "cloudsyncworkspace.h"
+#include "cloudsyncworkspacearchive.h"
 #include <QElapsedTimer>
 
 // Local metadata for one canonical-XML snapshot; no XML or credentials stored.
@@ -83,6 +84,7 @@ private:
 	void complete();
 	CloudSyncFileStore files;
 	CloudWorkspaceOpen rootReader;
+	CloudWorkspaceArchive archiver;
 	QTimer deadline, startupRetry;
 	QElapsedTimer startupWait;
 	std::unique_ptr<CloudWorkspaceUploadIntent> intent;

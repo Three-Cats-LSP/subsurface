@@ -3,6 +3,7 @@
 #define CLOUD_SYNC_WORKSPACE_ACCEPTANCE_H
 
 #include "cloudsyncworkspace.h"
+#include "cloudsyncworkspacearchive.h"
 #include <QTimer>
 #include <QElapsedTimer>
 #include <memory>
@@ -66,6 +67,7 @@ private:
 	void observeSource(Step next);
 	CloudSyncFileStore files;
 	CloudWorkspaceOpen rootReader;
+	CloudWorkspaceArchive archiver;
 	CloudWorkspaceSourceReview sourceReview;
 	QTimer deadline, startupRetry;
 	QElapsedTimer startupWait;
