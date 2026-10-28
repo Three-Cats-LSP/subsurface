@@ -260,6 +260,7 @@ jobs:
           Pop-Location
 
       - name: Stage portable Neo package
+        id: stage-portable
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -317,6 +318,18 @@ jobs:
             build/native-ui/lsp-saved/*
             build/native-ui/lsp-log/*
             build/cloud-lifecycle/*.log
+
+      # A UI assertion failure must retain the exact executable for local
+      # reproduction. This artifact is explicitly unvalidated; the ordinary
+      # portable package below still requires every acceptance step to pass.
+      - name: Retain staged runtime after a failed acceptance check
+        if: failure() && steps.stage-portable.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Neo-Windows-failed-runtime-${{ github.sha }}
+          path: build/staging
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Create portable Neo archive
         id: archive-name
