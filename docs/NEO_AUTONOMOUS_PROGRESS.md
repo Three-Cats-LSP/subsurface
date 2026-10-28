@@ -38,6 +38,16 @@ targeted protocol-only run before full matching-source app acceptance. This
 models a Windows failure class; it does not prove the original live locking
 error's cause. Keep the separate 3c46 planner/export validation running.
 
+The ready-retry candidate is pushed at **`50e2e5c66`**; its targeted
+[protocol-only 40696305894](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40696305894)
+is running on the host and Windows. Resume that run; do not dispatch another
+copy. A subsequent one-line hardening copies the scope callback before invoking
+it, matching the existing cancellation/reentrancy pattern. The final app
+acceptance must use the source containing that hardening. At the 13:25 UTC
+heartbeat all three recorded workflows were still in progress, with no failure
+or owner action reported. Windows native file-sharing rows are not host/Linux
+evidence; only the Windows job exercises those real handles.
+
 **Current planner increment awaiting full native CI:** the native planner fixture manifest
 now contains **18 scenarios** (the original five numerical expectations remain
 unchanged): nitrox, CCR/trimix setpoint, pSCR, multilevel, three gases/lost oxygen,

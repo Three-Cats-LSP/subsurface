@@ -44,7 +44,8 @@ bool CloudWorkspaceSyncReceive::retryReady(bool rejected)
 {
 	if (step != Step::Receiving || rejected || readyRetries >= 2 || !scopeCurrent || !localSnapshot || !plan) return false;
 	const auto serial = generation;
-	if (!scopeCurrent() || serial != generation || step != Step::Receiving) return false;
+	const auto guard = scopeCurrent;
+	if (!guard() || serial != generation || step != Step::Receiving) return false;
 	CloudWorkspaceReceiveReceipt receipt(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision, reviewedBinding);
 	// Retry only before application, with the same immutable confirmation and
 	// all three recovery copies verified. Missing/corrupt/partly applied state
