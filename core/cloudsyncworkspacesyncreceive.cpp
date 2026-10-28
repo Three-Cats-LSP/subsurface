@@ -11,10 +11,16 @@ CloudWorkspaceSyncReceive::CloudWorkspaceSyncReceive(QNetworkAccessManager *netw
 	QObject(parent), reviewer(network, this), receiver(network, this)
 {
 	deadline.setSingleShot(true); deadline.setInterval(600000);
+	readyRetry.setSingleShot(true); readyRetry.setInterval(250);
+	connect(&readyRetry, &QTimer::timeout, this, [this] {
+		if (step == Step::RetryingReady) review(Step::InitialReview, before);
+	});
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
 	connect(&reviewer, &CloudWorkspaceSyncReview::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	connect(&reviewer, &CloudWorkspaceSyncReview::finished, this, &CloudWorkspaceSyncReceive::reviewed);
-	connect(&receiver, &CloudWorkspaceReceive::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
+	connect(&receiver, &CloudWorkspaceReceive::failed, this, [this](const QString &, bool rejected) {
+		if (!retryReady(rejected)) fail(rejected);
+	});
 	connect(&receiver, &CloudWorkspaceReceive::applied, this, [this](const QString &directory) {
 		if (step != Step::Receiving || !current()) { fail(); return; } emit applied(directory);
 	});
@@ -23,7 +29,8 @@ CloudWorkspaceSyncReceive::CloudWorkspaceSyncReceive(QNetworkAccessManager *netw
 CloudWorkspaceSyncReceive::~CloudWorkspaceSyncReceive() { cancel(); }
 void CloudWorkspaceSyncReceive::cancel()
 {
-	++generation; step = Step::Idle; deadline.stop(); reviewer.cancel(); receiver.cancel(); plan.reset(); operationLock.reset();
+	++generation; step = Step::Idle; deadline.stop(); readyRetry.stop(); readyRetries = 0;
+	reviewer.cancel(); receiver.cancel(); plan.reset(); operationLock.reset();
 	reference.value = {}; reviewedBinding = {}; priorPlan = false; token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); bindingFile.clear();
 	bindingRevision.clear(); nextRevision.clear(); baseline.clear(); target.clear(); reservation.clear(); operation.clear();
 	planDirectory.clear(); readFile.clear(); recoveryDirectory.clear(); before.clear(); scopeCurrent = {}; localSnapshot = {}; projectPayload = {}; applyPayload = {};
@@ -32,6 +39,26 @@ void CloudWorkspaceSyncReceive::fail(bool rejected)
 {
 	if (step == Step::Idle) return;
 	cancel(); emit failed(tr("The workspace receive needs review. Your local data, saved recovery copies and cloud versions were kept."), rejected);
+}
+bool CloudWorkspaceSyncReceive::retryReady(bool rejected)
+{
+	if (step != Step::Receiving || rejected || readyRetries >= 2 || !scopeCurrent || !localSnapshot || !plan) return false;
+	const auto serial = generation;
+	if (!scopeCurrent() || serial != generation || step != Step::Receiving) return false;
+	CloudWorkspaceReceiveReceipt receipt(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision, reviewedBinding);
+	// Retry only before application, with the same immutable confirmation and
+	// all three recovery copies verified. Missing/corrupt/partly applied state
+	// still stops for review, as does an expired grant or an edited local model.
+	if (!receipt.reload() || receipt.state() != "ready" || receipt.before() != before || receipt.raw().isEmpty() || receipt.after().isEmpty() ||
+	    !plan->reload() || plan->state() != "ready" || plan->before() != before) return false;
+	const auto snapshot = localSnapshot;
+	if (snapshot() != before || serial != generation || step != Step::Receiving) return false;
+	CloudWorkspaceSelection choice(choiceFile, text(reference.value, "provider"), text(reference.value, "account"));
+	if (!choice.load() || choice.version() != choiceVersion || choice.selected().value != reference.value) return false;
+	++readyRetries; priorPlan = true; step = Step::RetryingReady; readyRetry.start();
+	// Keep the original overall deadline. The fresh review and exact read must
+	// still confirm head, account, accepted legacy source and durable binding.
+	return true;
 }
 void CloudWorkspaceSyncReceive::start(const QString &accessToken, const CloudWorkspaceReference &workspace, const QString &choice,
 	const QString &choiceVer, const QString &checkpoint, const QString &binding, const QString &oldRevision, const QString &newRevision,

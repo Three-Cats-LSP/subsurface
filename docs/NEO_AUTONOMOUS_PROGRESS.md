@@ -11,7 +11,34 @@ create a duplicate. Notify on meaningful changes; if owner action becomes
 necessary, pause dependent work, play one available Windows Exclamation alert
 and ask clearly, while continuing independent work.
 
-**Current increment awaiting native CI:** the native planner fixture manifest
+**Planner/export source `3c46e4edf` is pushed and under validation.** Resume
+[full native/protocol 40694641265](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40694641265)
+and [matching Windows 40694648946](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40694648946).
+Its host protocol job passed; app regression and Windows checks continue. Do not
+start duplicates or call either whole run successful yet. Both workflows were
+explicitly dispatched to `Three-Cats-LSP/subsurface`; initial CLI calls without
+the repo flag targeted upstream and were rejected without starting runs. Always
+specify the fork on future workflow CLI calls. The connector has no dispatch
+capability. Capture a matching SHA-verified package after Windows succeeds and
+inspect the expanded fixture/native-export gates. No Google write is needed for
+these offline acceptance checks.
+
+**Next reliability candidate:** a failed pre-application receive can now retry
+the same ready receipt at most twice, 250 ms apart, without extending its overall
+deadline. It first verifies all three recovery copies, the immutable plan,
+original local bytes and captured selection. Each retry freshly reviews the
+account, accepted legacy source, binding and head, and re-reads the owned target.
+Cancelled, edited, corrupt, changed-selection or rejected-token state cannot
+start a different confirmation. This reuses the ordinary/Keep cloud coordinator.
+Thirty-two Windows-only provider-paired rows use a real Win32 read handle that
+temporarily denies file replacement: transient/persistent contention, edits,
+peer head, legacy change, cancellation, damaged backup and changed choice, for
+ordinary and confirmed cloud receive. **Not compiled or tested yet**; use a
+targeted protocol-only run before full matching-source app acceptance. This
+models a Windows failure class; it does not prove the original live locking
+error's cause. Keep the separate 3c46 planner/export validation running.
+
+**Current planner increment awaiting full native CI:** the native planner fixture manifest
 now contains **18 scenarios** (the original five numerical expectations remain
 unchanged): nitrox, CCR/trimix setpoint, pSCR, multilevel, three gases/lost oxygen,
 freshwater/altitude, recreational NDL refusal, low reserve, exhaustion and a

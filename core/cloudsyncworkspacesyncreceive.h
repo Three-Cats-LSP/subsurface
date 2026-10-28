@@ -10,7 +10,9 @@ class QLockFile;
 
 // One guarded remote-only sync receive. The caller supplies pure projection,
 // installation and actual durable local saving; account scope must stay fresh.
-// No app caller, automatic route, legacy writes or conflict merge.
+// Used by the app's ordinary receive and confirmed Keep cloud flow. No legacy
+// writes or conflict merge. A pre-application I/O failure can retry the same
+// verified ready receipt after a fresh review; it cannot confirm another choice.
 class CloudWorkspaceSyncReceive : public QObject {
 	Q_OBJECT
 public:
@@ -31,21 +33,23 @@ signals:
 	void finished(const QJsonObject &root, const QString &version, const QString &target, bool headMatches);
 	void failed(const QString &message, bool tokenRejected);
 private:
-	enum class Step { Idle, InitialReview, Receiving, PostReview };
+	enum class Step { Idle, InitialReview, Receiving, RetryingReady, PostReview };
 	bool current();
+	bool retryReady(bool rejected);
 	void fail(bool rejected = false);
 	void review(Step next, const QByteArray &expectedModel);
 	void reviewed(int action, const QJsonObject &root, const QString &version, const QString &revision);
 	void received(const QJsonObject &root, const QString &version, const QString &target);
 	CloudWorkspaceSyncReview reviewer;
 	CloudWorkspaceReceive receiver;
-	QTimer deadline;
+	QTimer deadline, readyRetry;
 	std::unique_ptr<CloudWorkspaceReceivePlan> plan;
 	std::unique_ptr<QLockFile> operationLock;
 	CloudWorkspaceReference reference;
 	QJsonObject reviewedBinding;
 	Step step = Step::Idle;
 	bool priorPlan = false;
+	int readyRetries = 0;
 	quint64 generation = 0;
 	QString token, choiceFile, choiceVersion, checkpointFile, bindingFile, bindingRevision, nextRevision;
 	QString baseline, target, reservation, operation, planDirectory, readFile, recoveryDirectory;

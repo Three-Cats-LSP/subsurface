@@ -33,9 +33,13 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QUrlQuery>
 #include <QUuid>
 #include <cstring>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
 
 namespace {
 QString uid() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
@@ -2660,18 +2664,24 @@ void TestCloudSyncHistory::workspaceSyncUpload()
 
 void TestCloudSyncHistory::workspaceSyncReceive_data()
 {
-	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode"); QTest::addColumn<bool>("confirmedCloud");
 	const QStringList cases = {"receive-complete-restart", "local-and-remote-conflict", "legacy-changed-before", "legacy-changed-after-apply",
 		"head-changed-before-apply", "scope-changed", "stale-choice", "local-edit-during-review", "cancel-before-read",
 		"restart-applied-model", "restart-before-model", "recover-after-binding-save", "recover-after-later-head",
 		"concurrent-local-and-remote", "token-rejected", "invalid-projection", "apply-failed", "local-edit-before-save",
 		"source-changed-before-confirmation", "corrupt-binding"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
-		QTest::newRow(qPrintable(QString("%1-sync-receive-%2").arg(g).arg(m))) << g << m;
+		QTest::newRow(qPrintable(QString("%1-sync-receive-%2").arg(g).arg(m))) << g << m << false;
+#ifdef Q_OS_WIN
+	const QStringList sharing = {"transient-sharing", "persistent-sharing", "edit-during-retry", "head-during-retry",
+		"legacy-during-retry", "cancel-during-retry", "corrupt-copy-during-retry", "choice-during-retry"};
+	for (bool g : {false, true}) for (bool confirmed : {false, true}) for (int m = 0; m < sharing.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-ready-%2-%3").arg(g).arg(confirmed).arg(sharing[m]))) << g << (20 + m) << confirmed;
+#endif
 }
 void TestCloudSyncHistory::workspaceSyncReceive()
 {
-	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); n.workspaceWrites = true;
+	QFETCH(bool, google); QFETCH(int, mode); QFETCH(bool, confirmedCloud); Network n; n.seed(); n.workspaceWrites = true;
 	const auto source = copySource(n, google); const auto originalManifest = n.files[0].data;
 	const auto provider = QString(google ? "google-drive" : "dropbox"), baseline = uid(), target = uid(), event = uid();
 	const auto revision = uid(), nextRevision = uid(), reservation = uid(), operation = uid();
@@ -2696,6 +2706,11 @@ void TestCloudSyncHistory::workspaceSyncReceive()
 	if (mode == 2) n.files[0].rev += "-changed"; if (mode == 8) n.deferReads = true; if (mode == 14) n.readFailureStatus = 401;
 	if (mode == 19) { QFile f(bindingFile); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("corrupt") == 7); f.close(); }
 	QByteArray local = mode == 1 || mode == 13 ? B : A, persisted = A; bool resumed = false, injected = false; int installs = 0, aliases = 0;
+	const QByteArray conflicting = "<divelog><dives><dive number='3'><notes>Unchosen device version</notes></dive></dives></divelog>";
+	const QByteArray edited = "<divelog><dives><dive number='4'><notes>Later local edit</notes></dive></dives></divelog>";
+	if (confirmedCloud) local = persisted = conflicting;
+	const QByteArray expectedBefore = local;
+	int projections = 0;
 	n.requested = [&](const QNetworkRequest &r) {
 		if (mode == 7 && !injected) { local = B; injected = true; }
 		QString alias;
@@ -2707,6 +2722,38 @@ void TestCloudSyncHistory::workspaceSyncReceive()
 		}
 	};
 	CloudWorkspaceSyncReceive client(&n); QSignalSpy applied(&client, &CloudWorkspaceSyncReceive::applied), done(&client, &CloudWorkspaceSyncReceive::finished), errors(&client, &CloudWorkspaceSyncReceive::failed);
+#ifdef Q_OS_WIN
+	HANDLE sharedRead = INVALID_HANDLE_VALUE; bool sharingAcquired = false;
+	const auto closeSharedRead = [&] { if (sharedRead != INVALID_HANDLE_VALUE) { CloseHandle(sharedRead); sharedRead = INVALID_HANDLE_VALUE; } };
+	const auto cleanupRead = qScopeGuard(closeSharedRead);
+#endif
+	const auto snapshot = [&]() -> QByteArray {
+#ifdef Q_OS_WIN
+		if (mode >= 20 && !injected) {
+			const auto path = QDir(recoveryDir).filePath("intent.json");
+			QFile file(path); QJsonObject receipt;
+			if (file.open(QIODevice::ReadOnly)) { receipt = QJsonDocument::fromJson(file.readAll()).object(); file.close(); }
+			if (receipt.value("state") == "ready") {
+				injected = true;
+				// A real read handle that permits readers/writers but temporarily
+				// denies replacement. QSaveFile must fail without damaging ready.
+				sharedRead = CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()), GENERIC_READ,
+					FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+				sharingAcquired = sharedRead != INVALID_HANDLE_VALUE;
+				if (mode != 21) QTimer::singleShot(75, &client, closeSharedRead);
+				if (mode >= 22) QTimer::singleShot(30, &client, [&] {
+					if (mode == 22) local = edited;
+					if (mode == 23) { auto later = CloudWorkspaceRecord::parse(n.files[2].data); appendLater(later); n.files[2].data = later.json(); n.files[2].rev += "-later"; }
+					if (mode == 24) n.files[0].rev += "-changed";
+					if (mode == 25) client.cancel();
+					if (mode == 26) { QFile backup(QDir(recoveryDir).filePath("before.xml")); if (backup.open(QIODevice::WriteOnly | QIODevice::Truncate)) backup.write("damaged"); }
+					if (mode == 27) { CloudWorkspaceSelection newer(choiceFile, provider, Account); newer.select(choiceVersion, CloudWorkspaceReference::create(provider, Account, uid(), google ? "other-root" : "id:other-root")); }
+				});
+			}
+		}
+#endif
+		return local;
+	};
 	QObject::connect(&client, &CloudWorkspaceSyncReceive::applied, &client, [&](const QString &) {
 		if ((mode == 9 || mode == 10) && !resumed) return;
 		if (mode == 3 || mode == 18) n.files[0].rev += "-later";
@@ -2715,18 +2762,29 @@ void TestCloudSyncHistory::workspaceSyncReceive()
 	});
 	const auto start = [&] {
 		client.start("token", ref, choiceFile, mode == 6 ? uid() : choiceVersion, checkpointFile, bindingFile, revision, nextRevision,
-			baseline, target, reservation, operation, planDir, readFile, recoveryDir, A, [&] { return mode != 5 && n.guard; }, [&] { return local; },
-			[&](const QByteArray &, const QByteArray &) { return mode == 15 ? QByteArray("bad") : B; },
-			[&](const QByteArray &, const QByteArray &, const QByteArray &projected) { ++installs; if (mode == 16) return false; local = projected; return true; });
+			baseline, target, reservation, operation, planDir, readFile, recoveryDir, confirmedCloud ? expectedBefore : A, [&] { return mode != 5 && n.guard; }, snapshot,
+			[&](const QByteArray &, const QByteArray &) { ++projections; return mode == 15 ? QByteArray("bad") : B; },
+			[&](const QByteArray &, const QByteArray &, const QByteArray &projected) { ++installs; if (mode == 16) return false; local = projected; return true; },
+			confirmedCloud ? binding.value() : QJsonObject());
 	};
 	start();
-	if (mode == 8) { QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0); }
+	if (mode == 25) { QTRY_VERIFY(injected); QTest::qWait(400); QCOMPARE(done.size() + errors.size(), 0); }
+	else if (mode == 8) { QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0); }
 	else if (mode == 9 || mode == 10) {
 		QTRY_COMPARE(applied.size(), 1); client.cancel(); if (mode == 10) local = A; resumed = true;
 		start(); QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), 1);
 	} else {
-		QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), int(mode == 0 || mode == 11 || mode == 12));
+		QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), int(mode == 0 || mode == 11 || mode == 12 || mode == 20));
 	}
+#ifdef Q_OS_WIN
+	if (mode >= 20) {
+		QVERIFY(injected && sharingAcquired); QVERIFY(projections <= 3);
+		if (mode == 20) { QVERIFY(projections >= 2); QCOMPARE(installs, 1); }
+		else { QCOMPARE(installs, 0); QCOMPARE(local, mode == 22 ? edited : expectedBefore); QCOMPARE(persisted, expectedBefore); }
+		if (mode == 21) QCOMPARE(projections, 3);
+		QCOMPARE(n.files.size(), size_t(5));
+	}
+#endif
 	if (!done.isEmpty()) {
 		QCOMPARE(persisted, B); CloudWorkspaceBinding actual(bindingFile, ref, choiceVersion); QVERIFY(actual.load()); QCOMPARE(actual.commit(), target);
 		QCOMPARE(actual.revision(), nextRevision); QCOMPARE(done.last()[2].toString(), target); QVERIFY(done.last()[3].toBool());
