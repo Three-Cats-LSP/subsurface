@@ -1480,7 +1480,8 @@ void TestCloudSyncHistory::workspaceBinding_data()
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"activate-advance-restart", "foreign-choice", "foreign-root", "no-acceptance", "wrong-raw", "different-initial-model",
 		"invalid-xml", "corrupt-binding", "locked-binding", "wrong-revision", "missing-upload-proof", "uncommitted-upload-proof",
-		"wrong-upload-identity", "legacy-changed", "checkpoint-rollback", "unknown-baseline", "different-upload-model", "existing-binding-preserved", "remote-advanced-before-own-upload", "stale-activation-checkpoint"};
+		"wrong-upload-identity", "legacy-changed", "checkpoint-rollback", "unknown-baseline", "different-upload-model", "existing-binding-preserved", "remote-advanced-before-own-upload", "stale-activation-checkpoint",
+		"lost-binding-ack", "lost-ack-later-local-edit", "lost-ack-later-remote-head", "lost-ack-corrupt-previous-pin"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-binding-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceBinding()
@@ -1522,10 +1523,26 @@ void TestCloudSyncHistory::workspaceBinding()
 	if (mode == 15) { auto journal = root.value["journal"].toObject(); auto tickets = journal["tickets"].toObject(); auto old = tickets[copy].toObject(); old["sha256"] = CloudSyncManifest::sha256(B); tickets[copy] = old; journal["tickets"] = tickets; root.value["journal"] = journal; }
 	const bool ok = binding.advanceOwnedUpload(mode == 9 ? uid() : revision, root, mode == 14 ? withoutAcceptance : baseline, B,
 		mode == 16 ? A : B, mode == 10 ? dir.filePath("missing.json") : proofFile, nextRevision);
-	if (mode == 0) {
+	if (mode == 0 || mode >= 20) {
 		QVERIFY(ok); QCOMPARE(binding.commit(), upload); QCOMPARE(binding.revision(), nextRevision); QVERIFY(binding.matchesModel(B));
 		CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), binding.value());
 		QVERIFY(!restarted.advanceOwnedUpload(revision, root, baseline, B, B, proofFile, uid()));
+		const auto written = readFile(file);
+		if (mode == 20) QVERIFY(restarted.advanceOwnedUpload(revision, root, baseline, B, B, proofFile, nextRevision));
+		if (mode == 21) QVERIFY(!restarted.advanceOwnedUpload(revision, root, baseline, B, A, proofFile, nextRevision));
+		if (mode == 22) {
+			const auto later = uid(); QVERIFY(root.registerUpload(later, upload, CloudSyncManifest::sha256(A), A.size()));
+			QVERIFY(root.completeUpload(later, google ? "object-later" : "id:object-later", "rev-later")); QVERIFY(root.publish(later, upload));
+			QVERIFY(!restarted.advanceOwnedUpload(revision, root, baseline, B, B, proofFile, nextRevision));
+		}
+		QCOMPARE(readFile(file), written);
+		if (mode == 23) {
+			auto corrupted = QJsonDocument::fromJson(written).object(); auto previous = corrupted["previous"].toObject();
+			auto raw = previous["raw"].toObject(); raw["name"] = "foreign"; previous["raw"] = raw; corrupted["previous"] = previous;
+			QFile f(file); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write(QJsonDocument(corrupted).toJson()) > 0); f.close();
+			CloudWorkspaceBinding invalid(file, ref, choice); QVERIFY(!invalid.load());
+			QVERIFY(!invalid.advanceOwnedUpload(revision, root, baseline, B, B, proofFile, nextRevision));
+		}
 	} else { QVERIFY(!ok); CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), saved); }
 }
 
