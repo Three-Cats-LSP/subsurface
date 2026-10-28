@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QTimer>
 #include <QUuid>
 
 namespace {
@@ -226,6 +227,33 @@ void CloudSyncManager::beginWorkspaceRestoreApply()
 			CloudWorkspaceModel staged; if (!staged.prepare(payload, actual) || staged.normalizedXml() != workspaceRestoreModelBytes || !staged.install()) return false;
 			workspaceRestoreProjected = true; return CloudWorkspaceModel::currentXml() == workspaceRestoreModelBytes;
 		});
+}
+
+void CloudSyncManager::workspaceRestoreApplyFailed(const QString &message, bool rejected)
+{
+	// A prepared receipt with both verified recovery copies can be retried
+	// without creating another cloud version. The coordinator re-verifies the
+	// exact account, choice, head and reservations on each attempt. Do not retry
+	// an ambiguous, applied, corrupt or locally edited state.
+	if (!rejected && workspaceInProgress() && workspaceRestoreStep == WorkspaceRestoreStep::Applying &&
+	    workspaceRestoreApplyRetries < 2 && workspaceScopeCurrent() && workspacePersistenceAvailable && workspacePersistenceAvailable() &&
+	    workspaceRestoreSnapshot() == workspaceRestoreBefore) {
+		const auto localDir = path(workspaceRestoreDirectory, "local");
+		CloudWorkspaceApplyIntent receipt(localDir, workspaceReference, workspaceChoiceVersion, str(workspaceRestorePlan, "ticket"), str(workspaceRestorePlan, "apply_reservation"));
+		if (receipt.inspect() && receipt.state() == "prepared" && receipt.before() == workspaceRestoreBefore && receipt.after() == workspaceRestoreSourceBytes) {
+			const auto serial = workspaceSerial;
+			const int delay = 250 * ++workspaceRestoreApplyRetries;
+			QTimer::singleShot(delay, this, [this, serial, message] {
+				if (workspaceSerial != serial || !workspaceInProgress() || workspaceRestoreStep != WorkspaceRestoreStep::Applying) return;
+				if (!workspaceScopeCurrent() || !workspacePersistenceAvailable || !workspacePersistenceAvailable() || workspaceRestoreSnapshot() != workspaceRestoreBefore) {
+					failWorkspace(message); return;
+				}
+				beginWorkspaceRestoreApply();
+			});
+			return;
+		}
+	}
+	failWorkspace(message, rejected);
 }
 
 void CloudSyncManager::workspaceRestoreApplied(const QString &directory)

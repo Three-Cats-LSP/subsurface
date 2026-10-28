@@ -11,7 +11,7 @@ This document is the working implementation schedule for **Subsurface Neo**. Neo
 - Treat SeaBirds as a source of proven UX/product ideas and web-device transport concepts, not as a replacement backend.
 - Treat LSP D-Planner+ as a source of planner algorithms, validation cases, technical-diving workflows, schedule/export UX, and decompression-planning ideas; reuse Subsurface calculation code where it already provides the required capability.
 - Keep native Android and Windows builds fully capable of Bluetooth/USB dive-computer downloads.
-- Share as much Qt/QML/core code as practical with the future WebAssembly build.
+- Share Qt/QML and core code between the Windows and Android builds.
 - Never ship OAuth client secrets or provider access/refresh tokens in source or plaintext preferences.
 - Maintain a clean path for continuously receiving upstream Subsurface fixes, libraries, formats and dive-computer support.
 - For decompression/planner calculations, numerical correctness and reproducible regression tests take priority over UI speed or feature count.
@@ -513,7 +513,7 @@ Before release:
 - include contingency and gas-loss cases,
 - test gas exhaustion/reserve boundaries,
 - compare selected cases against current Subsurface, LSP+, and trusted independent references where available,
-- run the same fixtures on Windows, Android and WebAssembly calculation paths,
+- run the same fixtures on Windows and Android calculation paths,
 - ensure platform differences remain inside documented numerical tolerances,
 - add regression tests whenever upstream planner/deco changes are merged.
 
@@ -805,7 +805,6 @@ Deployment target:
 - Dive-computer hardware matrix tests.
 - Windows Bluetooth/USB/serial tests.
 - Android Bluetooth/USB tests.
-- Desktop Web Bluetooth/Web Serial tests.
 - Performance/memory profiling.
 - Accessibility and keyboard navigation.
 - Translation/localization review.
@@ -824,7 +823,7 @@ Deployment target:
 
 ## Post-1.0 / next-version candidates — Maps & Weather
 
-These integrations are deliberately deferred until after the current native UI, WebAssembly, and production-hardening roadmap is complete.
+These integrations are deliberately deferred until after the current Windows/Android and production-hardening roadmap is complete.
 
 - Modernize the in-app Google-backed map experience without replacing canonical Subsurface dive-site storage.
 - Keep dive-site coordinates synchronized through the normal Neo dive log on Google Drive, Dropbox, and compatible local files.
@@ -864,7 +863,7 @@ Planner work has an independent safety/reliability gate:
 3. deterministic reference profiles are stored in tests,
 4. gas/reserve results are regression-tested as well as decompression times,
 5. exports are generated from the same schedule model shown on screen,
-6. Windows/Android/WebAssembly outputs are compared,
+6. Windows and Android outputs are compared,
 7. upstream decompression changes trigger focused review rather than blind auto-merge.
 
 # Ongoing workstream — Release readiness

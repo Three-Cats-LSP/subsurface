@@ -172,6 +172,7 @@ private:
 	void workspaceRestoreReadFinished(const QJsonObject &root, const QString &version, const QString &commit, const QString &reservation, const QByteArray &payload);
 	void workspaceRestorePublished(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches);
 	void workspaceRestoreApplied(const QString &directory);
+	void workspaceRestoreApplyFailed(const QString &message, bool rejected);
 	void workspaceRestoreCompleted(const QJsonObject &root, const QString &version, const QString &commit, bool headMatches, bool localMatches);
 	void workspaceRestoreReleased(const QJsonObject &root, const QString &version, const QString &reservation);
 	void beginWorkspaceRestoreApply();
@@ -226,6 +227,7 @@ private:
 	bool workspaceRestoreProjected = false, workspaceRestoreHeadMatches = false, workspaceRestoreLocalMatches = false;
 	enum class WorkspaceRestoreStep { None, Source, Publishing, Applying, ReleaseApply, ReleaseSource };
 	WorkspaceRestoreStep workspaceRestoreStep = WorkspaceRestoreStep::None;
+	int workspaceRestoreApplyRetries = 0;
 	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;

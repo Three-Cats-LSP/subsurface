@@ -115,7 +115,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceRestoreReader, &CloudWorkspaceRead::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceRestoreApply, &CloudWorkspaceApply::applied, this, &CloudSyncManager::workspaceRestoreApplied);
 	connect(&workspaceRestoreApply, &CloudWorkspaceApply::finished, this, &CloudSyncManager::workspaceRestoreCompleted);
-	connect(&workspaceRestoreApply, &CloudWorkspaceApply::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceRestoreApply, &CloudWorkspaceApply::failed, this, &CloudSyncManager::workspaceRestoreApplyFailed);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &source, const QByteArray &) { finishWorkspaceSource(source); });
 	connect(&workspaceCopy, &CloudWorkspaceCopy::finished, this, [this](const QJsonObject &root, const QString &version, const QString &, bool changed) {
 		workspaceLegacyChanged = changed; finishWorkspace(root, version);
@@ -1262,7 +1262,7 @@ void CloudSyncManager::clearSyncOperation()
 	workspaceVersionTicket.clear();
 	workspaceRestorePlan = {}; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();
 	workspaceRestoreDirectory.clear(); workspaceRestoreSource.clear(); workspaceRestoreProjected = false; workspaceRestoreHeadMatches = false; workspaceRestoreLocalMatches = false;
-	workspaceRestoreStep = WorkspaceRestoreStep::None;
+	workspaceRestoreStep = WorkspaceRestoreStep::None; workspaceRestoreApplyRetries = 0;
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

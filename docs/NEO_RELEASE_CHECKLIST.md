@@ -5,11 +5,13 @@ head and uploads an unpublished APK/Windows ZIP bundle with release notes,
 `update.json`, and `SHA256SUMS.txt`. It does not create a tag, GitHub Release,
 or website update notification.
 
+Windows and Android are the current release targets. Linux desktop and browser builds are outside the current release scope.
+
 Before the publishing workflow is authorized:
 
 1. Verify every candidate checksum.
 2. Install and smoke-test Android and Windows artifacts.
-3. Run planner, cloud, WebAssembly, import/export, and backup/restore gates.
+3. Run planner, cloud, import/export, and backup/restore gates for Windows and Android.
 4. Complete physical dive-computer coverage appropriate for the release.
 5. Confirm OAuth publication, privacy/terms approval, and signing credentials.
 6. Review and finalize release notes.
