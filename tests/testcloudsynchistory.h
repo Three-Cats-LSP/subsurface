@@ -72,6 +72,8 @@ private slots:
 	void workspaceSyncReview();
 	void workspaceSyncUpload_data();
 	void workspaceSyncUpload();
+	void workspaceSyncReceive_data();
+	void workspaceSyncReceive();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();

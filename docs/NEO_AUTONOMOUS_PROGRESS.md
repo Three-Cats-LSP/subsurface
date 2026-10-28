@@ -62,7 +62,9 @@ Source **c20368845** adds upload recovery retaining a private canonical snapshot
 
 Source **1f845308d** adds an unused sync-upload coordinator re-reviewing the selected legacy branch and workspace before publication and again before advancing the binding. It creates a private upload plan, uses the existing create-only/CAS uploader, and only recognizes a previously published ticket with its matching owned intent. It preserves uncertain uploads and refuses conflicts, later local edits and changed legacy branches. The provider-paired workflow cases cover cancellation and restart after publication and after binding, later heads and acknowledgement loss. Protocol run **40636340423** is pending. This is still not an app caller or automatic route; exact Windows validation is pending.
 
-Follow-up guards for both upload and receive also retain and compare the complete original binding while the old revision is active; a metadata change that reuses the same revision stops the operation. Provider-paired tampering cases require a changed-source run.
+Source **751f7446a** guards both upload and receive by retaining and comparing the complete original binding while the old revision is active; a metadata change that reuses the same revision stops the operation. Protocol run **40636461989** is pending.
+
+An unused sync-receive coordinator now composes the durable plan, initial review, remote receive and caller-requested local persistence. It re-reviews the legacy branch after the caller reports saving and before advancing the binding, then completes its plan only after reservation release. It can resume from the original or already-applied model and recognize a previously saved binding; changed local data or an unowned conflict stops safely. Its provider-paired interruption and branch-change tests are pending. It has no application caller yet.
 
 Full native/protocol **40634506779** and exact-source Windows **40634506507** were dispatched at **c44b997de**. The Windows run passed launch, Clean/Modern, lifecycle and packaging; full native tests remain running. No release was published.
 

@@ -23,6 +23,7 @@ add_executable(TestCloudSyncHistory
     ${NEO_ROOT}/core/cloudsyncworkspacedecision.cpp ${NEO_ROOT}/core/cloudsyncworkspacedecision.h
     ${NEO_ROOT}/core/cloudsyncworkspacesyncreview.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncreview.h
     ${NEO_ROOT}/core/cloudsyncworkspacesyncupload.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncupload.h
+    ${NEO_ROOT}/core/cloudsyncworkspacesyncreceive.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncreceive.h
     ${NEO_ROOT}/core/cloudsyncworkspaceupload.cpp ${NEO_ROOT}/core/cloudsyncworkspaceupload.h
     ${NEO_ROOT}/core/cloudsyncworkspaceuploadplan.cpp ${NEO_ROOT}/core/cloudsyncworkspaceuploadplan.h
     ${NEO_ROOT}/core/cloudsyncworkspaceread.cpp ${NEO_ROOT}/core/cloudsyncworkspaceread.h
@@ -51,6 +52,7 @@ add_executable(NeoCloudIdentityProbe identityprobe.cpp
     ${NEO_ROOT}/core/cloudsyncworkspacedecision.cpp ${NEO_ROOT}/core/cloudsyncworkspacedecision.h
     ${NEO_ROOT}/core/cloudsyncworkspacesyncreview.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncreview.h
     ${NEO_ROOT}/core/cloudsyncworkspacesyncupload.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncupload.h
+    ${NEO_ROOT}/core/cloudsyncworkspacesyncreceive.cpp ${NEO_ROOT}/core/cloudsyncworkspacesyncreceive.h
 	${NEO_ROOT}/core/cloudsyncworkspaceupload.cpp ${NEO_ROOT}/core/cloudsyncworkspaceupload.h
     ${NEO_ROOT}/core/cloudsyncworkspaceuploadplan.cpp ${NEO_ROOT}/core/cloudsyncworkspaceuploadplan.h
 	${NEO_ROOT}/core/cloudsyncworkspaceread.cpp ${NEO_ROOT}/core/cloudsyncworkspaceread.h
