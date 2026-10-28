@@ -75,7 +75,8 @@ public:
 		PlanScheduleRole,
 		PlanProfileRole,
 		PlanReportHeaderRole,
-		PlanReportFooterRole
+		PlanReportFooterRole,
+		PlanEngineRole
 	};
 	QHash<int, QByteArray> roleNames() const override;
 protected:

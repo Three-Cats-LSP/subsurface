@@ -12,6 +12,7 @@ QJsonObject identity();
 QJsonArray presets();
 QJsonObject calculate(const QJsonObject &request);
 QJsonObject project(const QJsonObject &input);
+QJsonObject ndlReference(const QJsonObject &input);
 }
 
 #endif

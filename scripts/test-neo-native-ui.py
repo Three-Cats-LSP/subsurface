@@ -6,6 +6,7 @@ The first launch uses packaged QML. The following launches use the existing
 No test hooks or sample data are added to the shipping application.
 """
 import argparse
+import base64
 import json
 import os
 import re
@@ -23,6 +24,8 @@ DRIVER = r'''
     property string smokeLastCapture: ""
     property bool smokeCapturePending: false
     property var smokeConfig: CONFIG
+    property int smokeLspRuntime: 0
+    property var smokeLspProfile: []
     function smokeCheck(value, message) {
         if (!value) throw new Error(message)
     }
@@ -94,9 +97,11 @@ DRIVER = r'''
                     smokeCheck(rootItem.neoInterfaceStyle === smokeConfig.expectedStyle, "style restart persistence")
                     if (smokeConfig.restartOnly) {
                         smokeCheck(NeoDashboard.diveCount === 12, "populated log restart")
-                        console.log("NEO_UI_PASS restart persistence")
-                        smokeTimer.stop()
-                        Qt.quit()
+                        smokeCheck(NeoDashboard.planCount === 2, "LSP saved-plan restart")
+                        neoPlannerLab.loadPreset(0)
+                        smokeCheck(neoPlannerLab.useLspPlanner && Math.abs(neoPlannerLab.lspParameters.ascentRate-9.876543)<1e-9, "full LSP preset restart")
+                        rootItem.openNeoDiveDetails(NeoDashboard.recentPlans[0].id, false, true)
+                        rootItem.smokeStep = 24
                         return
                     }
                     smokeCheck(NeoDashboard.diveCount === 0, "isolated empty log")
@@ -183,7 +188,102 @@ DRIVER = r'''
                     rootItem.showNeoHome()
                     break
                 case 13:
-                    console.log("NEO_UI_PASS styles, themes, sizes, data, navigation")
+                    rootItem.showPageFromDrawer(neoPlannerLab)
+                    Backend.unit_system = Enums.METRIC
+                    neoPlannerLab.plannedDate = "2027-02-01"
+                    neoPlannerLab.plannedTime = "12:00:00"
+                    neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"21/0",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}])
+                    break
+                case 14:
+                    smokeCheck(pageStack.currentItem === neoPlannerLab, "shared planner route")
+                    smokeCheck(neoPlannerLab.useLspPlanner && neoPlannerLab.builtInProfiles.length === 7, "LSP default and all six presets")
+                    for (var pi = 1; pi < 7; ++pi) {
+                        neoPlannerLab.loadBuiltInProfile(pi)
+                        var original = neoPlannerLab.builtInProfiles[pi].parameters
+                        for (var key in original) smokeCheck(String(neoPlannerLab.lspParameters[key]) === String(original[key]), "complete original preset " + key)
+                        smokeCheck(neoPlannerLab.planSaveAllowed && neoPlannerLab.timeline.length > 2, "preset calculates a physical profile: " + pi)
+                    }
+                    neoPlannerLab.loadBuiltInProfile(1)
+                    neoPlannerLab.setLspParameter("ascentRate", 9.876543)
+                    neoPlannerLab.generatePlan(false, true)
+                    neoPlannerLab.savePreset("LSP UI precision")
+                    neoPlannerLab.loadBuiltInProfile(2)
+                    neoPlannerLab.loadPreset(0)
+                    smokeCheck(Math.abs(neoPlannerLab.lspParameters.ascentRate-9.876543)<1e-9, "preset retains precise SI rates")
+                    smokeCheck(neoPlannerLab.fullPlanExport().indexOf("Engine: LSP D-Planner+") >= 0, "LSP export source")
+                    smokeLspRuntime=neoPlannerLab.runtimeSeconds
+                    smokeLspProfile=JSON.parse(JSON.stringify(neoPlannerLab.profileData))
+                    smokeCheck(manager.exportNeoPlannerText(smokeConfig.lspPreview, neoPlannerLab.fullPlanExport()).length > 0, "LSP TXT export")
+                    smokeCheck(manager.exportNeoPlannerPdf(smokeConfig.lspPreview, neoPlannerLab.fullPlanExport(), neoPlannerLab.profileData).length > 0, "LSP PDF export")
+                    break
+                case 15:
+                    Backend.unit_system = Enums.IMPERIAL
+                    break
+                case 16:
+                    neoPlannerLab.generatePlan(false, true)
+                    smokeCheck(neoPlannerLab.planSaveAllowed, "imperial LSP plan")
+                    smokeCheck(Math.abs(neoPlannerLab.lastLspRequest.levels[0].depth-30)<1e-7, "imperial depth preserves SI geometry")
+                    smokeCheck(Math.abs(neoPlannerLab.lastLspRequest.settings.ascentRate-9.876543)<1e-9, "imperial rate preserves precise SI preset")
+                    smokeCheck(Math.abs(neoPlannerLab.runtimeSeconds-smokeLspRuntime)<=1, "units preserve LSP runtime")
+                    Backend.unit_system = Enums.METRIC
+                    break
+                case 17:
+                    neoPlannerLab.selectDiveMode(1)
+                    smokeCheck(!neoPlannerLab.planSaveAllowed, "CCR without complete supplies refuses save")
+                    neoPlannerLab.selectDiveMode(0)
+                    neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"80/80",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}])
+                    smokeCheck(!neoPlannerLab.planSaveAllowed && !smokeFind(neoPlannerLab,"NeoSavePlannerPlan").enabled, "invalid gas disables actual Save action")
+                    neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"21/0",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}])
+                    neoPlannerLab.calculateNdlReference()
+                    smokeCheck(neoPlannerLab.ndlReference.length === 6 && neoPlannerLab.ndlReference[0].available, "actual LSP NDL action")
+                    neoPlannerLab.contingencyScenario=0
+                    neoPlannerLab.contingencyDelta=5
+                    neoPlannerLab.calculateContingency()
+                    smokeCheck(neoPlannerLab.contingencyResult.planSaveAllowed && neoPlannerLab.contingencyResult.runtimeSeconds>neoPlannerLab.runtimeSeconds, "actual LSP contingency")
+                    rootItem.neoInterfaceStyle = "Clean"
+                    rootItem.showPageFromDrawer(neoPlannerLab)
+                    break
+                case 18:
+                    smokeCheck(pageStack.currentItem === neoPlannerLab && neoPlannerLab.useLspPlanner, "Clean uses the same LSP planner")
+                    if (!smokeCapture("clean-lsp-planner-wide")) return
+                    rootItem.width=390
+                    break
+                case 19:
+                    if (!smokeCapture("clean-lsp-planner-small")) return
+                    smokeLspProfile=JSON.parse(JSON.stringify(neoPlannerLab.profileData))
+                    smokeCheck(neoPlannerLab.planSaveAllowed, "actual LSP Save is available")
+                    smokeFind(neoPlannerLab,"NeoSavePlannerPlan").clicked()
+                    break
+                case 20:
+                    smokeCheck(NeoDashboard.planCount === 2, "actual LSP Save adds one plan")
+                    manager.exportToFile(0, smokeConfig.lspLog, false, false)
+                    rootItem.openNeoDiveDetails(NeoDashboard.recentPlans[0].id, false, true)
+                    break
+                case 21:
+                    var saved=pageStack.currentItem.currentItem
+                    smokeCheck(saved && saved.isLspPlan, "saved LSP identity selects its own view")
+                    smokeCheck(JSON.stringify(saved.modelData.planProfile) === JSON.stringify(smokeLspProfile), "saved LSP chart matches calculation")
+                    smokeCheck(saved.modelData.planReportHeader.indexOf("LSP D-Planner+")>=0, "saved report retains engine source")
+                    smokeCheck(smokeFind(saved,"NeoSavedLspProfile").visible, "saved LSP chart rendered")
+                    var report=pageStack.currentItem.planReportText(saved.modelData)
+                    smokeCheck(manager.exportNeoPlannerText(smokeConfig.lspSaved, report).length>0, "reopened LSP TXT")
+                    smokeCheck(manager.exportNeoPlannerPdf(smokeConfig.lspSaved, report, saved.modelData.planProfile).length>0, "reopened LSP PDF")
+                    rootItem.width=1100
+                    rootItem.neoInterfaceStyle="Modern"
+                    neoAppearance.sync()
+                    rootItem.showNeoHome()
+                    break
+                case 22:
+                    console.log("NEO_UI_PASS styles, themes, sizes, data, navigation, LSP presets/units/save/reopen/export")
+                    smokeTimer.stop()
+                    Qt.quit()
+                    break
+                case 24:
+                    var restored=pageStack.currentItem.currentItem
+                    smokeCheck(restored && restored.isLspPlan, "LSP identity survives restart")
+                    smokeCheck(restored.modelData.planReportHeader.indexOf("9.876543")>=0, "resolved LSP settings survive restart")
+                    smokeCheck(restored.modelData.planTimeline.length>2 && restored.modelData.planProfile.length>2, "LSP schedule and geometry survive restart")
+                    console.log("NEO_UI_PASS restart persistence and LSP plan")
                     smokeTimer.stop()
                     Qt.quit()
                     break
@@ -238,6 +338,19 @@ def main():
     shutil.copyfile(ROOT / "map-widget/qml/MapWidgetQt6.qml", qml / "MapWidget.qml")
     (qml / "qmldir").write_text("", encoding="utf-8")
     source = (qml / "main.qml").read_text(encoding="utf-8")
+    # This input helper exists only in the disposable test copy. Calculation,
+    # save, preset persistence, chart/report and restart all use product code.
+    planner = qml / "modern/pages/ModernPlannerLab.qml"
+    planner_source = planner.read_text(encoding="utf-8")
+    planner.write_text(planner_source.rstrip()[:-1] + r'''
+    function neoSmokeInputs(gasRows, levelRows) {
+        cylinders.clear(); segments.clear()
+        for (var gas of gasRows) cylinders.append(gas)
+        for (var level of levelRows) segments.append(level)
+        updateGasNames(); generatePlan(false, true)
+    }
+}
+''', encoding="utf-8")
     fixture = ET.parse(ROOT / "dives/neo-ui-regression.ssrf")
     plan = ET.SubElement(fixture.getroot().find("dives"), "dive", date="2026-10-11", time="09:00:00", duration="20:00 min")
     computer = ET.SubElement(plan, "divecomputer", model="planned dive")
@@ -249,11 +362,15 @@ def main():
     exports = [output / name for name in ("standard URL export", "legacy URL export", "raw path export")]
     for folder in exports:
         folder.mkdir()
+    lsp_folders = {name: output / name for name in ("lsp-preview", "lsp-saved", "lsp-log")}
+    for folder in lsp_folders.values():
+        folder.mkdir()
     for restart in (False, True):
         config = dict(output=output.as_posix(), fixture=fixture_path.as_uri(),
                       expectedStyle="Modern" if restart else "Clean", restartOnly=restart,
                       exportUrl=exports[0].as_uri(), exportLegacyUrl="file://" + exports[1].as_posix(),
-                      exportPath=str(exports[2]))
+                      exportPath=str(exports[2]), lspPreview=lsp_folders["lsp-preview"].as_uri(),
+                      lspSaved=lsp_folders["lsp-saved"].as_uri(), lspLog=lsp_folders["lsp-log"].as_uri())
         driver = DRIVER.replace("CONFIG", json.dumps(config))
         (qml / "main.qml").write_text(source.rstrip()[:-1] + driver + "\n}\n", encoding="utf-8")
         log_path = output / ("restart.log" if restart else "runtime.log")
@@ -263,11 +380,35 @@ def main():
         text = log_path.read_text(encoding="utf-8", errors="replace")
         if result.returncode or "NEO_UI_PASS" not in text or "NEO_UI_FAIL" in text or re.search(r"ModernDiveEditor.qml:[0-9]+:.*ReferenceError", text):
             raise RuntimeError(text[-12000:])
-    if len(list(output.glob("*.png"))) != 8:
-        raise RuntimeError("Expected eight rendered page screenshots")
+    if len(list(output.glob("*.png"))) != 10:
+        raise RuntimeError("Expected ten rendered page screenshots, including the LSP shared planner")
     exported = [(folder / "Subsurface_export.ssrf").read_bytes() for folder in exports]
     if len(set(exported)) != 1 or len(ET.fromstring(exported[0]).findall(".//dive")) != 13:
         raise RuntimeError("Standard URL, legacy URL and raw-path exports must preserve all dives and the plan")
+    lsp_xml = ET.parse(lsp_folders["lsp-log"] / "Subsurface_export.ssrf")
+    metadata = []
+    for notes in lsp_xml.findall(".//dive/notes"):
+        match = re.search(r"<!--NEO_PLAN:([A-Za-z0-9_-]+)-->", notes.text or "")
+        if match:
+            encoded = match.group(1)
+            value = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+            if value.get("engine", {}).get("id") == "lsp-d-planner-plus":
+                metadata.append(value)
+    if len(metadata) != 1:
+        raise RuntimeError("Expected one actual LSP-generated plan in the canonical log export")
+    plan_data = metadata[0]
+    if abs(plan_data["engineRequest"]["settings"]["ascentRate"] - 9.876543) > 1e-9:
+        raise RuntimeError("LSP precise settings did not survive save/export")
+    if plan_data["profile"][-1]["depth"] != 0 or plan_data["profile"][-1]["time"] != plan_data["runtimeSeconds"]:
+        raise RuntimeError("Saved LSP profile must prove a complete physical return to surface")
+    for name in ("lsp-preview", "lsp-saved"):
+        texts = list(lsp_folders[name].glob("*.txt"))
+        pdfs = list(lsp_folders[name].glob("*.pdf"))
+        if len(texts) != 1 or len(pdfs) != 1 or not pdfs[0].read_bytes().startswith(b"%PDF-"):
+            raise RuntimeError(f"Missing actual LSP TXT/PDF exports: {name}")
+        if "LSP D-Planner+" not in texts[0].read_text(encoding="utf-8"):
+            raise RuntimeError(f"LSP source identity missing from {name}")
+    (output / "lsp-saved-metadata.json").write_text(json.dumps(plan_data, indent=2), encoding="utf-8")
     print(f"Native UI checks passed; logs and screenshots: {output}")
 
 

@@ -13,5 +13,6 @@ private slots:
 	void freshEngineIsolation();
 	void physicalProjection_data();
 	void physicalProjection();
+	void ndlReference();
 };
 #endif

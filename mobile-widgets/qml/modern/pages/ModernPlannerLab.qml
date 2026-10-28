@@ -8,13 +8,40 @@ import org.kde.kirigami as Kirigami
 import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
 import "../components" as Components
+import "../LspSettings.js" as LspSettings
 
 Kirigami.ScrollablePage {
 	id: page
+	objectName: "NeoPlannerLab"
 	title: qsTr("Planner & decompression lab")
 	background: Rectangle { color: tokens.background }
 	Modern.DesignTokens { id: tokens }
 	property bool advancedSettingsExpanded: false
+	property bool useLspPlanner: true
+	property var lspParameters: ({})
+	property var lastLspRequest: ({})
+	property real totalPlanCns: -1
+	property bool plannerReady: false
+	property int observedLengthUnit: Backend.length
+	property int observedPressureUnit: Backend.pressure
+	property int renderedLengthUnit: Backend.length
+	property int renderedPressureUnit: Backend.pressure
+	onObservedLengthUnitChanged: {
+		if(plannerReady&&renderedLengthUnit!==observedLengthUnit) {
+			var factor=observedLengthUnit===Enums.METERS?0.3048:1/0.3048
+			for(var i=0;i<segments.count;i++)segments.setProperty(i,"depth",segments.get(i).depth*factor)
+		}
+		renderedLengthUnit=observedLengthUnit
+		if(plannerReady)generatePlan(false,true)
+	}
+	onObservedPressureUnitChanged: {
+		if(plannerReady&&renderedPressureUnit!==observedPressureUnit) {
+			var factor=observedPressureUnit===Enums.BAR?1/14.5037738:14.5037738
+			for(var i=0;i<cylinders.count;i++)cylinders.setProperty(i,"pressure",cylinders.get(i).pressure*factor)
+		}
+		renderedPressureUnit=observedPressureUnit
+		if(plannerReady)generatePlan(false,true)
+	}
 	property bool gasToolsExpanded: false
 	property int selectedProfileIndex: 0
 	property int gasOxygen: 21
@@ -82,22 +109,12 @@ Kirigami.ScrollablePage {
 	property string activeProfileId: ""
 	property int activeProfileVersion: 0
 	property bool activeProfileBuiltIn: false
-	property var builtInProfiles: [
-		{ "id": "subsurface-native", "name": qsTr("Subsurface native"), "version": 1,
-			"summary": qsTr("Native defaults: Buhlmann GF 30/75 · 18 m/min descent · 9 m/min ascent tiers") },
-		{ "id": "lsp-default", "name": qsTr("LSP Default (native mapping)"), "version": 1,
-			"summary": qsTr("GF 20/85 · 20 m/min descent · 10/3/3 m/min ascent · 3 m last stop") },
-		{ "id": "lsp-multideco", "name": qsTr("MultiDeco (native mapping)"), "version": 1,
-			"summary": qsTr("GF 30/85 · 22 m/min descent · 9 m/min ascent tiers · 3 m last stop") },
-		{ "id": "lsp-abysner", "name": qsTr("Abysner (native mapping)"), "version": 1,
-			"summary": qsTr("GF 60/70 · 25 m/min descent · 9/3/3 m/min ascent · 3 m last stop") },
-		{ "id": "lsp-subsurface", "name": qsTr("LSP Subsurface (native mapping)"), "version": 1,
-			"summary": qsTr("GF 30/70 · 20 m/min descent · 9/6/3 m/min ascent · 3 m last stop") },
-		{ "id": "lsp-gue", "name": qsTr("GUE DecPlanner (native mapping)"), "version": 1,
-			"summary": qsTr("GF 20/85 · 20 m/min descent · 9/3/3 m/min ascent · 3 m last stop · pO2 1.2") },
-		{ "id": "lsp-divekit", "name": qsTr("DiveKit (native mapping)"), "version": 1,
-			"summary": qsTr("GF 50/80 · 20 m/min descent · 9 m/min ascent tiers · 6 m last stop") }
-	]
+    property var builtInProfiles: {
+        var definitions=[{id:"subsurface-native",name:qsTr("Subsurface native"),version:1,engine:"subsurface",summary:qsTr("Existing Subsurface planner and settings")}]
+        var source=JSON.parse(Backend.divePlannerPointsModel.lspPlannerPresetsJson()),ids=["lsp-default","lsp-multideco","lsp-abysner","lsp-subsurface","lsp-gue","lsp-divekit"]
+        for(var i=0;i<source.length;i++)definitions.push({id:ids[i],name:source[i].name,version:2,engine:"lsp",summary:source[i].summary,parameters:source[i].values})
+        return definitions
+    }
 	ListModel { id: cylinders }
 	ListModel { id: segments }
 	Settings { id: plannerStorage; category: "subsurface-neo/planner"; property var presets: [] }
@@ -125,13 +142,13 @@ Kirigami.ScrollablePage {
 		if (name.trim().length === 0)
 			return
 		var saved = plannerStorage.presets || []
-		var preset = { "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex, "customSalinity": customSalinity, "plannedDate": plannedDate, "plannedTime": plannedTime, "surfacePressureBar": surfacePressureBar,
-			"decoMode": Backend.planner_deco_mode, "gflow": Backend.planner_gflow, "gfhigh": Backend.planner_gfhigh, "vpmbConservatism": Backend.vpmb_conservatism,
-			"bottomSac": Backend.bottomsac, "decoSac": Backend.decosac, "reserveGas": Backend.reserve_gas, "bottomPo2": Backend.bottompo2 / 100, "decoPo2": Backend.decopo2 / 100,
-			"descentRate": Backend.descrate, "deepAscentRate": Backend.ascrate75, "midAscentRate": Backend.ascrate50, "decoAscentRate": Backend.ascratestops, "finalAscentRate": Backend.ascratelast6m,
-			"dropToFirstDepth": Backend.drop_stone_mode, "lastStop6m": Backend.last_stop6m, "switchAtRequiredStop": Backend.switch_at_req_stop, "minSwitchDuration": Backend.min_switch_duration,
-			"surfaceSegment": Backend.surface_segment, "problemSolvingTime": Backend.problemsolvingtime, "backGasBreaks": Backend.doo2breaks, "bailout": Backend.dobailout,
-			"defaultSetpoint": Backend.default_setpoint, "o2Narcotic": Backend.o2narcotic, "sacFactor": Backend.sacfactor }
+		var preset = { "schema":2,"engine":useLspPlanner?"lsp":"subsurface","lspParameters":JSON.parse(JSON.stringify(lspParameters)),"units":{length:Backend.length,pressure:Backend.pressure}, "name": name.trim(), "cylinders": modelData(cylinders), "segments": modelData(segments), "diveMode": diveMode.currentIndex, "waterType": waterType.currentIndex, "customSalinity": customSalinity, "plannedDate": plannedDate, "plannedTime": plannedTime, "surfacePressureBar": surfacePressureBar,
+			"decoMode": page.plannerValue("planner_deco_mode"), "gflow": page.plannerValue("planner_gflow"), "gfhigh": page.plannerValue("planner_gfhigh"), "vpmbConservatism": page.plannerValue("vpmb_conservatism"),
+			"bottomSac": page.plannerValue("bottomsac"), "decoSac": page.plannerValue("decosac"), "reserveGas": page.plannerValue("reserve_gas"), "bottomPo2": page.plannerValue("bottompo2") / 100, "decoPo2": page.plannerValue("decopo2") / 100,
+			"descentRate": page.plannerValue("descrate"), "deepAscentRate": page.plannerValue("ascrate75"), "midAscentRate": page.plannerValue("ascrate50"), "decoAscentRate": page.plannerValue("ascratestops"), "finalAscentRate": page.plannerValue("ascratelast6m"),
+			"dropToFirstDepth": page.plannerValue("drop_stone_mode"), "lastStop6m": page.plannerValue("last_stop6m"), "switchAtRequiredStop": page.plannerValue("switch_at_req_stop"), "minSwitchDuration": page.plannerValue("min_switch_duration"),
+			"surfaceSegment": page.plannerValue("surface_segment"), "problemSolvingTime": page.plannerValue("problemsolvingtime"), "backGasBreaks": page.plannerValue("doo2breaks"), "bailout": page.plannerValue("dobailout"),
+			"defaultSetpoint": page.plannerValue("default_setpoint"), "o2Narcotic": page.plannerValue("o2narcotic"), "sacFactor": page.plannerValue("sacfactor") }
 		for (var i = 0; i < saved.length; ++i) {
 			if (saved[i].name === preset.name) {
 				saved[i] = preset
@@ -239,85 +256,70 @@ Kirigami.ScrollablePage {
 	function plannerSac(litresPerMinute) {
 		return Backend.volume === Enums.LITER ? litresPerMinute : Math.round(litresPerMinute * 3.53147)
 	}
-	function lspMappedPlannerSettings(profileId) {
-		var settings = nativePlannerSettings()
-		settings.bottomSac = plannerSac(22)
-		settings.decoSac = plannerSac(20)
-		settings.descentRate = plannerRate(20)
-		settings.deepAscentRate = plannerRate(10)
-		settings.midAscentRate = plannerRate(3)
-		settings.decoAscentRate = plannerRate(3)
-		settings.finalAscentRate = plannerRate(3)
-		settings.gflow = 20
-		settings.gfhigh = 85
-		if (profileId === "lsp-multideco") {
-			settings.gflow = 30; settings.gfhigh = 85; settings.descentRate = plannerRate(22)
-			settings.deepAscentRate = plannerRate(9); settings.midAscentRate = plannerRate(9)
-			settings.decoAscentRate = plannerRate(9); settings.finalAscentRate = plannerRate(9)
-		} else if (profileId === "lsp-abysner") {
-			settings.gflow = 60; settings.gfhigh = 70; settings.descentRate = plannerRate(25)
-			settings.deepAscentRate = plannerRate(9)
-		} else if (profileId === "lsp-subsurface") {
-			settings.gflow = 30; settings.gfhigh = 70; settings.deepAscentRate = plannerRate(9)
-			settings.midAscentRate = plannerRate(6)
-		} else if (profileId === "lsp-gue") {
-			settings.bottomPo2 = 1.2; settings.decoPo2 = 1.2; settings.deepAscentRate = plannerRate(9)
-		} else if (profileId === "lsp-divekit") {
-			settings.gflow = 50; settings.gfhigh = 80; settings.deepAscentRate = plannerRate(9)
-			settings.midAscentRate = plannerRate(9); settings.decoAscentRate = plannerRate(9)
-			settings.lastStop6m = true
-		} else if (profileId !== "lsp-default") {
-			return null
-		}
-		return settings
-	}
-	function activeProfileLimitations() {
-		if (!activeProfileBuiltIn || activeProfileId.indexOf("lsp-") !== 0)
-			return ""
-		return qsTr("This preset contains only native Neo planner settings.")
-	}
-	function profileExportIdentity() {
-		var lines = [qsTr("Profile: %1").arg(profileLabel())]
-		var limitations = activeProfileLimitations()
-		if (limitations.length > 0)
-			lines.push(qsTr("Profile mapping: %1").arg(limitations))
-		return lines
-	}
+
+    function activeProfileLimitations() { return "" }
+    function profileExportIdentity() {
+        var lines=[qsTr("Profile: %1").arg(profileLabel()),useLspPlanner?qsTr("Engine: LSP D-Planner+ %1").arg(Backend.divePlannerPointsModel.lspPlannerIdentity().version):qsTr("Engine: Subsurface native")]
+        if(useLspPlanner&&lastLspRequest.schema===1)lines.push(qsTr("Effective LSP calculation: %1").arg(JSON.stringify(lastLspRequest)))
+        return lines
+    }
+    function plannerValue(name) {
+        if(!useLspPlanner)return Backend[name]
+        var value=LspSettings.read(name,lspParameters,Backend.length===Enums.METERS,Backend.pressure===Enums.BAR,Backend.volume===Enums.LITER,Enums)
+        return value===undefined?Backend[name]:value
+    }
+    function setLspParameter(key,value) {
+        var values=JSON.parse(JSON.stringify(lspParameters));values[key]=value;lspParameters=values
+    }
+    function setPlannerValue(name,value) {
+        if(!useLspPlanner){Backend[name]=value;return}
+        lspParameters=LspSettings.write(name,value,lspParameters,Backend.length===Enums.METERS,Backend.pressure===Enums.BAR,Backend.volume===Enums.LITER,Enums)
+        if(name==="default_setpoint")for(var i=0;i<segments.count;i++)segments.setProperty(i,"setpoint",Math.round(Number(value)))
+    }
+    function calculateEnginePlan(cylinderData,segmentData,savePlan) {
+        if(useLspPlanner) {
+            for(var i=0;i<segmentData.length;i++)segmentData[i].divemode=diveMode.currentIndex
+            return Backend.divePlannerPointsModel.calculateNeoLspPlan({date:plannedDate,time:plannedTime,diveMode:diveMode.currentIndex,waterType:waterType.currentIndex,customSalinity:customSalinity,surfacePressureBar:surfacePressureBar,cylinders:cylinderData,segments:segmentData,lspParameters:lspParameters,profileId:activeProfileId,profileVersion:activeProfileVersion},savePlan===true)
+        }
+        var salinity=waterType.currentIndex===0?10300:waterType.currentIndex===1?10000:waterType.currentIndex===2?10200:customSalinity
+        return Backend.divePlannerPointsModel.calculatePlan(cylinderData,segmentData,plannedDate,plannedTime,diveMode.currentIndex,salinity,Math.round(surfacePressureBar*1000),savePlan===true)
+    }
 	function applyPlannerSettings(preset) {
-		if (preset.decoMode !== undefined) Backend.planner_deco_mode = preset.decoMode
-		if (preset.gflow !== undefined) Backend.planner_gflow = preset.gflow
-		if (preset.gfhigh !== undefined) Backend.planner_gfhigh = preset.gfhigh
-		if (preset.vpmbConservatism !== undefined) Backend.vpmb_conservatism = preset.vpmbConservatism
-		if (preset.bottomSac !== undefined) Backend.bottomsac = preset.bottomSac
-		if (preset.decoSac !== undefined) Backend.decosac = preset.decoSac
-		if (preset.reserveGas !== undefined) Backend.reserve_gas = preset.reserveGas
-		if (preset.bottomPo2 !== undefined) Backend.bottompo2 = preset.bottomPo2
-		if (preset.decoPo2 !== undefined) Backend.decopo2 = preset.decoPo2
-		if (preset.descentRate !== undefined) Backend.descrate = preset.descentRate
-		if (preset.deepAscentRate !== undefined) Backend.ascrate75 = preset.deepAscentRate
-		if (preset.midAscentRate !== undefined) Backend.ascrate50 = preset.midAscentRate
-		if (preset.decoAscentRate !== undefined) Backend.ascratestops = preset.decoAscentRate
-		if (preset.finalAscentRate !== undefined) Backend.ascratelast6m = preset.finalAscentRate
-		if (preset.dropToFirstDepth !== undefined) Backend.drop_stone_mode = preset.dropToFirstDepth
-		if (preset.lastStop6m !== undefined) Backend.last_stop6m = preset.lastStop6m
-		if (preset.switchAtRequiredStop !== undefined) Backend.switch_at_req_stop = preset.switchAtRequiredStop
-		if (preset.minSwitchDuration !== undefined) Backend.min_switch_duration = preset.minSwitchDuration
-		if (preset.surfaceSegment !== undefined) Backend.surface_segment = preset.surfaceSegment
-		if (preset.problemSolvingTime !== undefined) Backend.problemsolvingtime = preset.problemSolvingTime
-		if (preset.backGasBreaks !== undefined) Backend.doo2breaks = preset.backGasBreaks
-		if (preset.bailout !== undefined) Backend.dobailout = preset.bailout
-		if (preset.defaultSetpoint !== undefined) Backend.default_setpoint = preset.defaultSetpoint
-		if (preset.o2Narcotic !== undefined) Backend.o2narcotic = preset.o2Narcotic
-		if (preset.sacFactor !== undefined) Backend.sacfactor = preset.sacFactor
+		if (preset.decoMode !== undefined) page.setPlannerValue("planner_deco_mode", preset.decoMode)
+		if (preset.gflow !== undefined) page.setPlannerValue("planner_gflow", preset.gflow)
+		if (preset.gfhigh !== undefined) page.setPlannerValue("planner_gfhigh", preset.gfhigh)
+		if (preset.vpmbConservatism !== undefined) page.setPlannerValue("vpmb_conservatism", preset.vpmbConservatism)
+		if (preset.bottomSac !== undefined) page.setPlannerValue("bottomsac", preset.bottomSac)
+		if (preset.decoSac !== undefined) page.setPlannerValue("decosac", preset.decoSac)
+		if (preset.reserveGas !== undefined) page.setPlannerValue("reserve_gas", preset.reserveGas)
+		if (preset.bottomPo2 !== undefined) page.setPlannerValue("bottompo2", preset.bottomPo2)
+		if (preset.decoPo2 !== undefined) page.setPlannerValue("decopo2", preset.decoPo2)
+		if (preset.descentRate !== undefined) page.setPlannerValue("descrate", preset.descentRate)
+		if (preset.deepAscentRate !== undefined) page.setPlannerValue("ascrate75", preset.deepAscentRate)
+		if (preset.midAscentRate !== undefined) page.setPlannerValue("ascrate50", preset.midAscentRate)
+		if (preset.decoAscentRate !== undefined) page.setPlannerValue("ascratestops", preset.decoAscentRate)
+		if (preset.finalAscentRate !== undefined) page.setPlannerValue("ascratelast6m", preset.finalAscentRate)
+		if (preset.dropToFirstDepth !== undefined) page.setPlannerValue("drop_stone_mode", preset.dropToFirstDepth)
+		if (preset.lastStop6m !== undefined) page.setPlannerValue("last_stop6m", preset.lastStop6m)
+		if (preset.switchAtRequiredStop !== undefined) page.setPlannerValue("switch_at_req_stop", preset.switchAtRequiredStop)
+		if (preset.minSwitchDuration !== undefined) page.setPlannerValue("min_switch_duration", preset.minSwitchDuration)
+		if (preset.surfaceSegment !== undefined) page.setPlannerValue("surface_segment", preset.surfaceSegment)
+		if (preset.problemSolvingTime !== undefined) page.setPlannerValue("problemsolvingtime", preset.problemSolvingTime)
+		if (preset.backGasBreaks !== undefined) page.setPlannerValue("doo2breaks", preset.backGasBreaks)
+		if (preset.bailout !== undefined) page.setPlannerValue("dobailout", preset.bailout)
+		if (preset.defaultSetpoint !== undefined) page.setPlannerValue("default_setpoint", preset.defaultSetpoint)
+		if (preset.o2Narcotic !== undefined) page.setPlannerValue("o2narcotic", preset.o2Narcotic)
+		if (preset.sacFactor !== undefined) page.setPlannerValue("sacfactor", preset.sacFactor)
 	}
 	function loadBuiltInProfile(index) {
 		var profile = builtInProfiles[index]
 		if (!profile)
 			return
-		var settings = profile.id === "subsurface-native" ? nativePlannerSettings() : lspMappedPlannerSettings(profile.id)
-		if (!settings)
-			return
-		applyPlannerSettings(settings)
+        useLspPlanner=profile.engine==="lsp"
+        if(useLspPlanner) {
+            lspParameters=LspSettings.presetParameters(profile.parameters)
+            for(var j=0;j<segments.count;j++)segments.setProperty(j,"setpoint",Math.round(lspParameters.bottomSetpoint*1000))
+        } else applyPlannerSettings(nativePlannerSettings())
 		activeProfileName = profile.name
 		activeProfileId = profile.id
 		activeProfileVersion = profile.version
@@ -329,7 +331,9 @@ Kirigami.ScrollablePage {
 		var preset = plannerStorage.presets[index]
 		if (!preset)
 			return
-		cylinders.clear(); segments.clear()
+        useLspPlanner=preset.engine==="lsp"
+        if(useLspPlanner)lspParameters=JSON.parse(JSON.stringify(preset.lspParameters))
+        cylinders.clear(); segments.clear()
 		for (var i = 0; i < preset.cylinders.length; ++i) cylinders.append(preset.cylinders[i])
 		for (var j = 0; j < preset.segments.length; ++j) segments.append(preset.segments[j])
 		updateGasNames()
@@ -339,7 +343,11 @@ Kirigami.ScrollablePage {
 		if (preset.plannedDate !== undefined) plannedDate = preset.plannedDate
 		if (preset.plannedTime !== undefined) plannedTime = preset.plannedTime
 		if (preset.surfacePressureBar !== undefined) surfacePressureBar = preset.surfacePressureBar
-		applyPlannerSettings(preset)
+        if(!useLspPlanner)applyPlannerSettings(preset)
+        if(preset.units) {
+            if(preset.units.length!==Backend.length)for(var si=0;si<segments.count;si++)segments.setProperty(si,"depth",segments.get(si).depth*(Backend.length===Enums.METERS?0.3048:1/0.3048))
+            if(preset.units.pressure!==Backend.pressure)for(var ci=0;ci<cylinders.count;ci++)cylinders.setProperty(ci,"pressure",cylinders.get(ci).pressure*(Backend.pressure===Enums.BAR?1/14.5037738:14.5037738))
+        }
 		activeProfileName = preset.name
 		activeProfileId = ""
 		activeProfileVersion = 0
@@ -398,7 +406,12 @@ Kirigami.ScrollablePage {
 		var index = Math.max(0, Math.min(values.length - 1, Math.round((po2Bar - 1.0) * 10)))
 		return values.length > 0 ? values[index] : ({})
 	}
-	function updateGasReference() {
+	function updateGasReference(calculation) {
+        if(useLspPlanner&&calculation) {
+            var references=[],gases=calculation.gasAnalysis||[]
+            for(var n=0;n<gases.length;n++)references.push({name:qsTr("Gas %1").arg(n+1),mix:gases[n].mix,bottomMod:gases[n].bottomMod||"—",decoSwitch:gases[n].decoSwitch||"—",ead:"—"})
+            gasReference=references;return
+        }
 		var references = []
 		for (var i = 0; i < cylinders.count; ++i) {
 			var cylinder = cylinders.get(i)
@@ -408,8 +421,8 @@ Kirigami.ScrollablePage {
 			var parsedHe = Number(parts.length > 1 ? parts[1] : 0)
 			var he = isNaN(parsedHe) ? 0 : Math.max(0, Math.min(100 - o2, parsedHe))
 			var values = Backend.divePlannerPointsModel.calculateGasInfo(cylinder.type, Math.round(o2 * 10), Math.round(he * 10))
-			var bottomReference = gasInfoAt(values, Backend.bottompo2 / 100.0)
-			var decoReference = gasInfoAt(values, Backend.decopo2 / 100.0)
+			var bottomReference = gasInfoAt(values, page.plannerValue("bottompo2") / 100.0)
+			var decoReference = gasInfoAt(values, page.plannerValue("decopo2") / 100.0)
 			references.push({ "name": qsTr("Gas %1").arg(i + 1), "mix": o2 + "/" + he,
 				"bottomMod": bottomReference.mod || "—", "decoSwitch": decoReference.decoSwitch || decoReference.mod || "—", "ead": bottomReference.ead || "—" })
 		}
@@ -417,11 +430,18 @@ Kirigami.ScrollablePage {
 	}
 	function calculateNdlReference() {
 		var depths = Backend.length === Enums.METERS ? [12, 18, 24, 30, 36, 42] : [40, 60, 80, 100, 120, 140]
+		if(useLspPlanner) {
+			var metres=[];for(var di=0;di<depths.length;di++)metres.push(depths[di]*(Backend.length===Enums.METERS?1:0.3048))
+			var response=Backend.divePlannerPointsModel.calculateLspNdlReference({request:lastLspRequest,depthsMetres:metres})
+			var rows=response.ok?response.result.rows:[],output=[]
+			for(var ri=0;ri<depths.length;ri++)output.push({depth:depths[ri],ndl:rows[ri]?rows[ri].ndl:-1,available:rows[ri]?rows[ri].available:false,capped:rows[ri]?rows[ri].capped:false})
+			ndlReference=output;return
+		}
 		var cylinderData = modelData(cylinders)
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
 		var table = []
 		for (var i = 0; i < depths.length; ++i) {
-			var segment = { "depth": depths[i], "duration": 1, "gas": 0, "setpoint": diveMode.currentIndex === 1 ? Backend.default_setpoint : 0, "divemode": diveMode.currentIndex }
+			var segment = { "depth": depths[i], "duration": 1, "gas": 0, "setpoint": diveMode.currentIndex === 1 ? page.plannerValue("default_setpoint") : 0, "divemode": diveMode.currentIndex }
 			var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, [segment], plannedDate, plannedTime, diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
 			var samples = result.profile || []
 			var sample = samples.length > 0 ? samples[samples.length - 1] : null
@@ -439,8 +459,21 @@ Kirigami.ScrollablePage {
 	function addSegment() {
 		var last = segments.get(segments.count - 1)
 		segments.append({ "depth": last ? last.depth : (Backend.length === Enums.METERS ? 18 : 60),
-			"duration": last ? last.duration + 10 : 10, "gas": last ? last.gas : 0, "setpoint": last ? last.setpoint : Backend.default_setpoint,
+			"duration": last ? last.duration + 10 : 10, "gas": last ? last.gas : 0, "setpoint": last ? last.setpoint : page.plannerValue("default_setpoint"),
 			"divemode": last ? last.divemode : 0 })
+		generatePlan()
+	}
+	function selectDiveMode(mode) {
+		diveMode.currentIndex = mode
+		if (useLspPlanner && cylinders.count > 0) {
+			var first = cylinders.get(0)
+			if (mode === 1 && first.use === 0) cylinders.setProperty(0, "use", 1)
+			if (mode !== 1 && first.use === 1) cylinders.setProperty(0, "use", 0)
+			for (var i = 0; i < segments.count; ++i) {
+				segments.setProperty(i, "divemode", mode)
+				segments.setProperty(i, "setpoint", mode === 1 ? page.plannerValue("default_setpoint") : 0)
+			}
+		}
 		generatePlan()
 	}
 	function generatePlan(savePlan, retainActiveProfile) {
@@ -452,7 +485,7 @@ Kirigami.ScrollablePage {
 		for (var i = 0; i < cylinders.count; ++i) {
 			var cylinder = cylinders.get(i)
 			cylinderData.push({ "type": cylinder.type, "mix": cylinder.mix, "pressure": cylinder.pressure,
-				"use": diveMode.currentIndex === 1 ? cylinder.use : 0 })
+				"use": useLspPlanner || diveMode.currentIndex === 1 ? cylinder.use : 0 })
 		}
 		var segmentData = []
 		for (var j = 0; j < segments.count; ++j) {
@@ -461,11 +494,11 @@ Kirigami.ScrollablePage {
 				"setpoint": segment.setpoint, "divemode": diveMode.currentIndex === 2 ? 2 : segment.divemode })
 		}
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
-		var result = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData,
-			plannedDate, plannedTime,
-			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), savePlan === true)
+        var result=calculateEnginePlan(cylinderData,segmentData,savePlan)
+        lastLspRequest=useLspPlanner?(result.engineRequest||{}):({})
+        totalPlanCns=useLspPlanner&&result.cns!==undefined?result.cns:-1
 		planNotes = result.notes || ""
-		updateGasReference()
+		updateGasReference(result)
 		profileData = result.profile || []
 		analysis = result.analysis || ({})
 		timeline = result.timeline || []
@@ -489,7 +522,7 @@ Kirigami.ScrollablePage {
 		for (var i = 0; i < cylinders.count; ++i) {
 			var cylinder = cylinders.get(i)
 			cylinderData.push({ "type": cylinder.type, "mix": cylinder.mix, "pressure": cylinder.pressure,
-				"use": diveMode.currentIndex === 1 ? cylinder.use : 0 })
+				"use": useLspPlanner || diveMode.currentIndex === 1 ? cylinder.use : 0 })
 		}
 		var segmentData = []
 		for (var j = 0; j < segments.count; ++j) {
@@ -508,14 +541,13 @@ Kirigami.ScrollablePage {
 			cylinderData[contingencyGasIndex].use = 3 // NOT_USED: remove this gas from the mature planner input
 		}
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
-		contingencyResult = Backend.divePlannerPointsModel.calculatePlan(cylinderData, segmentData, plannedDate, plannedTime,
-			diveMode.currentIndex, salinity, Math.round(surfacePressureBar * 1000), false)
+        contingencyResult=calculateEnginePlan(cylinderData,segmentData,false)
 		generatePlan(false, true)
 	}
 	function contingencyName() { return contingencyScenario === 0 ? qsTr("Extra bottom time (+%1 min)").arg(contingencyDelta) : contingencyScenario === 1 ? qsTr("Deeper profile (+%1 %2)").arg(contingencyDelta).arg(depthUnit) : qsTr("Lost gas: %1").arg(gasNames[contingencyGasIndex] || qsTr("selected gas")) }
 	function contingencySlate() {
 		if (!contingencyResult) return ""
-		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
+		var modelSettings = page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(page.plannerValue("planner_gflow")).arg(page.plannerValue("planner_gfhigh")) : page.plannerValue("planner_deco_mode") === Enums.VPMB ? qsTr("Conservatism %1").arg(page.plannerValue("vpmb_conservatism")) : qsTr("NDL planning")
 		var lines = [qsTr("SUBSURFACE NEO CONTINGENCY PLAN"), qsTr("Scenario: %1").arg(contingencyName()), qsTr("This is a separately calculated contingency; it does not replace the main plan."), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings), qsTr("Surface pressure: %1 bar · Altitude: %2 m").arg(surfacePressureBar.toFixed(3)).arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)), qsTr("Mode: %1 · Water: %2").arg(diveMode.currentText).arg(waterDescription()), "", qsTr("DECOMPRESSION SCHEDULE")]
 		var stops = contingencyResult.schedule || []
 		for (var i = 0; i < stops.length; ++i) { var stop = stops[i]; lines.push((stop.depth / (Backend.length === Enums.METERS ? 1000 : 304.8)).toFixed(1) + " " + depthUnit + "  " + formatDuration(stop.duration) + (stop.gas !== undefined ? "  " + stop.gas : "")) }
@@ -524,7 +556,7 @@ Kirigami.ScrollablePage {
 		for (var j = 0; j < gases.length; ++j) lines.push(qsTr("%1: remaining %2; end %3").arg(gases[j].mix).arg(gases[j].remaining).arg(gases[j].endPressure))
 		var contingencyWarnings = []
 		if (contingencyResult.planSaveAllowed !== true)
-			contingencyWarnings.push(qsTr("The native planner could not create a valid saveable contingency plan."))
+			contingencyWarnings.push(qsTr("The selected planner could not create a valid saveable contingency plan."))
 		for (var gasIndex = 0; gasIndex < gases.length; ++gasIndex) {
 			if (gases[gasIndex].belowMinimum)
 				contingencyWarnings.push(qsTr("%1 has insufficient gas.").arg(gases[gasIndex].mix))
@@ -543,7 +575,8 @@ Kirigami.ScrollablePage {
 		return mainPlan + "\n\n" + "=".repeat(64) + "\n\n" + contingencySlate()
 	}
 	function finalSampleValue(name, fallback) {
-		return analysis[name] !== undefined ? analysis[name] : fallback
+		if(useLspPlanner&&name==="cns"&&totalPlanCns>=0)return totalPlanCns
+        return analysis[name] !== undefined ? analysis[name] : fallback
 	}
 	function surfacedSampleValue(name, fallback) {
 		if (profileData.length === 0)
@@ -600,9 +633,11 @@ Kirigami.ScrollablePage {
 		return Math.floor(seconds / 60) + ":" + (remainder < 10 ? "0" : "") + remainder
 	}
 	function algorithmName() {
-		if (Backend.planner_deco_mode === Enums.VPMB)
+		if(useLspPlanner&&!lspParameters.recreational&&String(lspParameters.model||"").indexOf("VPM")===0)
+			return {VPMA:"VPM-A",VPMB:"VPM-B",VPMBE:"VPM-B/E",VPMB_GFS:"VPM-B+GFS",VPMBFBO:"VPM-B/FBO"}[lspParameters.model]
+		if (page.plannerValue("planner_deco_mode") === Enums.VPMB)
 			return qsTr("VPM-B")
-		if (Backend.planner_deco_mode === Enums.RECREATIONAL)
+		if (page.plannerValue("planner_deco_mode") === Enums.RECREATIONAL)
 			return qsTr("Recreational (NDL)")
 		return qsTr("Buhlmann ZHL-16C + GF")
 	}
@@ -620,6 +655,7 @@ Kirigami.ScrollablePage {
 		if (phase === "ascent") return qsTr("Ascend to")
 		if (phase === "level") return qsTr("Stay at")
 		if (phase === "deco") return qsTr("Deco stop")
+        if(phase==="safety")return qsTr("Safety stop")
 		if (phase === "switch") return qsTr("Gas switch")
 		return qsTr("Surface")
 	}
@@ -647,7 +683,7 @@ Kirigami.ScrollablePage {
 		if (exceedsNDL)
 			warnings.push(qsTr("This recreational plan exceeds the no-decompression limit."))
 		else if (!planSaveAllowed)
-			warnings.push(qsTr("The native planner could not create a valid saveable plan."))
+			warnings.push(qsTr("The selected planner could not create a valid saveable plan."))
 		for (var i = 0; i < gasAnalysis.length; ++i) {
 			var gas = gasAnalysis[i]
 			if (gas.belowMinimum)
@@ -661,8 +697,8 @@ Kirigami.ScrollablePage {
 		return waterType.currentIndex === 3 ? qsTr("Custom (%1 kg/10,000 L)").arg(customSalinity) : waterType.currentText
 	}
 	function fullPlanExport() {
-		var modelSettings = Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(Backend.bottomsac)).arg(sacText(Backend.decosac)).arg(sacUnit), qsTr("Reserve: %1 %2").arg(Backend.reserve_gas).arg(pressureUnit), "", qsTr("GASES")])
+		var modelSettings = page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(page.plannerValue("planner_gflow")).arg(page.plannerValue("planner_gfhigh")) : page.plannerValue("planner_deco_mode") === Enums.VPMB ? qsTr("Conservatism %1").arg(page.plannerValue("vpmb_conservatism")) : qsTr("NDL planning")
+		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(page.plannerValue("bottomsac"))).arg(sacText(page.plannerValue("decosac"))).arg(sacUnit), qsTr("Reserve: %1 %2").arg(page.plannerValue("reserve_gas")).arg(pressureUnit), "", qsTr("GASES")])
 		lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
 		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
 			var cylinder = cylinders.get(gasIndex)
@@ -674,7 +710,7 @@ Kirigami.ScrollablePage {
 		}
 		lines.push("", qsTr("CALCULATED ANALYSIS"))
 		lines.push(qsTr("Runtime: %1  Bottom profile: %2  Decompression stops: %3").arg(formatDuration(runtimeSeconds)).arg(formatDuration(bottomTimeSeconds)).arg(formatDuration(decoTimeSeconds)))
-		lines.push(qsTr("NDL: %1  Surface GF: %2%  Tissue: %3%").arg(formatDuration(finalSampleValue("ndl", -1))).arg(surfacedSampleValue("surfaceGf", 0).toFixed(0)).arg(finalSampleValue("tissueLoad", 0).toFixed(0)))
+		lines.push(qsTr("NDL: %1  Surface GF: %2  Tissue: %3").arg(formatDuration(finalSampleValue("ndl", -1))).arg(surfacedSampleValue("surfaceGf", -1)>=0?surfacedSampleValue("surfaceGf", -1).toFixed(0)+"%":"—").arg(finalSampleValue("tissueLoad", -1)>=0?finalSampleValue("tissueLoad", -1).toFixed(0)+"%":"—"))
 		lines.push(qsTr("CNS: %1%  OTU: %2").arg(finalSampleValue("cns", 0).toFixed(1)).arg(planOtu), "", qsTr("FULL PLAN"))
 		if (timeline.length === 0)
 			lines.push(qsTr("No plan segments generated."))
@@ -701,39 +737,38 @@ Kirigami.ScrollablePage {
 			lines.push(timelineLine(timeline[i]))
 		return lines.join("\n")
 	}
-	Component.onCompleted: {
-		Backend.planner_gflow = PrefTechnicalDetails.gflow
-		Backend.planner_gfhigh = PrefTechnicalDetails.gfhigh
-		addCylinder()
-		segments.append({ "depth": Backend.length === Enums.METERS ? 18 : 60, "duration": 30,
-			"gas": 0, "setpoint": Backend.default_setpoint, "divemode": 0 })
-		generatePlan()
-	}
+    Component.onCompleted: {
+        renderedLengthUnit=Backend.length;renderedPressureUnit=Backend.pressure
+        loadBuiltInProfile(1);selectedProfileIndex=1
+        addCylinder()
+        segments.append({depth:Backend.length===Enums.METERS?18:60,duration:30,gas:0,setpoint:plannerValue("default_setpoint"),divemode:0})
+        plannerReady=true;generatePlan(false,true)
+    }
 
 	ColumnLayout {
 		width: page.availableWidth
 		spacing: tokens.space16
 		Text { text: qsTr("Build a validated dive plan"); color: tokens.textPrimary; font.pixelSize: 26; font.weight: Font.DemiBold; Layout.fillWidth: true }
-		Text { text: qsTr("Neo sends this profile directly to Subsurface's mature planner. No decompression or gas calculation is duplicated here."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+		Text { text: useLspPlanner?qsTr("LSP D-Planner+ calculates this profile with its recorded settings. Runtime entries remain the end of each level."):qsTr("Subsurface calculates this profile with its established native settings."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Decompression model"); color: tokens.textMuted; font.pixelSize: 11 }
 			Text { text: page.algorithmName(); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
-				Components.NeoComboBox { id: decoAlgorithm; Layout.fillWidth: true; accessibleName: qsTr("Decompression model"); model: [qsTr("Recreational (NDL)"), qsTr("Buhlmann ZHL-16C + GF"), qsTr("VPM-B")]; currentIndex: Backend.planner_deco_mode === Enums.VPMB ? 2 : Backend.planner_deco_mode === Enums.BUEHLMANN ? 1 : 0; onActivated: { Backend.planner_deco_mode = currentIndex === 2 ? Enums.VPMB : currentIndex === 1 ? Enums.BUEHLMANN : Enums.RECREATIONAL; page.generatePlan() } }
-				Text { text: qsTr("Subsurface's established planner is the calculation source."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-				RowLayout { visible: Backend.planner_deco_mode === Enums.BUEHLMANN; Layout.fillWidth: true; Label { text: qsTr("GF low"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("GF low"); from: 1; to: 150; value: Backend.planner_gflow; onValueModified: { Backend.planner_gflow = value; page.generatePlan() } }
+				Components.NeoComboBox { id: decoAlgorithm; Layout.fillWidth: true; accessibleName: qsTr("Decompression model"); model: [qsTr("Recreational (NDL)"), qsTr("Buhlmann ZHL-16C + GF"), qsTr("VPM-B")]; currentIndex: page.plannerValue("planner_deco_mode") === Enums.VPMB ? 2 : page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN ? 1 : 0; onActivated: { page.setPlannerValue("planner_deco_mode", currentIndex === 2 ? Enums.VPMB : currentIndex === 1 ? Enums.BUEHLMANN : Enums.RECREATIONAL); page.generatePlan() } }
+				Text { text: useLspPlanner?qsTr("Calculation source: LSP D-Planner+ 3.2.0"):qsTr("Calculation source: Subsurface native"); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				RowLayout { visible: page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN; Layout.fillWidth: true; Label { text: qsTr("GF low"); color: tokens.textMuted; Layout.fillWidth: true }
+ Components.NeoSpinBox { accessibleName: qsTr("GF low"); from: 1; to: page.useLspPlanner ? 100 : 150; value: page.plannerValue("planner_gflow"); onValueModified: { page.setPlannerValue("planner_gflow", value); page.generatePlan() } }
  Label { text: qsTr("GF high"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("GF high"); from: 1; to: 150; value: Backend.planner_gfhigh; onValueModified: { Backend.planner_gfhigh = value; page.generatePlan() } } }
-				RowLayout { visible: Backend.planner_deco_mode === Enums.VPMB; Layout.fillWidth: true; Label { text: qsTr("VPM-B conservatism"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("VPM-B conservatism"); from: 0; to: 4; value: Backend.vpmb_conservatism; onValueModified: { Backend.vpmb_conservatism = value; page.generatePlan() } } }
+ Components.NeoSpinBox { accessibleName: qsTr("GF high"); from: 1; to: page.useLspPlanner ? 100 : 150; value: page.plannerValue("planner_gfhigh"); onValueModified: { page.setPlannerValue("planner_gfhigh", value); page.generatePlan() } } }
+				RowLayout { visible: page.plannerValue("planner_deco_mode") === Enums.VPMB; Layout.fillWidth: true; Label { text: qsTr("VPM-B conservatism"); color: tokens.textMuted; Layout.fillWidth: true }
+ Components.NeoSpinBox { accessibleName: qsTr("VPM-B conservatism"); from: 0; to: 4; value: page.plannerValue("vpmb_conservatism"); onValueModified: { page.setPlannerValue("vpmb_conservatism", value); page.generatePlan() } } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Bottom SAC (%1)").arg(page.sacUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoTextField { Layout.preferredWidth: 86; accessibleName: qsTr("Bottom SAC (%1)").arg(page.sacUnit); text: page.sacText(Backend.bottomsac); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { Backend.bottomsac = page.sacValue(text); page.generatePlan() } }
+ Components.NeoTextField { Layout.preferredWidth: 86; accessibleName: qsTr("Bottom SAC (%1)").arg(page.sacUnit); text: page.sacText(page.plannerValue("bottomsac")); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { page.setPlannerValue("bottomsac", page.sacValue(text)); page.generatePlan() } }
  Label { text: qsTr("Deco SAC (%1)").arg(page.sacUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoTextField { Layout.preferredWidth: 86; accessibleName: qsTr("Deco SAC (%1)").arg(page.sacUnit); text: page.sacText(Backend.decosac); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { Backend.decosac = page.sacValue(text); page.generatePlan() } } }
-				Text { text: qsTr("Active settings: %1").arg(Backend.planner_deco_mode === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(Backend.planner_gflow).arg(Backend.planner_gfhigh) : Backend.planner_deco_mode === Enums.VPMB ? qsTr("Conservatism %1").arg(Backend.vpmb_conservatism) : qsTr("NDL planning")); color: tokens.textPrimary }
-				Text { text: qsTr("Bottom/deco SAC: %1 / %2 %3").arg(page.sacText(Backend.bottomsac)).arg(page.sacText(Backend.decosac)).arg(page.sacUnit); color: tokens.textPrimary }
+ Components.NeoTextField { Layout.preferredWidth: 86; accessibleName: qsTr("Deco SAC (%1)").arg(page.sacUnit); text: page.sacText(page.plannerValue("decosac")); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { page.setPlannerValue("decosac", page.sacValue(text)); page.generatePlan() } } }
+				Text { text: qsTr("Active settings: %1").arg(page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(page.plannerValue("planner_gflow")).arg(page.plannerValue("planner_gfhigh")) : page.plannerValue("planner_deco_mode") === Enums.VPMB ? qsTr("Conservatism %1").arg(page.plannerValue("vpmb_conservatism")) : qsTr("NDL planning")); color: tokens.textPrimary }
+				Text { text: qsTr("Bottom/deco SAC: %1 / %2 %3").arg(page.sacText(page.plannerValue("bottomsac"))).arg(page.sacText(page.plannerValue("decosac"))).arg(page.sacUnit); color: tokens.textPrimary }
 				Components.NeoButton { text: page.advancedSettingsExpanded ? qsTr("Hide planner settings") : qsTr("More planner settings"); onClicked: page.advancedSettingsExpanded = !page.advancedSettingsExpanded }
 			}
 		}
@@ -741,7 +776,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Profile presets"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text { text: qsTr("Active profile: %1").arg(page.profileLabel()); color: tokens.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Text { text: qsTr("Native profiles and external native mappings contain only settings Subsurface supports. Mappings do not claim schedule compatibility."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("LSP presets apply their complete original parameters. Existing native profiles keep the Subsurface engine."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { visible: page.activeProfileModified; Layout.fillWidth: true; text: qsTr("Reset to %1").arg(page.activeProfileName); onClicked: page.resetActiveProfile() }
 			RowLayout {
 				Layout.fillWidth: true
@@ -765,74 +800,113 @@ Kirigami.ScrollablePage {
 			visible: page.advancedSettingsExpanded
 			Layout.fillWidth: true
 			Text { text: qsTr("Travel and stop settings"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("These rates and stop choices are sent directly to the established Subsurface planner."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: useLspPlanner?qsTr("These parameters are sent to LSP D-Planner+. Saved plans retain the resolved settings."):qsTr("These parameters are sent to the Subsurface planner."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Descent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Descent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: Backend.descrate; enabled: Backend.drop_stone_mode; onValueModified: { Backend.descrate = value; page.generatePlan() } } }
-				Components.NeoCheckBox { text: qsTr("Drop to first depth"); checked: Backend.drop_stone_mode; onToggled: { Backend.drop_stone_mode = checked; page.generatePlan() } }
+ Components.NeoSpinBox { accessibleName: qsTr("Descent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: page.plannerValue("descrate"); enabled: page.useLspPlanner || page.plannerValue("drop_stone_mode"); onValueModified: { page.setPlannerValue("descrate", value); page.generatePlan() } } }
+				Components.NeoCheckBox { visible: !page.useLspPlanner; text: qsTr("Drop to first depth"); checked: page.plannerValue("drop_stone_mode"); onToggled: { page.setPlannerValue("drop_stone_mode", checked); page.generatePlan() } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deep ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Deep ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: Backend.ascrate75; onValueModified: { Backend.ascrate75 = value; page.generatePlan() } } }
-				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Mid ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Mid ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: Backend.ascrate50; onValueModified: { Backend.ascrate50 = value; page.generatePlan() } } }
+ Components.NeoSpinBox { accessibleName: qsTr("Deep ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: page.plannerValue("ascrate75"); onValueModified: { page.setPlannerValue("ascrate75", value); page.generatePlan() } } }
+				RowLayout { visible: !page.useLspPlanner; Layout.fillWidth: true; Label { text: qsTr("Mid ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
+ Components.NeoSpinBox { accessibleName: qsTr("Mid ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: page.plannerValue("ascrate50"); onValueModified: { page.setPlannerValue("ascrate50", value); page.generatePlan() } } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deco ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Deco ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: Backend.ascratestops; onValueModified: { Backend.ascratestops = value; page.generatePlan() } } }
+ Components.NeoSpinBox { accessibleName: qsTr("Deco ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: page.plannerValue("ascratestops"); onValueModified: { page.setPlannerValue("ascratestops", value); page.generatePlan() } } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Final ascent (%1)").arg(page.speedUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Final ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: Backend.ascratelast6m; onValueModified: { Backend.ascratelast6m = value; page.generatePlan() } } }
-				Components.NeoCheckBox { text: qsTr("Last stop at 6 m / 20 ft"); checked: Backend.last_stop6m; onToggled: { Backend.last_stop6m = checked; page.generatePlan() } }
-				Components.NeoCheckBox { text: qsTr("Switch gas only at required stops"); checked: Backend.switch_at_req_stop; onToggled: { Backend.switch_at_req_stop = checked; page.generatePlan() } }
-				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Minimum gas-switch time (min)"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Minimum gas-switch time in minutes"); from: 0; to: 4; value: Backend.min_switch_duration; onValueModified: { Backend.min_switch_duration = value; page.generatePlan() } } }
-				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Surface segment (min)"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Surface segment in minutes"); from: 0; to: 4; value: Backend.surface_segment; onValueModified: { Backend.surface_segment = value; page.generatePlan() } } }
+ Components.NeoSpinBox { accessibleName: qsTr("Final ascent rate (%1)").arg(page.speedUnit); from: 1; to: 99; value: page.plannerValue("ascratelast6m"); onValueModified: { page.setPlannerValue("ascratelast6m", value); page.generatePlan() } } }
+				Components.NeoCheckBox { text: qsTr("Last stop at 6 m / 20 ft"); checked: page.plannerValue("last_stop6m"); onToggled: { page.setPlannerValue("last_stop6m", checked); page.generatePlan() } }
+				Components.NeoCheckBox { visible: !page.useLspPlanner; text: qsTr("Switch gas only at required stops"); checked: page.plannerValue("switch_at_req_stop"); onToggled: { page.setPlannerValue("switch_at_req_stop", checked); page.generatePlan() } }
+				RowLayout { visible: !page.useLspPlanner; Layout.fillWidth: true; Label { text: qsTr("Minimum gas-switch time (min)"); color: tokens.textMuted; Layout.fillWidth: true }
+ Components.NeoSpinBox { accessibleName: qsTr("Minimum gas-switch time in minutes"); from: 0; to: 4; value: page.plannerValue("min_switch_duration"); onValueModified: { page.setPlannerValue("min_switch_duration", value); page.generatePlan() } } }
+				RowLayout { visible: !page.useLspPlanner; Layout.fillWidth: true; Label { text: qsTr("Surface segment (min)"); color: tokens.textMuted; Layout.fillWidth: true }
+ Components.NeoSpinBox { accessibleName: qsTr("Surface segment in minutes"); from: 0; to: 4; value: page.plannerValue("surface_segment"); onValueModified: { page.setPlannerValue("surface_segment", value); page.generatePlan() } } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Problem-solving time (min)"); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Problem-solving time in minutes"); from: 1; to: 9; value: Backend.problemsolvingtime; onValueModified: { Backend.problemsolvingtime = value; page.generatePlan() } } }
-				Components.NeoCheckBox { text: qsTr("Plan back-gas breaks"); checked: Backend.doo2breaks; onToggled: { Backend.doo2breaks = checked; page.generatePlan() } }
+ Components.NeoSpinBox { accessibleName: qsTr("Problem-solving time in minutes"); from: 1; to: 9; value: page.plannerValue("problemsolvingtime"); onValueModified: { page.setPlannerValue("problemsolvingtime", value); page.generatePlan() } } }
+				Components.NeoCheckBox { visible: !page.useLspPlanner; text: qsTr("Plan back-gas breaks"); checked: page.plannerValue("doo2breaks"); onToggled: { page.setPlannerValue("doo2breaks", checked); page.generatePlan() } }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Bottom pO₂ limit (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
  Components.NeoSpinBox {
 					accessibleName: qsTr("Bottom pO₂ limit in bar")
-					from: 50; to: 250; stepSize: 5; value: Backend.bottompo2
+					from: 50; to: 250; stepSize: 5; value: page.plannerValue("bottompo2")
 					textFromValue: function(value) { return (value / 100).toFixed(2) }
 					valueFromText: function(text) { return Math.round(Number(text) * 100) }
-					onValueModified: { Backend.bottompo2 = value / 100; page.generatePlan() }
+					onValueModified: { page.setPlannerValue("bottompo2", value / 100); page.generatePlan() }
 				} }
 				RowLayout { Layout.fillWidth: true; Label { text: qsTr("Deco pO₂ limit (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
  Components.NeoSpinBox {
 					accessibleName: qsTr("Deco pO₂ limit in bar")
-					from: 50; to: 250; stepSize: 5; value: Backend.decopo2
+					from: 50; to: 250; stepSize: 5; value: page.plannerValue("decopo2")
 					textFromValue: function(value) { return (value / 100).toFixed(2) }
 					valueFromText: function(text) { return Math.round(Number(text) * 100) }
-					onValueModified: { Backend.decopo2 = value / 100; page.generatePlan() }
+					onValueModified: { page.setPlannerValue("decopo2", value / 100); page.generatePlan() }
 				} }
 				RowLayout { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; Label { text: qsTr("CCR default setpoint (bar)"); color: tokens.textMuted; Layout.fillWidth: true }
  Components.NeoSpinBox {
 					accessibleName: qsTr("CCR default setpoint in bar")
-					from: 160; to: 2000; stepSize: 50; value: Backend.default_setpoint
+					from: 160; to: 2000; stepSize: 50; value: page.plannerValue("default_setpoint")
 					textFromValue: function(value) { return (value / 1000).toFixed(2) }
 					valueFromText: function(text) { return Math.round(Number(text) * 1000) }
-					onValueModified: { Backend.default_setpoint = value; page.generatePlan() }
+					onValueModified: { page.setPlannerValue("default_setpoint", value); page.generatePlan() }
 				} }
 			}
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Plan mode & environment"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+			GridLayout {
+				visible: page.useLspPlanner; Layout.fillWidth: true; columns: page.width>=700?2:1
+				Repeater {
+					model: [
+						{key:"waterVapor",label:qsTr("Water vapour pressure (bar)"),minimum:0,maximum:0.1,group:-1},
+						{key:"minDeco9m",label:qsTr("Minimum deco at 9 m (min)"),minimum:0,maximum:30,group:-1},
+						{key:"minDeco6m",label:qsTr("Minimum deco at 6 m (min)"),minimum:0,maximum:30,group:-1},
+						{key:"minStopTime",label:qsTr("Minimum stop time (min)"),minimum:1/60,maximum:30,group:-1},
+						{key:"decoStep",label:qsTr("Stop spacing (m)"),minimum:1,maximum:6,group:-1},
+						{key:"lastDecoStop",label:qsTr("Last stop (m)"),minimum:1,maximum:12,group:-1},
+						{key:"descentSetpoint",label:qsTr("Descent setpoint (bar)"),minimum:0.5,maximum:1,group:1},
+						{key:"decoSetpoint",label:qsTr("Deco setpoint (bar)"),minimum:0.7,maximum:1.6,group:1},
+						{key:"scrLoopVolume",label:qsTr("pSCR loop volume (L)"),minimum:1,maximum:30,group:2},
+						{key:"scrMetabolicO2",label:qsTr("Metabolic oxygen (L/min)"),minimum:0.1,maximum:5,group:2},
+						{key:"sacStress",label:qsTr("Bailout stress SAC (L/min)"),minimum:10,maximum:100,group:1},
+						{key:"stressTimeMin",label:qsTr("Bailout stress time (min)"),minimum:0,maximum:30,group:1}
+					]
+					delegate: RowLayout {
+						required property var modelData
+						visible: modelData.group<0||modelData.group===diveMode.currentIndex
+						Layout.fillWidth: true
+						Label { text: modelData.label; color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+						Components.NeoTextField {
+							Layout.preferredWidth: 100; accessibleName: modelData.label; text: String(page.lspParameters[modelData.key])
+							inputMethodHints: Qt.ImhFormattedNumbersOnly
+							onEditingFinished: { var n=Number(text);if(isFinite(n)&&n>=modelData.minimum&&n<=modelData.maximum){page.setLspParameter(modelData.key,n);page.generatePlan()} }
+						}
+					}
+				}
+				Components.NeoComboBox { accessibleName: qsTr("Helium half-time convention"); model:[qsTr("Baker helium half-times"),qsTr("Buhlmann 2003 helium half-times")]; currentIndex:page.lspParameters.heHalfTimeMode==="buhl2003"?1:0; onActivated:{page.setLspParameter("heHalfTimeMode",currentIndex===1?"buhl2003":"baker");page.generatePlan()} }
+				Components.NeoComboBox { accessibleName: qsTr("Stop rounding");model:[qsTr("Whole-minute stops"),qsTr("Fractional stops")];currentIndex:page.lspParameters.stopRounding==="fractional"?1:0;onActivated:{page.setLspParameter("stopRounding",currentIndex===1?"fractional":"wholeminute");page.generatePlan()} }
+				Components.NeoComboBox { accessibleName: qsTr("Transit model");model:[qsTr("LSP MultiDeco transit"),qsTr("Schreiner transit")];currentIndex:page.lspParameters.decoTransitMode==="schreiner"?1:0;onActivated:{page.setLspParameter("decoTransitMode",currentIndex===1?"schreiner":"multideco");page.generatePlan()} }
+				Components.NeoComboBox { visible:String(page.lspParameters.model||"").indexOf("VPM")===0;accessibleName:qsTr("VPM variant");model:["VPM-A","VPM-B","VPM-B/E","VPM-B+GFS","VPM-B/FBO"];currentIndex:["VPMA","VPMB","VPMBE","VPMB_GFS","VPMBFBO"].indexOf(page.lspParameters.model);onActivated:{page.setLspParameter("model",["VPMA","VPMB","VPMBE","VPMB_GFS","VPMBFBO"][currentIndex]);page.generatePlan()} }
+				Components.NeoCheckBox { text:qsTr("Minimum deco profile");checked:page.lspParameters.minDecoProfileEnable==="yes";onToggled:{page.setLspParameter("minDecoProfileEnable",checked?"yes":"no");page.generatePlan()} }
+				Components.NeoCheckBox { text:qsTr("Allow oxygen at its MOD");checked:page.lspParameters.o2AtMODSelect==="on";onToggled:{page.setLspParameter("o2AtMODSelect",checked?"on":"off");page.generatePlan()} }
+				Components.NeoCheckBox { text:qsTr("Acclimatized to this altitude");checked:page.lspParameters.acclimatized!==false;onToggled:{page.setLspParameter("acclimatized",checked);page.generatePlan()} }
+				Components.NeoCheckBox { text:qsTr("Shallow gradient policy");checked:page.lspParameters.shallowGradient==="on";onToggled:{page.setLspParameter("shallowGradient",checked?"on":"off");page.generatePlan()} }
+				Components.NeoCheckBox { visible:diveMode.currentIndex!==0;text:qsTr("Use diluent supply as OC bailout");checked:page.lspParameters.diluentUseAsBailout===true;onToggled:{page.setLspParameter("diluentUseAsBailout",checked);page.generatePlan()} }
+			}
 			GridLayout { Layout.fillWidth: true; columns: page.width >= 700 ? 2 : 1
 				Components.NeoTextField { Layout.fillWidth: true; text: page.plannedDate; inputMask: "0000-00-00"; placeholderText: qsTr("Planned date (YYYY-MM-DD)"); onEditingFinished: { page.plannedDate = text; page.generatePlan() } }
 				Components.NeoTextField { Layout.fillWidth: true; text: page.plannedTime; inputMask: "00:00:00"; placeholderText: qsTr("Planned time (HH:MM:SS)"); onEditingFinished: { page.plannedTime = text; page.generatePlan() } }
 				Components.NeoTextField { Layout.fillWidth: true; text: page.surfacePressureBar.toFixed(3); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Surface pressure (bar)"); onEditingFinished: { var pressure = Number(text); if (!isNaN(pressure) && pressure > 0) { page.surfacePressureBar = pressure; page.generatePlan() } } }
 				Components.NeoTextField { Layout.fillWidth: true; text: manager.plannerAltitudeForSurfacePressure(page.surfacePressureBar).toFixed(0); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Altitude (-500 to 12,000 m)"); onEditingFinished: { var altitude = Number(text); if (!isNaN(altitude) && altitude >= -500 && altitude <= 12000) { page.surfacePressureBar = manager.plannerSurfacePressureForAltitude(altitude); page.generatePlan() } } }
-				Components.NeoComboBox { id: diveMode; Layout.fillWidth: true; accessibleName: qsTr("Dive mode"); model: [qsTr("Open circuit"), qsTr("CCR"), qsTr("pSCR")]; onActivated: page.generatePlan() }
+				Components.NeoComboBox { id: diveMode; Layout.fillWidth: true; accessibleName: qsTr("Dive mode"); model: [qsTr("Open circuit"), qsTr("CCR"), qsTr("pSCR")]; onActivated: page.selectDiveMode(currentIndex) }
 				Components.NeoComboBox { id: waterType; Layout.fillWidth: true; accessibleName: qsTr("Water type"); model: [qsTr("Sea water"), qsTr("Fresh water"), qsTr("EN13319"), qsTr("Custom water density")]; onActivated: page.generatePlan() }
 				RowLayout { visible: waterType.currentIndex === 3; Layout.fillWidth: true; Label { text: qsTr("Water density (kg/10,000 L)"); color: tokens.textMuted; Layout.fillWidth: true }
  Components.NeoSpinBox { accessibleName: qsTr("Water density in kilograms per 10,000 litres"); from: 9000; to: 12000; value: page.customSalinity; onValueModified: { page.customSalinity = value; page.generatePlan() } } }
 			}
-			Text { text: qsTr("For a later planned start, Subsurface initializes tissues from compatible logged dives and their surface intervals."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: useLspPlanner?qsTr("Recent sampled dives initialize LSP tissues. Incomplete or unsupported history is reported before saving."):qsTr("Subsurface initializes tissues from logged dives and their surface intervals."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Text { text: qsTr("Altitude and surface pressure describe the same native planner input. Changing either updates the pressure used to calculate this plan."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-			Components.NeoCheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Deco on OC bailout"); checked: Backend.dobailout; onToggled: { Backend.dobailout = checked; page.generatePlan() } }
-			Components.NeoCheckBox { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL; text: qsTr("Calculate contingency variations"); checked: Backend.display_variations; onToggled: { Backend.display_variations = checked; page.generatePlan() } }
-			Text { visible: Backend.planner_deco_mode !== Enums.RECREATIONAL && Backend.display_variations; text: qsTr("Subsurface adds the calculated contingencies to the plan notes below; the main schedule remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Components.NeoCheckBox { visible: diveMode.currentIndex !== 0; text: qsTr("Deco on OC bailout"); checked: page.plannerValue("dobailout"); onToggled: { page.setPlannerValue("dobailout", checked); page.generatePlan() } }
+			Components.NeoCheckBox { visible: !page.useLspPlanner && page.plannerValue("planner_deco_mode") !== Enums.RECREATIONAL; text: qsTr("Calculate contingency variations"); checked: page.plannerValue("display_variations"); onToggled: { page.setPlannerValue("display_variations", checked); page.generatePlan() } }
+			Text { visible: !page.useLspPlanner && page.plannerValue("planner_deco_mode") !== Enums.RECREATIONAL && page.plannerValue("display_variations"); text: qsTr("Subsurface adds the calculated contingencies to the plan notes below; the main schedule remains unchanged."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; Label { text: qsTr("Reserve gas (%1)").arg(page.pressureUnit); color: tokens.textMuted; Layout.fillWidth: true }
- Components.NeoSpinBox { accessibleName: qsTr("Reserve gas (%1)").arg(page.pressureUnit); from: 0; to: Backend.pressure === Enums.BAR ? 400 : 6000; value: Backend.reserve_gas; onValueModified: { Backend.reserve_gas = value; page.generatePlan() } } }
+ Components.NeoSpinBox { accessibleName: qsTr("Reserve gas (%1)").arg(page.pressureUnit); from: 0; to: Backend.pressure === Enums.BAR ? 400 : 6000; value: page.plannerValue("reserve_gas"); onValueModified: { page.setPlannerValue("reserve_gas", value); page.generatePlan() } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
@@ -853,9 +927,9 @@ Kirigami.ScrollablePage {
 			} }
 			Text { visible: page.gasReference.length > 0; text: qsTr("Gas depth reference"); color: tokens.textSecondary; font.weight: Font.DemiBold }
 			Repeater { model: page.gasReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Label { text: modelData.name + " " + modelData.mix; color: tokens.textMuted; Layout.fillWidth: true }
- Label { text: qsTr("Deco switch %1 (pO₂ %2 bar)").arg(modelData.decoSwitch).arg((Backend.decopo2 / 100.0).toFixed(1)); color: tokens.accent }
- Label { text: qsTr("Bottom MOD %1 (pO₂ %2 bar)").arg(modelData.bottomMod).arg((Backend.bottompo2 / 100.0).toFixed(1)); color: tokens.textPrimary }
- Label { text: (Backend.o2narcotic ? qsTr("END %1") : qsTr("EAD %1")).arg(modelData.ead); color: tokens.textPrimary } } }
+ Label { text: qsTr("Deco switch %1 (pO₂ %2 bar)").arg(modelData.decoSwitch).arg((page.plannerValue("decopo2") / 100.0).toFixed(1)); color: tokens.accent }
+ Label { text: qsTr("Bottom MOD %1 (pO₂ %2 bar)").arg(modelData.bottomMod).arg((page.plannerValue("bottompo2") / 100.0).toFixed(1)); color: tokens.textPrimary }
+ Label { text: (page.plannerValue("o2narcotic") ? qsTr("END %1") : qsTr("EAD %1")).arg(modelData.ead); color: tokens.textPrimary } } }
 		}
 		Components.ModernCard {
 			Layout.fillWidth: true
@@ -869,7 +943,7 @@ Kirigami.ScrollablePage {
 				Components.NeoTextField { Layout.fillWidth: true; text: depth; placeholderText: qsTr("Depth (%1)").arg(page.depthUnit); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "depth", Number(text)); page.generatePlan() } }
 				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Runtime at segment end (min)"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
 				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Gas for segment %1").arg(index + 1); model: page.gasNames; currentIndex: gas; onActivated: { segments.setProperty(index, "gas", currentIndex); page.generatePlan() } }
-				Components.NeoTextField { visible: diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
+				Components.NeoTextField { visible: !page.useLspPlanner && diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
 				Components.NeoButton { text: qsTr("Remove"); enabled: segments.count > 1; onClicked: { segments.remove(index); page.generatePlan() } }
 			} }
 		}
@@ -885,12 +959,11 @@ Kirigami.ScrollablePage {
 				Components.MetricCard { label: qsTr("OTU"); value: page.planOtu > 0 ? String(page.planOtu) : "—"; Layout.fillWidth: true }
 			}
 			Canvas { id: profileCanvas; Layout.fillWidth: true; Layout.preferredHeight: Math.max(280, Math.min(420, page.height * 0.42)); onPaint: getContext("2d").reset()
-				QMLProfile {
-					id: plannerNativeProfile
-					anchors.fill: parent
-					plannerPreview: true
-					clip: true
-				}
+                Loader {
+                    anchors.fill: parent; active: !page.useLspPlanner
+                    sourceComponent: Component { QMLProfile { id: plannerNativeProfile; anchors.fill: parent; plannerPreview: true; clip: true } }
+                }
+                Components.LspPlanProfile { objectName: "NeoLspPreviewProfile"; anchors.fill: parent; visible: page.useLspPlanner; points: page.profileData; inspectable: false }
 				Rectangle {
 					visible: page.inspectedProfileSample !== null
 					x: page.profileSampleX(page.inspectedProfileSample, profileCanvas.width)
@@ -951,7 +1024,7 @@ Kirigami.ScrollablePage {
 			Text { visible: page.schedule.length > 0; text: qsTr("Decompression schedule"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 			Components.PlanSchedule { rows: page.schedule; profileData: page.profileData; maximumWidth: page.plannerReadingWidth; decoOnly: true; Layout.fillWidth: true }
 			RowLayout { Layout.fillWidth: true; Button { text: qsTr("Recalculate"); onClicked: page.generatePlan(false, true) }
-	Components.NeoButton { text: qsTr("Save plan"); variant: "primary"; enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) }
+	Components.NeoButton { objectName: "NeoSavePlannerPlan"; text: qsTr("Save plan"); variant: "primary"; enabled: page.planSaveAllowed; onClicked: page.generatePlan(true, true) }
  Components.NeoButton { text: qsTr("Copy deco slate"); onClicked: manager.copyToClipboard(page.decoSlate()) }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as TXT"); onClicked: plannerTextFolder.open() }
  Components.NeoButton { visible: Qt.platform.os !== "android" && Qt.platform.os !== "ios"; text: qsTr("Save as PDF"); onClicked: plannerPdfFolder.open() }
@@ -999,7 +1072,7 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Technical tools"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below runs the active native planner—there is no separate table formula."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Use the established gas calculator for MOD, Best Mix, END/EAD, CNS and OTU reference calculations. The NDL reference below uses the selected planner’s own calculation."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: page.gasToolsExpanded ? qsTr("Hide gas calculator") : qsTr("Gas calculator"); onClicked: { page.gasToolsExpanded = !page.gasToolsExpanded; if (page.gasToolsExpanded && page.gasCalculatorResults.length === 0) page.calculateGasTools() } }
 			ColumnLayout {
 				visible: page.gasToolsExpanded
@@ -1013,13 +1086,13 @@ Kirigami.ScrollablePage {
 					RowLayout { Layout.fillWidth: true; spacing: tokens.space8; Label { text: qsTr("Helium %:"); color: tokens.textMuted; Layout.preferredWidth: 76 } Components.NeoSpinBox { Layout.preferredWidth: 140; from: 0; to: 100; value: page.gasHelium; onValueModified: page.gasHelium = value } Item { Layout.fillWidth: true } }
 					Components.NeoButton { text: qsTr("Calculate"); onClicked: page.calculateGasTools() }
 				}
-				GridLayout { Layout.fillWidth: true; columns: 3; Label { text: qsTr("pO₂"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: qsTr("MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: Backend.o2narcotic ? qsTr("END @ MOD") : qsTr("EAD @ MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } }
+				GridLayout { Layout.fillWidth: true; columns: 3; Label { text: qsTr("pO₂"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: qsTr("MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } Label { text: page.plannerValue("o2narcotic") ? qsTr("END @ MOD") : qsTr("EAD @ MOD"); color: tokens.textPrimary; font.weight: Font.DemiBold; Layout.fillWidth: true } }
 				Repeater { model: page.gasCalculatorResults; delegate: GridLayout { required property var modelData; Layout.fillWidth: true; columns: 3; Label { text: modelData.po2 || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.mod || "—"; color: tokens.textSecondary; Layout.fillWidth: true } Label { text: modelData.ead || "—"; color: tokens.textSecondary; Layout.fillWidth: true } } }
 			}
 			Components.NeoButton { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; text: qsTr("Calculate NDL reference"); onClicked: page.calculateNdlReference() }
 			Repeater { model: page.ndlReference; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Label { text: qsTr("%1 %2").arg(modelData.depth).arg(page.depthUnit); color: tokens.textPrimary; Layout.fillWidth: true }
- Label { text: modelData.available ? page.formatDuration(modelData.ndl) : qsTr("Not available"); color: modelData.available ? tokens.textSecondary : tokens.textMuted } } }
-			Text { visible: page.ndlReference.length > 0; Layout.maximumWidth: page.plannerReadingWidth; text: qsTr("Reference only: uses the current model, gases, water, surface pressure, and one-minute level profile at each shown depth. Review the generated plan before diving."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+ Label { text: modelData.available ? (modelData.capped ? "≥ " : "") + page.formatDuration(modelData.ndl) : qsTr("Not available"); color: modelData.available ? tokens.textSecondary : tokens.textMuted } } }
+			Text { visible: page.ndlReference.length > 0; Layout.maximumWidth: page.plannerReadingWidth; text: page.useLspPlanner ? qsTr("LSP fresh-tissue OC NDL reference, using the first gas and current environment. CCR, pSCR, VPM and repetitive references are unavailable. A ≥ value reaches the LSP 500-minute limit.") : qsTr("Reference only: uses the current model, gases, water, surface pressure, and one-minute level profile at each shown depth. Review the generated plan before diving."); color: tokens.textMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Text { text: qsTr("Unit reference"); color: tokens.textPrimary; font.weight: Font.DemiBold }
 			Components.NeoTextField { Layout.fillWidth: true; Layout.maximumWidth: 360; Layout.alignment: Qt.AlignLeft; text: page.conversionValue.toString(); inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: qsTr("Value to convert"); onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.conversionValue = value } }
 			GridLayout { Layout.fillWidth: true; Layout.maximumWidth: page.plannerReadingWidth; Layout.alignment: Qt.AlignLeft; columns: page.width >= 700 ? 3 : 1

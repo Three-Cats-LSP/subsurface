@@ -511,6 +511,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 	case MobileListModel::PlanTimelineRole: return planMetadata.value(QStringLiteral("timeline"));
 	case MobileListModel::PlanScheduleRole: return planMetadata.value(QStringLiteral("schedule"));
 	case MobileListModel::PlanProfileRole: return planMetadata.value(QStringLiteral("profile"));
+	case MobileListModel::PlanEngineRole: return planMetadata.value(QStringLiteral("engine")).toMap().value(QStringLiteral("id"), QStringLiteral("subsurface-native"));
 	case MobileListModel::PlanReportHeaderRole: return d->is_planned() ? neoPlanReportParts(d).first : QString();
 	case MobileListModel::PlanReportFooterRole: return d->is_planned() ? neoPlanReportParts(d).second : QString();
 	}

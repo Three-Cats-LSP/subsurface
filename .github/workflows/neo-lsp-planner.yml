@@ -9,6 +9,7 @@ on:
       - 'third-party/lsp-planner/**'
       - 'tools/lsp-planner/**'
       - 'qt-models/lspplanner*'
+      - 'qt-models/neolspplanhost.js'
       - 'tests/testlspplanner.*'
       - 'tests/lsp-planner/**'
       - 'tests/data/neo-lsp-regression.json'

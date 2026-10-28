@@ -69,6 +69,7 @@ QHash<int, QByteArray> MobileListModelBase::roleNames() const
 	roles[PlanProfileRole] = "planProfile";
 	roles[PlanReportHeaderRole] = "planReportHeader";
 	roles[PlanReportFooterRole] = "planReportFooter";
+	roles[PlanEngineRole] = "planEngine";
 	return roles;
 }
 

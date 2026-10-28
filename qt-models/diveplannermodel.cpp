@@ -1992,6 +1992,11 @@ QVariantList DivePlannerPointsModel::lspPlannerPresets() const
 	return LspPlanner::presets().toVariantList();
 }
 
+QString DivePlannerPointsModel::lspPlannerPresetsJson() const
+{
+	return QString::fromUtf8(QJsonDocument(LspPlanner::presets()).toJson(QJsonDocument::Compact));
+}
+
 QVariantMap DivePlannerPointsModel::lspPlannerIdentity() const
 {
 	return LspPlanner::identity().toVariantMap();

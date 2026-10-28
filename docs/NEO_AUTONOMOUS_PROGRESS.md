@@ -1,5 +1,34 @@
 # Windows cloud reliability continuation
 
+**LSP actual app integration candidate (28 October, pending matching validation).**
+The shared Clean/Modern planner now routes its default, six full presets,
+contingencies and Save action to `calculateNeoLspPlan`. Its native adapter
+normalizes runtime waypoints using LSP calculations, replays complete sampled
+prior profiles, retains source/input/settings and physical chart/schedule in
+version-2 notes, and saves through the existing command. Saved LSP plans use
+their recorded chart/report instead of native recalculated analysis. Existing
+Subsurface plans/presets retain the native path. Precise SI rates survive
+unit changes and personal preset save/load. Fresh OC NDL uses LSP's own helper;
+unsupported repetitive/CCR/pSCR/VPM NDL is explicitly unavailable. Unsupported
+travel/mixed-circuit/variable-setpoint and recent VPM history refuse LSP save,
+with the existing native profile available.
+
+Expanded engine/projection gate **40716867444 at 3158be140 PASSED** on Windows
+Qt 6.8.3 and the shared-code host, including **89 checks** (38 unchanged upstream
+references, physical projection rows, refusals and isolation). Original Node
+reference reproduction and generated-source checks passed. This does not yet
+prove the new public UI or actual persistence flow.
+
+Full app **40716874078 at 3158be140** failed compilation at an owning-table
+iteration; fixed at **ffe236b7c**. Full app **40718841109 at ffe236b7c** then failed
+compilation because the new saved-sample assertion lacked `core/sample.h`.
+Neither failure ran the new app-flow assertions. The current candidate adds the
+missing include and actual Windows UI/preset/units/Save/reopen/TXT/PDF/restart
+checks. Resume its checks; preserve both failures, and do not mark app adoption
+complete before those checks pass. No Google writes or protected-object changes
+were made during this planner work. Separate uncommitted history codec work
+remains untouched and incomplete.
+
 **LATEST OWNER STEERING: reuse our LSP+ planner.** The owner explicitly chose the
 existing LSP+ software/algorithms and previous studies. This supersedes the
 Subsurface-only/no-JavaScript-import planner notes below. Follow

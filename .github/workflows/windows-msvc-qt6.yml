@@ -312,6 +312,10 @@ jobs:
           path: |
             build/native-ui/*.log
             build/native-ui/*.png
+            build/native-ui/lsp-saved-metadata.json
+            build/native-ui/lsp-preview/*
+            build/native-ui/lsp-saved/*
+            build/native-ui/lsp-log/*
             build/cloud-lifecycle/*.log
 
       - name: Create portable Neo archive

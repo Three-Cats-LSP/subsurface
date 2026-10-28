@@ -180,3 +180,26 @@ NeoLspPlanner.project = function(input) {
         surfaceIntervalSeconds:state!==null?Math.round(s._surfaceInterval*60):null,
         otu:raw.totalOTU,cns:raw.totalCNS,exceedsNDL:exceedsNDL,planSaveAllowed:!exceedsNDL&&!missingOxygen,warnings:warnings};
 };
+
+NeoLspPlanner.ndlReference = function(input) {
+    if(!input||!input.request||!Array.isArray(input.depthsMetres)||input.depthsMetres.length>16)
+        return {error:'Enter a valid calculated profile for the NDL reference.'};
+    var request=input.request;
+    // Reuse the engine's complete request guards, including explicit pressure,
+    // gas fractions and tissue state, before running its fresh-tissue NDL helper.
+    var checked=this.calculate(request);
+    if(checked.error)return {error:checked.error,rows:[]};
+    var s=request.settings,env=request.environment;
+    var available=request.model==='ZHLC_GF'&&s.circuit==='OC'&&!s._preTissues;
+    var rows=[];
+    if(available) {
+        ZhlEngineBundle.applyEnvironment(env);ZhlEngineBundle.setHeHalfTimeMode(s.heHalfTimeMode);
+    }
+    for(var depth of input.depthsMetres) {
+        if(!Number.isFinite(depth)||depth<=0||depth>500)return {error:'Invalid NDL reference depth.'};
+        var minutes=available?ZhlEngineBundle.buhNDL(depth,1-request.levels[0].o2/100-request.levels[0].he/100,
+            s.gfLo,s.gfHi,request.levels[0].he/100,s.lastStop,s.stepSize,s.shallowGradient):-1;
+        rows.push({depthMetres:depth,ndl:minutes<0?-1:minutes*60,available:available,capped:minutes===500});
+    }
+    return {error:null,rows:rows};
+};

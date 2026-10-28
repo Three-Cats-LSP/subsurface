@@ -118,7 +118,7 @@ static QJsonObject runLsp(const QJsonObject &request, const QString &method, int
 	const auto raw = QJsonDocument::fromJson(wire).object();
 	if (encoded.isError() || engine.isInterrupted() || raw.isEmpty() || wire.size() > 4 * 1024 * 1024)
 		return failure(QStringLiteral("INVALID_RESULT"), QStringLiteral("LSP result exceeds the native output limit."));
-	const bool ok = raw.value("error").isNull() && (raw.contains("plan") || raw.contains("profile"));
+	const bool ok = raw.value("error").isNull() && (raw.contains("plan") || raw.contains("profile") || raw.contains("rows"));
 	return {{"ok", ok}, {"engine", LspPlanner::identity()}, {"model", request.value("model")},
 		{"requestSha256", QString::fromLatin1(QCryptographicHash::hash(input, QCryptographicHash::Sha256).toHex())},
 		{"effectiveRequest", request}, {"result", raw}};
@@ -132,4 +132,9 @@ QJsonObject LspPlanner::calculate(const QJsonObject &request)
 QJsonObject LspPlanner::project(const QJsonObject &input)
 {
 	return runLsp(input, QStringLiteral("project"), 4 * 1024 * 1024);
+}
+
+QJsonObject LspPlanner::ndlReference(const QJsonObject &input)
+{
+	return runLsp(input, QStringLiteral("ndlReference"), 64 * 1024);
 }

@@ -69,6 +69,8 @@
 		<file>modern/pages/ModernDiveComputerCenter.qml</file>
 		<file>modern/pages/ModernImportReview.qml</file>
 		<file>modern/pages/ModernPlannerLab.qml</file>
+		<file>modern/components/LspPlanProfile.qml</file>
+		<file>modern/LspSettings.js</file>
 		<file>modern/pages/ModernOperationsHub.qml</file>
 		<file>modern/pages/ModernEquipmentLibrary.qml</file>
 		<file>modern/pages/ModernDataPortability.qml</file>

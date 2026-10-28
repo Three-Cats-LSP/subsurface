@@ -194,12 +194,14 @@ Kirigami.Page {
 				,"planTimeline": model.planTimeline
 				,"planSchedule": model.planSchedule
 				,"planProfile": model.planProfile
+				,"planEngine": model.planEngine
 				,"planReportHeader": model.planReportHeader
 				,"planReportFooter": model.planReportFooter
 			})
 			Accessible.role: Accessible.Pane
 			Accessible.name: qsTr("Dive details for %1").arg(modelData.isPlanned ? modelData.planTitle : (modelData.location || qsTr("Unnamed dive site")))
 			property bool panningProfile: false
+			readonly property bool isLspPlan: modelData.isPlanned && modelData.planEngine === "lsp-d-planner-plus"
 			// A graph gesture owns the pointer until it ends. This keeps inspection,
 			// pan/zoom, vertical page scroll and horizontal dive swiping separate.
 			property bool profileGestureActive: false
@@ -473,6 +475,7 @@ Kirigami.Page {
 									font.pixelSize: 11
 									elide: Text.ElideRight
 									text: {
+										if (delegateRoot.isLspPlan) return qsTr("LSP D-Planner+ · saved calculation")
 										var parts = []
 										parts.push(profile.computerName.length > 0 ? profile.computerName : qsTr("Dive computer"))
 										if (profile.diveMode.length > 0)
@@ -484,10 +487,10 @@ Kirigami.Page {
 									}
 								}
 
-								Components.NeoButton { text: page.width < 480 ? qsTr("More") : qsTr("Controls"); variant: "ghost"; compact: true; accessibleName: qsTr("Open all profile controls"); onClicked: profileControls.open() }
-								ToolButton { visible: profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
+								Components.NeoButton { visible: !delegateRoot.isLspPlan; text: page.width < 480 ? qsTr("More") : qsTr("Controls"); variant: "ghost"; compact: true; accessibleName: qsTr("Open all profile controls"); onClicked: profileControls.open() }
+								ToolButton { visible: !delegateRoot.isLspPlan && profile.scale > 1.02; text: qsTr("Reset"); onClicked: delegateRoot.resetProfileZoom() }
 								Components.NeoComboBox {
-									visible: profile.numDC > 1
+									visible: !delegateRoot.isLspPlan && profile.numDC > 1
 									model: profile.numDC
 									currentIndex: profile.currentDC
 									delegate: ItemDelegate { required property int index; required property var modelData; text: qsTr("Computer %1").arg(index + 1) }
@@ -497,6 +500,7 @@ Kirigami.Page {
 							}
 
 							GridLayout {
+							visible: !delegateRoot.isLspPlan
 								Layout.fillWidth: true
 								Layout.leftMargin: tokens.space8
 								Layout.rightMargin: tokens.space8
@@ -560,8 +564,10 @@ Kirigami.Page {
 
 								QMLProfile {
 									id: profile
+									visible: !delegateRoot.isLspPlan
+									enabled: visible
 									anchors.fill: parent
-									diveId: delegateRoot.modelData.id
+									diveId: delegateRoot.isLspPlan ? -1 : delegateRoot.modelData.id
 									clip: true
 									property real lastScale: 1.0
 									property real lastPinchCenterX: 0
@@ -646,8 +652,9 @@ Kirigami.Page {
 
 								MouseArea {
 									id: profileInspector
+									visible: !delegateRoot.isLspPlan
 									anchors.fill: parent
-									enabled: profile.scale <= 1.02
+									enabled: visible && profile.scale <= 1.02
 									hoverEnabled: true
 									preventStealing: touchInspection
 									property var sampleInfo: ({})
@@ -805,6 +812,12 @@ Kirigami.Page {
 											Text { visible: profileInspector.equipmentLine().length > 0; text: profileInspector.equipmentLine(); color: tokens.textSecondary; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width }
 										}
 									}
+								}
+								Components.LspPlanProfile {
+									objectName: "NeoSavedLspProfile"
+									anchors.fill: parent
+									visible: delegateRoot.isLspPlan
+									points: delegateRoot.isLspPlan ? delegateRoot.modelData.planProfile || [] : []
 								}
 							}
 						}

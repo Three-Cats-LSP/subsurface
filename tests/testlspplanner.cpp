@@ -171,4 +171,29 @@ void TestLspPlanner::physicalProjection()
 	for(const auto &value:result.value("gasVolumes").toArray())QVERIFY(value.toObject().value("usedLitres").toDouble()>=0);
 }
 
+void TestLspPlanner::ndlReference()
+{
+	QJsonObject request;
+	for(const auto &entry:reference().value("cases").toArray()) {
+		const auto candidate=entry.toObject().value("request").toObject();
+		if(candidate.value("model").toString()==QLatin1String("ZHLC_GF")&&candidate.value("settings").toObject().value("circuit").toString()==QLatin1String("OC")) {request=candidate;break;}
+	}
+	QVERIFY(!request.isEmpty());
+	QJsonObject input{{"request",request},{"depthsMetres",QJsonArray{12,18,30}}};
+	const auto result=LspPlanner::ndlReference(input);
+	QVERIFY2(result.value("ok").toBool(),qPrintable(QString::fromUtf8(QJsonDocument(result).toJson())));
+	const auto rows=result.value("result").toObject().value("rows").toArray();
+	QCOMPARE(rows.size(),3);
+	QVERIFY(rows[0].toObject().value("available").toBool());
+	QVERIFY(rows[0].toObject().value("ndl").toInt()>rows[2].toObject().value("ndl").toInt());
+	request["model"]="VPMB";input["request"]=request;
+	const auto unavailable=LspPlanner::ndlReference(input);
+	QVERIFY(unavailable.value("ok").toBool());
+	QVERIFY(!unavailable.value("result").toObject().value("rows").toArray()[0].toObject().value("available").toBool());
+	input["request"]=QJsonObject();
+	QVERIFY(!LspPlanner::ndlReference(input).value("ok").toBool());
+	input["request"]=request;input["depthsMetres"]=QJsonArray{-1};
+	QVERIFY(!LspPlanner::ndlReference(input).value("ok").toBool());
+}
+
 QTEST_GUILESS_MAIN(TestLspPlanner)

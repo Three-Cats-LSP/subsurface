@@ -129,3 +129,43 @@ Clean/Modern, lifecycle and package run **40705358568**, plus Android compile
 LSP planner flow. Full native app **40707131405** remains pending on 6c97 and
 also predates the JSON fix. Preserve these source-specific results; final
 matching-source app/package validation follows the actual UI/save/export work.
+
+## Actual app integration candidate, 28 October
+
+The shared page now selects actual LSP calculations by default and loads all six
+original preset dictionaries. Native SI parameters are independent of rounded
+Subsurface preferences. Existing native plans and old personal presets retain
+the native path. New presets record schema, engine, SI settings and display units.
+
+The adapter resolves end-runtime waypoints with the LSP engine, projects its
+uncollapsed physical steps and replays complete sampled OC/CCR histories. The
+pinned engine's mathematics and original result remain unchanged: a checked
+integration patch exposes read-only physical trace data and supplies an optional
+explicit last-stop value to the existing MOD utility. The patch and generated
+runtime have reproducible hashes. Projection checks compare original raw output
+as well as proving a complete physical ascent. Version-2 plan notes retain exact
+engine/source, effective request, input, schedule, profile and gas/exposure data.
+Save uses the existing command; canonical XML round-trip assertions and actual
+Windows page Save/reopen/export/restart gates are added and pending validation.
+Saved LSP details use the recorded chart/report, avoiding native recalculation
+labels. Unavailable analysis is displayed as unavailable.
+
+The existing 38 reference capture remains byte-for-byte unchanged. Its inherited
+`CCR-ALT` case supplies a sea-level pressure despite its altitude label, so that
+case does **not** prove altitude handling. `OC-altitude-freshwater` uses explicit
+reduced pressure. A corrected CCR altitude reference must be separately reviewed;
+never silently rebaseline the inherited capture. External compatibility and
+medical-validation claims remain disabled.
+
+Known explicit limits: recent VPM dives lack verified bubble-state reconstruction;
+pSCR prior history, incomplete/overlapping profiles, explicit travel gas,
+mixed-circuit waypoints and changing per-level CCR setpoints refuse this LSP path.
+The native profile remains available. Fresh-tissue OC ZHL NDL uses LSP's own
+`buhNDL`; repetitive/CCR/pSCR/VPM NDL is unavailable. These limits remain gates,
+not hidden fresh-tissue fallbacks or substituted native LSP calculations.
+
+Projection gate **40716867444**, source **3158be140**, passed 89 checks on the host
+and Windows Qt 6.8.3. Full linked-app builds **40716874078 / 40718841109** failed
+before app-flow assertions (owning-table pointer, then missing sample include);
+both corrections are retained. Matching-source UI and full-app acceptance must
+pass before calling the visible adoption complete.

@@ -106,6 +106,11 @@ bool priorProfiles(qint64 start, double vapor, QJsonArray &profiles, QString &er
 }
 }
 
+QVariantMap DivePlannerPointsModel::calculateLspNdlReference(const QVariantMap &input)
+{
+	return LspPlanner::ndlReference(QJsonObject::fromVariantMap(input)).toVariantMap();
+}
+
 QVariantMap DivePlannerPointsModel::calculateNeoLspPlan(const QVariantMap &input, bool shouldSave)
 {
 	QDateTime when = QDateTime::fromString(input.value("date").toString() + QLatin1Char(' ') + input.value("time").toString(), QStringLiteral("yyyy-MM-dd hh:mm:ss"));
@@ -213,6 +218,9 @@ QVariantMap DivePlannerPointsModel::calculateNeoLspPlan(const QVariantMap &input
 	const auto model = parameters.value("model").toString(QStringLiteral("ZHLC_GF"));
 	QJsonObject request{{"schema", 1}, {"model", model}, {"levels", levels}, {"decoGases", decoGases}, {"settings", settings},
 		{"environment", environment(pressure, barPerMetre(water, salinity), number("waterVapor"), parameters.value("acclimatized").toBool(true))}};
+	auto requestedEnvironment=request.value("environment").toObject();
+	requestedEnvironment["allowO2AtMOD"]=parameters.value("o2AtMODSelect").toString()==QLatin1String("on");
+	request["environment"]=requestedEnvironment;
 	QJsonObject data{{"schema", 1}, {"engineRequest", request}, {"cylinders", cylinders}, {"priorProfiles", prior},
 		{"start", static_cast<double>(when.toSecsSinceEpoch())}, {"bottomSacLpm", number("sacBottom")}, {"decoSacLpm", number("sacDeco")},
 		{"noDecompression", parameters.value("recreational").toBool()}};
