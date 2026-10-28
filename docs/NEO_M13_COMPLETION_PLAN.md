@@ -16,6 +16,18 @@ established. Do not call the milestone complete or remove the gate on that basis
 
 ## 1. Resolve concurrent changes in the app
 
+**Implemented and Windows-validated at `a92c17bf0`.** The shared two-choice
+dialog performs the operations below. Full native/protocol and matching Windows
+package/Clean/Modern checks passed. Actual Google two-profile cases passed both
+choices, cancellation, peer receive and restart. A separately retained recovery
+run terminated an owned saved receive at **ready**, completed the same confirmed
+operation and survived restart without changing the chosen cloud head or
+creating objects. The first live aggregate remains failed after a safe ready-state
+refusal; its exact locking-error cause is unproven. Do not describe this as a
+live applying-phase interruption pass. The [checkpoint](NEO_AUTONOMOUS_PROGRESS.md)
+records exact runs, captures, retained copies and the successful independent
+original-file/credential audit. Workspace production activation remains gated.
+
 Deliver a simple shared Clean/Modern pop-up with two choices: **Keep this
 device** and **Keep cloud**, plus cancellation. Each choice must perform a real,
 guarded operation. Review must bind the current account, exact selected
@@ -40,6 +52,9 @@ must show what is kept and require confirmation.
 
 ## 2. Make history sustainable
 
+**Open; next implementation item in this plan.** Do not rerun the completed
+conflict sequence to substitute for delivering this behavior.
+
 Define and implement a versioned transition for bounded workspace history and
 local recovery records. Preserve pending operations, active read reservations,
 selected restore versions and older unsupported data. Handle offline devices
@@ -53,6 +68,8 @@ and no general cleanup until separately proven safe.
 
 ## 3. Sync Neo metadata
 
+**Open.** Current cloud payloads still exclude the separate Neo metadata.
+
 Add a versioned payload and migration/merge policy for equipment, collections
 and planner presets alongside canonical dive XML. Preserve unknown fields and
 legacy clients' data; make conflicting edits reviewable instead of silently
@@ -63,6 +80,14 @@ concurrent edit tests on Windows for Google Drive; document what remains
 unsupported before exposing the feature.
 
 ## 4. Validate Windows and prepare production access
+
+**Partially validated.** The integrated two-choice candidate passed its full
+regression and matching Windows package checks. Its Google live checks used
+sequential divergent edits on two profiles of one account; they do not prove
+truly simultaneous app writers, large/slow workspace transfers, all network
+faults or physical devices. Preserve the original ready-state refusal and the
+later conflict ready-state refusal as unresolved-cause evidence; both saved
+operations subsequently recovered. Public OAuth/provisioning remains open.
 
 Run targeted tests during development, then one full native regression and one
 matching Windows package/launch/Clean/Modern validation for the integrated

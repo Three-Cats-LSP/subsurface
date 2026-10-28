@@ -663,13 +663,14 @@ Keep existing Subsurface Cloud support and add the Neo provider abstraction.
 Providers:
 
 - Subsurface Cloud (legacy compatibility),
-- Google Drive App Data,
-- Dropbox App Folder.
+- Google Drive App Data (current Neo sync provider).
+
+Dropbox App Folder remains in the preserved backend for possible future use;
+it is absent from current product choices and acceptance requirements.
 
 Sync model:
 
-- one Primary Sync provider,
-- optional Backup provider,
+- Google Drive as the Primary Sync provider,
 - conflict-safe revision/hash metadata,
 - never silently overwrite diverged logs.
 
@@ -687,6 +688,21 @@ OAuth/security:
 Also complete settings polish, release/update preferences, privacy/terms links and production OAuth readiness.
 
 **Exit:** Neo cloud synchronization and settings are production-ready on native platforms.
+
+The two-choice conflict increment at `a92c17bf0` is implemented and validated on
+Windows: Clean/Modern offer **Keep this device**, **Keep cloud** and Cancel;
+Combine is removed. Both operations retain recovery versions, reject stale
+reviews and resume their own durable confirmation. Full 38/35 native suites,
+2439 host protocol cases and matching Windows package/Clean/Modern checks passed.
+Actual Google two-profile checks passed both choices and restart; a restricted
+ready-phase process-termination continuation completed the same saved receive.
+Its earlier safe-refusal aggregate remains failed, with locking-error cause
+unproven. An independent read-only audit reproduced the original 47 Google
+entries/current bytes/credentials and retained every fixture. See the
+[checkpoint](NEO_AUTONOMOUS_PROGRESS.md) for exact evidence and limitations.
+Workspace routing stays development-gated. Sustainable history, Neo metadata
+sync, remaining Windows fault/concurrent-writer gates, public OAuth and physical
+Android remain open; this increment does not close Milestone 13.
 
 Reliability implementation now includes bounded network inactivity waits, release of the busy state after missing/expired authorization, structured missing-file detection (invalid or ambiguous Google Drive responses cannot start a replacement upload), and local-snapshot checks before using a remote manifest or applying a download. The checks preserve edits made during a sync, including after choosing an explicit cloud replacement. `TestCloudSyncManager` covers these failure paths and retry availability using simulated provider responses. Windows Google Drive and Dropbox validation is recorded below; the remaining physical-device and release gates are required before this milestone can be closed.
 

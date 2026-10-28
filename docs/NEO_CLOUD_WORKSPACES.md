@@ -2,6 +2,21 @@
 
 The owner chose explicit workspace selection on 2026-10-28 JST, keeping Google App Data/Dropbox App Folder permissions and avoiding a coordination service. Concurrent creators may create separate protected workspaces. A new device explicitly joins one workspace; discovery does not silently choose or merge roots.
 
+**Current application state (28 October):** shared create/join, guarded legacy
+copy/acceptance, activation, actual local restore/persistence, manual and
+foreground sync, and the two-choice conflict pop-up are integrated behind the
+workspace development gate. Google Drive is now the only selectable Neo sync
+provider; Dropbox files, credentials and backend remain preserved. At
+`a92c17bf0`, full native and matching Windows package/Clean/Modern validation
+passed. Live Google tests exercised both real conflict choices, cancellation,
+peer receive and restart; a saved ready receive survived real process
+termination and same-operation recovery. Both losing originals remain
+recoverable. The [current checkpoint](NEO_AUTONOMOUS_PROGRESS.md) distinguishes
+the retained initial live failure, successful restricted recovery, independent
+preservation audit and remaining production gates. Do not repeat those runs.
+The incremental sections below describe their named historical revisions;
+their earlier “unused” and “not implemented” boundaries are not current status.
+
 ## Reference and local choice
 
 `CloudWorkspaceReference` identifies one provider, account hash, fresh epoch and physical root ID. Its canonical JSON SHA-256 is the workspace key. Google roots with equal names and epochs but different physical IDs have different keys. Payload names include that complete key and a fresh ticket UUID, so even these roots cannot claim each other's new snapshots by name. References contain neither credentials nor XML and are not authorization.
