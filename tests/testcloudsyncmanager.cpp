@@ -2263,7 +2263,8 @@ void TestCloudSyncManager::testWorkspaceRestore_data()
 		"missing-local-save", "failed-save-recovery", "restart-from-before", "edited-after-failed-save", "cancel-before-root", "choice-during-root",
 		"assignment-during-root", "corrupt-projection", "corrupt-source", "unknown-upload-identity", "stale-reviewed-head", "edit-during-local-save",
 		"completed-receipt-keeps-later-edits", "restart-forgets-review", "corrupt-plan-preserved", "normalized-before-restart", "interrupted-reservation-release",
-		"prepared-auto-retry", "cancel-prepared-auto-retry", "edit-before-prepared-auto-retry"};
+		"prepared-auto-retry", "cancel-prepared-auto-retry", "edit-before-prepared-auto-retry",
+		"ready-auto-retry", "cancel-ready-auto-retry", "edit-before-ready-auto-retry"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2353,27 +2354,29 @@ void TestCloudSyncManager::testWorkspaceRestore()
 		const auto localDir = QDir(manager.workspaceRestoreDirectory).filePath("local");
 		CloudWorkspaceApplyIntent receipt(localDir, ref, manager.workspaceChoiceVersion, ticket, reservation);
 		QVERIFY(receipt.prepare(before, original, savedRoot));
-		// Simulate an interrupted atomic transition after both verified recovery
-		// copies were saved but while the receipt still says prepared.
-		const auto intentFile = QDir(localDir).filePath("intent.json");
-		auto prepared = QJsonDocument::fromJson(readFile(intentFile)).object(); prepared["state"] = "prepared";
-		const auto bytes = QJsonDocument(prepared).toJson(QJsonDocument::Compact); QSaveFile file(intentFile);
-		QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), qint64(bytes.size())); QVERIFY(file.commit());
-		QVERIFY(receipt.inspect()); QCOMPARE(receipt.state(), QString("prepared"));
+		// Preserve the fully verified ready receipt, or simulate interruption
+		// before its ready transition, and inject a transient local failure.
+		if (mode <= 25) {
+			const auto intentFile = QDir(localDir).filePath("intent.json");
+			auto prepared = QJsonDocument::fromJson(readFile(intentFile)).object(); prepared["state"] = "prepared";
+			const auto bytes = QJsonDocument(prepared).toJson(QJsonDocument::Compact); QSaveFile file(intentFile);
+			QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write(bytes), qint64(bytes.size())); QVERIFY(file.commit());
+		}
+		QVERIFY(receipt.inspect()); QCOMPARE(receipt.state(), mode <= 25 ? QString("prepared") : QString("ready"));
 		network.workspaceReadDeferred = false; network.requested = {}; network.recoveryReply = nullptr;
 		manager.workspaceRestoreApply.cancel(); injectedPuts = network.puts; injectedRoot = network.files[0].data;
 		manager.workspaceRestoreApplyFailed("Transient local preparation failure", false);
-		if (mode == 24) manager.cancelWorkspace();
-		if (mode == 25) ::divelog.dives[0]->notes += " Edited before retry.";
-		if (mode == 24 || mode == 25) QTest::qWait(900);
+		if (mode == 24 || mode == 27) manager.cancelWorkspace();
+		if (mode == 25 || mode == 28) ::divelog.dives[0]->notes += " Edited before retry.";
+		if (mode == 24 || mode == 25 || mode == 27 || mode == 28) QTest::qWait(900);
 	}
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
-	const bool initiallyCompleted = mode == 0 || mode == 18 || mode == 23;
+	const bool initiallyCompleted = mode == 0 || mode == 18 || mode == 23 || mode == 26;
 	if (initiallyCompleted) {
 		QCOMPARE(done.size(), 4); QCOMPARE(saves, 1); QCOMPARE(CloudWorkspaceModel::currentXml(), after); QCOMPARE(readFile(localFile), after);
 		root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.valid()); QCOMPARE(root.value["journal"].toObject()["history"].toArray().size(), 3);
 		const auto restored = root.head(); QCOMPARE(root.ticket(restored).value("restore_source").toString(), source); QCOMPARE(root.ticket(restored).value("parent").toString(), parent);
-		if (mode == 23) QCOMPARE(network.files.size(), 5); // one owned payload for each of A, B and restore
+		if (mode == 23 || mode == 26) QCOMPARE(network.files.size(), 5); // one owned payload for each of A, B and restore
 		const auto reservations = root.value["journal"].toObject()["reservations"].toObject(); QCOMPARE(reservations.size(), 2);
 		for (const auto &entry : reservations) QVERIFY(!entry.toObject().value("active").toBool());
 		if (mode == 18) {
@@ -2384,10 +2387,10 @@ void TestCloudSyncManager::testWorkspaceRestore()
 		} else {
 			const auto puts = network.puts; manager.runWorkspaceVersion(provider, "resume-restore", restored); QTRY_COMPARE(done.size(), 5); QCOMPARE(network.puts, puts); QCOMPARE(saves, 1); QCOMPARE(CloudWorkspaceModel::currentXml(), after);
 		}
-	} else if (mode == 24 || mode == 25) {
+	} else if (mode == 24 || mode == 25 || mode == 27 || mode == 28) {
 		QCOMPARE(done.size(), 3); QCOMPARE(network.puts, injectedPuts); QCOMPARE(network.files[0].data, injectedRoot);
 		QCOMPARE(readFile(localFile), before);
-		if (mode == 24) QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		if (mode == 24 || mode == 27) QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 		else QVERIFY(CloudWorkspaceModel::currentXml() != before);
 	} else if (mode == 7 || mode == 8 || mode == 9 || mode == 13 || mode == 17 || mode == 20 || mode == 21 || mode == 22) {
 		const auto attempts = manager.workspaceReport(provider).value("restores").toList(); QCOMPARE(attempts.size(), 1); const auto ticket = attempts[0].toMap().value("id").toString();

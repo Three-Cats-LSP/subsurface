@@ -297,7 +297,7 @@ void CloudSyncManager::beginWorkspaceRestoreApply()
 
 void CloudSyncManager::workspaceRestoreApplyFailed(const QString &message, bool rejected)
 {
-	// A prepared receipt with both verified recovery copies can be retried
+	// A prepared or ready receipt with both verified recovery copies can be retried
 	// without creating another cloud version. The coordinator re-verifies the
 	// exact account, choice, head and reservations on each attempt. Do not retry
 	// an ambiguous, applied, corrupt or locally edited state.
@@ -306,7 +306,7 @@ void CloudSyncManager::workspaceRestoreApplyFailed(const QString &message, bool 
 	    workspaceRestoreSnapshot() == workspaceRestoreBefore) {
 		const auto localDir = path(workspaceRestoreDirectory, "local");
 		CloudWorkspaceApplyIntent receipt(localDir, workspaceReference, workspaceChoiceVersion, str(workspaceRestorePlan, "ticket"), str(workspaceRestorePlan, "apply_reservation"));
-		if (receipt.inspect() && receipt.state() == "prepared" && receipt.before() == workspaceRestoreBefore && receipt.after() == workspaceRestoreSourceBytes) {
+		if (receipt.inspect() && (receipt.state() == "prepared" || receipt.state() == "ready") && receipt.before() == workspaceRestoreBefore && receipt.after() == workspaceRestoreSourceBytes) {
 			const auto serial = workspaceSerial;
 			const int delay = 250 * ++workspaceRestoreApplyRetries;
 			QTimer::singleShot(delay, this, [this, serial, message] {

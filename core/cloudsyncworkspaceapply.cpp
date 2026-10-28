@@ -253,13 +253,15 @@ void CloudWorkspaceApply::received(const QJsonObject &value, const QString &, co
 	const bool alreadyApplied = (intent->state() == "applying" || intent->state() == "applied") && !afterPayload.isEmpty() && actual == afterPayload;
 	if ((!alreadyApplied && root.head() != commit) || !intent->prepare(beforePayload, payload, root)) { fail(); return; }
 	recoveryEstablished = true; afterPayload = payload;
-	if (!current() || !proofs(root, true)) { fail(); return; }
+	if (!current()) { qWarning("Neo workspace restore: scope check failed after preparing recovery."); return; }
+	if (!proofs(root, true)) { qWarning("Neo workspace restore: proof check failed after preparing recovery."); fail(); return; }
 	if (alreadyApplied) { if (intent->state() == "applying" && !intent->applied(actual)) { fail(); return; } }
 	else {
 		// An applied-but-unpersisted model is lost on process exit. A restart
 		// still holding the exact old bytes can apply again after the fresh head
 		// check, while preserving the existing durable recovery receipt.
-		if ((intent->state() != "applied" && !intent->beginApply()) || !current()) { fail(); return; }
+		if (intent->state() != "applied" && !intent->beginApply()) { qWarning("Neo workspace restore: could not mark recovery as applying."); fail(); return; }
+		if (!current()) { qWarning("Neo workspace restore: scope check failed before applying recovery."); return; }
 		const auto apply = applyPayload; const bool accepted = apply(payload);
 		if (serial != generation || step == Step::Idle) return;
 		if (!accepted || !current()) { fail(); return; }
