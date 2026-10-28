@@ -108,7 +108,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				Layout.alignment: Qt.AlignTop
 				Text { text: qsTr("Cloud & Sync"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
-				Text { text: qsTr("Google Drive, Dropbox, conflicts, and backups"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+				Text { text: qsTr("Google Drive, conflicts, and backups"); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Components.NeoSwitch {
 					Layout.fillWidth: true
 					text: qsTr("Automatic primary sync")

@@ -96,7 +96,7 @@ Kirigami.ScrollablePage {
 		Components.ModernCard {
 			Layout.fillWidth: true
 			Text { text: qsTr("Other choices"); color: tokens.textPrimary; font.pixelSize: 17; font.weight: Font.DemiBold }
-			Text { text: qsTr("Google Drive and Dropbox are connected from Neo Cloud & Sync after a local log has been opened. They do not require a Subsurface Cloud account."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Google Drive is connected from Neo Cloud & Sync after a local log has been opened. It does not require a Subsurface Cloud account."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			GridLayout {
 				Layout.fillWidth: true; columns: page.width >= 600 ? 3 : 1; columnSpacing: tokens.space8; rowSpacing: tokens.space8
 				Components.NeoButton { Layout.fillWidth: true; text: qsTr("Use local log"); onClicked: page.useLocalLog() }

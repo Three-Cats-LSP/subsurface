@@ -654,6 +654,10 @@ The XML remains the canonical dive data; Neo-specific metadata lives alongside i
 
 **Goal:** productionize Neo cloud/account features and overall application settings.
 
+**Current product scope:** Google Drive is the only Neo sync provider for now.
+Dropbox is deferred to a possible future version; earlier Dropbox results below
+remain historical evidence. Preserve existing Dropbox credentials and files.
+
 Keep existing Subsurface Cloud support and add the Neo provider abstraction.
 
 Providers:

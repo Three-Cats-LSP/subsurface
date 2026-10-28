@@ -37,7 +37,7 @@ Kirigami.ScrollablePage {
 			Repeater {
 				model: [
 				{ title: qsTr("Dive planner"), detail: qsTr("Build a plan with Subsurface’s established decompression engine."), icon: "depth", action: page.openPlanner },
-				{ title: qsTr("Cloud & Sync"), detail: qsTr("Connect Google Drive or Dropbox, choose primary and backup providers, and sync safely."), icon: "cloud", action: page.openCloudSync },
+				{ title: qsTr("Cloud & Sync"), detail: qsTr("Connect Google Drive and sync safely."), icon: "cloud", action: page.openCloudSync },
 				{ title: qsTr("Download from dive computer"), detail: qsTr("Use the mature Subsurface import engine for Bluetooth, USB, and serial devices."), icon: "device", action: page.openImport },
 				{ title: qsTr("Equipment library"), detail: qsTr("Maintain reusable kits, cylinders, and recent gear configurations."), icon: "gear", action: page.openEquipment },
 				{ title: qsTr("Export & backup"), detail: qsTr("Create compatible exports and local backup packages."), icon: "export", action: page.openPortability },

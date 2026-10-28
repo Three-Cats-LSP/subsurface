@@ -99,7 +99,8 @@ def main():
     profile = 'neo-cloud-lifecycle-' + uuid.uuid4().hex
     (output / 'profile.txt').write_text(profile, encoding='utf-8')
     prefix = 'SubsurfaceNeo/Cloud/profile/' + profile + '/'
-    targets = [prefix + 'dropbox', prefix + 'sync-state-dropbox']
+    providers = ('google-drive', 'dropbox')
+    targets = [prefix + key for provider in providers for key in (provider, 'sync-state-' + provider)]
     api = ctypes.WinDLL('advapi32', use_last_error=True)
     api.CredWriteW.argtypes = [ctypes.POINTER(Credential), wintypes.DWORD]
     api.CredWriteW.restype = wintypes.BOOL
@@ -127,19 +128,20 @@ def main():
                 winreg.SetValueEx(key, name, 0, kind, value)
         try:
             expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-            write_synthetic_credential(api, targets[0], {
-                'access_token': 'synthetic-credential-no-provider-access',
-                'expires_at': expiry.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
-            write_synthetic_credential(api, targets[1], {
-                'schema': 1, 'revision': 'synthetic-baseline', 'sha256': '0' * 64,
-                'created_at': '2026-01-01T00:00:00.000Z'})
-            for enabled in (False, True):
+            for index in range(0, len(targets), 2):
+                write_synthetic_credential(api, targets[index], {
+                    'access_token': 'synthetic-credential-no-provider-access',
+                    'expires_at': expiry.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
+                write_synthetic_credential(api, targets[index + 1], {
+                    'schema': 1, 'revision': 'synthetic-baseline', 'sha256': '0' * 64,
+                    'created_at': '2026-01-01T00:00:00.000Z'})
+            for provider, enabled in (('google-drive', False), ('google-drive', True), ('dropbox', True)):
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, settings + '\\subsurface-neo\\cloud') as key:
-                    winreg.SetValueEx(key, 'primary-provider', 0, winreg.REG_SZ, 'dropbox')
+                    winreg.SetValueEx(key, 'primary-provider', 0, winreg.REG_SZ, provider)
                     winreg.SetValueEx(key, 'auto-sync', 0, winreg.REG_DWORD, int(enabled))
-                driver = DRIVER.replace('EXPECTED', 'true' if enabled else 'false')
+                driver = DRIVER.replace('EXPECTED', 'true' if enabled and provider == 'google-drive' else 'false')
                 (qml / 'main.qml').write_text(source.rstrip()[:-1] + driver + '\n}\n', encoding='utf-8')
-                log_path = output / ('enabled.log' if enabled else 'disabled.log')
+                log_path = output / (provider + ('-enabled.log' if enabled else '-disabled.log'))
                 with log_path.open('w', encoding='utf-8') as log:
                     result = subprocess.run([str(executable), '--user=' + profile, '--testqml=' + qml.as_uri()],
                                             cwd=executable.parent, env=env, stdout=log, stderr=subprocess.STDOUT,

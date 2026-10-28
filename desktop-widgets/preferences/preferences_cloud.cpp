@@ -36,7 +36,7 @@ void PreferencesCloud::setupNeoCloudProviders()
 
 	auto *group = new QGroupBox(tr("Subsurface Neo cloud sync"), this);
 	auto *layout = new QVBoxLayout(group);
-	auto *description = new QLabel(tr("Connect Google Drive or Dropbox for Subsurface Neo synchronization. Sync uses revision manifests and SHA-256 checksums so divergent logs are never silently overwritten."), group);
+	auto *description = new QLabel(tr("Connect Google Drive for Subsurface Neo synchronization. Divergent logs are never silently overwritten."), group);
 	description->setWordWrap(true);
 	layout->addWidget(description);
 

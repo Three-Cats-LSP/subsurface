@@ -34,7 +34,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 			}
 			Text {
-				text: qsTr("Start with a private local log. You can connect Google Drive or Dropbox whenever you are ready.")
+				text: qsTr("Start with a private local log. You can connect Google Drive whenever you are ready.")
 				color: tokens.textSecondary
 				font.pixelSize: 16
 				wrapMode: Text.WordWrap
@@ -62,7 +62,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Bring an existing Subsurface Cloud log"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			Text {
-				text: qsTr("Use this only if you already use the original Subsurface Cloud account. Google Drive and Dropbox are connected from Neo after setup.")
+				text: qsTr("Use this only if you already use the original Subsurface Cloud account. Google Drive is connected from Neo after setup.")
 				color: tokens.textSecondary
 				wrapMode: Text.WordWrap
 				Layout.fillWidth: true

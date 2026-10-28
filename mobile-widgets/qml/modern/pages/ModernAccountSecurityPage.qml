@@ -52,7 +52,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true; columns: page.wideLayout ? 2 : 1; columnSpacing: tokens.space12; rowSpacing: tokens.space12
 			Components.ModernCard {
 				Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
-				Text { text: qsTr("Google Drive & Dropbox"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
+				Text { text: qsTr("Google Drive"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 				Text { text: qsTr("%1 of %2 providers connected").arg(page.connectedProviderCount()).arg(CloudSync.providers.length); color: page.connectedProviderCount() > 0 ? tokens.success : tokens.textSecondary; font.pixelSize: 12 }
 				Text { text: page.credentialProtection(); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 				Components.NeoButton { Layout.fillWidth: true; text: qsTr("Manage providers"); variant: "primary"; onClicked: page.openCloudSync() }
@@ -74,7 +74,7 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true; columns: page.wideLayout ? 2 : 1; columnSpacing: tokens.space16; rowSpacing: tokens.space12
 				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("YOUR LOG"); color: tokens.accent; font.pixelSize: 10; font.weight: Font.DemiBold } Text { text: qsTr("Dive data stays in your chosen local file or connected cloud provider. Provider synchronization uses revision manifests and checksums to prevent silent conflict overwrites."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
 				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("NETWORK USE"); color: tokens.accent; font.pixelSize: 10; font.weight: Font.DemiBold } Text { text: qsTr("Network access is used for services you invoke, cloud synchronization, maps, and update checks. Neo does not add a separate usage-analytics service."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
-				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("DISCONNECT"); color: tokens.accent; font.pixelSize: 10; font.weight: Font.DemiBold } Text { text: qsTr("Disconnecting Google Drive or Dropbox removes its OAuth tokens and saved sync-state credentials from this device. It does not delete the provider's remote app folder."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
+				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("DISCONNECT"); color: tokens.accent; font.pixelSize: 10; font.weight: Font.DemiBold } Text { text: qsTr("Disconnecting Google Drive removes its OAuth tokens and saved sync-state credentials from this device. It does not delete the remote app folder."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
 				ColumnLayout { Layout.fillWidth: true; Text { text: qsTr("EXPORTS"); color: tokens.accent; font.pixelSize: 10; font.weight: Font.DemiBold } Text { text: qsTr("Exported and backup files are normal user-controlled files. Their safety depends on where you save or share them."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
 			}
 		}
@@ -83,7 +83,7 @@ Kirigami.ScrollablePage {
 			visible: Backend.cloud_verification_status === Enums.CS_VERIFIED
 			Layout.fillWidth: true
 			Text { text: qsTr("Danger zone"); color: tokens.warning; font.pixelSize: 18; font.weight: Font.DemiBold }
-			Text { text: qsTr("Deleting the Subsurface Cloud account permanently removes that server account. This is different from disconnecting Google Drive or Dropbox and cannot be undone."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+			Text { text: qsTr("Deleting the Subsurface Cloud account permanently removes that server account. This is different from disconnecting Google Drive and cannot be undone."); color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Components.NeoButton { text: qsTr("Delete Subsurface Cloud account"); variant: "danger"; onClicked: { confirmationField.text = ""; deleteDialog.open() } }
 		}
 	}

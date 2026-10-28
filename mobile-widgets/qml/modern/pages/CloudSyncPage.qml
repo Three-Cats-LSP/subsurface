@@ -99,7 +99,7 @@ Kirigami.ScrollablePage {
 				font.weight: Font.DemiBold
 			}
 			Text {
-				text: qsTr("Connect Google Drive or Dropbox to keep your Subsurface Neo data available across devices. Sync uses revision manifests and SHA-256 checksums so divergent logs are never silently overwritten.")
+				text: qsTr("Connect Google Drive to keep your Subsurface Neo data available across devices. Sync uses revision manifests and SHA-256 checksums so divergent logs are never silently overwritten.")
 				color: tokens.textSecondary
 				font.pixelSize: 14
 				wrapMode: Text.WordWrap
@@ -113,15 +113,15 @@ Kirigami.ScrollablePage {
 				Layout.fillWidth: true
 				ColumnLayout {
 					Layout.fillWidth: true
-					Text { text: qsTr("Automatic primary sync"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
+					Text { text: qsTr("Automatic Google Drive sync"); color: tokens.textPrimary; font.pixelSize: 16; font.weight: Font.DemiBold }
 					Text {
-						text: qsTr("Sync an established primary provider after startup and when Neo returns to the foreground.")
+						text: qsTr("Sync Google Drive after startup and when Neo returns to the foreground.")
 						color: tokens.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
 					}
 				}
 				Components.NeoSwitch {
-					checked: CloudSync.autoSyncEnabled
-					enabled: CloudSync.primaryProviderId.length > 0
+					checked: CloudSync.autoSyncEnabled && CloudSync.primaryProviderId === "google-drive"
+					enabled: CloudSync.primaryProviderId === "google-drive"
 					onToggled: CloudSync.autoSyncEnabled = checked
 				}
 			}
@@ -266,12 +266,6 @@ Kirigami.ScrollablePage {
 							compact: true; variant: modelData.primary ? "primary" : "secondary"
 							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 							onClicked: CloudSync.setPrimaryProvider(modelData.primary ? "" : modelData.id)
-						}
-						Components.NeoButton {
-							text: modelData.backup ? qsTr("Backup") : qsTr("Set backup")
-							compact: true; variant: modelData.backup ? "primary" : "secondary"
-							enabled: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress && !modelData.primary
-							onClicked: CloudSync.setBackupProvider(modelData.backup ? "" : modelData.id)
 						}
 						Item { Layout.fillWidth: true }
 					}

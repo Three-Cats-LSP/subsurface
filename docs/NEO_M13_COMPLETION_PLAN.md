@@ -4,6 +4,10 @@ Status: 28 October 2026. Product targets are Windows and Android. The detailed
 [continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md) records source revisions,
 live runs, failed experiments and preservation evidence.
 
+The owner has deferred Dropbox sync to a possible future version. Product
+choices, new acceptance runs and production access target Google Drive only;
+retain existing Dropbox credentials, cloud data and implementation.
+
 The current workspace implementation, including save, restore, interrupted
 recovery and automatic sync, remains development-gated. Windows tests on Google
 Drive and Dropbox used two profiles on one account per provider. The original
@@ -28,7 +32,7 @@ neither choice silently merges the versions. Journal the confirmation and recove
 mutation; resume the same operation after interruption. A changed legacy
 source must be copied and explicitly accepted under equivalent guards.
 
-Acceptance: provider-paired manager tests and actual Windows two-profile
+Acceptance: Google-focused manager tests and actual Windows two-profile
 cases for both choices, cancellation, changed local/remote state, failed save,
 lost acknowledgement, termination/restart and preservation. The interface
 must show what is kept and require confirmation.
@@ -54,20 +58,20 @@ legacy clients' data; make conflicting edits reviewable instead of silently
 discarding a side. Keep portable backup compatibility.
 
 Acceptance: round-trip, old-format migration, interrupted upload/recovery and
-concurrent edit tests on Windows for both providers; document what remains
+concurrent edit tests on Windows for Google Drive; document what remains
 unsupported before exposing the feature.
 
 ## 4. Validate Windows and prepare production access
 
 Run targeted tests during development, then one full native regression and one
 matching Windows package/launch/Clean/Modern validation for the integrated
-candidate. Use isolated profiles and namespaces for both providers. Cover real
+candidate. Use isolated Google profiles and namespaces. Cover real
 app concurrent writers, interrupted and slow transfers, offline/reconnect,
 account changes and preservation. Investigate the original Google ready-state
 refusal if reproduced; keep its failed evidence.
 
 Complete provider production OAuth setup, release credential provisioning,
-privacy policy and terms review before public distribution. Google and Dropbox
+privacy policy and terms review before public distribution. Google
 approval may require the owner's account access and provider review. Do not
 broaden permissions or publish without the appropriate authorization.
 
@@ -75,8 +79,8 @@ broaden permissions or publish without the appropriate authorization.
 
 Build and install the candidate on a physical Android device, then test
 onboarding, credentials, workspace join, sync, conflicts, restore, background
-interruption and Windows-to-Android round trips. Physical Android and a second
-Dropbox account are currently unavailable and remain explicit deferred gates.
+interruption and Windows-to-Android round trips. Physical Android is currently
+unavailable and remains an explicit deferred gate.
 Host-built mobile tests do not satisfy the device gate.
 
 ## Delivery rule

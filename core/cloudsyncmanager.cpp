@@ -210,7 +210,9 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	});
 
 	for (const auto &provider : cloudSyncProviderDescriptors()) {
-		if (provider.type == CloudSyncProviderType::SubsurfaceCloud)
+		// Dropbox is retained internally for a possible future release. Hiding
+		// it here does not remove its saved credentials or cloud data.
+		if (provider.type != CloudSyncProviderType::GoogleDrive)
 			continue;
 		const OAuth2TokenSet restored = deserializeTokens(CloudCredentialStore::load(provider.id));
 		if (restored.hasAccessToken() || restored.canRefresh())
@@ -492,7 +494,7 @@ bool CloudSyncManager::syncPrimaryIfReady()
 
 	const QString providerId = primaryProviderId();
 	const auto *provider = descriptorForId(providerId);
-	if (providerId.isEmpty() || !provider ||
+	if (providerId.isEmpty() || !provider || provider->type == CloudSyncProviderType::Dropbox ||
 	    (!(provider->type != CloudSyncProviderType::SubsurfaceCloud && workspaceRouteRequired(providerId)) && !lastSyncManifest(providerId).isValid()))
 		return false;
 

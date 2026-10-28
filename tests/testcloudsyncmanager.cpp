@@ -379,8 +379,10 @@ void TestCloudSyncManager::testGoogleDesktopCredentials()
 	FakeNetwork network;
 	CloudSyncManager manager(&network);
 	manager.tokens.clear();
+	QCOMPARE(manager.providers().size(), 1);
 	for (const auto &entry : manager.providers()) {
 		const auto row = entry.toMap();
+		QCOMPARE(row.value("id").toString(), QString("google-drive"));
 		if (row.value("id").toString() == "google-drive") {
 			QCOMPARE(row.value("configured").toBool(), valid);
 			QCOMPARE(row.value("configurationError").toString().isEmpty(), valid);
@@ -2213,7 +2215,15 @@ void TestCloudSyncManager::testWorkspaceSync()
 	if (mode == 15) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
 	const auto before = CloudWorkspaceModel::currentXml(), rootBefore = network.files[0].data; const auto writes = network.puts;
 	QSignalSpy finished(&manager, &CloudSyncManager::diveLogSyncFinished);
-	if (mode == 6) { manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); QVERIFY(manager.syncPrimaryIfReady()); }
+	if (mode == 6) {
+		manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true);
+		if (!google) {
+			QVERIFY(!manager.syncPrimaryIfReady()); QVERIFY(!manager.syncInProgress());
+			QCOMPARE(network.puts, writes); QCOMPARE(network.files[0].data, rootBefore);
+			QCOMPARE(manager.primaryProviderId(), provider); return;
+		}
+		QVERIFY(manager.syncPrimaryIfReady());
+	}
 	else manager.syncDiveLog(provider);
 	if (mode == 15) {
 		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply; QVERIFY(manager.workspaceReport(provider).isEmpty());
