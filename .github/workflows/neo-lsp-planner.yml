@@ -67,8 +67,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          windeployqt --no-translations --dir build-lsp/Release build-lsp/Release/TestLspPlanner.exe
-          exit $LASTEXITCODE
+          # QCoreApplication + QJSEngine: no GUI, QML imports, network
+          # operations or plugins. Deploy its complete four-library closure
+          # explicitly, avoiding GUI debug-plugin discovery by windeployqt.
+          foreach ($library in @('Qt6Core.dll', 'Qt6Network.dll', 'Qt6Qml.dll', 'Qt6Test.dll')) {
+            Copy-Item -LiteralPath (Join-Path $env:QT_ROOT_DIR "bin/$library") -Destination build-lsp/Release/
+          }
       - name: Compare native engine with pinned upstream results
         if: runner.os != 'Windows'
         run: ctest --test-dir build-lsp --build-config Release --output-on-failure --verbose
