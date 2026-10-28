@@ -95,7 +95,12 @@ bool CloudWorkspaceRecord::valid() const
 			if (!entry.isObject()) return false;
 			const auto event = entry.toObject();
 			const auto id = string(event, "id"), previous = string(event, "parent"), copy = string(event, "ticket"), observedHead = string(event, "head");
-			const int copyIndex = history.indexOf(copy), headIndex = history.indexOf(observedHead);
+			int copyIndex = -1, headIndex = -1;
+			for (int i = 0; i < history.size(); ++i) {
+				const auto commit = history[i].toString();
+				if (commit == copy) copyIndex = i;
+				if (commit == observedHead) headIndex = i;
+			}
 			if (!fields(event, {"id", "parent", "ticket", "head"}) || !uuid(id) || ids.contains(id) || tickets.contains(id) ||
 			    internal.value.value("reservations").toObject().contains(id) || previous != parent ||
 			    !uuid(copy) || !uuid(observedHead) || id == copy || id == observedHead || copyIndex < 0 || headIndex < copyIndex ||
