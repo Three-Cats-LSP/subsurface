@@ -451,8 +451,8 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved cloud-copy attempts before activating workspace sync.")); return; }
 				for (const auto &body : workspaceUploads(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "committed";
 				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved version attempts before activating workspace sync.")); return; }
-				const auto restores = workspaceRestores(workspacePath, workspaceReference, workspaceChoiceVersion, &limited, &invalid);
-				if (limited || invalid || !restores.isEmpty()) { failWorkspace(tr("Finish or review saved restores before activating workspace sync.")); return; }
+				const auto restoreAttempts = workspaceRestores(workspacePath, workspaceReference, workspaceChoiceVersion, &limited, &invalid);
+				if (limited || invalid || !restoreAttempts.isEmpty()) { failWorkspace(tr("Finish or review saved restores before activating workspace sync.")); return; }
 				for (const auto &body : workspaceAcceptances(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "completed";
 				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved branch-acceptance attempts before activating workspace sync.")); return; }
 			}
