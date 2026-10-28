@@ -896,7 +896,7 @@ void TestDivePlannerModel::testNeoLspFlow()
 	QTemporaryDir directory;QVERIFY(directory.isValid());const QString filename=directory.filePath("lsp plan.ssrf");
 	divelog.dives.record_dive(std::move(lastSavedPlannerDive));QCOMPARE(save_dives(filename.toUtf8().constData()),0);
 	struct divelog reloaded;QCOMPARE(parse_file(filename.toUtf8().constData(),&reloaded),0);
-	const dive *plan=nullptr;for(const dive *entry:reloaded.dives)if(entry->is_planned())plan=entry;
+	const dive *plan=nullptr;for(const auto &entry:reloaded.dives)if(entry->is_planned())plan=entry.get();
 	QVERIFY(plan);const auto restored=neoPlanMetadata(plan->notes);
 	QCOMPARE(restored.value("engineRequest"),savedMetadata.value("engineRequest"));
 	QCOMPARE(restored.value("schedule"),savedMetadata.value("schedule"));

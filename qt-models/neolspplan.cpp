@@ -49,9 +49,9 @@ QJsonObject environment(double pressure, double gradient, double vapor, bool acc
 bool priorProfiles(qint64 start, double vapor, QJsonArray &profiles, QString &error)
 {
 	std::vector<const dive *> previous;
-	for (const dive *entry : divelog.dives) {
+	for (const auto &entry : divelog.dives) {
 		if (!entry->is_planned() && entry->when < start)
-			previous.push_back(entry);
+			previous.push_back(entry.get());
 	}
 	std::sort(previous.begin(), previous.end(), [](const dive *a, const dive *b) { return a->when < b->when; });
 	size_t first = previous.size();
