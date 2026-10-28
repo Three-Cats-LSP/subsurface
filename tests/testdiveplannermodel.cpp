@@ -7,7 +7,7 @@
 #include "core/divelog.h"
 #include "core/equipment.h"
 #include "core/pref.h"
-#include "core/parse.h"
+#include "core/file.h"
 #include "core/string-format.h"
 #include "core/units.h"
 #include <QSignalSpy>

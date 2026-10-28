@@ -14,14 +14,26 @@ and ask clearly, while continuing independent work.
 **Planner/export source `3c46e4edf` is pushed and under validation.** Resume
 [full native/protocol 40694641265](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40694641265)
 and [matching Windows 40694648946](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40694648946).
-Its host protocol job passed; app regression and Windows checks continue. Do not
-start duplicates or call either whole run successful yet. Both workflows were
+Both protocol jobs passed. The Windows run **passed**, including the native
+standard-URL/legacy-URL/raw-path exports, Clean/Modern and lifecycle checks.
+The full app regression **failed during compilation**: the new fixture called
+`parse_file` but included `core/parse.h` instead of its declaring `core/file.h`.
+No new planner assertions ran in that failed job. The working candidate fixes
+the include; validate it on its own source. Preserve this failed aggregate.
+Both workflows were
 explicitly dispatched to `Three-Cats-LSP/subsurface`; initial CLI calls without
 the repo flag targeted upstream and were rejected without starting runs. Always
 specify the fork on future workflow CLI calls. The connector has no dispatch
 capability. Capture a matching SHA-verified package after Windows succeeds and
 inspect the expanded fixture/native-export gates. No Google write is needed for
 these offline acceptance checks.
+
+The successful 3c46 Windows package is being downloaded and SHA-verified into
+`work/windows-planner-export-app-3c46e4edf-20261028/` (shell session **35395**).
+Resume that download; never start a duplicate over its partial archive. Use it
+only for offline planner/export evidence: it predates ready-retry code. The
+capture helper now requires the actual native surface interval of 600 seconds
+for the repetitive case, rather than relying only on the entered timestamps.
 
 **Next reliability candidate:** a failed pre-application receive can now retry
 the same ready receipt at most twice, 250 ms apart, without extending its overall

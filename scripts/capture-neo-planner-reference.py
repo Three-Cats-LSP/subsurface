@@ -63,7 +63,8 @@ DRIVER = r'''
                     }
                     var r = Backend.divePlannerPointsModel.calculatePlan(cylinders, segments, '2026-01-01', c.startTime || '12:00:00', mode, c.waterDensity || 10300, c.surfacePressureMbar || 1013, false)
                     if (!r.profile.length || r.planSaveAllowed !== c.planSaveAllowed) throw new Error('Unexpected validity: ' + c.id + ' ' + r.notes)
-                    console.log('NEO_PLANNER_REFERENCE', JSON.stringify({id:c.id,effective:effective,runtimeSeconds:r.runtimeSeconds,otu:r.otu,planSaveAllowed:r.planSaveAllowed,exceedsNDL:r.exceedsNDL,schedule:r.schedule,gasAnalysis:r.gasAnalysis,timeline:r.timeline,previousDiveEvidence:previousEvidence}))
+                    if (c.previousDiveFile && r.surfaceIntervalSeconds !== 600) throw new Error('Native surface interval was not verified')
+                    console.log('NEO_PLANNER_REFERENCE', JSON.stringify({id:c.id,effective:effective,runtimeSeconds:r.runtimeSeconds,surfaceIntervalSeconds:r.surfaceIntervalSeconds,otu:r.otu,planSaveAllowed:r.planSaveAllowed,exceedsNDL:r.exceedsNDL,schedule:r.schedule,gasAnalysis:r.gasAnalysis,timeline:r.timeline,previousDiveEvidence:previousEvidence}))
                 }
                 console.log('NEO_PLANNER_REFERENCE_PASS')
             } catch (error) { console.error('NEO_PLANNER_REFERENCE_FAIL', error) }
