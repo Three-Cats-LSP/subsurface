@@ -93,7 +93,8 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	workspaceReader(networkManager, this),
 	workspaceCreator(networkManager, this),
 	workspaceSource(networkManager, this),
-	workspaceCopy(networkManager, this)
+	workspaceCopy(networkManager, this),
+	workspaceUpload(networkManager, this)
 {
 	Q_ASSERT(networkManager);
 	connect(&workspaceReader, &CloudWorkspaceOpen::finished, this, &CloudSyncManager::finishWorkspace);
@@ -102,6 +103,8 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceCreator, &CloudWorkspaceCreate::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceCopy, &CloudWorkspaceCopy::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceUpload, &CloudWorkspaceUpload::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceUpload, &CloudWorkspaceUpload::finished, this, &CloudSyncManager::finishWorkspaceVersions);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &source, const QByteArray &) { finishWorkspaceSource(source); });
 	connect(&workspaceCopy, &CloudWorkspaceCopy::finished, this, [this](const QJsonObject &root, const QString &version, const QString &, bool changed) {
 		workspaceLegacyChanged = changed; finishWorkspace(root, version);
@@ -1235,9 +1238,10 @@ void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
-	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); ++workspaceSerial; }
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceUpload.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
 	workspaceCopyReview = {}; workspaceLegacyChanged = false;
+	workspaceVersionTicket.clear();
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

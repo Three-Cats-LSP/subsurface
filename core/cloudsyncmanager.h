@@ -8,6 +8,7 @@
 #include "cloudsynchistory.h"
 #include "cloudsyncworkspace.h"
 #include "cloudsyncworkspacecopy.h"
+#include "cloudsyncworkspaceupload.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -70,6 +71,7 @@ public:
 	Q_INVOKABLE void runHistory(const QString &providerId, const QString &action, const QString &revision = {});
 	Q_INVOKABLE void cancelHistory();
 	Q_INVOKABLE void runWorkspace(const QString &providerId, const QString &action, const QString &argument = {});
+	Q_INVOKABLE void runWorkspaceVersion(const QString &providerId, const QString &action, const QString &argument = {});
 	Q_INVOKABLE void cancelWorkspace();
 	Q_INVOKABLE void disconnectProvider(const QString &providerId);
 	Q_INVOKABLE void uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data);
@@ -159,6 +161,8 @@ private:
 	QString workspaceDirectory(const QString &providerId, const QString &account) const;
 	QList<QJsonObject> workspaceCreations(const QString &directory, const QString &providerId, const QString &account, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceCopies(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QList<QJsonObject> workspaceUploads(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
+	void finishWorkspaceVersions(const QJsonObject &record, const QString &version, const QString &ticket = {}, bool headMatches = false);
 	QVariantMap workspaceReport(const QString &providerId) const;
 	bool workspaceScopeCurrent();
 	void finishWorkspace(const QJsonObject &record, const QString &version);
@@ -174,11 +178,12 @@ private:
 	CloudWorkspaceCreate workspaceCreator;
 	CloudWorkspaceSourceReview workspaceSource;
 	CloudWorkspaceCopy workspaceCopy;
+	CloudWorkspaceUpload workspaceUpload;
 	const QString historyEpoch = qEnvironmentVariable("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
 	QHash<QString, QVariantMap> historyReports;
 	QHash<QString, QVariantMap> storageReviews;
 	QHash<QString, QVariantMap> workspaceReports;
-	QString workspaceAction, workspaceAccount, workspaceToken, workspacePath, workspaceChoiceVersion;
+	QString workspaceAction, workspaceAccount, workspaceToken, workspacePath, workspaceChoiceVersion, workspaceVersionTicket;
 	CloudWorkspaceReference workspaceReference;
 	bool workspaceCheckpointRequired = false;
 	quint64 workspaceSerial = 0;

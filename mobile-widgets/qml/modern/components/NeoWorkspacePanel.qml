@@ -40,7 +40,7 @@ ColumnLayout {
 		}
 	}
 	Text {
-		visible: panel.busy; text: qsTr("Verifying workspace…")
+		visible: panel.busy; text: qsTr("Working with workspace…")
 		color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
@@ -58,6 +58,35 @@ ColumnLayout {
 		NeoButton {
 			objectName: "verifyWorkspace-" + panel.provider.id; text: qsTr("Verify selected workspace"); compact: true; Layout.fillWidth: true
 			enabled: panel.available; onClicked: CloudSync.runWorkspace(panel.provider.id, "review")
+		}
+		GridLayout {
+			Layout.fillWidth: true; columns: width > 560 ? 2 : 1; rowSpacing: 8; columnSpacing: 8
+			NeoButton {
+				objectName: "saveWorkspaceVersion-" + panel.provider.id; text: qsTr("Save current log as a version"); compact: true; Layout.fillWidth: true
+				enabled: panel.available && !panel.report.uploadLimitReached
+				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "save")
+			}
+			NeoButton {
+				objectName: "listWorkspaceVersions-" + panel.provider.id; text: qsTr("Review versions"); compact: true; Layout.fillWidth: true
+				enabled: panel.available; onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "list")
+			}
+		}
+		Text {
+			objectName: "workspaceSaveStatus-" + panel.provider.id
+			visible: !!panel.report.savedVersion || !!panel.report.uploadLimitReached || !!panel.report.uploadRecoveryRequired
+			text: panel.report.uploadLimitReached ? qsTr("Saved version attempts have reached their safety limit. All versions and attempts were kept.") :
+				panel.report.uploadRecoveryRequired ? qsTr("Some saved version records need recovery. All versions and your local log were kept.") :
+				panel.report.savedVersionIsHead ? qsTr("Current log saved and verified. Workspace sync is not yet active.") : qsTr("Saved version verified. A later version is now current; all versions were kept.")
+			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
+		Repeater {
+			model: panel.report.versionRows || []
+			delegate: Text {
+				required property var modelData
+				objectName: "workspaceVersionRow-" + panel.provider.id + "-" + modelData.number
+				text: qsTr("Version %1 · %2 bytes%3%4").arg(modelData.number).arg(modelData.bytes).arg(modelData.head ? qsTr(" · Current") : "").arg(modelData.restored ? qsTr(" · Restored copy") : "")
+				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+			}
 		}
 		NeoButton {
 			objectName: "reviewWorkspaceCopy-" + panel.provider.id; text: qsTr("Review cloud log to copy"); compact: true; Layout.fillWidth: true
@@ -109,6 +138,23 @@ ColumnLayout {
 			NeoButton {
 				objectName: "selectSavedWorkspace-" + panel.provider.id + "-" + index; text: qsTr("Select"); compact: true
 				enabled: panel.available && !modelData.current; onClicked: CloudSync.runWorkspace(panel.provider.id, "join", modelData.reference)
+			}
+		}
+	}
+	Repeater {
+		model: panel.report.uploads || []
+		delegate: ColumnLayout {
+			required property var modelData
+			required property int index
+			Layout.fillWidth: true
+			Text {
+				text: modelData.uncertain ? qsTr("Version attempt %1 has no confirmed payload identity. Its files are kept. Save the current log as a separate version.").arg(index + 1) : qsTr("Saved version attempt %1 can be checked with the same local contents.").arg(index + 1)
+				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+			}
+			NeoButton {
+				objectName: "resumeWorkspaceVersion-" + panel.provider.id + "-" + index; text: qsTr("Check and resume version"); compact: true; Layout.fillWidth: true
+				enabled: panel.available && modelData.canResume
+				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-save", modelData.id)
 			}
 		}
 	}

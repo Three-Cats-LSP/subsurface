@@ -86,6 +86,12 @@ All **1662** protocol cases passed Windows/Linux at the fixed test/probe head; [
 
 The future app adapter must preflight parsing/serialization before replacing the live model, preserve the old canonical log, and acknowledge actual durable persistence only when the observed new canonical bytes match the verified target. Normalization that changes those bytes must be handled explicitly, rather than acknowledged after a partial replacement. Shared Clean/Modern controls, actual model/persistence integration, workspace baselines, legacy-observation acknowledgement and automatic activation remain separate gates.
 
+## Shared manual version controls (validation in progress)
+
+The gated Clean/Modern workspace panel now has Save current log, Review versions and saved-upload recovery actions. Save captures the actual divelog through a pure in-memory serializer, verifies identity afresh and keeps account, choice-version, assignment and local-edit guards throughout exact-root publication. Repeating a save at an owned committed head verifies its exact payload without another create. Pending known-identity attempts can resume only with the same local bytes. An unknown submitted identity is retained and never replayed; a separate explicit save uses a new identity. Corrupt records are preserved, and a bounded metadata-only recovery list grants no write authority.
+
+History rows come from a freshly verified exact-root journal, newest first; listing does not download or apply payload XML. Neither a displayed row nor a previous save badge is an activation baseline or permission to replace local data. Normal schema 2 sync, local XML and legacy baselines remain unchanged. Actual restore/persistence controls and activation are still open. Full native regression, exact Windows/Clean/Modern and matching live app checks for this increment are pending; see the continuation checkpoint rather than treating source implementation as validation.
+
 ## Remaining activation gates
 
 Before using a reference, verify current provider account identity, read that exact physical root with a stable revision and validate its immutable self-reference, epoch and supported control format. A reference alone is insufficient to select writable authority. Re-check scope before persisting a choice and before each subsequent operation. Missing or uncertain established roots must never be recreated by filename.
