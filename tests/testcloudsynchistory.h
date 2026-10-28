@@ -28,8 +28,14 @@ private slots:
 	void workspaceSelection();
 	void workspaceRecord_data();
 	void workspaceRecord();
+	void workspacePages_data();
+	void workspacePages();
 	void workspaceOpen_data();
 	void workspaceOpen();
+	void workspacePagedOpen_data();
+	void workspacePagedOpen();
+	void workspacePagedAuthority_data();
+	void workspacePagedAuthority();
 	void workspaceAuthority_data();
 	void workspaceAuthority();
 	void workspaceCreationIntent_data();

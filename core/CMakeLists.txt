@@ -76,6 +76,7 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsynchistory.cpp
 	cloudsynchistory.h
 	cloudsyncworkspace.cpp
+	cloudsyncworkspacepages.cpp
 	cloudsyncworkspace.h
 	cloudsyncworkspacesource.cpp
 	cloudsyncworkspacesource.h

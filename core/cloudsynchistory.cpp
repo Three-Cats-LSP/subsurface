@@ -137,7 +137,9 @@ bool CloudHistoryRecord::valid() const
 	    !value.value("history").isArray() || !value.value("tickets").isObject() || !value.value("reservations").isObject()) return false;
 	const auto history = value.value("history").toArray();
 	const auto tickets = value.value("tickets").toObject(), reservations = value.value("reservations").toObject();
-	if (tickets.size() > EntryLimit || reservations.size() > EntryLimit || history.size() > tickets.size() || json().size() > RecordLimit) return false;
+	const int entries = workspaceJournal ? 65536 : EntryLimit;
+	const int bytes = workspaceJournal ? 64 * 1024 * 1024 : RecordLimit;
+	if (tickets.size() > entries || reservations.size() > entries || history.size() > tickets.size() || json().size() > bytes) return false;
 	QSet<QString> committed, objects;
 	QString previous, acceptedLegacy;
 	for (const auto &entry : history) {
@@ -191,7 +193,7 @@ bool CloudHistoryRecord::valid() const
 }
 bool CloudHistoryRecord::replace(const QJsonObject &candidate)
 {
-	CloudHistoryRecord next; next.value = candidate;
+	CloudHistoryRecord next = *this; next.value = candidate;
 	next.value["sequence"] = value.value("sequence").toInt() + 1;
 	if (!valid() || !next.valid()) return false;
 	value = next.value; return true;

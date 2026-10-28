@@ -35,6 +35,10 @@ public:
 	bool release(const QString &id);
 	QVariantMap report() const;
 private:
+	friend class CloudWorkspaceRecord;
+	// Only a verified segmented workspace may use an expanded in-memory view.
+	// Schema 3 wire parsing retains its original limits.
+	bool workspaceJournal = false;
 	bool replace(const QJsonObject &candidate);
 };
 

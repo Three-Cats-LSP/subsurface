@@ -4,7 +4,9 @@
 #include "cloudsynchistory.h"
 #include "cloudsyncworkspacesource.h"
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QString>
+#include <QSet>
 
 // An explicitly selected workspace is identified by its physical root, not a
 // filename/list ordering. A reference is not authorization or a verified root.
@@ -47,9 +49,21 @@ private:
 // Existing schema 3 history readers reject this envelope. No expiry/deletion.
 class CloudWorkspaceRecord {
 public:
+	static constexpr int WireLimit = 1024 * 1024 + 3072;
+	static constexpr int ExpandedLimit = 64 * 1024 * 1024;
+	static constexpr int ArchivePageLimit = 256;
 	QJsonObject value;
 	static CloudWorkspaceRecord create(const CloudWorkspaceReference &reference, const QString &legacyHash);
 	static CloudWorkspaceRecord parse(const QByteArray &bytes);
+	// Read immutable archive pages newest first. Every exact pin/content hash
+	// and monotonic delta must verify; this method performs no I/O or writes.
+	static CloudWorkspaceRecord parsePages(const QByteArray &bytes, const QJsonArray &pages);
+	static QJsonObject archivePointer(const QByteArray &bytes, const CloudWorkspaceReference &reference);
+	static QString archiveName(const CloudWorkspaceReference &reference, const QString &nonce);
+	QJsonObject archivePin(const QString &nonce, const QString &object, const QString &version) const;
+	bool archiveTo(const QJsonObject &verifiedPin);
+	bool needsArchive() const;
+	QJsonArray archivePages() const;
 	CloudWorkspaceReference reference() const;
 	bool valid() const;
 	bool follows(const CloudWorkspaceRecord &previous) const;
@@ -73,7 +87,11 @@ public:
 	bool reserve(const QString &id, const QString &commit);
 	bool release(const QString &id);
 private:
-	CloudHistoryRecord journal() const;
+	QJsonObject logicalValue() const;
+	bool validLogical(bool expanded) const;
+	bool followsLogical(const CloudWorkspaceRecord &previous, bool expanded) const;
+	static CloudWorkspaceRecord decodePages(const QByteArray &bytes, const QJsonArray &pages);
+	CloudHistoryRecord journal(bool expanded = false) const;
 	bool replaceJournal(const CloudHistoryRecord &journal);
 };
 
@@ -164,10 +182,22 @@ signals:
 	void failed(const QString &message, bool tokenRejected);
 private:
 	void fail(bool rejected = false);
+	void received(CloudSyncProviderType provider, const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
+	void nextArchive();
+	void finish(const CloudWorkspaceRecord &record);
 	CloudSyncFileStore files;
 	QTimer deadline;
 	CloudWorkspaceReference reference;
 	CloudWorkspaceRecord checkpoint;
+	CloudWorkspaceRecord verified;
+	enum class Step { Root, Archive, Confirm };
+	Step step = Step::Root;
+	QString token, rootVersion;
+	QByteArray rootBytes;
+	QJsonArray pages;
+	QJsonObject archive;
+	QSet<QString> archiveIds;
+	qint64 pageBytes = 0;
 	std::function<bool()> scopeCurrent;
 	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
 	bool active = false;

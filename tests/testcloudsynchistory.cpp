@@ -1062,6 +1062,117 @@ void TestCloudSyncHistory::workspaceRecord()
 	QVERIFY(!root.valid()); QVERIFY(!CloudWorkspaceRecord::parse(root.json()).valid()); QVERIFY(!root.follows(original));
 	const auto invalid = root.json(); QVERIFY(!root.registerUpload(uid(), first, CloudSyncManifest::sha256(B), B.size())); QCOMPARE(root.json(), invalid);
 }
+void TestCloudSyncHistory::workspacePages_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"pending-boundary", "two-pages-release", "missing-page", "wrong-hash", "wrong-model-hash", "foreign-name",
+		"root-as-archive", "unsafe-version", "foreign-workspace", "altered-archive", "future-wire", "unknown-wire-field",
+		"unknown-delta-field", "lost-pending", "changed-old-payload", "revived-reservation", "changed-copy-proof",
+		"truncated-base64", "changed-history-prefix", "reversed-pages", "reused-object", "extra-page", "changed-cached-base",
+		"legacy-still-bounded", "committed-boundary", "pending-restore", "archive-downgrade", "archive-fork"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-pages-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspacePages()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox");
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	const auto first = uid(), pending = uid(), active = uid(), closed = uid();
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(first, {}, source)); QVERIFY(root.completeUpload(first, google ? "payload-first" : "id:payload-first", "v-first"));
+	QVERIFY(root.publish(first, {})); QVERIFY(root.acceptLegacyCopy(uid(), {}, first, first, source));
+	QVERIFY(root.reserve(active, first)); QVERIFY(root.reserve(closed, first)); QVERIFY(root.release(closed));
+	QVERIFY(root.registerUpload(pending, first, CloudSyncManifest::sha256(B), B.size()));
+	if (mode == 25) QVERIFY(root.registerUpload(uid(), first, CloudSyncManifest::sha256(A), A.size(), first, active));
+	if (mode == 0 || mode == 24) {
+		auto journal = root.value.value("journal").toObject(), tickets = journal.value("tickets").toObject();
+		auto history = journal.value("history").toArray(); QString parent = first;
+		while (tickets.size() < 512) {
+			const auto id = uid(); auto t = root.ticket(pending); t["name"] = ref.payloadName(id);
+			if (mode == 24) { t["state"] = "committed"; t["parent"] = parent; t["object"] = QString(google ? "payload-" : "id:payload-") + id; t["version"] = "v"; history.append(id); parent = id; }
+			tickets[id] = t;
+		}
+		journal["tickets"] = tickets; journal["history"] = history; journal["head"] = history.last(); journal["sequence"] = 2000;
+		root.value["journal"] = journal; QVERIFY(root.valid()); QVERIFY(root.needsArchive());
+		const auto before = root.json(); QVERIFY(!root.registerUpload(uid(), root.head(), CloudSyncManifest::sha256(B), B.size())); QCOMPARE(root.json(), before);
+	}
+	const auto original = root;
+	const auto pin = root.archivePin(uid(), google ? "archive-a" : "id:archive-a", "archive-v1");
+	QVERIFY(!pin.isEmpty()); QVERIFY(root.archiveTo(pin)); QVERIFY(root.valid()); QVERIFY(root.follows(original));
+	QVERIFY(!root.needsArchive()); QVERIFY(!CloudWorkspaceRecord::parse(root.json()).valid());
+	QCOMPARE(root.ticket(pending), original.ticket(pending)); QCOMPARE(root.copySource(first).value, original.copySource(first).value);
+	QCOMPARE(root.value.value("journal"), original.value.value("journal"));
+	QVERIFY(root.registerUpload(uid(), root.head(), CloudSyncManifest::sha256(B), B.size()));
+	if (mode == 0 || mode == 24) {
+		QVERIFY(root.json().size() < original.json().size());
+		QCOMPARE(root.value.value("journal").toObject().value("tickets").toObject().size(), 513);
+		QCOMPARE(CloudWorkspaceRecord::parsePages(root.json(), root.archivePages()).value, root.value); return;
+	}
+	const auto once = root;
+	QVERIFY(root.archiveTo(root.archivePin(uid(), google ? "archive-b" : "id:archive-b", "archive-v2")));
+	QCOMPARE(root.archivePages().size(), 2); QVERIFY(root.follows(once));
+	const auto next = uid(); QVERIFY(root.registerUpload(next, root.head(), CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(root.completeUpload(next, google ? "payload-next" : "id:payload-next", "v-next")); QVERIFY(root.publish(next, first));
+	QVERIFY(root.follows(original)); QCOMPARE(CloudWorkspaceRecord::parsePages(root.json(), root.archivePages()).value, root.value);
+	if (mode == 1 || mode == 25) {
+		const auto before = root;
+		QCOMPARE(root.release(active), mode != 25);
+		QVERIFY(root.follows(before)); QVERIFY(root.archiveTo(pin)); // Read-only reconciliation of an older owned page.
+		QCOMPARE(root.ticket(pending), original.ticket(pending));
+		QCOMPARE(CloudWorkspaceRecord::parsePages(root.json(), root.archivePages()).value, root.value); return;
+	}
+	if (mode == 26) { QVERIFY(!original.follows(root)); return; }
+	if (mode == 27) {
+		auto fork = original; QVERIFY(fork.archiveTo(fork.archivePin(uid(), google ? "other-archive" : "id:other-archive", "v-other")));
+		const auto metadata = fork.value.value("segments"); fork.value = root.value; fork.value["segments"] = metadata;
+		QVERIFY(fork.valid()); QVERIFY(!fork.follows(root)); return;
+	}
+	if (mode == 23) {
+		CloudHistoryRecord legacy; legacy.value = root.value.value("journal").toObject();
+		auto tickets = legacy.value.value("tickets").toObject();
+		for (auto it = tickets.begin(); it != tickets.end(); ++it) { auto t = it.value().toObject(); t["name"] = CloudHistoryRecord::payloadName(ref.value.value("epoch").toString(), it.key()); it.value() = t; }
+		// The expanded workspace format never changes schema 3 limits.
+		while (tickets.size() <= 512) { const auto id = uid(); auto t = original.ticket(pending); t["name"] = CloudHistoryRecord::payloadName(ref.value.value("epoch").toString(), id); tickets[id] = t; }
+		legacy.value["tickets"] = tickets; QVERIFY(!legacy.valid()); QVERIFY(!CloudHistoryRecord::parse(legacy.json()).valid()); return;
+	}
+	if (mode == 13 || mode == 15 || mode == 22) {
+		if (mode == 22) { auto metadata = root.value.value("segments").toObject(); auto base = metadata.value("base").toObject(); base["format"] = "unknown"; metadata["base"] = base; root.value["segments"] = metadata; }
+		else { auto journal = root.value.value("journal").toObject();
+			if (mode == 13) { auto tickets = journal.value("tickets").toObject(); tickets.remove(pending); journal["tickets"] = tickets; }
+			if (mode == 15) { auto reservations = journal.value("reservations").toObject(); auto r = reservations.value(closed).toObject(); r["active"] = true; reservations[closed] = r; journal["reservations"] = reservations; }
+			root.value["journal"] = journal;
+		}
+		QVERIFY(!root.valid()); return;
+	}
+	auto wire = QJsonDocument::fromJson(root.json()).object(); auto pages = root.archivePages();
+	auto pointer = wire.value("archive").toObject(); auto page = pages.first().toObject();
+	if (mode == 2) pages.removeLast();
+	if (mode == 3) pointer["sha256"] = CloudSyncManifest::sha256("wrong");
+	if (mode == 4) pointer["model_sha256"] = CloudSyncManifest::sha256("wrong");
+	if (mode == 5) pointer["name"] = "foreign.json";
+	if (mode == 6) pointer["object"] = ref.value.value("root_id");
+	if (mode == 7) pointer["version"] = "unsafe\nversion";
+	if (mode >= 3 && mode <= 7) { wire["archive"] = pointer; page["pin"] = pointer; pages[0] = page; }
+	if (mode == 8) { auto foreign = ref.value; foreign["account"] = CloudSyncManifest::sha256("foreign"); wire["workspace"] = foreign; }
+	if (mode == 9) { page["data"] = QString::fromLatin1(QByteArray("changed").toBase64()); pages[0] = page; }
+	if (mode == 10) wire["format"] = "future-pages";
+	if (mode == 11) wire["unknown_safety_field"] = true;
+	if (mode == 12 || mode == 14 || mode == 16 || mode == 18) {
+		auto changes = wire.value("changes").toObject();
+		if (mode == 12) changes["unknown_safety_field"] = true;
+		if (mode == 14) { auto journal = changes.value("journal").toObject(); auto tickets = journal.value("tickets").toObject(); auto t = root.ticket(first); t["object"] = google ? "changed-payload" : "id:changed-payload"; tickets[first] = t; journal["tickets"] = tickets; changes["journal"] = journal; }
+		if (mode == 16) { auto copies = changes.value("copies").toObject(); auto proof = source.value; proof["format"] = "unknown"; copies[first] = proof; changes["copies"] = copies; }
+		if (mode == 18) { auto journal = changes.value("journal").toObject(); journal["history"] = QJsonArray{first}; changes["journal"] = journal; }
+		wire["changes"] = changes;
+	}
+	if (mode == 17) { auto data = page.value("data").toString(); data.chop(1); page["data"] = data; pages[0] = page; }
+	if (mode == 19) { auto last = pages.last(); pages[1] = pages.first(); pages[0] = last; }
+	if (mode == 20) { auto older = pages[1].toObject(); auto p = older.value("pin").toObject(); p["object"] = pointer.value("object"); older["pin"] = p; pages[1] = older; }
+	if (mode == 21) pages.append(pages.last());
+	QVERIFY(!CloudWorkspaceRecord::parsePages(QJsonDocument(wire).toJson(QJsonDocument::Compact), pages).valid());
+}
 void TestCloudSyncHistory::workspaceOpen_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("scenario");
@@ -1123,6 +1234,87 @@ void TestCloudSyncHistory::workspaceOpen()
 	QCOMPARE(lookups, 0); QCOMPARE(n.mutations, 0); QCOMPARE(n.files.size(), before.size());
 	for (int i = 0; i < before.size(); ++i) { QCOMPARE(n.files[i].data, before[i].data); QCOMPARE(n.files[i].name, before[i].name); QCOMPARE(n.files[i].rev, before[i].rev); }
 	QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspacePagedOpen_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList modes={"new-device","checkpoint","missing-base","changed-version","damaged-body","renamed-page","missing-tip",
+		"scope-change","root-race","cancel","future-root","token-rejected"};
+	for(bool google:{false,true})for(int mode=0;mode<modes.size();++mode)QTest::newRow(qPrintable(QString("%1-paged-read-%2").arg(google).arg(modes[mode])))<<google<<mode;
+}
+void TestCloudSyncHistory::workspacePagedOpen()
+{
+	QFETCH(bool,google);QFETCH(int,mode);Network n;n.seed();
+	const QString provider=google?"google-drive":"dropbox";
+	auto ref=CloudWorkspaceReference::create(provider,Account,uid(),google?"temporary":"id:temporary");
+	n.add(ref.rootName(),{});ref=CloudWorkspaceReference::create(provider,Account,ref.value.value("epoch").toString(),google?n.files[2].id.mid(3):n.files[2].id);
+	auto root=CloudWorkspaceRecord::create(ref,CloudSyncManifest::sha256("legacy"));const auto first=uid();
+	QVERIFY(root.registerUpload(first,{},CloudSyncManifest::sha256(A),A.size()));
+	QVERIFY(root.completeUpload(first,google?"payload-a":"id:payload-a","v1"));QVERIFY(root.publish(first,{}));const auto original=root;
+	for(int i=0;i<2;++i){
+		const auto nonce=uid();n.add(CloudWorkspaceRecord::archiveName(ref,nonce),root.json());const auto &page=n.files.last();
+		QVERIFY(root.archiveTo(root.archivePin(nonce,google?page.id.mid(3):page.id,page.rev)));
+		QVERIFY(root.registerUpload(uid(),first,CloudSyncManifest::sha256(B),B.size()));
+	}
+	n.files[2].data=root.json();const auto before=n.files;
+	const auto baseName=n.files[3].name,tipName=n.files[4].name;
+	const auto tipId=google?n.files[4].id.mid(3):n.files[4].id;
+	if(mode==2)n.files.removeAt(3);
+	if(mode==3)n.files[3].rev="unexpected-page-revision";
+	if(mode==4)n.files[3].data="damaged";
+	if(mode==5)n.files[3].name="preserved-elsewhere.json";
+	if(mode==6)n.files.removeAt(4);
+	if(mode==10){auto wire=QJsonDocument::fromJson(root.json()).object();wire["format"]="future-format";n.files[2].data=n.json(wire);}
+	bool reachedPage=false;
+	n.requested=[&](const QNetworkRequest &request){
+		const bool page=google?request.url().path().endsWith("/"+tipId):QJsonDocument::fromJson(request.rawHeader("Dropbox-API-Arg")).object().value("path").toString()==tipId;
+		if(!page||reachedPage)return;reachedPage=true;
+		if(mode==7)n.guard=false;
+		if(mode==8){n.files[2].data=n.files[2].data+" ";n.files[2].rev="raced-root";}
+		if(mode==9)n.deferReads=true;
+		if(mode==11)n.readFailureStatus=401;
+	};
+	CloudWorkspaceOpen opener(&n);QSignalSpy done(&opener,&CloudWorkspaceOpen::finished),errors(&opener,&CloudWorkspaceOpen::failed);
+	opener.start("token",provider,Account,ref,[&]{return n.guard;},mode==1?original:CloudWorkspaceRecord());
+	if(mode==9){QTRY_VERIFY(n.deferred);opener.cancel();if(n.deferred)n.deferred->complete();QTest::qWait(20);QCOMPARE(done.size()+errors.size(),0);}
+	else{
+		QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),int(mode<=1));
+		if(mode<=1){QCOMPARE(done.first()[0].toJsonObject(),root.value);QCOMPARE(done.first()[1].toString(),n.files[2].rev);}
+		if(mode==11)QVERIFY(errors.first()[1].toBool());
+	}
+	QCOMPARE(n.mutations,0);QCOMPARE(n.content(Legacy),before[0].data);QCOMPARE(n.content(before[1].name),before[1].data);
+	if(mode!=2&&mode!=3&&mode!=4&&mode!=5)QCOMPARE(n.content(baseName),before[3].data);
+	if(mode!=6)QCOMPARE(n.content(tipName),before[4].data);
+	QVERIFY(n.allowed);
+}
+void TestCloudSyncHistory::workspacePagedAuthority_data()
+{
+	QTest::addColumn<bool>("google");QTest::addColumn<int>("mode");
+	for(bool google:{false,true})for(int mode=0;mode<6;++mode)QTest::newRow(qPrintable(QString("%1-paged-checkpoint-%2").arg(google).arg(mode)))<<google<<mode;
+}
+void TestCloudSyncHistory::workspacePagedAuthority()
+{
+	QFETCH(bool,google);QFETCH(int,mode);const QString provider=google?"google-drive":"dropbox";
+	const auto ref=CloudWorkspaceReference::create(provider,Account,uid(),google?"root":"id:root");
+	auto root=CloudWorkspaceRecord::create(ref,CloudSyncManifest::sha256("legacy"));const auto first=uid(),pending=uid();
+	QVERIFY(root.registerUpload(first,{},CloudSyncManifest::sha256(A),A.size()));QVERIFY(root.completeUpload(first,google?"a":"id:a","v1"));QVERIFY(root.publish(first,{}));
+	const auto original=root;
+	QVERIFY(root.archiveTo(root.archivePin(uid(),google?"archive":"id:archive","archive-v1")));
+	QVERIFY(root.registerUpload(pending,first,CloudSyncManifest::sha256(B),B.size()));
+	QTemporaryDir directory;QVERIFY(directory.isValid());const auto path=directory.filePath("checkpoint.json");
+	CloudWorkspaceAuthority authority(path,ref);QVERIFY(authority.observe(original,"root-v1"));QVERIFY(authority.observe(root,"root-v2",true));
+	QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto before=file.readAll();file.close();
+	CloudWorkspaceAuthority restarted(path,ref);QVERIFY(restarted.load());QCOMPARE(restarted.record().value,root.value);
+	if(mode==0){QVERIFY(authority.observe(root,"root-v2",true));QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),before);return;}
+	if(mode==1){auto next=root;QVERIFY(next.reserve(uid(),first));QVERIFY(restarted.observe(next,"root-v3",true));QVERIFY(authority.load());QCOMPARE(authority.record().value,next.value);return;}
+	if(mode==2){QVERIFY(!restarted.observe(original,"root-v1",true));QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),before);return;}
+	auto saved=QJsonDocument::fromJson(before).object();
+	if(mode==3){auto record=saved["record"].toObject();auto metadata=record["segments"].toObject();auto pages=metadata["archives"].toArray();auto page=pages[0].toObject();page["data"]="corrupt";pages[0]=page;metadata["archives"]=pages;record["segments"]=metadata;saved["record"]=record;}
+	if(mode==4)saved["format"]="neo-workspace-checkpoint-development-1";
+	if(mode==5)saved["record"]=original.value;
+	QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));const auto damaged=QJsonDocument(saved).toJson(QJsonDocument::Compact);QCOMPARE(file.write(damaged),damaged.size());file.close();
+	QVERIFY(!restarted.load());QVERIFY(!restarted.record().valid());QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),damaged);
 }
 
 void TestCloudSyncHistory::workspaceAuthority_data()

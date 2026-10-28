@@ -1,5 +1,31 @@
 # Windows cloud reliability continuation
 
+**Pending planner/PDF candidate: `844260acd86e09a9bc8c2cdc77b007705ddc5e8e`.**
+Resume **full native 40732896718** and **Windows 40732903652**. They validate the
+actual disk-save hook, settled Clean navigation and one-painter PDF correction,
+including retained profile pages and full schedule text. Both were running at
+this checkpoint. Do not dispatch duplicates. Render/inspect the corrected PDF
+artifact after the Windows run; the older local e flow passed UI/save/restart
+but its old executable still loses the PDF chart page.
+
+**Next history increment: archive codec + exact-root/page reads and checkpoints.**
+The earlier uncommitted codec is now connected to `CloudWorkspaceOpen`: exact
+pinned ID/name/revision/length/hash reads, bounded chain traversal, monotonic
+state reconstruction and an unchanged physical root/body/revision reread before
+exposing the result. Existing unsegmented reads retain their old path. Local
+checkpoint format 2 retains and revalidates the full verified page chain across
+restart; old format-1 bounds remain enforced. Schema 1/2 and ordinary schema-3
+limits are unchanged. New provider-paired cases cover archived pending/committed
+boundaries, malformed/foreign/changed pages, missing pages, cancellation,
+revoked token, scope changes, a root race, checkpoint corruption and rollback.
+
+This is **pending protocol validation**, not sustainable history completion.
+Archive publication and durable create intent, root-writing coordinators,
+manager/UI automatic rollover and bounded local operation receipts remain to
+integrate. No live segmented root has been created; no original cloud objects,
+credentials or logs have changed. Continue these real flows after the targeted
+protocol gate, and do not expose automatic archival/cleanup before integration.
+
 **LSP actual Windows flow repaired and locally passed, 29 October JST.**
 Full native **40721658217 at 0c167b879 PASSED all 39 desktop and 36 mobile-target
 host suites**. This includes the actual planner model/save/XML-round-trip

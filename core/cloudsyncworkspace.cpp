@@ -14,8 +14,9 @@
 
 namespace {
 constexpr int ReferenceLimit = 2048, SelectionLimit = 64 * 1024, WorkspaceLimit = 32;
-constexpr int RootLimit = 1024 * 1024 + ReferenceLimit + 1024;
-constexpr int CheckpointLimit = RootLimit + 2048;
+constexpr int RootLimit = CloudWorkspaceRecord::WireLimit;
+constexpr int LegacyCheckpointLimit = RootLimit + 2048;
+constexpr int CheckpointLimit = 4 * CloudWorkspaceRecord::ExpandedLimit + 4096;
 bool providerValid(const QString &s) { return s == "google-drive" || s == "dropbox"; }
 bool hash(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(s).hasMatch(); }
 bool uuid(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$")).match(s).hasMatch(); }
@@ -32,14 +33,13 @@ CloudWorkspaceReference CloudWorkspaceRecord::reference() const
 {
 	CloudWorkspaceReference result; result.value = value.value("workspace").toObject(); return result;
 }
-QByteArray CloudWorkspaceRecord::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
 QString CloudWorkspaceRecord::head() const { return value.value("journal").toObject().value("head").toString(); }
 QJsonObject CloudWorkspaceRecord::ticket(const QString &id) const { return value.value("journal").toObject().value("tickets").toObject().value(id).toObject(); }
 CloudWorkspaceCopySource CloudWorkspaceRecord::copySource(const QString &id) const
 {
 	CloudWorkspaceCopySource source; source.value = value.value("copies").toObject().value(id).toObject(); return source;
 }
-CloudHistoryRecord CloudWorkspaceRecord::journal() const
+CloudHistoryRecord CloudWorkspaceRecord::journal(bool expanded) const
 {
 	CloudHistoryRecord result;
 	const auto ref = reference();
@@ -49,6 +49,7 @@ CloudHistoryRecord CloudWorkspaceRecord::journal() const
 	const bool copies = acceptance || format == "neo-workspace-history-development-2";
 	QStringList keys = {"schema", "format", "workspace", "journal"}; if (copies) keys.append("copies");
 	if (acceptance) keys.append("legacy_acceptances");
+	if (value.contains("segments")) keys.append("segments");
 	if (!ref.valid() || !fields(value, keys) || value.value("schema") != QJsonValue(4) ||
 	    (!copies && format != "neo-workspace-history-development-1") || !value.value("journal").isObject() ||
 	    (copies && (!value.value("copies").isObject() || (!absenceFormat && value.value("copies").toObject().isEmpty()))) ||
@@ -64,12 +65,14 @@ CloudHistoryRecord CloudWorkspaceRecord::journal() const
 		// Wire records always retain the exact root-qualified ownership name.
 		t["name"] = CloudHistoryRecord::payloadName(string(ref.value, "epoch"), it.key()); it.value() = t;
 	}
-	journal["tickets"] = tickets; result.value = journal; return result;
+	journal["tickets"] = tickets; result.value = journal;
+	result.workspaceJournal = expanded || value.contains("segments"); return result;
 }
-bool CloudWorkspaceRecord::valid() const
+bool CloudWorkspaceRecord::validLogical(bool expanded) const
 {
-	if (json().size() > RootLimit) return false;
-	const auto internal = journal();
+	expanded = expanded || value.contains("segments");
+	if (QJsonDocument(logicalValue()).toJson(QJsonDocument::Compact).size() > (expanded ? ExpandedLimit : RootLimit)) return false;
+	const auto internal = journal(expanded);
 	if (!internal.valid()) return false;
 	const auto ref = reference();
 	const auto tickets = internal.value.value("tickets").toObject();
@@ -91,7 +94,7 @@ bool CloudWorkspaceRecord::valid() const
 	if (format == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-4") {
 		const auto events = value.value("legacy_acceptances").toArray();
 		const auto history = internal.value.value("history").toArray();
-		if (events.size() > 512) return false;
+		if (events.size() > (expanded ? 65536 : 512)) return false;
 		QSet<QString> ids; QString parent; int lastHeadIndex = -1;
 		for (const auto &entry : events) {
 			if (!entry.isObject()) return false;
@@ -127,12 +130,22 @@ CloudWorkspaceRecord CloudWorkspaceRecord::parse(const QByteArray &bytes)
 	CloudWorkspaceRecord result;
 	if (bytes.size() > RootLimit) return result;
 	result.value = QJsonDocument::fromJson(bytes).object();
-	if (!result.valid()) result.value = {};
+	// Expanded local representation is never accepted as a cloud wire record.
+	if (result.value.contains("segments") || !result.valid()) result.value = {};
 	return result;
 }
 bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 {
-	if (!valid() || !previous.valid() || reference().value != previous.reference().value || !journal().follows(previous.journal())) return false;
+	if (!valid() || !previous.valid()) return false;
+	const auto pages = archivePages(), oldPages = previous.archivePages();
+	if (pages.size() < oldPages.size()) return false;
+	for (int i = 0; i < oldPages.size(); ++i)
+		if (pages[pages.size() - oldPages.size() + i] != oldPages[i]) return false;
+	return followsLogical(previous, value.contains("segments") || previous.value.contains("segments"));
+}
+bool CloudWorkspaceRecord::followsLogical(const CloudWorkspaceRecord &previous, bool expanded) const
+{
+	if (!validLogical(expanded) || !previous.validLogical(expanded) || reference().value != previous.reference().value || !journal(expanded).follows(previous.journal(expanded))) return false;
 	const auto before = previous.value.value("copies").toObject(), after = value.value("copies").toObject();
 	for (auto it = before.begin(); it != before.end(); ++it) if (after.value(it.key()) != it.value()) return false;
 	for (auto it = after.begin(); it != after.end(); ++it) if (!before.contains(it.key()) && !previous.ticket(it.key()).isEmpty()) return false;
@@ -146,7 +159,7 @@ bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 		// from the original format must still contain a newer journal, because
 		// registering the first copy changes that journal before acceptance.
 		if (format == "neo-workspace-history-development-3" && oldFormat == "neo-workspace-history-development-1" &&
-		    journal().value.value("sequence").toInt() <= previous.journal().value.value("sequence").toInt()) return false;
+	    journal(expanded).value.value("sequence").toInt() <= previous.journal(expanded).value.value("sequence").toInt()) return false;
 		if (format == "neo-workspace-history-development-4" &&
 		    oldFormat != "neo-workspace-history-development-1" && oldFormat != "neo-workspace-history-development-2" &&
 		    oldFormat != "neo-workspace-history-development-3" && oldFormat != format) return false;
@@ -165,7 +178,7 @@ bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 	}
 	return value.value("format") == previous.value.value("format") ||
 		(oldFormat == "neo-workspace-history-development-1" && format == "neo-workspace-history-development-2" &&
-		 journal().value.value("sequence").toInt() > previous.journal().value.value("sequence").toInt());
+		 journal(expanded).value.value("sequence").toInt() > previous.journal(expanded).value.value("sequence").toInt());
 }
 QJsonObject CloudWorkspaceRecord::latestLegacyAcceptance() const
 {
@@ -178,7 +191,7 @@ bool CloudWorkspaceRecord::acceptLegacyCopy(const QString &id, const QString &ex
 	if (!valid() || !uuid(id) || expectedHead != head() || expectedAcceptance != string(latestLegacyAcceptance(), "id") ||
 	    !observed.valid() || observed.json() != copySource(copyTicket).json() || string(ticket(copyTicket), "state") != "committed") return false;
 	auto next = *this; auto events = value.value("legacy_acceptances").toArray();
-	if (events.size() >= 512) return false;
+	if (events.size() >= (value.contains("segments") ? 65536 : 512)) return false;
 	events.append(QJsonObject{{"id", id}, {"parent", expectedAcceptance}, {"ticket", copyTicket}, {"head", expectedHead}});
 	next.value["format"] = string(value, "format") == "neo-workspace-history-development-4" ? "neo-workspace-history-development-4" : "neo-workspace-history-development-3";
 	next.value["legacy_acceptances"] = events;
@@ -190,7 +203,7 @@ bool CloudWorkspaceRecord::acceptLegacyAbsence(const QString &id, const QString 
 	if (!valid() || !uuid(id) || !uuid(expectedHead) || expectedHead != head() ||
 	    expectedAcceptance != string(latestLegacyAcceptance(), "id")) return false;
 	auto next = *this; auto events = value.value("legacy_acceptances").toArray();
-	if (events.size() >= 512) return false;
+	if (events.size() >= (value.contains("segments") ? 65536 : 512)) return false;
 	events.append(QJsonObject{{"id", id}, {"parent", expectedAcceptance}, {"head", expectedHead}, {"kind", "absent"}});
 	next.value["format"] = "neo-workspace-history-development-4"; next.value["copies"] = value.value("copies").toObject();
 	next.value["legacy_acceptances"] = events;
@@ -253,11 +266,12 @@ bool CloudWorkspaceAuthority::readUnlocked()
 	const auto bytes = file.read(CheckpointLimit + 1);
 	if (bytes.size() > CheckpointLimit || file.error() != QFileDevice::NoError) return false;
 	const auto saved = QJsonDocument::fromJson(bytes).object();
+	const bool segmented = string(saved, "format") == "neo-workspace-checkpoint-development-2";
 	if (!fields(saved, {"schema", "format", "workspace_key", "record", "version"}) || saved.value("schema") != QJsonValue(1) ||
-	    string(saved, "format") != "neo-workspace-checkpoint-development-1" || string(saved, "workspace_key") != reference.key() ||
-	    !versionValid(string(saved, "version"))) return false;
+	    (!segmented && (string(saved, "format") != "neo-workspace-checkpoint-development-1" || bytes.size() > LegacyCheckpointLimit)) ||
+	    string(saved, "workspace_key") != reference.key() || !versionValid(string(saved, "version"))) return false;
 	CloudWorkspaceRecord root; root.value = saved.value("record").toObject();
-	if (!root.valid() || root.reference().value != reference.value) return false;
+	if (segmented != root.value.contains("segments") || !root.valid() || root.reference().value != reference.value) return false;
 	checkpoint = root; observedVersion = string(saved, "version"); return true;
 }
 bool CloudWorkspaceAuthority::load()
@@ -275,7 +289,8 @@ bool CloudWorkspaceAuthority::observe(const CloudWorkspaceRecord &root, const QS
 	if (requireExisting && !checkpoint.valid()) return false;
 	if (checkpoint.valid() && !root.follows(checkpoint)) return false;
 	if (checkpoint.json() == root.json() && observedVersion == version) return true;
-	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", "neo-workspace-checkpoint-development-1"},
+	const auto format = root.archivePages().isEmpty() ? "neo-workspace-checkpoint-development-1" : "neo-workspace-checkpoint-development-2";
+	const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"format", format},
 		{"workspace_key", reference.key()}, {"record", root.value}, {"version", version}}).toJson(QJsonDocument::Compact);
 	if (bytes.size() > CheckpointLimit) return false;
 	QSaveFile file(fileName);
@@ -442,15 +457,7 @@ CloudWorkspaceOpen::CloudWorkspaceOpen(QNetworkAccessManager *network, QObject *
 	files.setStrictReads(true); files.setResponseLimit(RootLimit);
 	deadline.setSingleShot(true); deadline.setInterval(180000);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
-	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this,
-		[this](CloudSyncProviderType type, const QString &name, const QByteArray &bytes, const QString &version, const QString &id) {
-			if (!active) return;
-			const auto root = CloudWorkspaceRecord::parse(bytes);
-			if (!scopeCurrent || !scopeCurrent() || type != provider || id != string(reference.value, "root_id") || name != reference.rootName() ||
-			    !versionValid(version) || !root.valid() ||
-			    root.reference().value != reference.value || (!checkpoint.value.isEmpty() && !root.follows(checkpoint))) { fail(); return; }
-			const auto confirmed = root.value; cancel(); emit finished(confirmed, version);
-		});
+	connect(&files, &CloudSyncFileStore::versionedDownloadFinished, this, &CloudWorkspaceOpen::received);
 	connect(&files, &CloudSyncFileStore::operationError, this, [this](CloudSyncProviderType, const QString &, const QString &, bool rejected) { fail(rejected); });
 	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &) { fail(); });
 	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &) { fail(); });
@@ -458,7 +465,8 @@ CloudWorkspaceOpen::CloudWorkspaceOpen(QNetworkAccessManager *network, QObject *
 CloudWorkspaceOpen::~CloudWorkspaceOpen() { cancel(); }
 void CloudWorkspaceOpen::cancel()
 {
-	active = false; deadline.stop(); files.cancel(provider); reference.value = {}; checkpoint.value = {}; scopeCurrent = {};
+	active = false; deadline.stop(); files.cancel(provider); reference.value = {}; checkpoint.value = {}; verified.value = {}; scopeCurrent = {};
+	token.clear(); rootVersion.clear(); rootBytes.clear(); pages = {}; archive = {}; archiveIds.clear(); pageBytes = 0; step = Step::Root;
 }
 void CloudWorkspaceOpen::fail(bool rejected)
 {
@@ -468,11 +476,57 @@ void CloudWorkspaceOpen::fail(bool rejected)
 void CloudWorkspaceOpen::start(const QString &token, const QString &providerId, const QString &account, const CloudWorkspaceReference &ref,
 	const std::function<bool()> &guard, const CloudWorkspaceRecord &previous)
 {
-	cancel(); active = true; reference = ref; checkpoint = previous; scopeCurrent = guard;
+	cancel(); active = true; reference = ref; checkpoint = previous; scopeCurrent = guard; this->token = token;
 	provider = providerId == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
 	if (token.isEmpty() || !reference.matches(providerId, account) || !scopeCurrent || !scopeCurrent() ||
 	    (!checkpoint.value.isEmpty() && (!checkpoint.valid() || checkpoint.reference().value != reference.value))) { fail(); return; }
 	deadline.start(); files.downloadIdentity(provider, token, reference.rootName(), string(reference.value, "root_id"));
+}
+
+void CloudWorkspaceOpen::finish(const CloudWorkspaceRecord &record)
+{
+	if (!active || !scopeCurrent || !scopeCurrent() || !record.valid() || record.reference().value != reference.value ||
+	    (!checkpoint.value.isEmpty() && !record.follows(checkpoint))) { fail(); return; }
+	const auto confirmed = record.value; const auto version = rootVersion;
+	cancel(); emit finished(confirmed, version);
+}
+void CloudWorkspaceOpen::nextArchive()
+{
+	if (!active || !scopeCurrent || !scopeCurrent() || archive.isEmpty() || pages.size() >= CloudWorkspaceRecord::ArchivePageLimit ||
+	    archiveIds.contains(string(archive, "object"))) { fail(); return; }
+	archiveIds.insert(string(archive, "object")); step = Step::Archive;
+	files.downloadExact(provider, token, string(archive, "name"), string(archive, "object"), string(archive, "version"));
+}
+void CloudWorkspaceOpen::received(CloudSyncProviderType type, const QString &name, const QByteArray &bytes, const QString &version, const QString &id)
+{
+	if (!active) return;
+	if (!scopeCurrent || !scopeCurrent() || type != provider || !versionValid(version)) { fail(); return; }
+	if (step == Step::Archive) {
+		pageBytes += bytes.size();
+		if (name != string(archive, "name") || id != string(archive, "object") || version != string(archive, "version") ||
+		    bytes.size() != archive.value("bytes").toDouble() || CloudSyncManifest::sha256(bytes) != string(archive, "sha256") ||
+		    pageBytes > CloudWorkspaceRecord::ExpandedLimit) { fail(); return; }
+		pages.append(QJsonObject{{"pin", archive}, {"data", QString::fromLatin1(bytes.toBase64())}});
+		archive = CloudWorkspaceRecord::archivePointer(bytes, reference);
+		if (!archive.isEmpty()) { nextArchive(); return; }
+		verified = CloudWorkspaceRecord::parsePages(rootBytes, pages);
+		if (!verified.valid() || (!checkpoint.value.isEmpty() && !verified.follows(checkpoint))) { fail(); return; }
+		// Pages are immutable exact-ID reads. Bracket their traversal with the
+		// same physical root/body/revision before exposing a coherent view.
+		step = Step::Confirm;
+		files.downloadIdentity(provider, token, reference.rootName(), string(reference.value, "root_id")); return;
+	}
+	if (id != string(reference.value, "root_id") || name != reference.rootName()) { fail(); return; }
+	if (step == Step::Confirm) {
+		if (bytes != rootBytes || version != rootVersion) { fail(); return; }
+		finish(verified); return;
+	}
+	rootVersion = version; rootBytes = bytes;
+	const auto root = CloudWorkspaceRecord::parse(bytes);
+	if (root.valid()) { finish(root); return; }
+	archive = CloudWorkspaceRecord::archivePointer(bytes, reference);
+	if (archive.isEmpty()) { fail(); return; }
+	nextArchive();
 }
 
 CloudWorkspaceReference CloudWorkspaceReference::create(const QString &provider, const QString &account, const QString &epoch, const QString &rootId)
