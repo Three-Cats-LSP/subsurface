@@ -4,6 +4,7 @@
 #include "core/cloudsyncworkspace.h"
 #include "core/cloudsyncworkspacesource.h"
 #include "core/cloudsyncworkspacecopy.h"
+#include "core/cloudsyncworkspaceacceptance.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
 #include "core/cloudsyncworkspaceapply.h"
@@ -1366,6 +1367,108 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 	if (mode == 7 || mode == 8) { QVERIFY(root.valid()); QVERIFY(!root.follows(acceptedAgain)); }
 	else QVERIFY(!root.valid());
 }
+void TestCloudSyncHistory::workspaceAcceptanceIntent_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"restart", "different-choice", "different-source", "different-event", "different-previous", "different-head", "different-copy", "corrupt", "locked", "future-state"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-accept-intent-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceAcceptanceIntent()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto ref = CloudWorkspaceReference::create(google ? "google-drive" : "dropbox", Account, uid(), google ? "root" : "id:root");
+	const auto choice = uid(), event = uid(), previous = uid(), head = uid(), copy = uid(); QTemporaryDir dir; QVERIFY(dir.isValid());
+	const auto file = dir.filePath("intent.json"); CloudWorkspaceAcceptanceIntent intent(file, ref, choice, source, event, previous, head, copy);
+	QVERIFY(intent.prepare()); QCOMPARE(intent.state(), QString("prepared")); const auto original = intent.proof();
+	if (mode >= 1 && mode <= 6) {
+		auto otherSource = source; if (mode == 2) { auto m = otherSource.value["manifest"].toObject(); m["version"] = "other-revision"; otherSource.value["manifest"] = m; }
+		CloudWorkspaceAcceptanceIntent other(file, ref, mode == 1 ? uid() : choice, otherSource, mode == 3 ? uid() : event,
+			mode == 4 ? uid() : previous, mode == 5 ? uid() : head, mode == 6 ? uid() : copy);
+		QVERIFY(!other.prepare()); QVERIFY(!other.inspect()); QVERIFY(intent.inspect()); QCOMPARE(intent.proof(), original); return;
+	}
+	if (mode == 7 || mode == 9) {
+		QFile f(file); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+		if (mode == 7) f.write("corrupt"); else { auto body = original; body["state"] = "future"; f.write(QJsonDocument(body).toJson(QJsonDocument::Compact)); }
+		f.close(); QVERIFY(!intent.prepare()); QVERIFY(!intent.inspect()); return;
+	}
+	if (mode == 8) { QLockFile lock(file + ".lock"); QVERIFY(lock.tryLock(0)); QVERIFY(!intent.submitted()); QVERIFY(intent.inspect()); QCOMPARE(intent.proof(), original); return; }
+	QVERIFY(!intent.committed()); QVERIFY(intent.submitted()); QVERIFY(intent.submitted()); QVERIFY(intent.committed()); QVERIFY(intent.committed());
+	CloudWorkspaceAcceptanceIntent restarted(file, ref, choice, source, event, previous, head, copy);
+	QVERIFY(restarted.inspect()); QCOMPARE(restarted.state(), QString("committed"));
+	QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly)); QVERIFY(!f.readAll().contains("access_token"));
+}
+
+void TestCloudSyncHistory::workspaceAcceptanceWorkflow_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"accept-restart", "scope-before", "missing-choice", "choice-changed", "missing-checkpoint", "stale-head", "stale-acceptance", "source-changed-before", "damaged-copy", "ack-lost", "source-changed-after", "cancel-read", "token-rejected", "later-acceptance", "corrupt-intent", "choice-away-back", "cancel-after-write-resume", "completed-source-changed", "foreign-copy", "write-conflict-resume"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-accept-workflow-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceAcceptanceWorkflow()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); n.workspaceWrites = true;
+	const auto source = copySource(n, google); const auto provider = QString(google ? "google-drive" : "dropbox");
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "3" : "id:3");
+	const auto copy = uid(), event = uid(); auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(copy, {}, source)); QVERIFY(root.completeUpload(copy, google ? "4" : "id:4", "rev-4")); QVERIFY(root.publish(copy, {}));
+	n.add(ref.rootName(), root.json()); n.add(ref.payloadName(copy), A); const auto original = n.files;
+	QTemporaryDir dir; QVERIFY(dir.isValid()); const auto choiceFile = dir.filePath("choice.json"), checkpoint = dir.filePath("checkpoint.json"), intent = dir.filePath("intent.json");
+	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, ref)); const auto choiceVersion = choice.version();
+	CloudWorkspaceAuthority authority(checkpoint, ref); QVERIFY(authority.observe(root, "rev-3"));
+	if (mode == 1) n.guard = false; if (mode == 2) QVERIFY(QFile::remove(choiceFile)); if (mode == 4) QVERIFY(QFile::remove(checkpoint));
+	if (mode == 7) n.files[0].rev += "-changed"; if (mode == 8) n.files[3].data = B;
+	if (mode == 9) n.loseWriteAck = true; if (mode == 12) n.writeFailureStatus = 401; if (mode == 19) n.fault = 4;
+	if (mode == 14) { QFile f(intent); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("unknown intent"); f.close(); }
+	bool changed = false, mutatedChoice = false;
+	const auto changeChoice = [&](bool back) {
+		CloudWorkspaceSelection c(choiceFile, provider, Account); QVERIFY(c.load());
+		const auto other = CloudWorkspaceReference::create(provider, Account, uid(), google ? "other" : "id:other");
+		QVERIFY(c.select(c.version(), other)); if (back) QVERIFY(c.select(c.version(), ref));
+	};
+	n.requested = [&](const QNetworkRequest &) { if ((mode == 3 || mode == 15) && !mutatedChoice) { mutatedChoice = true; changeChoice(mode == 15); } };
+	n.wrote = [&](const QString &name) {
+		if (name != ref.rootName()) return;
+		if (mode == 10) { n.files[0].rev += "-later"; changed = true; }
+		if (mode == 13) {
+			auto later = CloudWorkspaceRecord::parse(n.files[2].data); const auto next = uid();
+			QVERIFY(later.acceptLegacyCopy(next, event, copy, copy, source)); n.files[2].data = later.json(); n.files[2].rev += "-later";
+		}
+		if (mode == 16) n.deferReads = true;
+	};
+	if (mode == 11) n.deferReads = true;
+	CloudWorkspaceAcceptance client(&n); QSignalSpy done(&client, &CloudWorkspaceAcceptance::finished), errors(&client, &CloudWorkspaceAcceptance::failed);
+	const auto start = [&] { client.start("token", ref, source, choiceFile, choiceVersion, checkpoint, intent, event,
+		mode == 6 ? uid() : QString(), mode == 5 ? uid() : copy, mode == 18 ? uid() : copy, [&] { return n.guard; }); };
+	start();
+	if (mode == 11 || mode == 16) {
+		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; QTest::qWait(20);
+		QCOMPARE(done.size() + errors.size(), 0);
+		if (mode == 16) { n.wrote = {}; const auto writes = n.mutations; start(); QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), 1); QCOMPARE(n.mutations, writes); }
+	} else {
+		QTRY_COMPARE(done.size() + errors.size(), 1);
+		const bool success = mode == 0 || mode == 9 || mode == 10 || mode == 13 || mode == 17;
+		QCOMPARE(done.size(), int(success));
+	}
+	if (mode == 19) {
+		const auto writes = n.mutations; start(); QTRY_COMPARE(done.size(), 1); QCOMPARE(n.mutations, writes + 1);
+	}
+	if (!done.isEmpty()) {
+		const auto observed = CloudWorkspaceRecord::parse(n.files[2].data); QVERIFY(observed.valid());
+		QCOMPARE(done.last()[2].toString(), event); QCOMPARE(done.last()[3].toBool(), mode != 13); QCOMPARE(done.last()[4].toBool(), mode == 10);
+		QCOMPARE(observed.head(), copy); QCOMPARE(observed.copySource(copy).json(), source.json());
+		if (mode == 0 || mode == 17) {
+			const auto writes = n.mutations;
+			if (mode == 17) { n.files[0].rev += "-later"; changed = true; }
+			start(); QTRY_COMPARE(done.size(), 2); QCOMPARE(n.mutations, writes);
+			if (mode == 17) QVERIFY(done.last()[4].toBool());
+		}
+	}
+	if (mode == 12) QVERIFY(errors.first()[1].toBool());
+	QCOMPARE(n.files[1].data, original[1].data); QCOMPARE(n.files[3].data, mode == 8 ? B : original[3].data);
+	if (!changed && mode != 7) QCOMPARE(n.files[0].data, original[0].data);
+	QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
+}
+
 void TestCloudSyncHistory::workspaceCopyIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
