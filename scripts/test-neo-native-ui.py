@@ -8,6 +8,7 @@ No test hooks or sample data are added to the shipping application.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -146,35 +147,39 @@ DRIVER = r'''
                     smokeCheck(pageStack.currentItem.objectName === "ModernDiveDetails", "dive detail route")
                     smokeCheck(pageStack.currentItem.navigationSection === "dives", "dive navigation scope")
                     smokeCheck(pageStack.currentItem.initialDiveId === NeoDashboard.recentDives[0].id, "canonical dive identity")
+                    rootItem.openNeoDiveDetails(NeoDashboard.recentDives[0].id, true, false)
+                    break
+                case 7:
+                    smokeCheck(pageStack.currentItem.objectName === "ModernDiveEditor", "dive editor route")
                     rootItem.showNeoHome()
                     subsurfaceTheme.currentTheme = "Dark"
                     rootItem.width = 390
                     break
-                case 7:
+                case 8:
                     if (!smokeCapture("modern-populated-dark-small")) return
                     rootItem.neoInterfaceStyle = "Clean"
                     break
-                case 8:
+                case 9:
                     smokeCheck(pageStack.currentItem === modernDiveList, "populated Clean return")
                     if (!smokeCapture("clean-populated-dark-small")) return
                     rootItem.width = 1100
                     subsurfaceTheme.currentTheme = "Blue"
                     break
-                case 9:
+                case 10:
                     if (!smokeCapture("clean-populated-light-wide")) return
                     rootItem.neoInterfaceStyle = "Modern"
                     neoAppearance.sync()
                     break
-                case 10:
+                case 11:
                     rootItem.openNeoDiveDetails(NeoDashboard.recentPlans[0].id, false, true)
                     break
-                case 11:
+                case 12:
                     smokeCheck(pageStack.currentItem.navigationSection === "plans", "saved-plan scope")
                     smokeCheck(pageStack.currentItem.initialDiveId === NeoDashboard.recentPlans[0].id, "saved-plan identity")
                     smokeCheck(pageStack.currentItem.previousScopedRow === -1 && pageStack.currentItem.nextScopedRow === -1, "plans do not navigate into dives")
                     rootItem.showNeoHome()
                     break
-                case 12:
+                case 13:
                     console.log("NEO_UI_PASS styles, themes, sizes, data, navigation")
                     smokeTimer.stop()
                     Qt.quit()
@@ -248,7 +253,7 @@ def main():
             result = subprocess.run(base + ["--testqml=" + qml.as_uri()], cwd=executable.parent, env=env,
                                     stdout=log, stderr=subprocess.STDOUT, timeout=120, creationflags=flags)
         text = log_path.read_text(encoding="utf-8", errors="replace")
-        if result.returncode or "NEO_UI_PASS" not in text or "NEO_UI_FAIL" in text:
+        if result.returncode or "NEO_UI_PASS" not in text or "NEO_UI_FAIL" in text or re.search(r"ModernDiveEditor.qml:[0-9]+:.*ReferenceError", text):
             raise RuntimeError(text[-12000:])
     if len(list(output.glob("*.png"))) != 8:
         raise RuntimeError("Expected eight rendered page screenshots")

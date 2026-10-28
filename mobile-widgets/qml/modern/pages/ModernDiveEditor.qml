@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.subsurfacedivelog.mobile 1.0
 import ".." as Modern
 import "../components" as Components
 
