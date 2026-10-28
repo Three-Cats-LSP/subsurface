@@ -167,6 +167,13 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 		acceptances.append(QVariantMap{{"id", text(body, "event")}, {"choiceChanged", choiceChanged}, {"canResume", !choiceChanged}});
 	}
 	report["acceptances"] = acceptances; report["acceptanceLimitReached"] = acceptanceLimited; report["acceptanceRecoveryRequired"] = acceptanceInvalid;
+	bool activationLimited = false, activationInvalid = false; QVariantList activations;
+	for (const auto &body : workspaceActivations(directory, selected, &activationLimited, &activationInvalid)) {
+		if (text(body, "state") == "completed") continue;
+		const bool choiceChanged = text(body, "choice_version") != choice.version();
+		activations.append(QVariantMap{{"id", text(body, "operation")}, {"choiceChanged", choiceChanged}, {"canResume", !choiceChanged}});
+	}
+	report["activations"] = activations; report["activationLimitReached"] = activationLimited; report["activationRecoveryRequired"] = activationInvalid;
 	bool limited = false, invalid = false; QVariantList attempts;
 	for (const auto &body : workspaceCreations(directory, providerId, account, &limited, &invalid)) {
 		const auto ref = CloudWorkspaceReference::create(providerId, account, text(body, "epoch"), text(body, "id"));
@@ -183,6 +190,8 @@ bool CloudSyncManager::workspaceScopeCurrent()
 		tokens.value(syncProviderId).accessToken == workspaceToken && verifiedAccountTokens.value(syncProviderId) == workspaceToken &&
 		CloudSyncManifest::sha256(tokens.value(syncProviderId).accountId.toUtf8()) == workspaceAccount;
 	if (!current) return false;
+	if (workspaceAction == "activate" || workspaceAction == "resume-activation")
+		return CloudWorkspaceModel::currentXml() == syncLocalPayload;
 	if (workspaceAction == "version-save" || workspaceAction == "version-resume-save" ||
 	    (workspaceAction == "version-restore" && workspaceRestoreStep == WorkspaceRestoreStep::None))
 		return CloudSyncManifest::sha256(CloudWorkspaceModel::currentXml()) == syncLocalSha256;
@@ -216,7 +225,8 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	}
 	const bool versioning = action == "version-list" || action == "version-save" || action == "version-resume-save" || action == "version-restore" || action == "version-resume-restore";
 	const bool accepting = action == "accept-copy" || action == "resume-accept";
-	if (action != "create" && action != "join" && action != "review" && action != "resume" && action != "inspect-copy" && action != "copy" && action != "resume-copy" && !accepting && !versioning) { setError(tr("Choose a valid workspace action.")); return; }
+	const bool activating = action == "activate" || action == "resume-activation";
+	if (action != "create" && action != "join" && action != "review" && action != "resume" && action != "inspect-copy" && action != "copy" && action != "resume-copy" && !accepting && !activating && !versioning) { setError(tr("Choose a valid workspace action.")); return; }
 	if ((action == "version-resume-save" || action == "version-resume-restore") && !CloudHistoryRecord::validEpoch(argument)) { setError(tr("The saved version attempt is invalid.")); return; }
 	WorkspaceVersionReview versionReview; QString restoreSource;
 	if (action == "version-restore") {
@@ -231,7 +241,7 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		setError(tr("Open this profile's local dive log before restoring a workspace version.")); return;
 	}
 	const bool copying = action == "copy" || action == "resume-copy", inspecting = action == "inspect-copy";
-	auto reviewed = (action == "copy" || action == "accept-copy") ? workspaceCopyReviews.value(providerId) : WorkspaceCopyReview();
+	auto reviewed = (action == "copy" || action == "accept-copy" || action == "activate") ? workspaceCopyReviews.value(providerId) : WorkspaceCopyReview();
 	if (action == "copy" && (!CloudHistoryRecord::validEpoch(argument) || reviewed.id != argument || !reviewed.source.valid())) {
 		setError(tr("Review the current cloud log before confirming a copy.")); return;
 	}
@@ -240,6 +250,11 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		setError(tr("Review the current cloud log and keep a verified workspace copy before accepting it.")); return;
 	}
 	if (action == "resume-accept" && !CloudHistoryRecord::validEpoch(argument)) { setError(tr("The saved acceptance attempt is invalid.")); return; }
+	if (action == "activate" && (!CloudHistoryRecord::validEpoch(argument) || reviewed.id != argument || !reviewed.source.valid() ||
+	    !CloudHistoryRecord::validEpoch(reviewed.previousAcceptance) || !CloudHistoryRecord::validEpoch(reviewed.parent))) {
+		setError(tr("Review and accept the current cloud branch before preparing workspace sync.")); return;
+	}
+	if (action == "resume-activation" && !CloudHistoryRecord::validEpoch(argument)) { setError(tr("The saved activation attempt is invalid.")); return; }
 	CloudWorkspaceReference reference;
 	QString expectedAccount = tokens.value(providerId).accountId.isEmpty() ? QString() : CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8());
 	if (action == "join") {
@@ -254,11 +269,11 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		const auto path = workspaceDirectory(providerId, expectedAccount);
 		if (path.isEmpty()) { setError(tr("Workspace recovery records cannot be stored on this device.")); return; }
 		CloudWorkspaceSelection choice(QDir(path).filePath("selection.json"), providerId, expectedAccount);
-		if (!((copying || versioning || accepting) ? choice.inspect() : choice.load())) { setError(tr("The saved workspace choice needs recovery. All records were kept.")); return; }
+		if (!((copying || versioning || accepting || activating) ? choice.inspect() : choice.load())) { setError(tr("The saved workspace choice needs recovery. All records were kept.")); return; }
 		expectedVersion = choice.version();
-		if (action == "review" || inspecting || copying || accepting || versioning) reference = choice.selected();
+		if (action == "review" || inspecting || copying || accepting || activating || versioning) reference = choice.selected();
 	}
-	if ((action == "review" || inspecting || copying || accepting || versioning) && !reference.valid()) { setError(tr("Choose a workspace before verifying it.")); return; }
+	if ((action == "review" || inspecting || copying || accepting || activating || versioning) && !reference.valid()) { setError(tr("Choose a workspace before verifying it.")); return; }
 	QByteArray local;
 	if (versioning) {
 		local = CloudWorkspaceModel::currentXml();
@@ -274,11 +289,20 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			setError(tr("The workspace choice or local log changed. Review the cloud log again before copying.")); return;
 		}
 	}
+	if (activating) {
+		local = CloudWorkspaceModel::currentXml();
+		if (local.isEmpty() || local.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(local)) { setError(tr("The current dive log cannot be prepared for workspace sync.")); return; }
+		if (action == "activate" && (reviewed.choiceVersion != expectedVersion || reviewed.reference.value != reference.value ||
+		    reviewed.localSha256 != CloudSyncManifest::sha256(serializeCurrentDiveLog()))) {
+			setError(tr("The workspace choice or local log changed. Review the cloud branch again.")); return;
+		}
+	}
 	clearStorageReview(providerId); setError({});
 	if (!acquireCloudRoute(providerId, false)) return;
 	syncProviderId = providerId; syncOperation = SyncOperation::Workspace; workspaceAction = action; workspaceChoiceVersion = expectedVersion; workspaceReference = reference;
 	if (inspecting || copying || accepting) { syncLocalSha256 = CloudSyncManifest::sha256(local); workspaceCopyReview = reviewed; }
 	if (versioning) { syncLocalPayload = local; syncLocalSha256 = CloudSyncManifest::sha256(local); }
+	if (activating) { syncLocalPayload = local; workspaceCopyReview = reviewed; }
 	if (action == "version-restore") { workspaceRestoreReview = versionReview; workspaceRestoreSource = restoreSource; }
 	// Keep the resume ticket separate from payload data; it is an immutable UUID.
 	if (action == "version-resume-save" || action == "version-resume-restore") workspaceVersionTicket = argument;
@@ -291,8 +315,8 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			failWorkspace(tr("The connected account or workspace settings changed. Your local log was kept.")); return;
 		}
 		CloudWorkspaceSelection choice(QDir(workspacePath).filePath("selection.json"), providerId, workspaceAccount);
-		const bool copying = action == "copy" || action == "resume-copy", accepting = action == "accept-copy" || action == "resume-accept", versioning = action.startsWith("version-");
-		if (!((copying || accepting || versioning) ? choice.inspect() : choice.load()) || choice.version() != workspaceChoiceVersion) { failWorkspace(tr("The workspace choice changed. Review it and try again; all records were kept.")); return; }
+		const bool copying = action == "copy" || action == "resume-copy", accepting = action == "accept-copy" || action == "resume-accept", activating = action == "activate" || action == "resume-activation", versioning = action.startsWith("version-");
+		if (!((copying || accepting || activating || versioning) ? choice.inspect() : choice.load()) || choice.version() != workspaceChoiceVersion) { failWorkspace(tr("The workspace choice changed. Review it and try again; all records were kept.")); return; }
 		if (versioning) {
 			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The selected workspace changed. All version attempts were kept.")); return; }
 			CloudWorkspaceAuthority checkpoint(QDir(workspacePath).filePath("roots/" + workspaceReference.key() + ".json"), workspaceReference);
@@ -321,6 +345,36 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			workspaceAcceptance.start(token, workspaceReference, source, QDir(workspacePath).filePath("selection.json"), workspaceChoiceVersion,
 				QDir(workspacePath).filePath("roots/" + workspaceReference.key() + ".json"), QDir(attempt).filePath("intent.json"), syncLocalSha256,
 				event, previous, head, copy, [this, serial] { return workspaceSerial == serial && workspaceScopeCurrent(); }); return;
+		}
+		if (activating) {
+			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The workspace choice changed. All activation attempts were kept.")); return; }
+			bool limited = false, invalid = false; const auto attempts = workspaceActivations(workspacePath, workspaceReference, &limited, &invalid);
+			if (invalid || (action == "activate" && limited)) { failWorkspace(tr("Saved activation records need review or reached their safety limit. All records were kept.")); return; }
+			QString operation = uuid(), revision = uuid(), target = workspaceCopyReview.parent, reservation = uuid(), acceptance = workspaceCopyReview.previousAcceptance;
+			if (action == "resume-activation") {
+				QJsonObject saved; for (const auto &body : attempts) if (text(body, "operation") == argument) { saved = body; break; }
+				const auto model = saved.value("model").toObject();
+				if (saved.isEmpty() || text(saved, "choice_version") != workspaceChoiceVersion ||
+				    text(model, "sha256") != CloudSyncManifest::sha256(syncLocalPayload) || model.value("bytes").toDouble() != syncLocalPayload.size()) {
+					failWorkspace(tr("The saved activation belongs to a different workspace choice or local log. Its records were kept.")); return;
+				}
+				operation = argument; revision = text(saved, "binding_revision"); target = text(saved, "target");
+				reservation = text(saved, "reservation"); acceptance = text(saved, "acceptance");
+			}
+			const auto planDir = QDir(workspacePath).filePath("activations/" + workspaceReference.key() + "/" + operation);
+			const auto readFile = QDir(workspacePath).filePath("activation-reads/" + workspaceReference.key() + "/" + operation + ".json");
+			for (const auto &path : {workspacePath, QDir(workspacePath).filePath("activations"), QDir(workspacePath).filePath("activations/" + workspaceReference.key()),
+				planDir, QDir(workspacePath).filePath("activation-reads"), QDir(workspacePath).filePath("activation-reads/" + workspaceReference.key())}) {
+				if (QFileInfo(path).isSymLink()) { failWorkspace(tr("Activation storage needs review. All records were kept.")); return; }
+			}
+			const auto checkpointFile = QDir(workspacePath).filePath("roots/" + workspaceReference.key() + ".json");
+			const auto bindingFile = QDir(workspacePath).filePath("bindings/" + workspaceReference.key() + ".json");
+			const auto routeFile = workspaceRoutePath(providerId) + ".json";
+			workspaceActivation.start(workspaceToken, workspaceReference, QDir(workspacePath).filePath("selection.json"), workspaceChoiceVersion,
+				checkpointFile, bindingFile, routeFile, revision, target, reservation, operation, acceptance, planDir, readFile, syncLocalPayload,
+				[this, providerId] { return requireWorkspaceRoute(providerId); }, [this, providerId] { return workspaceRouteConfirmed(providerId); },
+				[this, serial] { return workspaceSerial == serial && workspaceScopeCurrent(); }, [] { return CloudWorkspaceModel::currentXml(); });
+			return;
 		}
 		if (action == "copy" || action == "resume-copy") {
 			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The workspace choice changed. All copy attempts were kept.")); return; }

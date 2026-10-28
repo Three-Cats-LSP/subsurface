@@ -33,3 +33,25 @@ QList<QJsonObject> CloudSyncManager::workspaceAcceptances(const QString &directo
 	}
 	return result;
 }
+QList<QJsonObject> CloudSyncManager::workspaceActivations(const QString &directory, const CloudWorkspaceReference &reference, bool *limited, bool *invalid) const
+{
+	if (limited) *limited = false; if (invalid) *invalid = false;
+	QList<QJsonObject> result; if (!reference.valid()) return result;
+	const auto parent = QDir(directory).filePath("activations"), scope = QDir(parent).filePath(reference.key());
+	if (QFileInfo(directory).isSymLink() || QFileInfo(parent).isSymLink() || QFileInfo(scope).isSymLink()) { if (invalid) *invalid = true; return result; }
+	const auto entries = QDir(scope).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
+	if (limited) *limited = entries.size() >= 64;
+	for (int i = 0; i < qMin(64, int(entries.size())); ++i) {
+		const auto operation = entries[i].fileName(), path = QDir(entries[i].absoluteFilePath()).filePath("plan.json");
+		const QFileInfo info(path); QFile file(path); QJsonObject body;
+		if (CloudHistoryRecord::validEpoch(operation) && info.isFile() && !info.isSymLink() && info.size() <= 16384 && file.open(QIODevice::ReadOnly))
+			body = QJsonDocument::fromJson(file.read(16385)).object();
+		CloudWorkspaceActivationPlan attempt(entries[i].absoluteFilePath(), reference, text(body, "choice_version"), text(body, "binding_revision"),
+			text(body, "target"), text(body, "reservation"), operation, text(body, "acceptance"));
+		if (body.isEmpty() || !attempt.reload() || text(body, "operation") != operation || body.value("workspace").toObject() != reference.value) {
+			if (invalid) *invalid = true; continue;
+		}
+		result.append(body);
+	}
+	return result;
+}

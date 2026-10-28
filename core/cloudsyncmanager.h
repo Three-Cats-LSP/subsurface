@@ -12,6 +12,7 @@
 #include "cloudsyncworkspaceupload.h"
 #include "cloudsyncworkspaceapply.h"
 #include "cloudsyncworkspaceroute.h"
+#include "cloudsyncworkspaceactivation.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -176,6 +177,7 @@ private:
 	QList<QJsonObject> workspaceCopies(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceUploads(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceAcceptances(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QList<QJsonObject> workspaceActivations(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QVariantList workspaceRestores(const QString &directory, const CloudWorkspaceReference &reference, const QString &choiceVersion, bool *limited = nullptr, bool *invalid = nullptr) const;
 	void finishWorkspaceVersions(const QJsonObject &record, const QString &version, const QString &ticket = {}, bool headMatches = false);
 	void startWorkspaceRestore(const QJsonObject &root);
@@ -205,6 +207,7 @@ private:
 	CloudWorkspaceSourceReview workspaceSource;
 	CloudWorkspaceCopy workspaceCopy;
 	CloudWorkspaceAcceptance workspaceAcceptance;
+	CloudWorkspaceActivation workspaceActivation;
 	CloudWorkspaceUpload workspaceUpload;
 	CloudWorkspaceRead workspaceRestoreReader;
 	CloudWorkspaceApply workspaceRestoreApply;

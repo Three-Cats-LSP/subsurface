@@ -1901,6 +1901,86 @@ void TestCloudSyncManager::testWorkspaceAcceptance()
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)
 
+void TestCloudSyncManager::testWorkspaceActivation_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"activate-and-resume", "wrong-review", "local-edit-after-review", "choice-away-back",
+		"legacy-changed", "different-workspace-model", "cancel-and-resume", "foreign-required-flag", "unknown-attempt", "local-edit-during-read", "missing-checkpoint"};
+	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
+		QTest::newRow(qPrintable(QString("%1-activation-%2").arg(google).arg(mode))) << google << mode;
+}
+void TestCloudSyncManager::testWorkspaceActivation()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	const auto previous = qgetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	const auto restore = qScopeGuard([&] { if (previous.isNull()) qunsetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH"); else qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", previous); });
+	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
+	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
+	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
+	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
+	const auto ref = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "1" : "id:1");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); network.add(ref.rootName(), root.json());
+	const auto local = CloudWorkspaceModel::currentXml(), remote = mode == 5 ? local + QByteArray("\n") : local;
+	auto manifest = CloudSyncManifest::forPayload(remote); manifest.schemaVersion = 2; manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml";
+	network.add("subsurface-neo-sync.json", manifest.toJson()); network.add(manifest.payloadFileName(), remote);
+	const auto originalManifest = network.files[1].data;
+	const auto checkpointFile = QDir(directory).filePath("roots/" + ref.key() + ".json"); CloudWorkspaceAuthority checkpoint(checkpointFile, ref); QVERIFY(checkpoint.observe(root, network.files[0].version));
+	CloudWorkspaceSelection choice(choiceFile, provider, account); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), ref));
+	QSignalSpy done(&manager, &CloudSyncManager::workspaceFinished); manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(done.size(), 1);
+	const auto initialReview = manager.workspaceCopyReviews.value(provider); QVERIFY(initialReview.source.valid());
+	const auto target = QUuid::createUuid().toString(QUuid::WithoutBraces), event = QUuid::createUuid().toString(QUuid::WithoutBraces);
+	QVERIFY(root.registerCopy(target, {}, initialReview.source)); network.add(ref.payloadName(target), remote);
+	QVERIFY(root.completeUpload(target, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version));
+	QVERIFY(root.publish(target, {})); QVERIFY(root.acceptLegacyCopy(event, {}, target, target, initialReview.source));
+	network.files[0].data = root.json(); network.files[0].version = "accepted-revision"; QVERIFY(checkpoint.observe(root, network.files[0].version));
+	manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(done.size(), 2);
+	const auto review = manager.workspaceCopyReviews.value(provider); QVERIFY(CloudHistoryRecord::validEpoch(review.id));
+	QVERIFY(manager.workspaceReport(provider).value("copyReview").toMap().value("alreadyAccepted").toBool());
+	const auto routePath = manager.workspaceRoutePath(provider), flag = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + provider;
+	if (mode == 2) ::divelog.dives[0]->notes = "Changed after review";
+	if (mode == 3) {
+		CloudWorkspaceSelection changed(choiceFile, provider, account); QVERIFY(changed.load());
+		const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "other" : "id:other");
+		QVERIFY(changed.select(changed.version(), other)); QVERIFY(changed.select(changed.version(), ref));
+	}
+	if (mode == 4) network.files[1].version += "-changed";
+	if (mode == 7) QSettings().setValue(flag, true);
+	if (mode == 8) {
+		const auto bad = QDir(directory).filePath("activations/" + ref.key() + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces));
+		QVERIFY(QDir().mkpath(bad)); QFile f(QDir(bad).filePath("plan.json")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("unknown") == 7); f.close();
+	}
+	if (mode == 10) QVERIFY(QFile::remove(checkpointFile));
+	if (mode == 6 || mode == 9) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
+	manager.runWorkspace(provider, "activate", mode == 1 ? QUuid::createUuid().toString(QUuid::WithoutBraces) : review.id);
+	if (mode == 6 || mode == 9) {
+		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply;
+		if (mode == 6) manager.cancelWorkspace(); else ::divelog.dives[0]->notes = "Changed during activation";
+		network.workspaceReadDeferred = false; late->complete();
+	}
+	QTRY_VERIFY(!manager.syncInProgress());
+	if (mode == 6) {
+		const auto attempts = manager.workspaceReport(provider).value("activations").toList(); QCOMPARE(attempts.size(), 1);
+		QVERIFY(!manager.workspaceRouteRequired(provider)); manager.runWorkspace(provider, "resume-activation", attempts[0].toMap().value("id").toString());
+		QTRY_VERIFY(!manager.syncInProgress());
+	}
+	const bool success = mode == 0 || mode == 6;
+	QCOMPARE(done.size(), success ? 3 : 2);
+	if (success) {
+		QVERIFY(manager.workspaceReport(provider).value("activationComplete").toBool()); QVERIFY(manager.workspaceRouteConfirmed(provider));
+		CloudWorkspaceRoute route(routePath + ".json", provider); QVERIFY(route.load()); QCOMPARE(route.state(), QString("active"));
+		CloudWorkspaceBinding binding(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version()); QVERIFY(binding.load());
+		QCOMPARE(binding.commit(), target); QVERIFY(binding.matchesModel(local)); QCOMPARE(CloudWorkspaceModel::currentXml(), local);
+		const auto saved = manager.workspaceActivations(directory, ref); QCOMPARE(saved.size(), 1); QCOMPARE(saved[0]["state"].toString(), QString("completed"));
+		const auto writes = network.puts; manager.runWorkspace(provider, "resume-activation", saved[0]["operation"].toString()); QTRY_VERIFY(!manager.syncInProgress());
+		QCOMPARE(done.size(), 4); QCOMPARE(network.puts, writes); manager.syncDiveLog(provider); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, writes);
+	} else if (mode != 7) {
+		QVERIFY(!manager.workspaceRouteRequired(provider)); QVERIFY(!QFileInfo::exists(routePath + ".json"));
+	}
+	QCOMPARE(network.files[1].data, originalManifest); QCOMPARE(network.files[2].data, remote); QCOMPARE(network.renames, 0);
+}
+
 void TestCloudSyncManager::testWorkspaceRestore_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
