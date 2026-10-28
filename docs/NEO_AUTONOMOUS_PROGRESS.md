@@ -1,5 +1,49 @@
 # Windows cloud reliability continuation
 
+**LSP actual Windows flow repaired and locally passed, 29 October JST.**
+Full native **40721658217 at 0c167b879 PASSED all 39 desktop and 36 mobile-target
+host suites**. This includes the actual planner model/save/XML-round-trip
+cases. It is host evidence, not physical Android acceptance. Focused source/
+engine **40721651443** had already passed 90 checks on Windows Qt 6.8.3.
+
+Windows snapshot-fix **40725165511 at 3456995ae** passed the repaired preset
+reload, both units, NDL and contingency, then failed a Clean-navigation test
+race. Its exact debug runtime was downloaded and SHA-verified: artifact
+**12834451112**, archive SHA-256
+`5f07c960ce6f903f3adf6ed595b607727b1cdd1ee14cf4d272e8c63844c0de27`,
+executable `76006e99918190515446971e402759a9b317b7480081b6267524972f890defa0`.
+See `work/lsp-ui-runtime-3456995ae-20261029/verified-debug-runtime.json`.
+The failed artifact remains explicitly unvalidated and is not a release.
+
+Local development-QML runs retain their failures. Run `...20261029-c` traced
+the queued style-change return Home occurring after test navigation. The test
+now waits for the observed Clean Home before navigating. Run `...20261029-d`
+then passed both styles, actual oxygen-role/CCR and multilevel-gas actions,
+Save/reopen and exports, but failed restart: the Save button added an in-memory
+plan without calling the manager's normal dirty/disk-save path. The shared
+Save handler now calls `manager.changesNeedSaving()` for both planner engines.
+Run **work/lsp-ui-local-769796bb0-20261029-e PASSED**, including restart with 14
+records (12 dives, two plans), full preset persistence, recorded LSP chart/report,
+canonical export and TXT/PDF creation. All tests used fresh credential-free
+profiles. This combines the verified unchanged C++ runtime with current test-copy
+QML; it is not final embedded-package acceptance.
+
+Read-only PDF QA then exposed an existing exporter defect: ending the profile
+painter and starting another painter discarded the profile page. Both exported
+PDFs contained all TXT text but only one text page. The candidate keeps one
+active painter, uses consistent point geometry, and draws only available
+analysis (LSP surface-GF checkpoints, no invented tissue-loading chart). The new
+`validate-neo-planner-pdf.py` fails the old output for the lost profile page;
+the Windows workflow now checks profile + schedule pages and all TXT lines with
+pinned pypdf. Render and inspect the corrected candidate before calling PDF
+acceptance complete. Matching-source full native and Windows runs follow this
+commit; record their IDs here and resume, rather than duplicating them.
+
+No Google writes, original-log changes, credential changes or old-object deletion
+occurred. Separate unfinished history-page work stays untouched. After LSP
+Windows acceptance, resume sustainable history, metadata sync and the remaining
+Google/Windows gates; owner action is not needed yet.
+
 **Resume Windows snapshot-fix run 40725165511, source 3456995ae.**
 The complete native **0c167b879** desktop build/tests have passed; the same run
 **40721658217** is now building the mobile-target host suites. C++ and engines

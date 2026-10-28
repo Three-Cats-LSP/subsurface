@@ -253,25 +253,31 @@ DRIVER = r'''
                     neoPlannerLab.calculateContingency()
                     smokeCheck(neoPlannerLab.contingencyResult.planSaveAllowed && neoPlannerLab.contingencyResult.runtimeSeconds>neoPlannerLab.runtimeSeconds, "actual LSP contingency")
                     rootItem.neoInterfaceStyle = "Clean"
-                    rootItem.showPageFromDrawer(neoPlannerLab)
                     break
                 case 18:
-                    smokeCheck(pageStack.currentItem === neoPlannerLab && neoPlannerLab.useLspPlanner, "Clean uses the same LSP planner")
+                    // Interface changes deliberately return home via Qt.callLater.
+                    // Wait for the observed home, not an assumed timer interval:
+                    // heavy synchronous calculations can delay the queued call.
+                    if (pageStack.currentItem !== modernDiveList) { rootItem.smokeStep--; return }
+                    rootItem.showPageFromDrawer(neoPlannerLab)
+                    break
+                case 19:
+                    smokeCheck(pageStack.currentItem === neoPlannerLab && neoPlannerLab.useLspPlanner, "Clean uses the same LSP planner; current=" + (pageStack.currentItem ? pageStack.currentItem.objectName + ":" + pageStack.currentItem.title : "null") + "; LSP=" + neoPlannerLab.useLspPlanner + "; style=" + rootItem.neoInterfaceStyle)
                     if (!smokeCapture("clean-lsp-planner-wide")) return
                     rootItem.width=390
                     break
-                case 19:
+                case 20:
                     if (!smokeCapture("clean-lsp-planner-small")) return
                     smokeLspProfile=JSON.parse(JSON.stringify(neoPlannerLab.profileData))
                     smokeCheck(neoPlannerLab.planSaveAllowed, "actual LSP Save is available")
                     smokeFind(neoPlannerLab,"NeoSavePlannerPlan").clicked()
                     break
-                case 20:
+                case 21:
                     smokeCheck(NeoDashboard.planCount === 2, "actual LSP Save adds one plan")
                     manager.exportToFile(0, smokeConfig.lspLog, false, false)
                     rootItem.openNeoDiveDetails(NeoDashboard.recentPlans[0].id, false, true)
                     break
-                case 21:
+                case 22:
                     var saved=pageStack.currentItem.currentItem
                     smokeCheck(saved && saved.isLspPlan, "saved LSP identity selects its own view")
                     smokeCheck(JSON.stringify(saved.modelData.planProfile) === JSON.stringify(smokeLspProfile), "saved LSP chart matches calculation")
@@ -285,7 +291,7 @@ DRIVER = r'''
                     neoAppearance.sync()
                     rootItem.showNeoHome()
                     break
-                case 22:
+                case 23:
                     console.log("NEO_UI_PASS styles, themes, sizes, data, navigation, LSP presets/units/save/reopen/export")
                     smokeTimer.stop()
                     Qt.quit()
@@ -350,6 +356,9 @@ def main():
     shutil.copyfile(ROOT / "map-widget/qml/MapWidgetQt6.qml", qml / "MapWidget.qml")
     (qml / "qmldir").write_text("", encoding="utf-8")
     source = (qml / "main.qml").read_text(encoding="utf-8")
+    if os.environ.get("NEO_NATIVE_UI_TRACE_NAVIGATION") == "1":
+        source = source.replace("function showNeoHome() {", "function showNeoHome() { console.log('NEO_HOME_TRACE step=' + rootItem.smokeStep); console.trace()")
+        source = source.replace("function showPageFromDrawer(page) {", "function showPageFromDrawer(page) { console.log('NEO_PAGE_TRACE step=' + rootItem.smokeStep + ' page=' + page.objectName); console.trace()")
     # This input helper exists only in the disposable test copy. Calculation,
     # save, preset persistence, chart/report and restart all use product code.
     planner = qml / "modern/pages/ModernPlannerLab.qml"

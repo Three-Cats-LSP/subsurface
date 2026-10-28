@@ -520,6 +520,9 @@ Kirigami.ScrollablePage {
 		bottomTimeSeconds = result.bottomTimeSeconds || 0
 		decoTimeSeconds = result.decoTimeSeconds || 0
 		if (savePlan === true && result.newDiveId !== undefined && result.newDiveId !== -1) {
+			// The command updates the in-memory model. Use the same dirty/save
+			// path as the editor and import review so the plan reaches local disk.
+			manager.changesNeedSaving()
 			manager.selectDive(result.newDiveId)
 			showPageFromDrawer(modernPlansList)
 		}

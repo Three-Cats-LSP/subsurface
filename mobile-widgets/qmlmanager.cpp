@@ -5,6 +5,7 @@
 #include <QAuthenticator>
 #include <QDesktopServices>
 #include <QTextDocument>
+#include <QAbstractTextDocumentLayout>
 #include <QRegularExpression>
 #include <QApplication>
 #include <QElapsedTimer>
@@ -2389,16 +2390,15 @@ QString QMLManager::exportNeoDiveReportText(const QString &directory, const QStr
 	return output;
 }
 
-static bool writeNeoPdfText(QPdfWriter &writer, const QString &contents)
-
+static bool writeNeoPdfText(QPdfWriter &writer, QPainter &painter, const QString &contents)
 {
-	QPainter painter(&writer);
 	if (!painter.isActive())
 		return false;
 	QFont font = painter.font();
 	font.setPointSize(10);
 	const QRect pageRect = writer.pageLayout().paintRectPixels(writer.resolution());
 	QTextDocument document;
+	document.documentLayout()->setPaintDevice(&writer);
 	document.setDefaultFont(font);
 	document.setDocumentMargin(0);
 	document.setPlainText(contents);
@@ -2412,98 +2412,67 @@ static bool writeNeoPdfText(QPdfWriter &writer, const QString &contents)
 		document.drawContents(&painter, QRectF(0, offset, pageRect.width(), pageHeight));
 		painter.restore();
 		offset += pageHeight;
-		if (offset < document.size().height())
-			writer.newPage();
+		if (offset < document.size().height() && !writer.newPage())
+			return false;
 	}
-	painter.end();
 	return true;
 }
 
-static bool drawNeoPlannerProfile(QPdfWriter &writer, const QVariantList &profile)
+static bool drawNeoPlannerProfile(QPdfWriter &writer, QPainter &painter, const QVariantList &profile)
 {
 	QVector<QVariantMap> samples;
-	qreal maxTime = 0.0;
-	qreal maxDepth = 0.0;
-	for (const QVariant &value : profile) {
-		const QVariantMap sample = value.toMap();
-		if (!sample.contains("time") || !sample.contains("depth"))
-			continue;
+	qreal maxTime = 0, maxDepth = 0;
+	bool hasGf = false, hasSurfaceGf = false, hasTissue = false;
+	for (const auto &value : profile) {
+		const auto sample = value.toMap();
+		if (!sample.contains("time") || !sample.contains("depth")) continue;
 		maxTime = qMax(maxTime, sample.value("time").toDouble());
 		maxDepth = qMax(maxDepth, sample.value("depth").toDouble());
+		hasGf |= sample.contains("gf");
+		hasSurfaceGf |= sample.contains("surfaceGf");
+		hasTissue |= sample.contains("tissueLoad");
 		samples.append(sample);
 	}
-	QPainter painter(&writer);
-	if (!painter.isActive())
-		return false;
+	if (!painter.isActive()) return false;
 	const QRect page = writer.pageLayout().paintRectPixels(writer.resolution());
-	QFont titleFont = painter.font();
-	titleFont.setPointSize(16);
-	titleFont.setBold(true);
-	painter.setFont(titleFont);
-	painter.setPen(QColor("#0f172a"));
+	QFont font = painter.font(); font.setPointSize(16); font.setBold(true);
+	painter.setFont(font); painter.setPen(QColor("#0f172a"));
 	painter.drawText(page.left(), page.top() + 28, QMLManager::tr("SUBSURFACE NEO PLAN PROFILE"));
-	QFont bodyFont = painter.font();
-	bodyFont.setPointSize(9);
-	bodyFont.setBold(false);
-	painter.setFont(bodyFont);
-	painter.setPen(QColor("#475569"));
-	painter.drawText(page.left(), page.top() + 48, QMLManager::tr("Profile, GF, and tissue loading are rendered from the same native planner result as the schedule."));
-	if (samples.size() < 2 || maxTime <= 0.0 || maxDepth <= 0.0) {
+	font.setPointSize(9); font.setBold(false); painter.setFont(font); painter.setPen(QColor("#475569"));
+	painter.drawText(page.left(), page.top() + 48, QMLManager::tr("Profile and available analysis come from the same saved calculation as the schedule."));
+	if (samples.size() < 2 || maxTime <= 0 || maxDepth <= 0) {
 		painter.drawText(page.left(), page.top() + 82, QMLManager::tr("No profile samples were available for this plan."));
-		painter.end();
 		return true;
 	}
-	const qreal chartWidth = page.width();
-	const qreal chartHeight = (page.height() - 145) / 3.0;
-	const QRectF depthChart(page.left(), page.top() + 68, chartWidth, chartHeight - 12);
-	const QRectF gfChart(page.left(), depthChart.bottom() + 32, chartWidth, chartHeight - 12);
-	const QRectF tissueChart(page.left(), gfChart.bottom() + 32, chartWidth, chartHeight - 12);
-	auto drawFrame = [&painter](const QRectF &rect, const QString &label) {
-		painter.setPen(QPen(QColor("#94a3b8"), 1));
-		painter.setBrush(QColor("#f8fafc"));
-		painter.drawRect(rect);
-		painter.setPen(QColor("#475569"));
-		painter.drawText(rect.left() + 8, rect.top() + 16, label);
-	};
-	drawFrame(depthChart, QMLManager::tr("Depth (m)"));
-	drawFrame(gfChart, QMLManager::tr("Gradient factor (%)"));
-	drawFrame(tissueChart, QMLManager::tr("Tissue loading (%)"));
-	QPolygonF depthLine;
-	QPolygonF gfLine;
-	QPolygonF tissueLine;
-	for (const QVariantMap &sample : samples) {
-		const qreal x = depthChart.left() + sample.value("time").toDouble() / maxTime * depthChart.width();
-		const qreal depthY = depthChart.top() + sample.value("depth").toDouble() / maxDepth * depthChart.height();
-		depthLine << QPointF(x, depthY);
-		if (sample.contains("gf")) {
-			const qreal gf = qBound(0.0, sample.value("gf").toDouble(), 100.0);
-			gfLine << QPointF(x, gfChart.bottom() - gf / 100.0 * gfChart.height());
-		}
-		if (sample.contains("tissueLoad")) {
-			const qreal tissueLoad = qBound(0.0, sample.value("tissueLoad").toDouble(), 100.0);
-			tissueLine << QPointF(x, tissueChart.bottom() - tissueLoad / 100.0 * tissueChart.height());
-		}
-	}
+	struct Chart { QString field, label; QColor color; qreal maximum; bool depth, pointsOnly; };
+	const bool metric = prefs.units.length == units::METERS;
+	const QString unit = metric ? QMLManager::tr("m") : QMLManager::tr("ft");
+	QVector<Chart> charts{{"depth", QMLManager::tr("Depth (%1)").arg(unit), QColor("#0891b2"), maxDepth, true, false}};
+	if (hasGf) charts.append({"gf", QMLManager::tr("Gradient factor (%)"), QColor("#7c3aed"), 100, false, false});
+	else if (hasSurfaceGf) charts.append({"surfaceGf", QMLManager::tr("Surface GF at calculated checkpoints (%)"), QColor("#7c3aed"), 100, false, true});
+	if (hasTissue) charts.append({"tissueLoad", QMLManager::tr("Tissue loading (%)"), QColor("#ea580c"), 100, false, false});
+	const qreal chartHeight = (page.height() - 145) / qreal(charts.size());
 	painter.setRenderHint(QPainter::Antialiasing, true);
-	painter.setPen(QPen(QColor("#0891b2"), 2));
-	painter.drawPolyline(depthLine);
-	if (gfLine.size() > 1) {
-		painter.setPen(QPen(QColor("#7c3aed"), 2));
-		painter.drawPolyline(gfLine);
+	for (int i = 0; i < charts.size(); ++i) {
+		const auto &chart = charts[i];
+		const QRectF frame(page.left(), page.top() + 68 + i * chartHeight, page.width(), chartHeight - 28);
+		const QRectF plot = frame.adjusted(8, 26, -8, -10);
+		painter.setPen(QPen(QColor("#94a3b8"), 0.6)); painter.setBrush(QColor("#f8fafc")); painter.drawRect(frame);
+		painter.setPen(QColor("#475569")); painter.drawText(frame.left() + 8, frame.top() + 16, chart.label);
+		painter.drawText(frame.left(), frame.bottom() + 13, QMLManager::tr("0 min"));
+		painter.drawText(frame.right() - 58, frame.bottom() + 13, QMLManager::tr("%1 min").arg(QString::number(maxTime / 60, 'f', 1)));
+		painter.drawText(frame.right() - 65, frame.top() + 16, chart.depth ? QString::number(maxDepth / (metric ? 1000 : 304.8), 'f', 1) + " " + unit : QStringLiteral("100%"));
+		QPolygonF line;
+		for (const auto &sample : samples) {
+			if (!sample.contains(chart.field)) continue;
+			const qreal value = qBound(0.0, sample.value(chart.field).toDouble() / chart.maximum, 1.0);
+			line << QPointF(plot.left() + sample.value("time").toDouble() / maxTime * plot.width(),
+				chart.depth ? plot.top() + value * plot.height() : plot.bottom() - value * plot.height());
+		}
+		painter.setPen(QPen(chart.color, 1.5)); painter.setBrush(chart.color);
+		if (chart.pointsOnly) for (const auto &point : line) painter.drawEllipse(point, 2.5, 2.5);
+		else painter.drawPolyline(line);
 	}
-	if (tissueLine.size() > 1) {
-		painter.setPen(QPen(QColor("#ea580c"), 2));
-		painter.drawPolyline(tissueLine);
-	}
-	painter.setPen(QColor("#475569"));
-	painter.drawText(depthChart.left(), depthChart.bottom() + 15, QMLManager::tr("0 min"));
-	painter.drawText(depthChart.right() - 60, depthChart.bottom() + 15, QMLManager::tr("%1 min").arg(qRound(maxTime / 60.0)));
-	painter.drawText(depthChart.right() - 55, depthChart.top() + 16, QMLManager::tr("%1 m").arg(QString::number(maxDepth / 1000.0, 'f', 1)));
-	painter.drawText(gfChart.left(), gfChart.bottom() + 15, QMLManager::tr("0%"));
-	painter.drawText(gfChart.left(), gfChart.top() + 16, QMLManager::tr("100%"));
-	painter.drawText(tissueChart.left(), tissueChart.bottom() + 15, QMLManager::tr("0%"));
-	painter.drawText(tissueChart.left(), tissueChart.top() + 16, QMLManager::tr("100%"));
-	painter.end();
 	return true;
 }
 
@@ -2514,12 +2483,14 @@ static QString exportNeoPdfDocument(const QString &directory, const QString &con
 		return {};
 	const QString output = targetDirectory.filePath(QString("%1-%2.pdf").arg(filePrefix, QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
 	QPdfWriter writer(output);
+	writer.setResolution(72); // Use page points consistently for font and chart geometry.
 	writer.setTitle(title);
 	writer.setCreator(QStringLiteral("Subsurface Neo"));
 	QPageLayout layout = writer.pageLayout();
 	layout.setMargins(QMarginsF(18, 18, 18, 18));
 	writer.setPageLayout(layout);
-	return writeNeoPdfText(writer, contents) ? output : QString();
+	QPainter painter(&writer);
+	return writeNeoPdfText(writer, painter, contents) ? output : QString();
 }
 
 QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString &contents, const QVariantList &profile)
@@ -2531,15 +2502,19 @@ QString QMLManager::exportNeoPlannerPdf(const QString &directory, const QString 
 	}
 	const QString output = targetDirectory.filePath(QString("subsurface-neo-plan-%1.pdf").arg(QDateTime::currentDateTimeUtc().toString("yyyyMMdd-hhmmss")));
 	QPdfWriter writer(output);
+	writer.setResolution(72); // Use page points consistently for font and chart geometry.
 	writer.setTitle(tr("Subsurface Neo dive plan"));
 	writer.setCreator(QStringLiteral("Subsurface Neo"));
 	QPageLayout layout = writer.pageLayout();
 	layout.setMargins(QMarginsF(18, 18, 18, 18));
 	writer.setPageLayout(layout);
-	const bool profileDrawn = profile.isEmpty() || drawNeoPlannerProfile(writer, profile);
-	if (profileDrawn && !profile.isEmpty())
-		writer.newPage();
-	const bool textWritten = profileDrawn && writeNeoPdfText(writer, contents);
+	// Keep one active painter for the whole document. Starting a second one
+	// restarted QPdfWriter and discarded the already rendered profile page.
+	QPainter painter(&writer);
+	const bool profileDrawn = painter.isActive() && (profile.isEmpty() || drawNeoPlannerProfile(writer, painter, profile));
+	const bool textPageReady = profileDrawn && (profile.isEmpty() || writer.newPage());
+	const bool textWritten = textPageReady && writeNeoPdfText(writer, painter, contents);
+	painter.end();
 	if (!textWritten) {
 		setErrorMessage(tr("Could not write the planner PDF export."));
 		return {};
