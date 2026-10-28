@@ -5,6 +5,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonArray>
+#include <QSet>
 #include <QLockFile>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -41,11 +43,15 @@ CloudHistoryRecord CloudWorkspaceRecord::journal() const
 {
 	CloudHistoryRecord result;
 	const auto ref = reference();
-	const bool copies = string(value, "format") == "neo-workspace-history-development-2";
+	const auto format = string(value, "format");
+	const bool acceptance = format == "neo-workspace-history-development-3";
+	const bool copies = acceptance || format == "neo-workspace-history-development-2";
 	QStringList keys = {"schema", "format", "workspace", "journal"}; if (copies) keys.append("copies");
+	if (acceptance) keys.append("legacy_acceptances");
 	if (!ref.valid() || !fields(value, keys) || value.value("schema") != QJsonValue(4) ||
-	    (!copies && string(value, "format") != "neo-workspace-history-development-1") || !value.value("journal").isObject() ||
-	    (copies && (!value.value("copies").isObject() || value.value("copies").toObject().isEmpty()))) return result;
+	    (!copies && format != "neo-workspace-history-development-1") || !value.value("journal").isObject() ||
+	    (copies && (!value.value("copies").isObject() || value.value("copies").toObject().isEmpty())) ||
+	    (acceptance && (!value.value("legacy_acceptances").isArray() || value.value("legacy_acceptances").toArray().isEmpty()))) return result;
 	auto journal = value.value("journal").toObject();
 	if (!journal.value("tickets").isObject()) return result;
 	for (const auto &key : {"provider", "account", "epoch"}) if (journal.value(QLatin1String(key)) != ref.value.value(QLatin1String(key))) return result;
@@ -80,6 +86,23 @@ bool CloudWorkspaceRecord::valid() const
 		    string(p, "id") == string(ref.value, "root_id") || string(m, "id") == string(ref.value, "root_id") ||
 		    (!string(t, "object").isEmpty() && (string(t, "object") == string(p, "id") || string(t, "object") == string(m, "id")))) return false;
 	}
+	if (string(value, "format") == "neo-workspace-history-development-3") {
+		const auto events = value.value("legacy_acceptances").toArray();
+		const auto history = internal.value.value("history").toArray();
+		if (events.size() > 512) return false;
+		QSet<QString> ids; QString parent;
+		for (const auto &entry : events) {
+			if (!entry.isObject()) return false;
+			const auto event = entry.toObject();
+			const auto id = string(event, "id"), previous = string(event, "parent"), copy = string(event, "ticket"), observedHead = string(event, "head");
+			const int copyIndex = history.indexOf(copy), headIndex = history.indexOf(observedHead);
+			if (!fields(event, {"id", "parent", "ticket", "head"}) || !uuid(id) || ids.contains(id) || tickets.contains(id) ||
+			    internal.value.value("reservations").toObject().contains(id) || previous != parent ||
+			    !uuid(copy) || !uuid(observedHead) || id == copy || id == observedHead || copyIndex < 0 || headIndex < copyIndex ||
+			    string(ticket(copy), "state") != "committed" || !copySource(copy).valid()) return false;
+			ids.insert(id); parent = id;
+		}
+	}
 	return true;
 }
 CloudWorkspaceRecord CloudWorkspaceRecord::create(const CloudWorkspaceReference &reference, const QString &legacyHash)
@@ -105,9 +128,35 @@ bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 	const auto before = previous.value.value("copies").toObject(), after = value.value("copies").toObject();
 	for (auto it = before.begin(); it != before.end(); ++it) if (after.value(it.key()) != it.value()) return false;
 	for (auto it = after.begin(); it != after.end(); ++it) if (!before.contains(it.key()) && !previous.ticket(it.key()).isEmpty()) return false;
+	const auto format = string(value, "format"), oldFormat = string(previous.value, "format");
+	if (oldFormat == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-3") {
+		if (format != "neo-workspace-history-development-3" ||
+		    (oldFormat != "neo-workspace-history-development-2" && oldFormat != "neo-workspace-history-development-3")) return false;
+		const auto oldEvents = previous.value.value("legacy_acceptances").toArray(), events = value.value("legacy_acceptances").toArray();
+		if (events.size() < oldEvents.size() || (oldFormat != format && events.isEmpty())) return false;
+		for (int i = 0; i < oldEvents.size(); ++i) if (events[i] != oldEvents[i]) return false;
+		return true;
+	}
 	return value.value("format") == previous.value.value("format") ||
-		(string(previous.value, "format") == "neo-workspace-history-development-1" && string(value, "format") == "neo-workspace-history-development-2" &&
+		(oldFormat == "neo-workspace-history-development-1" && format == "neo-workspace-history-development-2" &&
 		 journal().value.value("sequence").toInt() > previous.journal().value.value("sequence").toInt());
+}
+QJsonObject CloudWorkspaceRecord::latestLegacyAcceptance() const
+{
+	const auto events = value.value("legacy_acceptances").toArray();
+	return events.isEmpty() ? QJsonObject() : events.last().toObject();
+}
+bool CloudWorkspaceRecord::acceptLegacyCopy(const QString &id, const QString &expectedAcceptance, const QString &expectedHead,
+	const QString &copyTicket, const CloudWorkspaceCopySource &observed)
+{
+	if (!valid() || !uuid(id) || expectedHead != head() || expectedAcceptance != string(latestLegacyAcceptance(), "id") ||
+	    !observed.valid() || observed.json() != copySource(copyTicket).json() || string(ticket(copyTicket), "state") != "committed") return false;
+	auto next = *this; auto events = value.value("legacy_acceptances").toArray();
+	if (events.size() >= 512) return false;
+	events.append(QJsonObject{{"id", id}, {"parent", expectedAcceptance}, {"ticket", copyTicket}, {"head", expectedHead}});
+	next.value["format"] = "neo-workspace-history-development-3"; next.value["legacy_acceptances"] = events;
+	if (!next.valid() || !next.follows(*this)) return false;
+	value = next.value; return true;
 }
 bool CloudWorkspaceRecord::registerCopy(const QString &id, const QString &parent, const CloudWorkspaceCopySource &source)
 {
@@ -115,7 +164,8 @@ bool CloudWorkspaceRecord::registerCopy(const QString &id, const QString &parent
 	if (!valid() || !source.matches(string(ref.value, "provider"), string(ref.value, "account")) ||
 	    !next.registerUpload(id, parent, string(payload, "sha256"), qint64(payload.value("bytes").toDouble()))) return false;
 	auto copies = value.value("copies").toObject(); copies[id] = source.value;
-	next.value["format"] = "neo-workspace-history-development-2"; next.value["copies"] = copies;
+	if (string(value, "format") != "neo-workspace-history-development-3") next.value["format"] = "neo-workspace-history-development-2";
+	next.value["copies"] = copies;
 	if (!next.valid() || !next.follows(*this)) return false;
 	value = next.value; return true;
 }

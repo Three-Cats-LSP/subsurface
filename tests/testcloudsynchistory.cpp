@@ -1310,6 +1310,62 @@ void TestCloudSyncHistory::workspaceCopyRecord()
 	if (mode == 17) { QTemporaryDir dir; CloudWorkspaceAuthority cp(dir.filePath("checkpoint.json"), ref); QVERIFY(cp.observe(root, "root-revision")); QVERIFY(!cp.observe(initial, "initial-revision", true)); CloudWorkspaceAuthority restarted(dir.filePath("checkpoint.json"), ref); QVERIFY(restarted.load()); QCOMPARE(restarted.record().json(), root.json()); }
 	if (mode == 20) { auto other = CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, epoch, google ? "other-root" : "id:other-root"), CloudSyncManifest::sha256("genesis")); QVERIFY(other.registerCopy(ticket, {}, source)); QVERIFY(other.reference().payloadName(ticket) != ref.payloadName(ticket)); QVERIFY(!root.follows(other)); }
 }
+void TestCloudSyncHistory::workspaceLegacyAcceptance_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"accept-and-aba", "stale-acceptance", "stale-head", "foreign-source", "unknown-copy", "reused-event", "pending-copy",
+		"removed-event", "changed-event", "reordered-events", "downgrade", "wrong-parent", "unknown-field", "foreign-head", "unknown-ticket", "checkpoint-rollback"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-legacy-acceptance-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceLegacyAcceptance()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed();
+	const auto sourceA = copySource(n, google); QVERIFY(sourceA.valid());
+	const auto provider = QString(google ? "google-drive" : "dropbox");
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "accept-root" : "id:accept-root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	const auto copyA = uid(), eventA = uid(), copyB = uid(), eventB = uid(), eventAgain = uid();
+	QVERIFY(root.registerCopy(copyA, {}, sourceA)); const auto registered = root;
+	if (mode == 6) { QVERIFY(!root.acceptLegacyCopy(eventA, {}, {}, copyA, sourceA)); QCOMPARE(root.json(), registered.json()); return; }
+	QVERIFY(root.completeUpload(copyA, google ? "copy-a" : "id:copy-a", "copy-rev-a")); QVERIFY(root.publish(copyA, {}));
+	const auto beforeAcceptance = root;
+	if (mode == 1 || mode == 2 || mode == 3 || mode == 4) {
+		auto observed = sourceA; if (mode == 3) observed.value["account"] = CloudSyncManifest::sha256("other-account");
+		QVERIFY(!root.acceptLegacyCopy(eventA, mode == 1 ? uid() : QString(), mode == 2 ? uid() : root.head(), mode == 4 ? uid() : copyA, observed));
+		QCOMPARE(root.json(), beforeAcceptance.json()); return;
+	}
+	QVERIFY(root.acceptLegacyCopy(eventA, {}, copyA, copyA, sourceA)); const auto acceptedA = root;
+	QVERIFY(root.valid()); QVERIFY(root.follows(beforeAcceptance)); QVERIFY(!beforeAcceptance.follows(root));
+	QCOMPARE(root.latestLegacyAcceptance().value("id").toString(), eventA);
+	QVERIFY(!CloudHistoryRecord::parse(root.json()).valid()); QCOMPARE(CloudWorkspaceRecord::parse(root.json()).json(), root.json());
+	if (mode == 5) { QVERIFY(!root.acceptLegacyCopy(eventA, eventA, copyA, copyA, sourceA)); QCOMPARE(root.json(), acceptedA.json()); return; }
+	n.files[0].rev = "new-legacy-revision"; const auto sourceB = copySource(n, google); QVERIFY(sourceB.valid()); QVERIFY(sourceB.json() != sourceA.json());
+	QVERIFY(root.registerCopy(copyB, copyA, sourceB)); QVERIFY(root.completeUpload(copyB, google ? "copy-b" : "id:copy-b", "copy-rev-b")); QVERIFY(root.publish(copyB, copyA));
+	// Merely protecting another branch cannot silently accept it.
+	QCOMPARE(root.latestLegacyAcceptance().value("id").toString(), eventA); QVERIFY(root.follows(acceptedA));
+	QVERIFY(root.acceptLegacyCopy(eventB, eventA, copyB, copyB, sourceB)); const auto acceptedB = root;
+	QVERIFY(root.acceptLegacyCopy(eventAgain, eventB, copyB, copyA, sourceA)); const auto acceptedAgain = root;
+	QVERIFY(root.follows(acceptedB)); QVERIFY(root.follows(acceptedA)); QVERIFY(!acceptedB.follows(root));
+	QCOMPARE(root.latestLegacyAcceptance().value("ticket").toString(), copyA);
+	if (mode == 15) {
+		QTemporaryDir dir; CloudWorkspaceAuthority checkpoint(dir.filePath("root.json"), ref);
+		QVERIFY(checkpoint.observe(root, "latest")); QVERIFY(!checkpoint.observe(acceptedB, "older", true));
+		CloudWorkspaceAuthority restarted(dir.filePath("root.json"), ref); QVERIFY(restarted.load()); QCOMPARE(restarted.record().json(), root.json()); return;
+	}
+	if (mode == 0) return;
+	auto events = root.value["legacy_acceptances"].toArray();
+	if (mode == 7) events.removeLast();
+	if (mode == 8) { auto event = events[0].toObject(); event["head"] = copyB; events[0] = event; }
+	if (mode == 9) { auto first = events[0]; events[0] = events[1]; events[1] = first; }
+	if (mode == 10) { root.value.remove("legacy_acceptances"); root.value["format"] = "neo-workspace-history-development-2"; QVERIFY(root.valid()); QVERIFY(!root.follows(acceptedAgain)); return; }
+	if (mode == 11) { auto event = events[1].toObject(); event["parent"] = uid(); events[1] = event; }
+	if (mode == 12) { auto event = events[1].toObject(); event["unknown"] = true; events[1] = event; }
+	if (mode == 13) { auto event = events[1].toObject(); event["head"] = uid(); events[1] = event; }
+	if (mode == 14) { auto event = events[1].toObject(); event["ticket"] = uid(); events[1] = event; }
+	root.value["legacy_acceptances"] = events;
+	if (mode == 7 || mode == 8) { QVERIFY(root.valid()); QVERIFY(!root.follows(acceptedAgain)); }
+	else QVERIFY(!root.valid());
+}
 void TestCloudSyncHistory::workspaceCopyIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");

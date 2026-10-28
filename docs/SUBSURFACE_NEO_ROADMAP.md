@@ -528,7 +528,7 @@ No upstream sync that materially changes decompression/planner output should be 
 
 **Exit:** Neo can plan recreational and advanced technical dives using the strongest existing Subsurface calculations plus validated LSP+-derived improvements, with gas/reserve analysis, contingencies, visualization and high-quality schedule exports.
 
-**Status:** The native Neo planner, profile analysis, contingency workflow, personal presets, versioned Subsurface-native baseline, plan exports, and a native planner-regression CI gate are complete on `modern-ui`. Named third-party compatibility profiles remain deliberately incomplete: the audited external manifests contain schedule-affecting assumptions that the current Subsurface planner does not expose, and no numerical reference-fixture/tolerance suite exists yet to support a compatibility claim. The future WebAssembly test pages will run this same native engine, not a JavaScript decompression implementation.
+**Status:** The native Neo planner, profile analysis, contingency workflow, personal presets, versioned Subsurface-native baseline, plan exports and native regression gate are implemented. Five recorded Windows-native schedule/runtime/OTU fixtures with explicit assumptions and tolerances passed the desktop native suite; the mobile-target suite is still being validated. These are regression baselines from the same Subsurface engine. Named third-party compatibility profiles remain incomplete because the audited external manifests contain schedule-affecting assumptions the current Subsurface planner does not expose. Broader reference coverage and physical Android comparisons remain release gates.
 
 ---
 

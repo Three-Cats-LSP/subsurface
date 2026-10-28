@@ -44,6 +44,8 @@ private slots:
 	void workspaceSourceReview();
 	void workspaceCopyRecord_data();
 	void workspaceCopyRecord();
+	void workspaceLegacyAcceptance_data();
+	void workspaceLegacyAcceptance();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();

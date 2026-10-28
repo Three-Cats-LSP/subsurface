@@ -57,6 +57,11 @@ public:
 	QString head() const;
 	QJsonObject ticket(const QString &id) const;
 	CloudWorkspaceCopySource copySource(const QString &ticket) const;
+	// Append a separately confirmed legacy observation. The caller must freshly
+	// verify the provider/account and exact source immediately before the CAS.
+	QJsonObject latestLegacyAcceptance() const;
+	bool acceptLegacyCopy(const QString &id, const QString &expectedAcceptance, const QString &expectedHead,
+		const QString &copyTicket, const CloudWorkspaceCopySource &observed);
 	bool registerCopy(const QString &id, const QString &expectedHead, const CloudWorkspaceCopySource &source);
 	bool registerUpload(const QString &id, const QString &expectedHead, const QString &hash, qint64 bytes,
 		const QString &restoreSource = {}, const QString &reservation = {});
