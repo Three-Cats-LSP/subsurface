@@ -74,6 +74,7 @@ private:
 	void fail(bool rejected = false);
 	void readRoot(Step next);
 	void received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
+	void receivedRoot(const QJsonObject &value, const QString &version);
 	void writeRoot(const CloudWorkspaceRecord &next, const std::function<void()> &then);
 	void continueUpload();
 	void prepareUpload();
@@ -81,6 +82,7 @@ private:
 	void publish();
 	void complete();
 	CloudSyncFileStore files;
+	CloudWorkspaceOpen rootReader;
 	QTimer deadline, startupRetry;
 	QElapsedTimer startupWait;
 	std::unique_ptr<CloudWorkspaceUploadIntent> intent;

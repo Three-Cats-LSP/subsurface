@@ -372,8 +372,11 @@ bool CloudWorkspaceCreationIntent::reload()
 	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && readUnlocked() && !saved.isEmpty();
 }
 
-CloudWorkspaceCreate::CloudWorkspaceCreate(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
+CloudWorkspaceCreate::CloudWorkspaceCreate(QNetworkAccessManager *network, QObject *parent) :
+	QObject(parent), files(network, this), rootReader(std::make_unique<CloudWorkspaceOpen>(network, this))
 {
+	connect(rootReader.get(), &CloudWorkspaceOpen::finished, this, &CloudWorkspaceCreate::receivedRoot);
+	connect(rootReader.get(), &CloudWorkspaceOpen::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	files.setStrictReads(true); files.setResponseLimit(RootLimit);
 	deadline.setSingleShot(true); deadline.setInterval(180000);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
@@ -395,7 +398,7 @@ CloudWorkspaceCreate::CloudWorkspaceCreate(QNetworkAccessManager *network, QObje
 CloudWorkspaceCreate::~CloudWorkspaceCreate() { cancel(); }
 void CloudWorkspaceCreate::cancel()
 {
-	step = Step::Idle; deadline.stop(); files.cancel(provider); intent.reset(); scopeCurrent = {}; token.clear(); checkpointDirectory.clear(); originHash.clear();
+	step = Step::Idle; deadline.stop(); files.cancel(provider); rootReader->cancel(); intent.reset(); scopeCurrent = {}; token.clear(); checkpointDirectory.clear(); originHash.clear();
 }
 void CloudWorkspaceCreate::fail(bool rejected)
 {
@@ -448,6 +451,19 @@ void CloudWorkspaceCreate::received(CloudSyncProviderType type, const QString &n
 		step = Step::Bind; if (current()) files.uploadIdentity(provider, token, name, initial.json(), version, id); return;
 	}
 	const auto root = CloudWorkspaceRecord::parse(bytes);
+	if (root.valid()) { receivedRoot(root.value, version); return; }
+	if (CloudWorkspaceRecord::archivePointer(bytes, ref).isEmpty() || (intent->state() != "binding" && intent->state() != "bound")) { fail(); return; }
+	rootReader->start(token, string(ref.value, "provider"), string(ref.value, "account"), ref, scopeCurrent,
+		saved.record().valid() ? saved.record() : initial);
+}
+void CloudWorkspaceCreate::receivedRoot(const QJsonObject &value, const QString &version)
+{
+	if (!current() || !intent->reload() || (step != Step::Read && step != Step::Confirm)) { fail(); return; }
+	const auto ref = intent->reference();
+	const auto path = QDir(checkpointDirectory).filePath(ref.key() + ".json"); CloudWorkspaceAuthority saved(path, ref);
+	if (!saved.load()) { fail(); return; }
+	CloudWorkspaceRecord root; root.value = value;
+	const auto initial = CloudWorkspaceRecord::create(ref, originHash);
 	if ((intent->state() != "binding" && intent->state() != "bound") || !root.follows(initial) || (saved.record().valid() && !root.follows(saved.record())) || !current() || !saved.observe(root, version, intent->state() == "bound" || saved.record().valid()) || !current() || !intent->bind()) { fail(); return; }
 	const auto confirmed = root.value; cancel(); emit finished(confirmed, version, path);
 }

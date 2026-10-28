@@ -109,6 +109,7 @@ public:
 	bool workspaceWrites = false;
 	bool workspaceCopies = false;
 	bool workspaceUploads = false;
+	QJsonArray workspacePages;
 	QByteArray json(const QJsonObject &o) { return QJsonDocument(o).toJson(QJsonDocument::Compact); }
 	int find(const QString &name) const { for (int i = 0; i < files.size(); ++i) if (files[i].name == name) return i; return -1; }
 	void add(const QString &name, const QByteArray &data) {
@@ -182,7 +183,7 @@ protected:
 				if ((workspaceCopies || workspaceUploads) && name.startsWith("subsurface-neo-workspace-")) {
 					const auto ticket = name.chopped(4).right(36); bool registered = false;
 					for (const auto &f : files) {
-						const auto control = CloudWorkspaceRecord::parse(f.data); if (!control.valid() || control.reference().payloadName(ticket) != name) continue;
+						const auto control = CloudWorkspaceRecord::parsePages(f.data, workspacePages); if (!control.valid() || control.reference().payloadName(ticket) != name) continue;
 						const auto t = control.ticket(ticket); registered |= t["state"] == QJsonValue("registered") && t["sha256"] == QJsonValue(CloudSyncManifest::sha256(data)) &&
 							(workspaceUploads ? t["bytes"].toDouble() == data.size() : control.copySource(ticket).valid());
 					}
@@ -4173,6 +4174,73 @@ ReadFixture readFixture(Network &n, bool google, bool copied = false, const QByt
 	return f;
 }
 }
+void TestCloudSyncHistory::workspacePagedWorkflow_data()
+{
+	QTest::addColumn<bool>("google");QTest::addColumn<int>("mode");
+	const QStringList modes={"upload-restart","upload-lost-ack","read-release-restart","missing-archive","legacy-acceptance","existing-copy","creator-restart","creator-missing-archive"};
+	for(bool google:{false,true})for(int mode=0;mode<modes.size();++mode)QTest::newRow(qPrintable(QString("%1-paged-flow-%2").arg(google).arg(modes[mode])))<<google<<mode;
+}
+void TestCloudSyncHistory::workspacePagedWorkflow()
+{
+	QFETCH(bool,google);QFETCH(int,mode);Network n;auto f=readFixture(n,google,true);QVERIFY(f.root.valid());
+	n.workspaceUploads=n.workspaceCopies=true;
+	for(int i=0;i<2;++i){
+		const auto nonce=uid();n.add(CloudWorkspaceRecord::archiveName(f.reference,nonce),f.root.json());const auto &page=n.files.last();
+		QVERIFY(f.root.archiveTo(f.root.archivePin(nonce,google?page.id.mid(3):page.id,page.rev)));
+	}
+	n.workspacePages=f.root.archivePages();n.files[2].data=f.root.json();n.files[2].rev+="-archived";
+	const auto before=n.files;
+	QTemporaryDir directory;QVERIFY(directory.isValid());const auto choiceFile=directory.filePath("choice.json"),cpFile=directory.filePath(f.reference.key()+".json"),intentFile=directory.filePath("intent.json");
+	const QString provider=google?"google-drive":"dropbox";
+	CloudWorkspaceSelection choice(choiceFile,provider,Account);QVERIFY(choice.select({},f.reference));const auto choiceVersion=choice.version();
+	CloudWorkspaceAuthority authority(cpFile,f.reference);QVERIFY(authority.observe(f.root,n.files[2].rev));
+	const auto guard=[&]{return n.guard;};const auto ticket=uid();
+	if(mode<=1){
+		if(mode==1)n.loseWriteAck=true;
+		CloudWorkspaceUpload upload(&n);QSignalSpy done(&upload,&CloudWorkspaceUpload::finished),errors(&upload,&CloudWorkspaceUpload::failed);
+		auto start=[&]{upload.start("token",f.reference,A,choiceFile,choiceVersion,cpFile,intentFile,ticket,f.head,guard);};
+		start();QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),1);
+		const auto mutations=n.mutations;start();QTRY_COMPARE(done.size(),2);QCOMPARE(n.mutations,mutations);
+	}else if(mode<=3){
+		if(mode==3){const auto name=n.workspacePages[0].toObject()["pin"].toObject()["name"].toString();n.files.removeAt(n.find(name));}
+		CloudWorkspaceRead read(&n);QSignalSpy done(&read,&CloudWorkspaceRead::finished),errors(&read,&CloudWorkspaceRead::failed),released(&read,&CloudWorkspaceRead::released);
+		read.start(CloudWorkspaceRead::Action::Read,"token",f.reference,f.commit,ticket,choiceFile,choiceVersion,cpFile,intentFile,guard);
+		QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),int(mode==2));
+		if(mode==2){
+			QCOMPARE(done.first()[4].toByteArray(),A);
+			read.start(CloudWorkspaceRead::Action::Release,"token",f.reference,f.commit,ticket,choiceFile,choiceVersion,cpFile,intentFile,guard);
+			QTRY_COMPARE(released.size(),1);const auto mutations=n.mutations;
+			read.start(CloudWorkspaceRead::Action::Release,"token",f.reference,f.commit,ticket,choiceFile,choiceVersion,cpFile,intentFile,guard);
+			QTRY_COMPARE(released.size(),2);QCOMPARE(n.mutations,mutations);
+		}else{QCOMPARE(n.mutations,0);QVERIFY(n.allowed);return;}
+	}else if(mode==4){
+		CloudWorkspaceAcceptance acceptance(&n);QSignalSpy done(&acceptance,&CloudWorkspaceAcceptance::finished),errors(&acceptance,&CloudWorkspaceAcceptance::failed);
+		acceptance.start("token",f.reference,copySource(n,google),choiceFile,choiceVersion,cpFile,intentFile,CloudSyncManifest::sha256(A),ticket,{},f.head,f.commit,guard);
+		QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),1);
+	}else if(mode==5){
+		const auto source=copySource(n,google);const auto proof=directory.filePath("source.json");QVERIFY(source.preserve(proof));
+		CloudWorkspaceCopy copy(&n);QSignalSpy done(&copy,&CloudWorkspaceCopy::finished),errors(&copy,&CloudWorkspaceCopy::failed);
+		copy.start("token",f.reference,source,choiceFile,choiceVersion,cpFile,intentFile,proof,ticket,f.head,guard);
+		QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),1);QCOMPARE(n.mutations,0);
+	}else{
+		const auto nonce=uid(),epoch=f.reference.value["epoch"].toString(),origin=CloudSyncManifest::sha256("genesis");
+		CloudWorkspaceCreationIntent intent(intentFile,provider,Account,epoch,nonce,origin);
+		QVERIFY(intent.prepare());QVERIFY(intent.submit());QVERIFY(intent.identify(f.reference.value["root_id"].toString()));QVERIFY(intent.beginBinding());QVERIFY(intent.bind());
+		if(mode==7){const auto name=n.workspacePages[0].toObject()["pin"].toObject()["name"].toString();n.files.removeAt(n.find(name));}
+		CloudWorkspaceCreate creator(&n);QSignalSpy done(&creator,&CloudWorkspaceCreate::finished),errors(&creator,&CloudWorkspaceCreate::failed);
+		creator.start(intentFile,directory.path(),provider,"token",Account,epoch,nonce,origin,guard);
+		QTRY_COMPARE(done.size()+errors.size(),1);QCOMPARE(done.size(),int(mode==6));QCOMPARE(n.mutations,0);
+		if(mode==7){QVERIFY(n.allowed);return;}
+	}
+	const auto completed=CloudWorkspaceRecord::parsePages(n.files[2].data,n.workspacePages);QVERIFY(completed.valid());QVERIFY(completed.follows(f.root));
+	CloudWorkspaceAuthority restart(cpFile,f.reference);QVERIFY(restart.load());QCOMPARE(restart.record().value,completed.value);
+	QCOMPARE(completed.ticket(f.pending),f.root.ticket(f.pending));QCOMPARE(completed.copySource(f.commit).value,f.root.copySource(f.commit).value);
+	if(mode<=1)QCOMPARE(completed.head(),ticket);else QCOMPARE(completed.head(),f.head);
+	QCOMPARE(n.files[0].data,before[0].data);QCOMPARE(n.files[1].data,before[1].data);
+	for(const auto &entry:n.workspacePages){const auto page=entry.toObject();QCOMPARE(n.content(page["pin"].toObject()["name"].toString()),QByteArray::fromBase64(page["data"].toString().toLatin1()));}
+	QVERIFY(n.allowed);
+}
+
 void TestCloudSyncHistory::workspaceReadIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");

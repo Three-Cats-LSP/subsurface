@@ -57,6 +57,7 @@ private:
 	void fail(bool rejected = false);
 	void readRoot(Step next);
 	void received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
+	void receivedRoot(const QJsonObject &value, const QString &version);
 	void writeRoot(const CloudWorkspaceRecord &next);
 	QJsonObject target() const;
 	bool pinned() const;
@@ -66,6 +67,7 @@ private:
 	void release();
 	void finishRelease();
 	CloudSyncFileStore files;
+	CloudWorkspaceOpen rootReader;
 	QTimer deadline, startupRetry;
 	QElapsedTimer startupWait;
 	CloudWorkspaceReference reference;

@@ -73,8 +73,10 @@ bool CloudWorkspaceAcceptanceIntent::committed() { return advance({"submitted"},
 bool CloudWorkspaceAcceptanceIntent::completed() { return advance({"committed"}, "completed"); }
 
 CloudWorkspaceAcceptance::CloudWorkspaceAcceptance(QNetworkAccessManager *network, QObject *parent) :
-	QObject(parent), files(network, this), sourceReview(network, this)
+	QObject(parent), files(network, this), rootReader(network, this), sourceReview(network, this)
 {
+	connect(&rootReader, &CloudWorkspaceOpen::finished, this, &CloudWorkspaceAcceptance::receivedRoot);
+	connect(&rootReader, &CloudWorkspaceOpen::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	files.setStrictReads(true); deadline.setSingleShot(true); deadline.setInterval(180000); startupRetry.setSingleShot(true);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
 	connect(&startupRetry, &QTimer::timeout, this, &CloudWorkspaceAcceptance::begin);
@@ -120,7 +122,7 @@ CloudWorkspaceAcceptance::CloudWorkspaceAcceptance(QNetworkAccessManager *networ
 CloudWorkspaceAcceptance::~CloudWorkspaceAcceptance() { cancel(); }
 void CloudWorkspaceAcceptance::cancel()
 {
-	++generation; step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); sourceReview.cancel(); intent.reset(); operationLock.reset();
+	++generation; step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); sourceReview.cancel(); intent.reset(); operationLock.reset();
 	reference.value = {}; source.value = {}; root.value = {}; pending.value = {}; sourceChanged = false; missing = false; token.clear(); choiceFile.clear(); choiceVersion.clear();
 	checkpointFile.clear(); intentFile.clear(); localHash.clear(); event.clear(); previous.clear(); expectedHead.clear(); copyTicket.clear(); rootVersion.clear(); scopeCurrent = {};
 }
@@ -194,8 +196,10 @@ void CloudWorkspaceAcceptance::begin()
 void CloudWorkspaceAcceptance::readRoot(Step next)
 {
 	if (!current()) return;
-	step = next; files.setResponseLimit(1024 * 1024 + 4096);
-	files.downloadIdentity(provider, token, reference.rootName(), text(reference.value, "root_id"));
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
+	if (!authority.load() || !authority.record().valid()) { fail(); return; }
+	step = next;
+	rootReader.start(token, text(reference.value, "provider"), text(reference.value, "account"), reference, scopeCurrent, authority.record());
 }
 bool CloudWorkspaceAcceptance::eventPresent(const CloudWorkspaceRecord &observed) const
 {
@@ -221,8 +225,13 @@ void CloudWorkspaceAcceptance::received(const QString &name, const QByteArray &b
 		const bool latest = text(root.latestLegacyAcceptance(), "id") == event, changed = sourceChanged;
 		cancel(); emit finished(result, v, eventId, latest, changed); return;
 	}
-	if (name != reference.rootName() || id != text(reference.value, "root_id") || version.isEmpty()) { fail(); return; }
-	auto observed = CloudWorkspaceRecord::parse(bytes); CloudWorkspaceAuthority authority(checkpointFile, reference);
+	fail(); // Only payload callbacks use this transport; roots use rootReader.
+}
+void CloudWorkspaceAcceptance::receivedRoot(const QJsonObject &value, const QString &version)
+{
+	if (!current() || !intent->inspect()) { fail(); return; }
+	CloudWorkspaceRecord observed; observed.value = value;
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
 	if (!observed.valid() || observed.reference().value != reference.value ||
 	    (step == Step::ConfirmRoot && pending.valid() && !observed.follows(pending)) ||
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }

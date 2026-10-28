@@ -1,5 +1,19 @@
 # Windows cloud reliability continuation
 
+**Paged-history write/read workflow integration candidate.**
+Upload, reserved read/release, copy and legacy acceptance now use the same
+exact-root/page verifier as workspace join. Existing root CAS, reviewed-head,
+selection, scope and durable intent checks remain in force. Creator restart can
+also reopen a bound paged root without resetting or rewriting it. Sixteen new
+provider-paired workflow rows exercise publication/restart, lost root acknowledgement,
+read/release idempotence, legacy acceptance, existing-copy reuse, creator restart
+and missing-page refusal while retaining archived pages, pending tickets and
+original source payloads. These changes require the next targeted protocol run;
+archive creation/automatic rollover and bounded receipts are still open.
+
+PDF margin correction **bea47f4c8** is in matching Windows run **40737335739**.
+Resume that run; do not duplicate it. No live cloud writes have been sent.
+
 **Planner Windows/PDF evidence, 29 October JST.**
 Windows **40732903652 at 844260acd PASSED** packaged launch, Clean/Modern,
 actual LSP Save/reopen/restart and TXT/PDF content checks. Verified UI evidence

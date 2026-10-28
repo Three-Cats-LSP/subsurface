@@ -99,8 +99,10 @@ bool CloudWorkspaceUploadIntent::verify(const QString &version) { return advance
 bool CloudWorkspaceUploadIntent::upload() { return advance("verified", "uploaded"); }
 bool CloudWorkspaceUploadIntent::commit() { return advance("uploaded", "committed"); }
 
-CloudWorkspaceUpload::CloudWorkspaceUpload(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this)
+CloudWorkspaceUpload::CloudWorkspaceUpload(QNetworkAccessManager *network, QObject *parent) : QObject(parent), files(network, this), rootReader(network, this)
 {
+	connect(&rootReader, &CloudWorkspaceOpen::finished, this, &CloudWorkspaceUpload::receivedRoot);
+	connect(&rootReader, &CloudWorkspaceOpen::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	files.setStrictReads(true); deadline.setSingleShot(true); deadline.setInterval(600000); startupRetry.setSingleShot(true);
 	connect(&startupRetry, &QTimer::timeout, this, &CloudWorkspaceUpload::begin);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
@@ -122,7 +124,7 @@ CloudWorkspaceUpload::CloudWorkspaceUpload(QNetworkAccessManager *network, QObje
 CloudWorkspaceUpload::~CloudWorkspaceUpload() { cancel(); }
 void CloudWorkspaceUpload::cancel()
 {
-	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); intent.reset(); reference.value = {}; root.value = {}; pending.value = {};
+	step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); rootReader.cancel(); intent.reset(); reference.value = {}; root.value = {}; pending.value = {};
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); rootVersion.clear(); payloadHash.clear(); payload.clear(); scopeCurrent = {}; continuation = {};
 	initialIntentFile.clear(); initialTicket.clear(); initialParent.clear(); readIntentFile.clear(); restoreProof = {}; sourceContinuation = {};
 }
@@ -236,7 +238,10 @@ void CloudWorkspaceUpload::begin()
 void CloudWorkspaceUpload::readRoot(Step next)
 {
 	if (!current()) return;
-	step = next; files.setResponseLimit(1024 * 1024 + 4096); files.downloadIdentity(provider, token, reference.rootName(), text(reference.value, "root_id"));
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
+	if (!authority.load() || !authority.record().valid()) { fail(); return; }
+	step = next;
+	rootReader.start(token, text(reference.value, "provider"), text(reference.value, "account"), reference, scopeCurrent, authority.record());
 }
 void CloudWorkspaceUpload::received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id)
 {
@@ -261,8 +266,13 @@ void CloudWorkspaceUpload::received(const QString &name, const QByteArray &bytes
 		auto next = root; if (!next.completeUpload(intent->ticket(), id, version)) { fail(); return; }
 		writeRoot(next, [this] { uploaded(); }); return;
 	}
-	if (name != reference.rootName() || id != text(reference.value, "root_id") || !revision(version)) { fail(); return; }
-	const auto observed = CloudWorkspaceRecord::parse(bytes); CloudWorkspaceAuthority authority(checkpointFile, reference);
+	fail(); // Only payload callbacks use this transport; roots use rootReader.
+}
+void CloudWorkspaceUpload::receivedRoot(const QJsonObject &value, const QString &version)
+{
+	if (!current() || !intent->reload()) { fail(); return; }
+	CloudWorkspaceRecord observed; observed.value = value;
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
 	if (!observed.valid() || observed.reference().value != reference.value || (step == Step::ConfirmRoot && !observed.follows(pending)) ||
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;

@@ -36,6 +36,8 @@ private slots:
 	void workspacePagedOpen();
 	void workspacePagedAuthority_data();
 	void workspacePagedAuthority();
+	void workspacePagedWorkflow_data();
+	void workspacePagedWorkflow();
 	void workspaceAuthority_data();
 	void workspaceAuthority();
 	void workspaceCreationIntent_data();

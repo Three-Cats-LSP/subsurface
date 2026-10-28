@@ -137,6 +137,8 @@ private:
 	QJsonObject scope, saved;
 };
 
+class CloudWorkspaceOpen;
+
 // Create/bind an empty workspace; no payload publication, local selection,
 // migration, XML replacement or credentials. The caller supplies verified scope.
 class CloudWorkspaceCreate : public QObject {
@@ -155,8 +157,10 @@ private:
 	bool current();
 	void read(Step step);
 	void received(CloudSyncProviderType provider, const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
+	void receivedRoot(const QJsonObject &value, const QString &version);
 	void fail(bool rejected = false);
 	CloudSyncFileStore files;
+	std::unique_ptr<CloudWorkspaceOpen> rootReader;
 	QTimer deadline;
 	std::unique_ptr<CloudWorkspaceCreationIntent> intent;
 	std::function<bool()> scopeCurrent;
