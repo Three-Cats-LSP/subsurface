@@ -18,8 +18,12 @@ constexpr int RootLimit = CloudWorkspaceRecord::WireLimit;
 constexpr int LegacyCheckpointLimit = RootLimit + 2048;
 constexpr int CheckpointLimit = 4 * CloudWorkspaceRecord::ExpandedLimit + 4096;
 bool providerValid(const QString &s) { return s == "google-drive" || s == "dropbox"; }
-bool hash(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(s).hasMatch(); }
-bool uuid(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$")).match(s).hasMatch(); }
+bool hash(const QString &s) { static const QRegularExpression pattern(QStringLiteral("^[a-f0-9]{64}$")); return pattern.match(s).hasMatch(); }
+bool uuid(const QString &s) { return CloudHistoryRecord::validEpoch(s); }
+bool objectId(const QString &provider, const QString &id) {
+	static const QRegularExpression google(QStringLiteral("^[A-Za-z0-9_-]+$")), dropbox(QStringLiteral("^id:[A-Za-z0-9_-]+$"));
+	return id.size() <= 512 && (provider == "google-drive" ? google : dropbox).match(id).hasMatch();
+}
 bool versionValid(const QString &s) { return !s.isEmpty() && s.size() <= 512 && !s.contains(QChar::Null) && !s.contains('\r') && !s.contains('\n'); }
 bool fields(const QJsonObject &o, const QStringList &keys) {
 	if (o.size() != keys.size()) return false;
@@ -58,9 +62,12 @@ CloudHistoryRecord CloudWorkspaceRecord::journal(bool expanded) const
 	if (!journal.value("tickets").isObject()) return result;
 	for (const auto &key : {"provider", "account", "epoch"}) if (journal.value(QLatin1String(key)) != ref.value.value(QLatin1String(key))) return result;
 	auto tickets = journal.value("tickets").toObject();
+	// The reference is already valid. Compute its physical ownership prefix
+	// once; the journal validator still validates every ticket UUID below.
+	const auto payloadPrefix = ref.rootName().chopped(5) + "-" + ref.key() + "-";
 	for (auto it = tickets.begin(); it != tickets.end(); ++it) {
 		auto t = it.value().toObject();
-		if (string(t, "name") != ref.payloadName(it.key())) return result;
+		if (string(t, "name") != payloadPrefix + it.key() + ".xml") return result;
 		// Normalize only in memory to reuse the existing journal state machine.
 		// Wire records always retain the exact root-qualified ownership name.
 		t["name"] = CloudHistoryRecord::payloadName(string(ref.value, "epoch"), it.key()); it.value() = t;
@@ -79,7 +86,7 @@ bool CloudWorkspaceRecord::validLogical(bool expanded) const
 	for (const auto &entry : tickets) {
 		const auto t = entry.toObject(); const auto id = string(t, "object"), version = string(t, "version");
 		if (string(t, "state") != "registered" &&
-		    (!CloudWorkspaceReference::create(string(ref.value, "provider"), string(ref.value, "account"), string(ref.value, "epoch"), id).valid() ||
+		    (!objectId(string(ref.value, "provider"), id) ||
 		     id == string(ref.value, "root_id") || !versionValid(version))) return false;
 	}
 	const auto copies = value.value("copies").toObject();
@@ -566,8 +573,7 @@ bool CloudWorkspaceReference::valid() const
 	const auto provider = string(value, "provider"), id = string(value, "root_id");
 	return fields(value, {"schema", "format", "provider", "account", "epoch", "root_id"}) && value.value("schema") == QJsonValue(1) &&
 		string(value, "format") == "neo-workspace-reference-development-1" && providerValid(provider) && hash(string(value, "account")) &&
-		uuid(string(value, "epoch")) && id.size() <= 512 && QRegularExpression(provider == "google-drive" ? QStringLiteral("^[A-Za-z0-9_-]+$") :
-		QStringLiteral("^id:[A-Za-z0-9_-]+$")).match(id).hasMatch() && json().size() <= ReferenceLimit;
+		uuid(string(value, "epoch")) && objectId(provider, id) && json().size() <= ReferenceLimit;
 }
 QByteArray CloudWorkspaceReference::json() const { return QJsonDocument(value).toJson(QJsonDocument::Compact); }
 QString CloudWorkspaceReference::key() const { return valid() ? CloudSyncManifest::sha256(json()) : QString(); }

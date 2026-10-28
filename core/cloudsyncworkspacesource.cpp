@@ -22,7 +22,8 @@ bool fields(const QJsonObject &o, const QStringList &keys) {
 }
 bool revision(const QString &v) { return !v.isEmpty() && v.size() <= 512 && !v.contains(QChar::Null) && !v.contains('\r') && !v.contains('\n'); }
 bool identity(const QString &provider, const QString &id) {
-	return id.size() <= 512 && QRegularExpression(provider == "google-drive" ? "^[A-Za-z0-9_-]+$" : "^id:[A-Za-z0-9_-]+$").match(id).hasMatch();
+	static const QRegularExpression google("^[A-Za-z0-9_-]+$"), dropbox("^id:[A-Za-z0-9_-]+$");
+	return id.size() <= 512 && (provider == "google-drive" ? google : dropbox).match(id).hasMatch();
 }
 bool legacyManifest(const QByteArray &bytes) {
 	if (bytes.isEmpty() || bytes.size() > ManifestLimit) return false;
@@ -30,7 +31,7 @@ bool legacyManifest(const QByteArray &bytes) {
 	QStringList keys = {"schema", "revision", "sha256", "created_at"};
 	if (object.contains("parent_sha256")) keys.append("parent_sha256");
 	if (manifest.schemaVersion == 2) keys.append("payload_file");
-	const QRegularExpression hash("^[a-f0-9]{64}$");
+	static const QRegularExpression hash("^[a-f0-9]{64}$");
 	return fields(object, keys) && object["schema"] == QJsonValue(manifest.schemaVersion) && manifest.isValid() &&
 		CloudHistoryRecord::validEpoch(manifest.revisionId) && hash.match(manifest.payloadSha256).hasMatch() && text(object, "created_at").size() <= 64 &&
 		(!object.contains("parent_sha256") || (object["parent_sha256"].isString() && (manifest.parentSha256.isEmpty() || hash.match(manifest.parentSha256).hasMatch())));

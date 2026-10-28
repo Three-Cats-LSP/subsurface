@@ -4296,7 +4296,7 @@ void TestCloudSyncHistory::workspaceArchive()
 		if (mode == 7 || mode == 18) n.files.last().data = mode == 7 ? QByteArray("corrupt archive") : CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, uid(), google ? "foreign" : "id:foreign"), CloudSyncManifest::sha256("foreign")).json();
 		if (mode == 9) n.files.removeLast();
 		if (mode == 13) n.readFailureStatus = 401;
-		if (mode == 15) QVERIFY(choice.select(choiceVersion, {}));
+		if (mode == 15) QVERIFY(choice.select(choiceVersion, CloudWorkspaceReference::create(provider, Account, uid(), google ? "other-root" : "id:other-root")));
 	};
 	if (mode == 1) n.loseWriteAck = true;
 	if (mode == 10) QVERIFY(writeFile(intentFile, "corrupt intent"));

@@ -1,5 +1,26 @@
 # Windows cloud reliability continuation
 
+**Archive failure and repair, 29 October JST.**
+The host in **9db0fa693 / 40738883128** failed two choice-change injections (the
+fixture incorrectly tried selecting an empty reference) and timed out while
+constructing the 600-ticket row. It reached 547 passes before the fatal timeout;
+this is a failed aggregate, not sustainable-history acceptance. Choice injection
+now selects a different valid workspace. Boundary setup was already changed to
+one validated monotonic fixture instead of hundreds of repeated registrations.
+
+Source inspection also found repeated regexp compilation and full reference
+validation/hash construction inside every ticket's ownership-name check. The
+repair reuses the exact fixed validation patterns, computes the validated
+physical-name prefix once per root, and checks completed object IDs with the
+same provider patterns. No identity/name/monotonicity rule is relaxed. Full
+adversarial regressions remain required after the focused archive gate.
+
+Superseded in-progress runs **40738883128**, **40741407027** (still containing the
+bad choice fixture and old validation costs) and **40737511700** (known failed
+acceptance fixture) were requested cancelled after retaining their failures.
+Resume the new repaired-source focused run instead; cancellation does not turn
+those old aggregates into passes. No live cloud objects or credentials changed.
+
 **LSP Windows/PDF correction complete at bea47f4c8.**
 Windows **40737335739 PASSED** packaged launch, Clean/Modern LSP actions,
 Save/reopen/disk restart, PDF content + printable-margin geometry, lifecycle

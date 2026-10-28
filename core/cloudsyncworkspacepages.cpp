@@ -17,7 +17,7 @@ bool fields(const QJsonObject &o, const QStringList &keys)
 	for (const auto &key : keys) if (!o.contains(key)) return false;
 	return true;
 }
-bool hash(const QString &s) { return QRegularExpression("^[a-f0-9]{64}$").match(s).hasMatch(); }
+bool hash(const QString &s) { static const QRegularExpression pattern("^[a-f0-9]{64}$"); return pattern.match(s).hasMatch(); }
 bool pinValid(const QJsonObject &pin, const CloudWorkspaceReference &ref)
 {
 	const auto object = text(pin, "object"), version = text(pin, "version"), name = text(pin, "name");

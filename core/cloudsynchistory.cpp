@@ -21,7 +21,7 @@ constexpr int EntryLimit = 512;
 constexpr int ProofLimit = 4 * RecordLimit + 4096;
 const QString LegacyName = QStringLiteral("subsurface-neo-sync.json");
 QString uuid() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
-bool hash(const QString &s) { return QRegularExpression(QStringLiteral("^[a-f0-9]{64}$")).match(s).hasMatch(); }
+bool hash(const QString &s) { static const QRegularExpression pattern(QStringLiteral("^[a-f0-9]{64}$")); return pattern.match(s).hasMatch(); }
 bool text(const QString &s) { return !s.isEmpty() && s.size() <= 512 && !s.contains(QChar::Null); }
 bool revision(const QString &s) { return text(s) && !s.contains('\r') && !s.contains('\n'); }
 bool fields(const QJsonObject &o, const QStringList &names) {
@@ -37,8 +37,8 @@ QString archivedRootName(const QString &epoch, const QString &id) {
 	return CloudHistoryRecord::rootName(epoch).chopped(5) + QStringLiteral("-recovered-%1.json").arg(id);
 }
 bool objectId(const QString &provider, const QString &id) {
-	return QRegularExpression(provider == "google-drive" ? QStringLiteral("^[A-Za-z0-9_-]+$") :
-		QStringLiteral("^id:[A-Za-z0-9_-]+$")).match(id).hasMatch() && id.size() <= 512;
+	static const QRegularExpression google(QStringLiteral("^[A-Za-z0-9_-]+$")), dropbox(QStringLiteral("^id:[A-Za-z0-9_-]+$"));
+	return id.size() <= 512 && (provider == "google-drive" ? google : dropbox).match(id).hasMatch();
 }
 }
 
