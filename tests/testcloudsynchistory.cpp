@@ -1610,6 +1610,17 @@ void TestCloudSyncHistory::workspaceConflictBinding()
 		CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load());
 		QVERIFY(restarted.advanceConflictUpload(prior, remote, root, root, B, intentFile, next));
 		QCOMPARE(restarted.ownsConflictUpload(prior, mode == 11 ? uid() : remote, root, root, B, ticket, intentFile, next), mode != 11);
+		// Completion must not archive a confirmed conflict before the reviewed
+		// cloud object has a durable exact-read proof and released reservation.
+		QVERIFY(!plan.complete(restarted, root, root, intentFile));
+		CloudWorkspaceReadIntent reader(dir.filePath("reviewed-read.json"), ref, remote, operation);
+		const auto target = root.ticket(remote);
+		const QJsonObject snapshot{{"name", target.value("name")}, {"object", target.value("object")},
+			{"version", target.value("version")}, {"sha256", target.value("sha256")}, {"bytes", target.value("bytes")}};
+		QVERIFY(reader.prepare()); QVERIFY(reader.pin(snapshot)); QVERIFY(root.reserve(operation, remote));
+		QVERIFY(reader.markReserved()); QVERIFY(reader.markVerified());
+		QVERIFY(!plan.complete(restarted, root, root, intentFile));
+		QVERIFY(reader.beginRelease()); QVERIFY(root.release(operation)); QVERIFY(reader.markReleased());
 		QVERIFY(plan.complete(restarted, root, root, intentFile)); QCOMPARE(plan.state(), QString("completed"));
 		CloudWorkspaceUploadPlan reloaded(planDir, ref, choice, revision, next, baseline, ticket, operation, remote, prior);
 		QVERIFY(reloaded.reload()); QVERIFY(reloaded.complete(restarted, root, root, intentFile));

@@ -4,6 +4,7 @@
 #include "cloudsyncworkspacesyncreview.h"
 #include "cloudsyncworkspaceupload.h"
 #include "cloudsyncworkspaceuploadplan.h"
+#include "cloudsyncworkspaceread.h"
 #include <QTimer>
 #include <memory>
 class QLockFile;
@@ -26,14 +27,19 @@ signals:
 	void finished(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches);
 	void failed(const QString &message, bool tokenRejected);
 private:
-	enum class Step { Idle, InitialReview, Uploading, FinalReview };
+	enum class Step { Idle, InitialReview, ReadingCloud, AfterCloudRead, Uploading, FinalReview, ReleasingCloud };
 	bool current();
 	void fail(bool rejected = false);
 	void review(Step next);
 	void reviewed(int action, const QJsonObject &root, const QString &version, const QString &revision);
 	void uploaded(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches);
+	bool reviewedCloudProof(const CloudWorkspaceRecord &root, bool released);
+	void releaseCloud();
+	void cloudRead(const QJsonObject &root, const QString &version, const QString &commit, const QString &reservation, const QByteArray &payload);
+	void cloudReleased(const QJsonObject &root, const QString &version, const QString &reservation);
 	CloudWorkspaceSyncReview reviewer;
 	CloudWorkspaceUpload uploader;
+	CloudWorkspaceRead cloudReader;
 	QTimer deadline;
 	std::unique_ptr<CloudWorkspaceUploadPlan> plan;
 	std::unique_ptr<QLockFile> operationLock;

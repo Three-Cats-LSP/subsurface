@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncworkspaceuploadplan.h"
 #include "cloudsyncmanifest.h"
+#include "cloudsyncworkspaceread.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -100,6 +101,18 @@ bool CloudWorkspaceUploadPlan::complete(CloudWorkspaceBinding &binding, const Cl
 	if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
 	const auto model = payload();
 	const bool conflict = text(scope, "format") == "neo-workspace-conflict-local-plan-development-1";
+	if (conflict) {
+		CloudWorkspaceReference ref; ref.value = scope.value("workspace").toObject();
+		const auto head = text(scope, "reviewed_head"), reservation = text(scope, "operation");
+		const auto readFile = QDir(QFileInfo(directory).absolutePath()).filePath("reviewed-read.json");
+		CloudWorkspaceReadIntent reader(readFile, ref, head, reservation);
+		const auto target = root.ticket(head);
+		const QJsonObject expected{{"name", target.value("name")}, {"object", target.value("object")},
+			{"version", target.value("version")}, {"sha256", target.value("sha256")}, {"bytes", target.value("bytes")}};
+		const auto record = root.value.value("journal").toObject().value("reservations").toObject().value(reservation).toObject();
+		if (!reader.reload() || reader.state() != "released" || reader.snapshot() != expected ||
+		    text(record, "commit") != head || record.value("active") != QJsonValue(false)) return false;
+	}
 	const bool owned = conflict ? binding.ownsConflictUpload(scope.value("reviewed_binding").toObject(), text(scope, "reviewed_head"),
 		root, checkpoint, model, text(scope, "ticket"), uploadIntentFile, text(scope, "next_revision")) :
 		binding.ownsUpload(root, checkpoint, text(scope, "binding_revision"), text(scope, "ticket"), uploadIntentFile, model);

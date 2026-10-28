@@ -2071,7 +2071,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion", "active-restore-same-revision-binding-change", "active-restore-intent-changed"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion", "active-restore-same-revision-binding-change", "active-restore-intent-changed", "conflict-corrupt-cloud", "conflict-missing-cloud"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2101,7 +2101,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 	manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(workspaceDone.size(), 3);
 	manager.runWorkspace(provider, "activate", manager.workspaceCopyReviews.value(provider).id); QTRY_COMPARE(workspaceDone.size(), 4);
 	QVERIFY(manager.workspaceRouteConfirmed(provider));
-	if (mode >= 17) {
+	if (mode >= 17 && mode <= 26) {
 		::divelog.dives[0]->notes = "Before active workspace restore"; const auto before = CloudWorkspaceModel::currentXml();
 		QSignalSpy synced(&manager, &CloudSyncManager::diveLogSyncFinished); manager.syncDiveLog(provider); QTRY_COMPARE(synced.size(), 1);
 		if (mode != 22) { manager.syncDiveLog(provider); QTRY_COMPARE(synced.size(), 2); }
@@ -2194,14 +2194,14 @@ void TestCloudSyncManager::testWorkspaceSync()
 	bool allowSave = mode != 7; int saves = 0; QByteArray persisted;
 	manager.setWorkspacePersistenceHandlers([] { return true; }, [&] { ++saves; if (!allowSave) return false; persisted = CloudWorkspaceModel::currentXml(); return true; });
 	const auto oldNotes = ::divelog.dives[0]->notes;
-	if (mode == 2 || mode == 3 || mode == 7) {
+	if (mode == 2 || mode == 3 || mode == 7 || mode == 27 || mode == 28) {
 		::divelog.dives[0]->notes = "Remote workspace version"; const auto remote = CloudWorkspaceModel::currentXml(); ::divelog.dives[0]->notes = oldNotes;
 		root = CloudWorkspaceRecord::parse(network.files[0].data); const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces);
 		QVERIFY(root.registerUpload(ticket, root.head(), CloudSyncManifest::sha256(remote), remote.size())); network.add(ref.payloadName(ticket), remote);
 		QVERIFY(root.completeUpload(ticket, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(ticket, initial));
 		network.files[0].data = root.json(); network.files[0].version = "remote-head";
 	}
-	if (mode == 1 || mode == 3 || mode == 6 || mode == 10 || mode == 11 || mode == 12) ::divelog.dives[0]->notes = "Local workspace version";
+	if (mode == 1 || mode == 3 || mode == 6 || mode == 10 || mode == 11 || mode == 12 || mode == 27 || mode == 28) ::divelog.dives[0]->notes = "Local workspace version";
 	if (mode == 4) { auto manifest = CloudSyncManifest::forPayload(original); manifest.schemaVersion = 2; manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml"; network.add("subsurface-neo-sync.json", manifest.toJson()); network.add(manifest.payloadFileName(), original); }
 	if (mode == 5) QVERIFY(QFile::remove(manager.workspaceRoutePath(provider) + ".json"));
 	if (mode == 8) { const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "other" : "id:other"); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), other)); QVERIFY(choice.select(choice.version(), ref)); }
@@ -2220,6 +2220,17 @@ void TestCloudSyncManager::testWorkspaceSync()
 		network.workspaceReadDeferred = false; late->complete();
 	}
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+	if (mode == 27 || mode == 28) {
+		const auto review = manager.workspaceReport(provider).value("conflictReview").toString();
+		QVERIFY(CloudHistoryRecord::validEpoch(review));
+		const auto head = CloudWorkspaceRecord::parse(rootBefore).head(); const auto index = network.byName(ref.payloadName(head)); QVERIFY(index >= 0);
+		if (mode == 27) network.files[index].data = "corrupted cloud version"; else network.files.removeAt(index);
+		manager.resolveWorkspaceConflict(provider, review, "device"); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(finished.size(), 0); QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.valid()); QCOMPARE(root.head(), head);
+		CloudWorkspaceBinding binding(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version());
+		QVERIFY(binding.load()); QCOMPARE(binding.commit(), initial); return;
+	}
 	if (mode == 3) {
 		const auto report = manager.workspaceReport(provider);
 		QVERIFY(report.value("syncConflict").toBool()); QVERIFY(report.value("routeActive").toBool());

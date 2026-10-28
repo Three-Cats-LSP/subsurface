@@ -9,7 +9,7 @@ namespace {
 QString text(const QJsonObject &o, const char *key) { return o.value(QLatin1String(key)).toString(); }
 }
 CloudWorkspaceSyncUpload::CloudWorkspaceSyncUpload(QNetworkAccessManager *network, QObject *parent) :
-	QObject(parent), reviewer(network, this), uploader(network, this)
+	QObject(parent), reviewer(network, this), uploader(network, this), cloudReader(network, this)
 {
 	deadline.setSingleShot(true); deadline.setInterval(600000);
 	connect(&deadline, &QTimer::timeout, this, [this] { fail(); });
@@ -17,11 +17,14 @@ CloudWorkspaceSyncUpload::CloudWorkspaceSyncUpload(QNetworkAccessManager *networ
 	connect(&reviewer, &CloudWorkspaceSyncReview::finished, this, &CloudWorkspaceSyncUpload::reviewed);
 	connect(&uploader, &CloudWorkspaceUpload::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
 	connect(&uploader, &CloudWorkspaceUpload::finished, this, &CloudWorkspaceSyncUpload::uploaded);
+	connect(&cloudReader, &CloudWorkspaceRead::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
+	connect(&cloudReader, &CloudWorkspaceRead::finished, this, &CloudWorkspaceSyncUpload::cloudRead);
+	connect(&cloudReader, &CloudWorkspaceRead::released, this, &CloudWorkspaceSyncUpload::cloudReleased);
 }
 CloudWorkspaceSyncUpload::~CloudWorkspaceSyncUpload() { cancel(); }
 void CloudWorkspaceSyncUpload::cancel()
 {
-	++generation; step = Step::Idle; deadline.stop(); reviewer.cancel(); uploader.cancel(); plan.reset(); operationLock.reset();
+	++generation; step = Step::Idle; deadline.stop(); reviewer.cancel(); uploader.cancel(); cloudReader.cancel(); plan.reset(); operationLock.reset();
 	reference.value = {}; originalBinding = {}; reviewedBinding = {}; reviewedHead.clear(); priorPlan = false; token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear();
 	bindingFile.clear(); bindingRevision.clear(); nextRevision.clear(); baseline.clear(); ticket.clear(); operation.clear();
 	planDirectory.clear(); intentFile.clear(); model.clear(); scopeCurrent = {}; localSnapshot = {};
@@ -81,13 +84,15 @@ void CloudWorkspaceSyncUpload::review(Step next)
 }
 void CloudWorkspaceSyncUpload::reviewed(int result, const QJsonObject &value, const QString &version, const QString &revision)
 {
-	if ((step != Step::InitialReview && step != Step::FinalReview) || !current()) { fail(); return; }
+	if ((step != Step::InitialReview && step != Step::AfterCloudRead && step != Step::FinalReview) || !current()) { fail(); return; }
 	using Action = CloudWorkspaceSyncDecision::Action; const auto action = Action(result); CloudWorkspaceRecord root; root.value = value;
 	CloudWorkspaceAuthority authority(checkpointFile, reference); CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
 	if (!root.valid() || !authority.load() || !binding.load() || binding.revision() != revision ||
 	    action == Action::Invalid || action == Action::LegacyChanged) { fail(); return; }
 	if (binding.revision() == nextRevision) {
-		if (!priorPlan || !plan->complete(binding, root, authority.record(), intentFile)) { fail(); return; }
+		if (!priorPlan) { fail(); return; }
+		if (!reviewedHead.isEmpty()) { releaseCloud(); return; }
+		if (!plan->complete(binding, root, authority.record(), intentFile)) { fail(); return; }
 		const auto resultRoot = root.value; const auto resultVersion = version, resultTicket = ticket; const bool head = root.head() == ticket;
 		cancel(); emit finished(resultRoot, resultVersion, resultTicket, head); return;
 	}
@@ -96,9 +101,12 @@ void CloudWorkspaceSyncUpload::reviewed(int result, const QJsonObject &value, co
 	const auto parent = conflict ? reviewedHead : baseline;
 	if (step == Step::FinalReview) {
 		if (action != Action::Conflict || root.head() != ticket) { fail(); return; }
+		if (conflict && !reviewedCloudProof(root, false)) { fail(); return; }
 		const bool advanced = conflict ? binding.advanceConflictUpload(reviewedBinding, reviewedHead, root, authority.record(), model, intentFile, nextRevision) :
 			binding.advanceOwnedUpload(bindingRevision, root, authority.record(), model, model, intentFile, nextRevision);
-		if (!advanced || !plan->complete(binding, root, authority.record(), intentFile) || !current()) { fail(); return; }
+		if (!advanced || !current()) { fail(); return; }
+		if (conflict) { releaseCloud(); return; }
+		if (!plan->complete(binding, root, authority.record(), intentFile)) { fail(); return; }
 		const auto resultRoot = root.value; const auto resultVersion = version, resultTicket = ticket; cancel(); emit finished(resultRoot, resultVersion, resultTicket, true); return;
 	}
 	const bool newUpload = conflict ? (action == Action::Conflict && root.head() == reviewedHead && binding.value() == reviewedBinding) :
@@ -108,8 +116,51 @@ void CloudWorkspaceSyncUpload::reviewed(int result, const QJsonObject &value, co
 		CloudWorkspaceUploadIntent owned(intentFile, reference, CloudSyncManifest::sha256(model), model.size(), ticket, parent);
 		if (!owned.reload() || owned.state() == "submitted") { fail(); return; }
 	}
+	if (conflict && step == Step::InitialReview) {
+		step = Step::ReadingCloud;
+		cloudReader.start(CloudWorkspaceRead::Action::Read, token, reference, reviewedHead, operation, choiceFile, choiceVersion,
+			checkpointFile, QDir(QFileInfo(planDirectory).absolutePath()).filePath("reviewed-read.json"), [this] { return current(); });
+		return;
+	}
+	if (conflict && (step != Step::AfterCloudRead || !reviewedCloudProof(root, false))) { fail(); return; }
 	step = Step::Uploading;
 	uploader.start(token, reference, model, choiceFile, choiceVersion, checkpointFile, intentFile, ticket, parent, [this] { return current(); });
+}
+
+bool CloudWorkspaceSyncUpload::reviewedCloudProof(const CloudWorkspaceRecord &root, bool released)
+{
+	CloudWorkspaceReadIntent reader(QDir(QFileInfo(planDirectory).absolutePath()).filePath("reviewed-read.json"), reference, reviewedHead, operation);
+	const auto target = root.ticket(reviewedHead);
+	const QJsonObject expected{{"name", target.value("name")}, {"object", target.value("object")},
+		{"version", target.value("version")}, {"sha256", target.value("sha256")}, {"bytes", target.value("bytes")}};
+	const auto record = root.value.value("journal").toObject().value("reservations").toObject().value(operation).toObject();
+	return root.valid() && root.reference().value == reference.value && reader.reload() &&
+		reader.state() == (released ? "released" : "verified") && reader.snapshot() == expected &&
+		text(record, "commit") == reviewedHead && record.value("active") == QJsonValue(!released);
+}
+void CloudWorkspaceSyncUpload::cloudRead(const QJsonObject &value, const QString &, const QString &commit, const QString &reservation, const QByteArray &payload)
+{
+	CloudWorkspaceRecord root; root.value = value;
+	if (step != Step::ReadingCloud || commit != reviewedHead || reservation != operation || payload.isEmpty() ||
+	    !current() || !reviewedCloudProof(root, false) || (root.head() != reviewedHead && root.head() != ticket)) { fail(); return; }
+	review(Step::AfterCloudRead);
+}
+void CloudWorkspaceSyncUpload::releaseCloud()
+{
+	if (!current()) return;
+	step = Step::ReleasingCloud;
+	cloudReader.start(CloudWorkspaceRead::Action::Release, token, reference, reviewedHead, operation, choiceFile, choiceVersion,
+		checkpointFile, QDir(QFileInfo(planDirectory).absolutePath()).filePath("reviewed-read.json"), [this] { return current(); });
+}
+void CloudWorkspaceSyncUpload::cloudReleased(const QJsonObject &value, const QString &version, const QString &reservation)
+{
+	CloudWorkspaceRecord root; root.value = value;
+	CloudWorkspaceAuthority authority(checkpointFile, reference);
+	CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
+	if (step != Step::ReleasingCloud || reservation != operation || !current() || !reviewedCloudProof(root, true) ||
+	    !authority.load() || !binding.load() || !plan->complete(binding, root, authority.record(), intentFile)) { fail(); return; }
+	const auto resultRoot = root.value; const auto resultTicket = ticket; const bool head = root.head() == ticket;
+	cancel(); emit finished(resultRoot, version, resultTicket, head);
 }
 void CloudWorkspaceSyncUpload::uploaded(const QJsonObject &, const QString &, const QString &id, bool headMatches)
 {

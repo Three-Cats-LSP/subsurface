@@ -12,8 +12,8 @@ established. Do not call the milestone complete or remove the gate on that basis
 
 ## 1. Resolve concurrent changes in the app
 
-Deliver a simple shared Clean/Modern pop-up with three choices: **Keep this
-device**, **Keep cloud** and **Combine**. Each choice must perform a real,
+Deliver a simple shared Clean/Modern pop-up with two choices: **Keep this
+device** and **Keep cloud**, plus cancellation. Each choice must perform a real,
 guarded operation. Review must bind the current account, exact selected
 workspace, local contents, accepted legacy observation, binding and remote
 head. If any changes, require a new review. Never silently pick a winner.
@@ -23,15 +23,13 @@ before replacing local data or advancing its binding. If choosing the local
 side, publish it conditionally from the reviewed remote head, retaining the
 remote version. If choosing the remote side, first protect the local version,
 then explicitly restore the selected remote version through the existing
-durable save and recovery flow. For **Combine**, stage and validate a merge
-using the existing dive-log merge behavior, preserve both original versions,
-and surface unresolved competing field edits for review; do not silently
-discard either version. Journal the confirmation and recovery steps before
+durable save and recovery flow. The owner has removed the Combine option;
+neither choice silently merges the versions. Journal the confirmation and recovery steps before
 mutation; resume the same operation after interruption. A changed legacy
 source must be copied and explicitly accepted under equivalent guards.
 
 Acceptance: provider-paired manager tests and actual Windows two-profile
-cases for all three choices, cancellation, changed local/remote state, failed save,
+cases for both choices, cancellation, changed local/remote state, failed save,
 lost acknowledgement, termination/restart and preservation. The interface
 must show what is kept and require confirmation.
 
