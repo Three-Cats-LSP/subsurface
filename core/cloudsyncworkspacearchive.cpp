@@ -72,12 +72,15 @@ bool CloudWorkspaceArchive::load()
 bool CloudWorkspaceArchive::save(const QJsonObject &next)
 {
 	const auto bytes = QJsonDocument(next).toJson(QJsonDocument::Compact); QSaveFile file(intentFile);
-	return bytes.size() <= 16384 && file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit() && load() && saved == next;
+	return bytes.size() <= 16384 && !QFileInfo(intentFile).isSymLink() && file.open(QIODevice::WriteOnly) &&
+		file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) && file.write(bytes) == bytes.size() && file.commit() && load() && saved == next;
 }
 bool CloudWorkspaceArchive::prepare()
 {
-	if (!QDir().mkpath(QFileInfo(intentFile).absolutePath())) return false;
-	operationLock = std::make_unique<QLockFile>(intentFile + ".operation.lock"); if (!operationLock->tryLock(0)) return false;
+	const QFileInfo info(intentFile), parent(info.absolutePath());
+	if (info.isSymLink() || parent.isSymLink() || !QDir().mkpath(parent.filePath())) return false;
+	operationLock = std::make_unique<QLockFile>(intentFile + ".operation.lock"); operationLock->setStaleLockTime(0);
+	if (!operationLock->tryLock(0)) return false;
 	QLockFile lock(intentFile + ".lock"); if (!lock.tryLock(0)) return false;
 	QString nonce;
 	if (QFileInfo::exists(intentFile)) {

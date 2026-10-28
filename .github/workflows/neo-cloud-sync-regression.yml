@@ -25,6 +25,10 @@ on:
         description: 'Run Linux/Windows history protocol checks without rebuilding the full application suites'
         type: boolean
         default: false
+      test_functions:
+        description: 'Optional semicolon-separated Qt slots for focused development checks; empty runs the full protocol suite'
+        type: string
+        default: ''
 
 permissions: read-all
 
@@ -37,8 +41,10 @@ jobs:
       - name: Install Qt protocol test dependencies
         run: sudo apt-get update && sudo apt-get install -y qt6-base-dev
       - name: Build and test history protocol
+        env:
+          NEO_HISTORY_TEST_FUNCTIONS: ${{ inputs.test_functions || '' }}
         run: |
-          cmake -S tests/cloud-history -B build-history -DCMAKE_BUILD_TYPE=Debug
+          cmake -S tests/cloud-history -B build-history -DCMAKE_BUILD_TYPE=Debug "-DNEO_HISTORY_TEST_FUNCTIONS=$NEO_HISTORY_TEST_FUNCTIONS"
           cmake --build build-history --parallel 2
           ctest --test-dir build-history --output-on-failure || { cat build-history/history-results.txt; exit 1; }
           cat build-history/history-results.txt
@@ -46,13 +52,15 @@ jobs:
   windows-history-protocol:
     name: Windows history protocol
     uses: ./.github/workflows/neo-cloud-history-windows.yml
+    with:
+      test_functions: ${{ inputs.test_functions || '' }}
 
   native-cloud-sync-tests:
     name: Native Qt 6 cloud sync tests
     # The full Linux application suite can run alongside the independent
     # Windows protocol job after its own fast protocol compile/test gate.
     needs: [history-protocol]
-    if: ${{ inputs.protocol_only != true }}
+    if: ${{ inputs.protocol_only != true && !inputs.test_functions }}
     uses: ./.github/workflows/linux-debian-generic-qt6.yml
     with:
       container-image: debian:trixie

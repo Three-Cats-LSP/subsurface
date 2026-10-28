@@ -2,6 +2,11 @@ name: Neo Windows history protocol
 
 on:
   workflow_call:
+    inputs:
+      test_functions:
+        type: string
+        required: false
+        default: ''
 
 permissions: read-all
 
@@ -17,9 +22,11 @@ jobs:
           arch: win64_msvc2022_64
           cache: true
       - name: Build and test history protocol on Windows
+        env:
+          NEO_HISTORY_TEST_FUNCTIONS: ${{ inputs.test_functions }}
         shell: pwsh
         run: |
-          cmake -S tests/cloud-history -B build-history -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+          cmake -S tests/cloud-history -B build-history -DCMAKE_PREFIX_PATH="$env:Qt6_DIR" "-DNEO_HISTORY_TEST_FUNCTIONS=$env:NEO_HISTORY_TEST_FUNCTIONS"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build build-history --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -37,7 +44,7 @@ jobs:
       - name: Preserve native identity probe
         uses: actions/upload-artifact@v7
         with:
-          name: Neo-Windows-cloud-identity-probe
+          name: Neo-Windows-cloud-identity-probe${{ inputs.test_functions && '-focused' || '' }}
           path: build-history/identity-probe/
           if-no-files-found: error
       - name: Preserve protocol test evidence

@@ -1,5 +1,31 @@
 # Windows cloud reliability continuation
 
+**LSP Windows/PDF correction complete at bea47f4c8.**
+Windows **40737335739 PASSED** packaged launch, Clean/Modern LSP actions,
+Save/reopen/disk restart, PDF content + printable-margin geometry, lifecycle
+and portable packaging. Downloaded UI artifact **12838557980**, SHA-256
+`e127e2c641364ff140a41d99a9d135e32d3adcd831d5b0a99e42c1d00c203e45`,
+is retained under `work/lsp-ui-evidence-bea47f4c8-20261029`. All four pages were
+rendered and visually inspected: complete bounded profile frames/checkpoint
+points and complete schedule text, with readable page margins. PDFs have hashes
+`2ddb79be22e41e2312b50856ab903abe5d591fcfddf4f18e1fb570d6cab6b5ef`
+and `04bee779f033be98047e98ad6b4e75db7dda2487b6491d88d101dcb60c901618`.
+The native 844 39/36 pass covers unchanged planner algorithms; the later history
+changes still need their own integrated exact-source full candidate validation.
+
+Archive candidate **9db0fa693 / 40738883128** remains running. Do not report a
+pass or replay its live namespace (none exists). The next development increment
+adds optional, visibly labelled Qt test-slot selection to the protocol workflow
+so new archive cases can be fixed without repeating unrelated long stale-lock
+sequences. The default remains the complete suite; focused runs never trigger
+the full-app job and their probe artifact is explicitly labelled focused.
+Boundary fixtures now bulk-copy the native validated pending-ticket shape and
+validate the whole monotonic fixture, then run the same actual coordinator
+flow; this avoids thousands of repeated setup transitions. Actual coordinator
+elapsed time is recorded. Archive intent paths reject symlinks and live process
+locks use native owner checks without an age-based takeover. These changes still
+need focused validation, then the full native and matching Windows gates.
+
 **Shared history review pagination.**
 Clean/Modern's actual `NeoWorkspacePanel.qml` now renders at most 20 version rows
 with Newer/Older navigation and resets to the newest page on a new review.

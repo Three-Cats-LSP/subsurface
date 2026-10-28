@@ -4352,13 +4352,22 @@ void TestCloudSyncHistory::workspaceAutomaticArchive()
 	QFETCH(bool, google); QFETCH(int, mode); Network n; auto f = readFixture(n, google, true); QVERIFY(f.root.valid());
 	// A real pre-boundary root. Keep every old pending ticket and reservation;
 	// routine publication/read must roll over, not prune to make space.
-	for (int i = f.root.value["journal"].toObject()["tickets"].toObject().size(); i < (mode == 4 ? 447 : 448); ++i)
-		QVERIFY(f.root.registerUpload(uid(), f.head, CloudSyncManifest::sha256(A), A.size()));
+	const auto fillPending = [&](int count) {
+		const auto before = f.root; auto journal = f.root.value["journal"].toObject(); auto tickets = journal["tickets"].toObject();
+		const auto prototype = f.root.ticket(f.pending); const int added = count - tickets.size();
+		while (tickets.size() < count) { const auto id = uid(); auto ticket = prototype; ticket["name"] = f.reference.payloadName(id); tickets[id] = ticket; }
+		journal["tickets"] = tickets; journal["sequence"] = journal["sequence"].toInt() + added; f.root.value["journal"] = journal;
+		return f.root.valid() && f.root.follows(before);
+	};
+	// Bulk-build the already validated pending-ticket shape, then validate the
+	// entire monotonic fixture. Exercise the real coordinator transition below
+	// instead of spending development CI repeating 448 individual setup writes.
+	QVERIFY(fillPending(mode == 4 ? 447 : 448));
 	QCOMPARE(f.root.needsArchive(), mode != 4);
 	if (mode == 5) {
 		const auto nonce = uid(); n.add(CloudWorkspaceRecord::archiveName(f.reference, nonce), f.root.json()); const auto &page = n.files.last();
 		QVERIFY(f.root.archiveTo(f.root.archivePin(nonce, google ? page.id.mid(3) : page.id, page.rev)));
-		for (int i = 448; i < 600; ++i) QVERIFY(f.root.registerUpload(uid(), f.head, CloudSyncManifest::sha256(A), A.size()));
+		QVERIFY(fillPending(600));
 	}
 	n.files[2].data = f.root.json(); const auto original = n.files;
 	n.workspaceUploads = n.workspaceCopies = true;
@@ -4366,6 +4375,7 @@ void TestCloudSyncHistory::workspaceAutomaticArchive()
 	const auto choiceFile = directory.filePath("choice.json"), cpFile = directory.filePath("checkpoint.json"), intentFile = directory.filePath(mode == 3 ? "acceptance/operation.json" : "operation.json");
 	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, f.reference)); const auto choiceVersion = choice.version();
 	CloudWorkspaceAuthority authority(cpFile, f.reference); QVERIFY(authority.observe(f.root, n.files[2].rev)); const auto ticket = uid();
+	QElapsedTimer elapsed; elapsed.start();
 	if (mode == 0 || mode >= 4) {
 		CloudWorkspaceUpload upload(&n); QSignalSpy done(&upload, &CloudWorkspaceUpload::finished), errors(&upload, &CloudWorkspaceUpload::failed);
 		upload.start("token", f.reference, A, choiceFile, choiceVersion, cpFile, intentFile, ticket, f.head, [&] { return n.guard; });
@@ -4384,6 +4394,7 @@ void TestCloudSyncHistory::workspaceAutomaticArchive()
 		acceptance.start("token", f.reference, copySource(n, google), choiceFile, choiceVersion, cpFile, intentFile, CloudSyncManifest::sha256(A), ticket, {}, f.head, f.commit, [&] { return n.guard; });
 		QTRY_COMPARE_WITH_TIMEOUT(done.size() + errors.size(), 1, 30000); QCOMPARE(done.size(), 1);
 	}
+	qInfo() << "Automatic archive coordinator milliseconds:" << elapsed.elapsed();
 	const auto result = n.workspaceRecord(n.files[2].data); QVERIFY(result.valid()); QVERIFY(result.follows(f.root));
 	QCOMPARE(result.archivePages().size(), 1); QVERIFY(!result.needsArchive()); QVERIFY(result.json().size() < CloudWorkspaceRecord::WireLimit);
 	if (mode != 5) QVERIFY(result.json().size() < f.root.json().size() / 4);

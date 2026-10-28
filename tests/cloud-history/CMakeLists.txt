@@ -38,7 +38,12 @@ add_executable(TestCloudSyncHistory
 target_include_directories(TestCloudSyncHistory PRIVATE ${NEO_ROOT})
 target_link_libraries(TestCloudSyncHistory PRIVATE Qt6::Core Qt6::Network Qt6::Test)
 enable_testing()
-add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory -o "${CMAKE_CURRENT_BINARY_DIR}/history-results.txt,txt")
+set(NEO_HISTORY_TEST_FUNCTIONS "" CACHE STRING "Optional semicolon-separated Qt test slots for focused development checks")
+if(NEO_HISTORY_TEST_FUNCTIONS AND NOT NEO_HISTORY_TEST_FUNCTIONS MATCHES "^[A-Za-z0-9_;]+$")
+    message(FATAL_ERROR "History test selector must contain only test slot names separated by semicolons")
+endif()
+message(STATUS "History test slots (empty means full suite): ${NEO_HISTORY_TEST_FUNCTIONS}")
+add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory ${NEO_HISTORY_TEST_FUNCTIONS} -o "${CMAKE_CURRENT_BINARY_DIR}/history-results.txt,txt")
 
 # Explicit developer tool: no credentials or live calls are part of CTest.
 # Its caller verifies the disposable account and newly created fixture IDs.
