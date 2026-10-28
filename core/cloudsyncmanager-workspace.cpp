@@ -215,6 +215,10 @@ bool CloudSyncManager::workspaceScopeCurrent()
 		CloudWorkspaceRoute route(workspaceRoutePath(syncProviderId) + ".json", syncProviderId);
 		if (!workspaceRouteConfirmed(syncProviderId) || !route.load() || route.value() != workspaceExpectedRoute) return false;
 	}
+	if (workspaceRestoreUsesBinding) {
+		CloudWorkspaceRoute route(workspaceRoutePath(syncProviderId) + ".json", syncProviderId);
+		if (!workspaceRouteConfirmed(syncProviderId) || !route.load() || route.state() != "active" || route.value() != workspaceRestoreRoute) return false;
+	}
 	if (workspaceAction == "activate" || workspaceAction == "resume-activation")
 		return CloudWorkspaceModel::currentXml() == syncLocalPayload;
 	if (workspaceAction == "version-save" || workspaceAction == "version-resume-save" ||
@@ -246,7 +250,8 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	    authorizationInProgress() || accountCheckInProgress() || pendingTokenContinuation) return;
 	if (action == "refresh") { workspaceReports.remove(providerId); workspaceCopyReviews.remove(providerId); workspaceVersionReviews.remove(providerId); setError({}); emit providersChanged(); return; }
 	const bool assigned = autoSyncEnabled() || !primaryProviderId().isEmpty() || !backupProviderId().isEmpty();
-	const bool assignedReview = assigned && (action == "review" || action == "inspect-copy" || action == "version-list");
+	const bool assignedReview = assigned && (action == "review" || action == "inspect-copy" || action == "version-list" ||
+		action == "version-restore" || action == "version-resume-restore");
 	if (assigned && !assignedReview) {
 		setError(tr("Experimental workspaces require automatic sync off and no primary or backup assignment. Use an isolated test profile.")); return;
 	}
@@ -336,10 +341,15 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	CloudWorkspaceRoute existingRoute(workspaceRoutePath(providerId) + ".json", providerId);
 	const bool routeRead = existingRoute.load();
 	const bool routeProtected = workspaceRouteRequired(providerId) || !routeRead || !existingRoute.value().isEmpty();
-	const bool safeWhenRouted = action == "review" || action == "inspect-copy" || action == "version-list" || action == "resume-activation";
+	const bool routeRestore = routeProtected && (action == "version-restore" || action == "version-resume-restore");
+	const bool safeWhenRouted = action == "review" || action == "inspect-copy" || action == "version-list" || action == "resume-activation" || routeRestore;
 	if (routeProtected && !safeWhenRouted) {
 		routeLease.reset(); routeProvider.clear();
 		setError(tr("This workspace is already routed for sync. Changing versions or branches needs workspace sync recovery; your local and cloud data were kept.")); return;
+	}
+	if (routeRestore && (!workspaceRouteConfirmed(providerId) || !routeRead || existingRoute.state() != "active" ||
+	    existingRoute.value().value("workspace").toObject() != reference.value || text(existingRoute.value(), "choice_version") != expectedVersion)) {
+		routeLease.reset(); routeProvider.clear(); setError(tr("The selected workspace route needs recovery before restoring. All records were kept.")); return;
 	}
 	QJsonObject reviewRoute;
 	if (assignedReview) {
@@ -351,6 +361,7 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		reviewRoute = route.value();
 	}
 	syncProviderId = providerId; syncOperation = SyncOperation::Workspace; workspaceAction = action; workspaceChoiceVersion = expectedVersion; workspaceReference = reference;
+	workspaceRestoreUsesBinding = routeRestore; workspaceRestoreRoute = routeRestore ? existingRoute.value() : QJsonObject();
 	workspaceAssignedReview = assignedReview; workspaceExpectedAutoSync = autoSyncEnabled(); workspaceExpectedPrimary = primaryProviderId(); workspaceExpectedBackup = backupProviderId(); workspaceExpectedRoute = reviewRoute;
 	if (inspecting || copying || accepting) { syncLocalSha256 = CloudSyncManifest::sha256(local); workspaceCopyReview = reviewed; }
 	if (versioning) { syncLocalPayload = local; syncLocalSha256 = CloudSyncManifest::sha256(local); }
@@ -374,6 +385,27 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			CloudWorkspaceAuthority checkpoint(QDir(workspacePath).filePath("roots/" + workspaceReference.key() + ".json"), workspaceReference);
 			if (!checkpoint.load() || !checkpoint.record().valid()) { failWorkspace(tr("This workspace's recovery record is missing or invalid. It was not reset.")); return; }
 			workspaceCheckpointRequired = true;
+			if (workspaceRestoreUsesBinding) {
+				if (action == "version-restore") {
+					for (const auto &kind : {QStringLiteral("sync-uploads"), QStringLiteral("sync-receives")}) {
+						const auto parent = QDir(workspacePath).filePath(kind), scope = QDir(parent).filePath(workspaceReference.key());
+						if (QFileInfo(parent).isSymLink() || QFileInfo(scope).isSymLink() ||
+						    !QDir(scope).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot).isEmpty()) {
+							failWorkspace(tr("Finish the previous workspace sync before restoring. All recovery records were kept.")); return;
+						}
+					}
+					bool limited = false, invalid = false;
+					if (!workspaceRestores(workspacePath, workspaceReference, workspaceChoiceVersion, &limited, &invalid).isEmpty() || limited || invalid) {
+						failWorkspace(tr("Finish or review the previous restore first. All recovery records were kept.")); return;
+					}
+				}
+				const auto serial = workspaceSerial; const auto snapshot = CloudWorkspaceModel::currentXml();
+				workspaceRestoreStep = WorkspaceRestoreStep::PreflightBinding;
+				workspaceSyncReview.start(token, workspaceReference, QDir(workspacePath).filePath("selection.json"), workspaceChoiceVersion,
+					QDir(workspacePath).filePath("roots/" + workspaceReference.key() + ".json"), QDir(workspacePath).filePath("bindings/" + workspaceReference.key() + ".json"),
+					snapshot, [this, serial] { return workspaceSerial == serial && workspaceScopeCurrent(); }, [] { return CloudWorkspaceModel::currentXml(); });
+				return;
+			}
 			workspaceReader.start(token, providerId, workspaceAccount, workspaceReference, [this, serial] { return workspaceSerial == serial && workspaceScopeCurrent(); }, checkpoint.record()); return;
 		}
 		if (accepting) {
@@ -406,11 +438,12 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The workspace choice changed. All activation attempts were kept.")); return; }
 			if (action == "activate") {
 				const auto copies = QDir(workspacePath).filePath("copies"), versions = QDir(workspacePath).filePath("versions"), versionScope = QDir(versions).filePath(workspaceReference.key());
-				const auto uploads = QDir(versionScope).filePath("uploads"), restores = QDir(versionScope).filePath("restores"), acceptances = QDir(workspacePath).filePath("acceptances");
+				const auto uploads = QDir(versionScope).filePath("uploads"), restores = QDir(versionScope).filePath("restores"), acceptances = QDir(workspacePath).filePath("acceptances"), activations = QDir(workspacePath).filePath("activations");
 				if (!knownAttempts({workspacePath, copies}, QDir(copies).filePath(workspaceReference.key()), "intent.json") ||
 				    !knownAttempts({workspacePath, versions, versionScope}, uploads, "intent.json") ||
 				    !knownAttempts({workspacePath, versions, versionScope}, restores, "plan.json") ||
-				    !knownAttempts({workspacePath, acceptances}, QDir(acceptances).filePath(workspaceReference.key()), "intent.json")) {
+				    !knownAttempts({workspacePath, acceptances}, QDir(acceptances).filePath(workspaceReference.key()), "intent.json") ||
+				    !knownAttempts({workspacePath, activations}, QDir(activations).filePath(workspaceReference.key()), "plan.json")) {
 					failWorkspace(tr("Saved workspace attempts need review before activating sync. All records were kept.")); return;
 				}
 				bool limited = false, invalid = false, pending = false;

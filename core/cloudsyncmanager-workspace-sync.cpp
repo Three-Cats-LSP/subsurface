@@ -73,6 +73,11 @@ void CloudSyncManager::startWorkspaceSync(const QString &providerId)
 	if (!choice.inspect() || choice.version() != choiceVersion || choice.selected().value != ref.value ||
 	    !checkpoint.load() || !checkpoint.record().valid() || !binding.load() || binding.value().isEmpty() ||
 	    !activation.reload() || activation.state() != "completed" || activation.model().isEmpty()) { fail(); return; }
+	bool restoreLimited = false, restoreInvalid = false;
+	if (!workspaceRestores(path, ref, choiceVersion, &restoreLimited, &restoreInvalid).isEmpty() || restoreLimited || restoreInvalid) {
+		setError(tr("Finish or review the saved workspace restore before syncing. All recovery records were kept."));
+		routeLease.reset(); routeProvider.clear(); legacyRouteOperation = false; return;
+	}
 	const auto model = CloudWorkspaceModel::currentXml();
 	if (model.isEmpty() || model.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(model)) { fail(); return; }
 	workspaceSyncAccount = account; workspaceSyncReference = ref; workspaceSyncRoute = routeValue; workspaceSyncPath = path;

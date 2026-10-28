@@ -23,7 +23,7 @@ ColumnLayout {
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
-		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. You can review versions and cloud branches. Changing or restoring them while workspace sync is active is still being completed.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
+		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. You can review and restore protected versions. Changing cloud branches while workspace sync is active is still being completed.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
 		color: tokens.textSecondary; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	GridLayout {
@@ -84,7 +84,7 @@ ColumnLayout {
 		}
 		Text {
 			visible: !!panel.report.versionReview && !panel.report.empty && !panel.report.localProtected
-			text: qsTr("Save the current local log as a version before restoring an earlier version.")
+			text: panel.report.routeActive ? qsTr("The current local log is not yet protected for restore. Sync it and review versions again.") : qsTr("Save the current local log as a version before restoring an earlier version.")
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		Text {
@@ -106,7 +106,7 @@ ColumnLayout {
 				}
 				NeoButton {
 					objectName: "restoreWorkspaceVersion-" + panel.provider.id + "-" + modelData.number; text: qsTr("Restore…"); compact: true
-					enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
+					enabled: panel.available && !panel.report.routeRecoveryRequired && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
 					onClicked: { panel.pendingRestore = { source: modelData.id, number: modelData.number, review: panel.report.versionReview }; restoreDialog.open() }
 				}
 			}
@@ -209,7 +209,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceRestore-" + panel.provider.id + "-" + index; text: qsTr("Check and resume restore"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume
+				enabled: panel.available && !panel.report.routeRecoveryRequired && modelData.canResume
 				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-restore", modelData.id)
 			}
 		}

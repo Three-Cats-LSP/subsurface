@@ -198,6 +198,9 @@ private:
 	void workspaceRestoreApplyFailed(const QString &message, bool rejected);
 	void workspaceRestoreCompleted(const QJsonObject &root, const QString &version, const QString &commit, bool headMatches, bool localMatches);
 	void workspaceRestoreReleased(const QJsonObject &root, const QString &version, const QString &reservation);
+	void workspaceRestoreBindingReviewed(int action, const QJsonObject &root, const QString &version, const QString &revision);
+	void finishWorkspaceRestoreRelease(const QJsonObject &root);
+	bool prepareWorkspaceRestoreBinding(bool resuming);
 	void beginWorkspaceRestoreApply();
 	QByteArray workspaceRestoreSnapshot() const;
 	bool prepareWorkspaceRestoreProjection(const QByteArray &payload);
@@ -256,10 +259,12 @@ private:
 	QHash<QString, WorkspaceVersionReview> workspaceVersionReviews;
 	WorkspaceVersionReview workspaceRestoreReview;
 	QJsonObject workspaceRestorePlan;
+	QJsonObject workspaceRestoreBindingIntent, workspaceRestoreRoute;
 	QByteArray workspaceRestoreBefore, workspaceRestoreBeforeModel, workspaceRestoreSourceBytes, workspaceRestoreModelBytes;
 	QString workspaceRestoreDirectory, workspaceRestoreSource;
 	bool workspaceRestoreProjected = false, workspaceRestoreHeadMatches = false, workspaceRestoreLocalMatches = false;
-	enum class WorkspaceRestoreStep { None, Source, Publishing, Applying, ReleaseApply, ReleaseSource };
+	bool workspaceRestoreUsesBinding = false;
+	enum class WorkspaceRestoreStep { None, PreflightBinding, Source, Publishing, Applying, ReleaseApply, ReleaseSource, PostBindingReview };
 	WorkspaceRestoreStep workspaceRestoreStep = WorkspaceRestoreStep::None;
 	int workspaceRestoreApplyRetries = 0;
 	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.

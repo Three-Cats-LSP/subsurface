@@ -113,6 +113,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceAcceptance, &CloudWorkspaceAcceptance::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceActivation, &CloudWorkspaceActivation::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceSyncReview, &CloudWorkspaceSyncReview::failed, this, [this](const QString &message, bool rejected) {
+		if (workspaceInProgress() && (workspaceRestoreStep == WorkspaceRestoreStep::PreflightBinding || workspaceRestoreStep == WorkspaceRestoreStep::PostBindingReview)) { failWorkspace(message, rejected); return; }
 		if (!workspaceSyncInProgress()) return;
 		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
 		else { setError(message); clearSyncOperation(); }
@@ -127,7 +128,11 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
 		else { setError(message); clearSyncOperation(); }
 	});
-	connect(&workspaceSyncReview, &CloudWorkspaceSyncReview::finished, this, &CloudSyncManager::workspaceSyncReviewed);
+	connect(&workspaceSyncReview, &CloudWorkspaceSyncReview::finished, this, [this](int action, const QJsonObject &root, const QString &version, const QString &revision) {
+		if (workspaceInProgress() && (workspaceRestoreStep == WorkspaceRestoreStep::PreflightBinding || workspaceRestoreStep == WorkspaceRestoreStep::PostBindingReview))
+			workspaceRestoreBindingReviewed(action, root, version, revision);
+		else if (workspaceSyncInProgress()) workspaceSyncReviewed(action, root, version, revision);
+	});
 	connect(&workspaceSyncUpload, &CloudWorkspaceSyncUpload::finished, this, [this](const QJsonObject &root, const QString &version, const QString &ticket, bool head) {
 		workspaceSyncCompleted(root, version, ticket, head, false);
 	});
@@ -1321,13 +1326,13 @@ void CloudSyncManager::clearSyncOperation()
 	const bool wasWorkspaceSync = workspaceSyncInProgress();
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
-	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceActivation.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceActivation.cancel(); workspaceSyncReview.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
 	if (workspaceSyncInProgress()) { workspaceSyncReview.cancel(); workspaceSyncUpload.cancel(); workspaceSyncReceive.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
 	workspaceAssignedReview = false; workspaceExpectedAutoSync = false; workspaceExpectedPrimary.clear(); workspaceExpectedBackup.clear(); workspaceExpectedRoute = {};
 	workspaceCopyReview = {}; workspaceReviewedRoot.value = {}; workspaceLegacyChanged = false;
 	workspaceVersionTicket.clear();
-	workspaceRestorePlan = {}; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();
+	workspaceRestorePlan = {}; workspaceRestoreBindingIntent = {}; workspaceRestoreRoute = {}; workspaceRestoreUsesBinding = false; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();
 	workspaceRestoreDirectory.clear(); workspaceRestoreSource.clear(); workspaceRestoreProjected = false; workspaceRestoreHeadMatches = false; workspaceRestoreLocalMatches = false;
 	workspaceRestoreStep = WorkspaceRestoreStep::None; workspaceRestoreApplyRetries = 0;
 	const bool wasActive = syncInProgress();
