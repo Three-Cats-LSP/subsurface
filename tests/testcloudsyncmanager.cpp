@@ -1864,6 +1864,9 @@ void TestCloudSyncManager::testWorkspaceModel()
 	auto payload=original; payload.replace("Local notes must survive cloud failures.","Workspace staged replacement.");
 	if(mode==1 || mode==7 || mode==9 || mode==14) payload.replace("<dive ","<dive tags='private-workspace-staging-tag' ");
 	if(mode==2 || mode==9 || mode==14) payload.replace("</settings>","<fingerprint model='00001234' serial='00005678' deviceid='00000002' diveid='00000003' data='01020304'/></settings>");
+	// Fingerprint reuse deliberately requires a matching computer in the log.
+	// Bind the staged fixture to those IDs instead of weakening that policy.
+	if(mode==2 || mode==9 || mode==14) payload.replace("<divecomputer model=", "<divecomputer deviceid='00000002' diveid='00000003' model=");
 	if(mode==3) payload.prepend("\n");
 	if(mode==4) payload="<divelog><dives>";
 	if(mode==5) payload="<!DOCTYPE divelog><divelog/>";
