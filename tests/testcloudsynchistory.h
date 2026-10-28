@@ -58,6 +58,8 @@ private slots:
 	void workspaceBinding();
 	void workspaceReceiveReceipt_data();
 	void workspaceReceiveReceipt();
+	void workspaceReceiveWorkflow_data();
+	void workspaceReceiveWorkflow();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();
