@@ -109,14 +109,23 @@ not a claim that the visible planner switch or the Windows release is complete.
 
 ## CI checkpoint
 
-Implementation `b2d1df52b` is pushed; initial validation source `ba0db8dc2` ran
-in **40705358571**. Source reproduction and the hosted C++ regression passed
-**55/55**. The Windows executable compiled but exited before test output;
-its failed aggregate and LastTest log are retained. Repair `91e130b5c` added
-runtime deployment, which exposed a missing platform plugin in the reused Qt
-installation (**40706143649**, failed before tests). Source `6c97e7acf` isolates
-the complete Qt cache and verifies its dependencies. Resume **40706743408**
-before claiming Windows C++ acceptance. Windows app/package **40705358568**
-validates the same functional LSP source separately; full linked native app
-regression **40707131405** runs on 6c97. No calculation source/expectations changed
-to repair these CI startup failures.
+**Native adoption gate passed:** run **40708771596**, source `151e53b2f`, passes
+source/fixture hashes, reproducible translation, all 38 original-Node references
+and native C++ testing on both Windows Qt **6.8.3** and the shared-code host. The
+suite has **55 checks**. The functional fix at `aa0f20f70` passes plain JSON into
+JavaScript, avoiding QVariant sequence conversion differences across Qt versions.
+No reference or LSP mathematics was changed to pass these tests.
+
+Earlier failures are retained: **40705358571** had an empty Windows CTest log;
+**40706143649 / 40706743408** failed in GUI-plugin deployment; **40707615383**
+ran Qt 6.8.3 and exposed 16 passes / 39 request refusals; **40708302494** caught
+a PowerShell version-argument quoting error before running tests. The earlier
+incomplete-cache diagnosis was disproven by explicit dependency checks. The
+successful headless runner deploys its four actual Qt libraries directly.
+
+The original integrated app source `ba0db8dc2` passed Windows launch,
+Clean/Modern, lifecycle and package run **40705358568**, plus Android compile
+**40705358554**. Those builds predate the JSON fix and do not exercise a public
+LSP planner flow. Full native app **40707131405** remains pending on 6c97 and
+also predates the JSON fix. Preserve these source-specific results; final
+matching-source app/package validation follows the actual UI/save/export work.

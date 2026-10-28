@@ -6,50 +6,46 @@ Subsurface-only/no-JavaScript-import planner notes below. Follow
 [LSP+ adoption](NEO_LSP_PLANNER_ADOPTION.md): source 3.2.0 at `05fef18`, original
 engine bundles and full presets imported, syntax translation reproducible,
 38 original-engine cases matched locally in Windows Qt 6.10.3. Shared C++
-comparison, UI/save/export integration and package validation remain open.
+comparison has now passed on Windows and the host. UI/save/export integration
+and final integrated package validation remain open.
 Do not relabel the still-native public planner as LSP before wiring it.
 
-**Current LSP check to resume: `40708771596`, source `151e53b2f`.** The latest
-functional C++ boundary is `aa0f20f70`: requests enter JavaScript through
-`JSON.parse` as plain data, avoiding version-dependent QVariant sequence wrappers.
-The follow-up workflow commit quotes the CMake version argument (locally proven:
-PowerShell split the unquoted `6.8.3` argument into `6` and `.8.3`). Native hosted
-checks remain 55/55; Windows is pending on that source. Do not resume or rerun
-superseded failed runs below.
+**LSP native gate PASSED: `40708771596`, source `151e53b2f`.** Source/evidence
+hashes, reproducible syntax generation, original-Node reference reproduction
+and both native C++ jobs passed. The suite covers 55 checks: 38 reference rows,
+13 refusals, identity/presets, isolation and QTest setup/cleanup. Windows built
+and ran against explicitly verified **Qt 6.8.3**; its passing CTest artifact is
+retained at `work/lsp-adoption-evidence-151e53b2f-20261028/windows/Testing/Temporary/LastTest.log`.
+The hosted QtTest log records 55/55. Windows QtTest does not print its passing
+rows into CTest's console capture. Do not rerun the unchanged complete sequence.
 
-Correction to earlier startup/cache interpretation: a fresh Qt check confirmed
-all DLLs and the platform plugin existed. Runs **40706143649** and **40706743408**
-failed in windeployqt GUI-plugin discovery, not because the expected plugin file
-was absent. Explicit deployment of the headless four-DLL closure in **40707615383**
-allowed direct file logging: Qt 6.8.3 actually executed **16 passed / 39 failed**,
-rejecting all reference inputs. The initially empty CTest output alone did not
-prove a pre-main launch failure. The plain-JSON fix awaits its Windows result;
-**40708302494** stopped before tests because of the now-corrected argument quoting.
-Retain all failed aggregates; no expectation or LSP algorithm was changed.
+The latest functional boundary is **`aa0f20f70`**: plain `JSON.parse` input
+replaces version-dependent QVariant sequences. The following workflow commit
+quotes the CMake version argument (locally proven: PowerShell split unquoted
+`6.8.3` into `6` and `.8.3`). No LSP calculation or reference expectation changed.
+The following failed aggregates remain retained and are superseded:
 
-LSP adoption implementation **`b2d1df52b`** is pushed. The first non-skipped
-validation source is **`ba0db8dc2`**. In LSP run **40705358571**, source/evidence
-hashes, reproducible syntax generation and original-Node reference reproduction
-passed, and the hosted native C++ test passed **55/55**. Its Windows C++ build
-passed but the process exited before any test output. Retained initial evidence:
-`work/lsp-adoption-evidence-ba0db8dc2-20261028/{host,windows}/LastTest.log`.
-Do not call that aggregate green or adjust expectations to hide its startup
-failure. Workflow repair **`91e130b5c`** added deployment and direct exit diagnostics;
-its run **40706143649 failed during deployment** with "Unable to find the platform
-plugin", before Windows tests could run. The reused Qt installation was incomplete.
-Source **`6c97e7acf`** uses a separate full-Qt cache and explicit DLL/platform-plugin
-checks. Resume LSP run **40706743408**; source parity and its hosted C++ checks
-have passed, Windows Qt installation was still running at the last observation.
-Neither failed aggregate was reclassified as a pass. The first
-manual dispatch of the new workflow returned 404 before it was registered by a
-non-skipped branch push; it started no run. The repair was successfully dispatched.
-The matching app Windows run **40705358568** and Android compile **40705358554**
-also continue on ba0; do not duplicate them. Physical Android is still deferred.
-Full native application regression **40707131405** was dispatched on 6c97 to
-exercise the actual linked model/resources in both app targets. The C++ LSP code
-is unchanged since b2d; later commits changed only CI and checkpoints. Resume
-these pending checks without duplicate runs. The existing 1cc suite below
-predates LSP and cannot substitute for the new integrated check.
+- **40705358571:** hosted 55/55; Windows test failed with empty CTest output.
+  That empty output alone did not prove a pre-main launch failure.
+- **40706143649 / 40706743408:** windeployqt GUI-plugin discovery failures before
+  tests. A fresh dependency check proved the plugin and DLLs were present;
+  the earlier incomplete-cache diagnosis was wrong.
+- **40707615383:** explicit headless-library deployment and direct file logging
+  exposed actual Qt 6.8.3 results: **16 passed / 39 failed**, rejecting the valid
+  requests. The subsequent plain-JSON boundary fixed the version difference.
+- **40708302494:** stopped during the Qt-version configuration check because of
+  the unquoted PowerShell argument; corrected before the successful run.
+
+Initial LSP implementation **`b2d1df52b`** and validation source **`ba0db8dc2`**
+remain auditable. App Windows **40705358568 passed**, including existing
+Clean/Modern, launch, lifecycle and package checks; Android compile
+**40705358554 passed**. They predate the plain-JSON fix and public LSP UI routing;
+they are preservation/compile evidence for their own source, not final LSP flow
+acceptance. Physical Android remains deferred. Full native linked-app run
+**40707131405** is still pending on 6c97, which also predates the JSON fix. Retain
+its result; do not substitute it for final matching-source UI/save/export gates
+or duplicate it while pending. Broader final candidate checks follow the actual
+shared planner integration, using the already-passed focused tests during coding.
 
 Continue actual shared UI/save/export adaptation using the finite acceptance
 list in the LSP document, while preserving existing native plan identity. The
