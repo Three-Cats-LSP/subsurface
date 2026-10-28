@@ -37,21 +37,18 @@ The dedicated `Neo planner regression` workflow runs the desktop and mobile
 native test suites on `modern-ui`; Android Qt 6 and Windows MSVC also compile
 the same planner and QML boundary.
 
-## Future Neo Web test pages
+## Windows and Android scope
 
-The planned WebAssembly build must compile and call the same Subsurface
-`plan()` and `create_plot_info_new()` pipeline as Neo native. The browser test
-pages will be thin scenario runners over that module; JavaScript must not
-implement, approximate or silently replace decompression mathematics.
+Windows and Android are the current product targets. Earlier WebAssembly test
+page ideas are outside the current delivery plan. Native Windows regression
+fixtures and the shared Android planner must continue to use Subsurface's own
+`plan()` and `create_plot_info_new()` pipeline.
 
-The eventual public URLs under `https://threecats-lsp.com/subsurface-neo/`
-will provide the Core, Verify, Extended, Massive, Mobile Massive, pSCR
-OTU/CNS and CCR differential groups as separate pages that open in new tabs.
-Their source scenarios may be adapted from the LSP suites where the input
-assumptions are representable, but their expected results will be captured
-from the matching Subsurface revision and versioned with documented
-tolerances. Until the WebAssembly planner module exists, no static page should
-claim to execute Neo's engine.
+The in-progress native fixture manifest records Windows x64 results captured
+from the matching Subsurface revision, with explicit runtime, stop and OTU
+tolerances. These are regression baselines for that engine, not independent
+medical validation or parity with an external engine. They remain unvalidated
+until the matching native suites pass on the changed source.
 
 ## Required before compatibility labels or numerical parity claims
 

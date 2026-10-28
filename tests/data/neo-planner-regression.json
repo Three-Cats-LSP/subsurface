@@ -14,7 +14,12 @@
       "surfacePressureMbar": 1013,
       "planSaveAllowed": true,
       "requiresSchedule": false,
-      "minimumProfileSamples": 2
+      "minimumProfileSamples": 2,
+      "expectedNative": {
+        "runtimeSeconds": 1302,
+        "otu": 0,
+        "stops": []
+      }
     },
     {
       "id": "oc-air-decompression",
@@ -27,7 +32,38 @@
       "surfacePressureMbar": 1013,
       "planSaveAllowed": true,
       "requiresSchedule": true,
-      "minimumProfileSamples": 2
+      "minimumProfileSamples": 2,
+      "expectedNative": {
+        "runtimeSeconds": 3200,
+        "otu": 17,
+        "stops": [
+          {
+            "depthMm": 15000,
+            "durationSeconds": 38,
+            "runTimeSeconds": 2040
+          },
+          {
+            "depthMm": 12000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 2160
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 2340
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 280,
+            "runTimeSeconds": 2640
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 520,
+            "runTimeSeconds": 3180
+          }
+        ]
+      }
     },
     {
       "id": "oc-trimix-altitude",
@@ -40,7 +76,43 @@
       "surfacePressureMbar": 850,
       "planSaveAllowed": true,
       "requiresSchedule": true,
-      "minimumProfileSamples": 2
+      "minimumProfileSamples": 2,
+      "expectedNative": {
+        "runtimeSeconds": 6140,
+        "otu": 11,
+        "stops": [
+          {
+            "depthMm": 18000,
+            "durationSeconds": 86,
+            "runTimeSeconds": 1800
+          },
+          {
+            "depthMm": 15000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 1920
+          },
+          {
+            "depthMm": 12000,
+            "durationSeconds": 220,
+            "runTimeSeconds": 2160
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 340,
+            "runTimeSeconds": 2520
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 880,
+            "runTimeSeconds": 3420
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 2680,
+            "runTimeSeconds": 6120
+          }
+        ]
+      }
     },
     {
       "id": "oc-vpmb-conservative",
@@ -52,7 +124,106 @@
       "surfacePressureMbar": 1013,
       "planSaveAllowed": true,
       "requiresSchedule": true,
-      "minimumProfileSamples": 2
+      "minimumProfileSamples": 2,
+      "expectedNative": {
+        "runtimeSeconds": 2540,
+        "otu": 12,
+        "stops": [
+          {
+            "depthMm": 12000,
+            "durationSeconds": 52,
+            "runTimeSeconds": 1740
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 1860
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 220,
+            "runTimeSeconds": 2100
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 400,
+            "runTimeSeconds": 2520
+          }
+        ]
+      }
+    },
+    {
+      "id": "oc-vpmb-relaxed",
+      "algorithm": "vpmb",
+      "vpmbConservatism": 0,
+      "mix": "21/0",
+      "depthMeters": 40,
+      "durationMinutes": 25,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "expectedNative": {
+        "runtimeSeconds": 2180,
+        "otu": 12,
+        "stops": [
+          {
+            "depthMm": 9000,
+            "durationSeconds": 32,
+            "runTimeSeconds": 1740
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 1860
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 280,
+            "runTimeSeconds": 2160
+          }
+        ]
+      }
     }
-  ]
+  ],
+  "numericalReference": {
+    "revision": "9c7214aac9d602784eac89a2ff1d77d868854cf4",
+    "platform": "Windows x64 native Neo planner",
+    "meaning": "Regression baseline captured from this Subsurface engine, not external-engine equivalence.",
+    "defaults": "core/pref.cpp preferences constructor at the reference revision, with SI units and drop-stone disabled",
+    "diveStartUtc": "2026-01-01T12:00:00Z",
+    "waterDensity": 10300,
+    "cylinder": {
+      "type": "D12 232 bar",
+      "pressureBar": 200,
+      "use": "open circuit"
+    },
+    "runtimeToleranceSeconds": 5,
+    "stopTimeToleranceSeconds": 5,
+    "otuTolerance": 1,
+    "effectivePreferences": {
+      "units": "SI",
+      "descentMmPerSecond": 300,
+      "ascent75MmPerSecond": 150,
+      "ascent50MmPerSecond": 150,
+      "ascentStopsMmPerSecond": 150,
+      "ascentLast6mMmPerSecond": 150,
+      "bottomSacMlPerMinute": 20000,
+      "decoSacMlPerMinute": 17000,
+      "bottomPpO2Mbar": 1400,
+      "decoPpO2Mbar": 1600,
+      "dropStone": false,
+      "lastStop6m": false,
+      "switchAtRequiredStop": false,
+      "minimumSwitchSeconds": 60,
+      "safetyStop": true,
+      "o2Narcotic": true,
+      "surfaceSegmentSeconds": 0,
+      "problemSolvingMinutes": 4,
+      "sacFactorPercent": 400,
+      "oxygenBreaks": false,
+      "bailout": false,
+      "variations": false
+    }
+  }
 }

@@ -14,8 +14,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScopedValueRollback>
+#include <QScopeGuard>
 #include <QVariantMap>
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -609,12 +611,16 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	// planner suites. These deliberately use Subsurface results as the oracle:
 	// external-engine schedules have different, non-native assumptions.
 	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
+	const auto oldLow = model->gfLow(), oldHigh = model->gfHigh();
+	const auto restoreModel = qScopeGuard([&] { model->setGFLow(oldLow); model->setGFHigh(oldHigh); });
 	prefs = default_prefs;
 	prefs.unit_system = METRIC;
 	prefs.units = SI_units;
 	prefs.planner_deco_mode = BUEHLMANN;
 	prefs.gflow = 30;
 	prefs.gfhigh = 75;
+	model->setGFLow(prefs.gflow);
+	model->setGFHigh(prefs.gfhigh);
 	prefs.drop_stone_mode = false;
 
 	auto calculate = [model](int depth, int duration, int oxygen = 21) {
@@ -657,14 +663,17 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	QVERIFY(runtime(deco45) >= runtime(shallow));
 	QVERIFY(runtime(longBottomTime) >= runtime(deco45));
 	prefs.gfhigh = 85;
+	model->setGFHigh(prefs.gfhigh);
 	const QVariantMap relaxedGf = calculate(45, 30);
 	prefs.gfhigh = 70;
+	model->setGFHigh(prefs.gfhigh);
 	const QVariantMap conservativeGf = calculate(45, 30);
 	QVERIFY(runtime(conservativeGf) >= runtime(relaxedGf));
 
 	// Gas and toxicity assertions are checked through the same QML-facing data
 	// contract that Neo uses, rather than through a duplicate calculation.
 	prefs.gfhigh = 75;
+	model->setGFHigh(prefs.gfhigh);
 	const QVariantMap air = calculate(30, 30, 21);
 	const QVariantMap ean32 = calculate(30, 30, 32);
 	QVERIFY(runtime(ean32) <= runtime(air));
@@ -699,6 +708,14 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 	QCOMPARE(fixtureDocument.object().value(QStringLiteral("schema")).toInt(), 1);
 
 	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
+	const auto oldLow = model->gfLow(), oldHigh = model->gfHigh();
+	const auto restoreModel = qScopeGuard([&] { model->setGFLow(oldLow); model->setGFHigh(oldHigh); });
+	const auto reference = fixtureDocument.object().value(QStringLiteral("numericalReference")).toObject();
+	QVERIFY(!reference.isEmpty());
+	const int runtimeTolerance = reference.value(QStringLiteral("runtimeToleranceSeconds")).toInt(-1);
+	const int stopTolerance = reference.value(QStringLiteral("stopTimeToleranceSeconds")).toInt(-1);
+	const int otuTolerance = reference.value(QStringLiteral("otuTolerance")).toInt(-1);
+	QVERIFY(runtimeTolerance >= 0 && stopTolerance >= 0 && otuTolerance >= 0);
 	for (const QJsonValue &fixtureValue : fixtureDocument.object().value(QStringLiteral("scenarios")).toArray()) {
 		const QJsonObject fixture = fixtureValue.toObject();
 		const QByteArray fixtureName = fixture.value(QStringLiteral("id")).toString().toUtf8();
@@ -710,6 +727,8 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 		prefs.planner_deco_mode = algorithm == QStringLiteral("vpmb") ? VPMB : BUEHLMANN;
 		prefs.gflow = fixture.value(QStringLiteral("gfLow")).toInt(30);
 		prefs.gfhigh = fixture.value(QStringLiteral("gfHigh")).toInt(75);
+		model->setGFLow(prefs.gflow);
+		model->setGFHigh(prefs.gfhigh);
 		prefs.vpmb_conservatism = fixture.value(QStringLiteral("vpmbConservatism")).toInt(0);
 
 		QVariantMap cylinder;
@@ -736,6 +755,20 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 			QVERIFY2(hasSchedule, fixtureName.constData());
 		QVERIFY2(result.value(QStringLiteral("otu")).toInt() >= 0, fixtureName.constData());
 		QVERIFY2(!result.value(QStringLiteral("gasAnalysis")).toList().empty(), fixtureName.constData());
+		const auto expected = fixture.value(QStringLiteral("expectedNative")).toObject();
+		QVERIFY2(!expected.isEmpty(), fixtureName.constData());
+		QVERIFY2(std::abs(result.value(QStringLiteral("runtimeSeconds")).toInt() - expected.value(QStringLiteral("runtimeSeconds")).toInt()) <= runtimeTolerance, fixtureName.constData());
+		QVERIFY2(std::abs(result.value(QStringLiteral("otu")).toInt() - expected.value(QStringLiteral("otu")).toInt()) <= otuTolerance, fixtureName.constData());
+		const auto actualStops = result.value(QStringLiteral("schedule")).toList();
+		const auto expectedStops = expected.value(QStringLiteral("stops")).toArray();
+		QVERIFY2(actualStops.size() == expectedStops.size(), fixtureName.constData());
+		for (int i = 0; i < actualStops.size(); ++i) {
+			const auto actual = actualStops[i].toMap();
+			const auto expectedStop = expectedStops[i].toObject();
+			QVERIFY2(actual.value(QStringLiteral("depth")).toInt() == expectedStop.value(QStringLiteral("depthMm")).toInt(), fixtureName.constData());
+			QVERIFY2(std::abs(actual.value(QStringLiteral("duration")).toInt() - expectedStop.value(QStringLiteral("durationSeconds")).toInt()) <= stopTolerance, fixtureName.constData());
+			QVERIFY2(std::abs(actual.value(QStringLiteral("runTime")).toInt() - expectedStop.value(QStringLiteral("runTimeSeconds")).toInt()) <= runtimeTolerance, fixtureName.constData());
+		}
 	}
 	prefs = default_prefs;
 }
