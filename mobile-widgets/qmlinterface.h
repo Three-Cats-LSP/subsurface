@@ -271,7 +271,7 @@ public slots:
 		DivePlannerPointsModel::instance()->setGFHigh(value);
 		emit planner_gfhighChanged(value);
 	}
-	void set_vpmb_conservatism(int value) { DivePlannerPointsModel::instance()->setVpmbConservatism(value); }
+	void set_vpmb_conservatism(int value) { qPrefTechnicalDetails::set_vpmb_conservatism(value); DivePlannerPointsModel::instance()->setVpmbConservatism(value); }
 	void set_dobailout(bool value) { PlannerShared::set_dobailout(value); }
 	void set_drop_stone_mode(bool value) { DivePlannerPointsModel::instance()->setDropStoneMode(value); }
 	void set_last_stop6m(bool value) { DivePlannerPointsModel::instance()->setLastStop6m(value); }

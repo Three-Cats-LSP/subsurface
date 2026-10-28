@@ -34,6 +34,30 @@ DRIVER = r'''
         }
         return null
     }
+    function smokeCheckVpmb() {
+        var previous = {units: Backend.unit_system, mode: Backend.planner_deco_mode,
+                        conservatism: Backend.vpmb_conservatism, drop: Backend.drop_stone_mode}
+        try {
+            Backend.unit_system = Enums.METRIC
+            Backend.planner_deco_mode = Enums.VPMB
+            Backend.drop_stone_mode = false
+            var cylinders = [{type: "D12 232 bar", mix: "21/0", pressure: 200, use: 0}]
+            var segments = [{depth: 40, duration: 25, gas: 0, setpoint: 0, divemode: 0}]
+            Backend.vpmb_conservatism = 0
+            smokeCheck(Backend.vpmb_conservatism === 0, "VPM-B level 0 reaches calculation preferences")
+            var relaxed = Backend.divePlannerPointsModel.calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", 0, 10300, 1013, false)
+            Backend.vpmb_conservatism = 3
+            smokeCheck(Backend.vpmb_conservatism === 3, "VPM-B level 3 reaches calculation preferences")
+            var conservative = Backend.divePlannerPointsModel.calculatePlan(cylinders, segments, "2026-01-01", "12:00:00", 0, 10300, 1013, false)
+            smokeCheck(relaxed.planSaveAllowed && conservative.planSaveAllowed, "VPM-B profiles calculate")
+            smokeCheck(conservative.runtimeSeconds > relaxed.runtimeSeconds, "VPM-B conservatism changes the native schedule")
+        } finally {
+            Backend.vpmb_conservatism = previous.conservatism
+            Backend.planner_deco_mode = previous.mode
+            Backend.drop_stone_mode = previous.drop
+            Backend.unit_system = previous.units
+        }
+    }
     function smokeCheckCleanWidth() {
         var layout = smokeFind(modernDiveList, "NeoDiveListContent")
         smokeCheck(layout !== null, "Clean content layout")
@@ -75,6 +99,7 @@ DRIVER = r'''
                         return
                     }
                     smokeCheck(NeoDashboard.diveCount === 0, "isolated empty log")
+                    smokeCheckVpmb()
                     Backend.cloud_verification_status = Enums.CS_NOCLOUD
                     manager.openNoCloudRepo()
                     rootItem.neoInterfaceStyle = "Clean"
