@@ -38,7 +38,7 @@ CloudWorkspaceReceive::~CloudWorkspaceReceive() { cancel(); }
 void CloudWorkspaceReceive::cancel()
 {
 	++generation; step = Step::Idle; reader.cancel(); opener.cancel(); deadline.stop(); startupRetry.stop(); startupWait.invalidate();
-	receipt.reset(); operationLock.reset(); reference.value = {}; bindingBefore = {}; recoveryEstablished = false;
+	receipt.reset(); operationLock.reset(); reference.value = {}; bindingBefore = {}; reviewedBinding = {}; recoveryEstablished = false;
 	token.clear(); baseline.clear(); target.clear(); reservation.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear();
 	bindingFile.clear(); bindingRevision.clear(); nextRevision.clear(); readFile.clear(); recoveryDirectory.clear(); before.clear(); raw.clear(); after.clear();
 	scopeCurrent = {}; localSnapshot = {}; projectPayload = {}; applyPayload = {};
@@ -53,11 +53,11 @@ void CloudWorkspaceReceive::start(const QString &accessToken, const CloudWorkspa
 	const QString &checkpoint, const QString &binding, const QString &oldRevision, const QString &newRevision,
 	const QString &readIntent, const QString &directory, const QByteArray &expectedBefore, const std::function<bool()> &guard,
 	const std::function<QByteArray()> &snapshot, const std::function<QByteArray(const QByteArray &, const QByteArray &)> &project,
-	const std::function<bool(const QByteArray &, const QByteArray &, const QByteArray &)> &apply)
+	const std::function<bool(const QByteArray &, const QByteArray &, const QByteArray &)> &apply, const QJsonObject &reviewed)
 {
 	cancel(); token = accessToken; reference = workspace; baseline = base; target = commit; reservation = id;
 	choiceFile = choice; choiceVersion = choiceVer; checkpointFile = checkpoint; bindingFile = binding; bindingRevision = oldRevision;
-	nextRevision = newRevision; readFile = readIntent; recoveryDirectory = directory; before = expectedBefore;
+	nextRevision = newRevision; readFile = readIntent; recoveryDirectory = directory; before = expectedBefore; reviewedBinding = reviewed;
 	scopeCurrent = guard; localSnapshot = snapshot; projectPayload = project; applyPayload = apply; step = Step::Starting;
 	if (token.isEmpty() || !reference.valid() || !CloudHistoryRecord::validEpoch(baseline) || !CloudHistoryRecord::validEpoch(target) ||
 	    !CloudHistoryRecord::validEpoch(reservation) || !CloudHistoryRecord::validEpoch(choiceVersion) ||
@@ -80,7 +80,7 @@ void CloudWorkspaceReceive::begin()
 	if (QFileInfo(recoveryDirectory).isSymLink() || !QDir().mkpath(recoveryDirectory)) { fail(); return; }
 	if (!operationLock) { operationLock = std::make_unique<QLockFile>(recoveryDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); }
 	if (!operationLock->isLocked() && !operationLock->tryLock(0)) { retryStartupOrFail(recoveryDirectory + ".operation"); return; }
-	receipt = std::make_unique<CloudWorkspaceReceiveReceipt>(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision);
+	receipt = std::make_unique<CloudWorkspaceReceiveReceipt>(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision, reviewedBinding);
 	const auto path = QDir(recoveryDirectory).filePath("intent.json"); recoveryEstablished = QFileInfo::exists(path);
 	if (recoveryEstablished) {
 		if (!receipt->reload()) { retryStartupOrFail(path); return; }
@@ -95,7 +95,8 @@ void CloudWorkspaceReceive::begin()
 	if (!authority.load()) { retryStartupOrFail(checkpointFile); return; }
 	if (!binding.load()) { retryStartupOrFail(bindingFile); return; }
 	if (!authority.record().valid() || (binding.revision() != bindingRevision && binding.revision() != nextRevision) ||
-	    (binding.revision() == bindingRevision && (binding.commit() != baseline || !binding.matchesModel(before))) ||
+	    (binding.revision() == bindingRevision && (binding.commit() != baseline ||
+	     (reviewedBinding.isEmpty() ? !binding.matchesModel(before) : (binding.value() != reviewedBinding || binding.matchesModel(before))))) ||
 	    (binding.revision() == nextRevision && (!receipt || receipt->state() != "persisted"))) { fail(); return; }
 	if (binding.revision() == bindingRevision) bindingBefore = binding.value();
 	startupRetry.stop(); startupWait.invalidate(); deadline.start();
@@ -138,7 +139,9 @@ void CloudWorkspaceReceive::received(const QJsonObject &value, const QByteArray 
 	CloudWorkspaceAuthority authority(checkpointFile, reference); CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
 	CloudWorkspaceReadIntent owned(readFile, reference, target, reservation);
 	if (!authority.load() || !root.follows(authority.record()) || !binding.load() || binding.revision() != bindingRevision ||
-	    binding.commit() != baseline || !binding.matchesModel(before) || !owned.reload() || owned.state() != "verified" ||
+	    binding.commit() != baseline ||
+	    (reviewedBinding.isEmpty() ? !binding.matchesModel(before) : binding.value() != reviewedBinding) ||
+	    !owned.reload() || owned.state() != "verified" ||
 	    owned.snapshot() != pin(root.ticket(target))) { fail(); return; }
 	const auto serial = generation; const auto snapshot = localSnapshot; const auto actual = snapshot(); if (serial != generation || step == Step::Idle) return;
 	const bool alreadyApplied = (receipt->state() == "applying" || receipt->state() == "applied") && !after.isEmpty() && actual == after;
@@ -186,6 +189,7 @@ void CloudWorkspaceReceive::completed(const QJsonObject &value, const QString &v
 	if (!root.valid() || !authority.observe(root, version, true) || !binding.load() || !owned.reload()) { fail(); return; }
 	const auto serial = generation; const auto snapshot = localSnapshot; const auto actual = snapshot(); if (serial != generation || step == Step::Idle) return;
 	if (binding.revision() == bindingRevision) {
+		if (!reviewedBinding.isEmpty() && root.head() != target) { fail(); return; }
 		if (!binding.advanceReceived(bindingRevision, root, authority.record(), *receipt, owned, actual, nextRevision)) { fail(); return; }
 	} else if (binding.revision() != nextRevision || !binding.ownsReceived(root, authority.record(), *receipt, owned)) { fail(); return; }
 	if (!current() || !binding.ownsReceived(root, authority.record(), *receipt, owned)) { fail(); return; }

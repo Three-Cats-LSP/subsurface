@@ -40,6 +40,21 @@ bool validModel(const QJsonObject &model)
 {
 	return fields(model, {"sha256", "bytes"}) && hash(text(model, "sha256")) && size(model.value("bytes"));
 }
+bool receivedBeforeMatches(const QJsonObject &old, const QJsonObject &proof, const QByteArray &before,
+	const QJsonObject &scope, const QJsonValue &acceptance)
+{
+	const QJsonObject digest{{"sha256", CloudSyncManifest::sha256(before)}, {"bytes", double(before.size())}};
+	if (!validXml(before)) return false;
+	if (text(proof, "format") == "neo-workspace-receive-development-1")
+		return !proof.contains("reviewed_binding") && old.value("model") == digest;
+	if (text(proof, "format") != "neo-workspace-conflict-receive-development-1") return false;
+	const auto reviewed = proof.value("reviewed_binding").toObject();
+	if (reviewed.value("workspace") != scope.value("workspace") || reviewed.value("choice_version") != scope.value("choice_version") ||
+	    reviewed.value("legacy_acceptance") != acceptance || reviewed.value("model") == digest) return false;
+	for (const auto &key : {"revision", "commit", "raw", "model"})
+		if (reviewed.value(QLatin1String(key)) != old.value(QLatin1String(key))) return false;
+	return true;
+}
 }
 
 CloudWorkspaceBinding::CloudWorkspaceBinding(const QString &file, const CloudWorkspaceReference &ref, const QString &choice) : fileName(file), reference(ref)
@@ -236,6 +251,7 @@ bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, con
 	const bool replay = revision() == newRevision && text(saved.value("previous").toObject(), "revision") == expectedRevision;
 	if (!replay && revision() != expectedRevision) return false;
 	const auto old = replay ? saved.value("previous").toObject() : saved, proof = receipt.proof();
+	if (!replay && proof.contains("reviewed_binding") && saved != proof.value("reviewed_binding").toObject()) return false;
 	const auto baseline = text(old, "commit"), target = text(proof, "target"), reservation = text(proof, "reservation");
 	const auto raw = receipt.raw(), before = receipt.before(), after = receipt.after();
 	const auto body = nextAt(root, target, raw, after, newRevision);
@@ -246,7 +262,7 @@ bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, con
 	    text(checkpoint.latestLegacyAcceptance(), "id") != acceptance() ||
 	    proof.value("baseline_pin") != old.value("raw") || old.value("raw").toObject() != pin(root.ticket(baseline)) ||
 	    old.value("raw").toObject() != pin(checkpoint.ticket(baseline)) || proof.value("target_pin").toObject() != pin(root.ticket(target)) ||
-	    old.value("model").toObject() != QJsonObject{{"sha256", CloudSyncManifest::sha256(before)}, {"bytes", double(before.size())}} ||
+	    !receivedBeforeMatches(old, proof, before, scope, saved.value("legacy_acceptance")) ||
 	    !reader.matches(reference, target, reservation) || !reader.reload() || reader.state() != "verified" ||
 	    reader.snapshot() != pin(root.ticket(target))) return false;
 	const auto r = root.value.value("journal").toObject().value("reservations").toObject().value(reservation).toObject();
@@ -271,14 +287,13 @@ bool CloudWorkspaceBinding::ownsReceived(const CloudWorkspaceRecord &root, const
 	const auto proof = receipt.proof(), old = saved.value("previous").toObject();
 	const auto target = text(proof, "target"), baseline = text(proof, "baseline"), reservation = text(proof, "reservation");
 	const auto before = receipt.before(), raw = receipt.raw(), after = receipt.after();
-	const QJsonObject beforeDigest{{"sha256", CloudSyncManifest::sha256(before)}, {"bytes", double(before.size())}};
 	const QJsonObject afterDigest{{"sha256", CloudSyncManifest::sha256(after)}, {"bytes", double(after.size())}};
 	if (old.isEmpty() || proof.value("workspace") != reference.value || proof.value("choice_version") != scope.value("choice_version") ||
 	    text(proof, "binding_revision") != text(old, "revision") || text(proof, "next_revision") != revision() ||
 	    baseline != text(old, "commit") || target != commit() || proof.value("acceptance") != saved.value("legacy_acceptance") ||
 	    proof.value("baseline_pin") != old.value("raw") || proof.value("target_pin") != saved.value("raw") ||
 	    old.value("raw").toObject() != pin(root.ticket(baseline)) || old.value("raw").toObject() != pin(checkpoint.ticket(baseline)) ||
-	    saved.value("raw").toObject() != pin(root.ticket(target)) || old.value("model").toObject() != beforeDigest ||
+	    saved.value("raw").toObject() != pin(root.ticket(target)) || !receivedBeforeMatches(old, proof, before, scope, saved.value("legacy_acceptance")) ||
 	    saved.value("model").toObject() != afterDigest || !validXml(raw) ||
 	    !reader.matches(reference, target, reservation) || !reader.reload() || reader.snapshot() != saved.value("raw").toObject()) return false;
 	const auto r = root.value.value("journal").toObject().value("reservations").toObject().value(reservation).toObject();

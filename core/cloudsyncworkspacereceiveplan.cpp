@@ -32,15 +32,19 @@ QByteArray readXml(const QString &path, const QJsonObject &p)
 }
 CloudWorkspaceReceivePlan::CloudWorkspaceReceivePlan(const QString &path, const CloudWorkspaceReference &ref,
 	const QString &choice, const QString &revision, const QString &next, const QString &baseline,
-	const QString &target, const QString &reservation, const QString &operation) : directory(path)
+	const QString &target, const QString &reservation, const QString &operation, const QJsonObject &reviewedBinding) : directory(path)
 {
 	if (ref.valid() && CloudHistoryRecord::validEpoch(choice) && CloudHistoryRecord::validEpoch(revision) &&
 	    CloudHistoryRecord::validEpoch(next) && CloudHistoryRecord::validEpoch(baseline) && CloudHistoryRecord::validEpoch(target) &&
 	    CloudHistoryRecord::validEpoch(reservation) && CloudHistoryRecord::validEpoch(operation) && revision != next &&
-	    baseline != target && reservation != baseline && reservation != target && operation != baseline && operation != target && operation != reservation)
-		scope = {{"schema", 1}, {"format", "neo-workspace-receive-plan-development-1"}, {"workspace", ref.value},
+	    baseline != target && reservation != baseline && reservation != target && operation != baseline && operation != target && operation != reservation &&
+	    (reviewedBinding.isEmpty() || (reviewedBinding.value("workspace") == ref.value && text(reviewedBinding, "choice_version") == choice &&
+	     text(reviewedBinding, "revision") == revision && text(reviewedBinding, "commit") == baseline))) {
+		scope = {{"schema", 1}, {"format", reviewedBinding.isEmpty() ? "neo-workspace-receive-plan-development-1" : "neo-workspace-conflict-cloud-plan-development-1"}, {"workspace", ref.value},
 			{"choice_version", choice}, {"binding_revision", revision}, {"next_revision", next}, {"baseline", baseline},
 			{"target", target}, {"reservation", reservation}, {"operation", operation}};
+		if (!reviewedBinding.isEmpty()) scope["reviewed_binding"] = reviewedBinding;
+	}
 }
 QString CloudWorkspaceReceivePlan::state() const { return text(saved, "state"); }
 QByteArray CloudWorkspaceReceivePlan::before() const
@@ -100,6 +104,7 @@ bool CloudWorkspaceReceivePlan::complete(CloudWorkspaceBinding &binding, const C
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted" ||
 	    !reader.reload() || reader.state() != "released") return false;
 	const auto proof = receipt.proof();
+	if (proof.value("reviewed_binding") != scope.value("reviewed_binding")) return false;
 	for (const auto &key : {"workspace", "choice_version", "binding_revision", "next_revision", "baseline", "target", "reservation"})
 		if (proof.value(QLatin1String(key)) != scope.value(QLatin1String(key))) return false;
 	if (proof.value("before") != saved.value("before") || receipt.before() != before() || !binding.ownsReceived(root, checkpoint, receipt, reader)) return false;

@@ -22,12 +22,13 @@ guarded operation. Review must bind the current account, exact selected
 workspace, local contents, accepted legacy observation, binding and remote
 head. If any changes, require a new review. Never silently pick a winner.
 
-Preserve and verify both sides as independently recoverable workspace versions
+Preserve and verify both originals as independently recoverable copies
 before replacing local data or advancing its binding. If choosing the local
 side, publish it conditionally from the reviewed remote head, retaining the
-remote version. If choosing the remote side, first protect the local version,
-then explicitly restore the selected remote version through the existing
-durable save and recovery flow. The owner has removed the Combine option;
+remote version. If choosing the remote side, retain the local log and verified
+cloud bytes in the existing private receive recovery files, then replace and
+durably save the device log. Keep the cloud version current without publishing
+an intermediate local winner. The owner has removed the Combine option;
 neither choice silently merges the versions. Journal the confirmation and recovery steps before
 mutation; resume the same operation after interruption. A changed legacy
 source must be copied and explicitly accepted under equivalent guards.

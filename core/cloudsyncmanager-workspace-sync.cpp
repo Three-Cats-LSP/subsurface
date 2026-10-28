@@ -39,7 +39,7 @@ bool apply(const QByteArray &raw, const QByteArray &before, const QByteArray &af
 void CloudSyncManager::resolveWorkspaceConflict(const QString &providerId, const QString &reviewId, const QString &choice)
 {
 	const auto review = workspaceConflictReviews.value(providerId);
-	if (choice != QLatin1String("device") || !CloudHistoryRecord::validEpoch(reviewId) || review.id != reviewId ||
+	if ((choice != QLatin1String("device") && choice != QLatin1String("cloud")) || !CloudHistoryRecord::validEpoch(reviewId) || review.id != reviewId ||
 	    syncInProgress() || authorizationInProgress() || accountCheckInProgress() || !workspaceRouteConfirmed(providerId)) {
 		setError(tr("Review the current conflict before choosing a version. Your data was kept.")); return;
 	}
@@ -48,9 +48,9 @@ void CloudSyncManager::resolveWorkspaceConflict(const QString &providerId, const
 		workspaceConflictReviews.remove(providerId);
 		setError(tr("The local log changed. Review the conflict again.")); return;
 	}
-	workspaceConflictRequested = reviewId; workspaceConflictProvider = providerId;
+	workspaceConflictRequested = reviewId; workspaceConflictProvider = providerId; workspaceConflictChoice = choice;
 	syncDiveLog(providerId);
-	if (!workspaceSyncInProgress()) { workspaceConflictRequested.clear(); workspaceConflictProvider.clear(); }
+	if (!workspaceSyncInProgress()) { workspaceConflictRequested.clear(); workspaceConflictProvider.clear(); workspaceConflictChoice.clear(); }
 }
 
 bool CloudSyncManager::workspaceSyncScopeCurrent()
@@ -141,11 +141,11 @@ bool CloudSyncManager::resumeWorkspaceSync()
 				if (valid && state == "completed" && authority.load() && binding.load())
 					completedProof = plan.complete(binding, authority.record(), authority.record(), QDir(entry.filePath()).filePath("intent.json"));
 			} else {
-				CloudWorkspaceReceivePlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, field(body, "binding_revision"), field(body, "next_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), attempt);
+				CloudWorkspaceReceivePlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, field(body, "binding_revision"), field(body, "next_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), attempt, body.value("reviewed_binding").toObject());
 				valid = plan.reload(); state = plan.state();
 				if (valid && state == "completed" && authority.load() && binding.load()) {
 					CloudWorkspaceReceiveReceipt receipt(QDir(entry.filePath()).filePath("recovery"), workspaceSyncReference, workspaceSyncChoiceVersion,
-						field(body, "binding_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), field(body, "next_revision"));
+						field(body, "binding_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), field(body, "next_revision"), body.value("reviewed_binding").toObject());
 					CloudWorkspaceReadIntent reader(QDir(entry.filePath()).filePath("read.json"), workspaceSyncReference, field(body, "target"), field(body, "reservation"));
 					completedProof = plan.complete(binding, authority.record(), authority.record(), receipt, reader);
 				}
@@ -186,7 +186,7 @@ bool CloudSyncManager::resumeWorkspaceSync()
 			old, next, baseline, field(pending, "ticket"), operation, dir, QDir(pendingDir).filePath("intent.json"), plan.payload(), guard,
 			[] { return CloudWorkspaceModel::currentXml(); }, field(pending, "reviewed_head"), pending.value("reviewed_binding").toObject());
 	} else {
-		CloudWorkspaceReceivePlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, old, next, baseline, field(pending, "target"), field(pending, "reservation"), operation);
+		CloudWorkspaceReceivePlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, old, next, baseline, field(pending, "target"), field(pending, "reservation"), operation, pending.value("reviewed_binding").toObject());
 		if (!workspacePersistenceAvailable || !workspacePersist || !workspacePersistenceAvailable() || !plan.reload() ||
 		    (plan.before().isEmpty() && !plan.prepare(workspaceSyncModel)) || plan.before().isEmpty() ||
 		    !safePath({QDir(pendingDir).filePath("recovery")})) {
@@ -194,7 +194,7 @@ bool CloudSyncManager::resumeWorkspaceSync()
 		}
 		workspaceSyncReceive.start(workspaceSyncToken, workspaceSyncReference, choice, workspaceSyncChoiceVersion, workspaceSyncCheckpointFile, workspaceSyncBindingFile,
 			old, next, baseline, field(pending, "target"), field(pending, "reservation"), operation, dir, QDir(pendingDir).filePath("read.json"),
-			QDir(pendingDir).filePath("recovery"), plan.before(), guard, [] { return CloudWorkspaceModel::currentXml(); }, project, apply);
+			QDir(pendingDir).filePath("recovery"), plan.before(), guard, [] { return CloudWorkspaceModel::currentXml(); }, project, apply, pending.value("reviewed_binding").toObject());
 	}
 	return true;
 }
@@ -237,22 +237,23 @@ void CloudSyncManager::workspaceSyncReviewed(int result, const QJsonObject &valu
 			tr("The workspace needs review. Your local log and cloud versions were kept."));
 		clearSyncOperation(); return;
 	}
-	if (action == Action::Receive && (!workspacePersistenceAvailable || !workspacePersist || !workspacePersistenceAvailable())) {
+	const bool upload = action == Action::Upload || (!selected.id.isEmpty() && workspaceConflictChoice == "device");
+	if (!upload && (!workspacePersistenceAvailable || !workspacePersist || !workspacePersistenceAvailable())) {
 		setError(tr("The local dive log cannot be saved safely. Cloud and local versions were kept.")); clearSyncOperation(); return;
 	}
-	const auto operation = id(), type = (action == Action::Upload || !selected.id.isEmpty()) ? QStringLiteral("sync-uploads") : QStringLiteral("sync-receives");
+	const auto operation = id(), type = upload ? QStringLiteral("sync-uploads") : QStringLiteral("sync-receives");
 	const auto base = QDir(workspaceSyncPath).filePath(type), scope = QDir(base).filePath(workspaceSyncReference.key()), attempt = QDir(scope).filePath(operation), plan = QDir(attempt).filePath("plan");
 	if (!safePath({workspaceSyncPath, base, scope, attempt, plan, QDir(attempt).filePath("recovery")})) { setError(tr("Workspace recovery storage needs review. Your data was kept.")); clearSyncOperation(); return; }
 	const auto serial = workspaceSerial; const auto next = id(); auto guard = [this, serial] { return workspaceSerial == serial && workspaceSyncScopeCurrent(); };
 	const auto choice = QDir(workspaceSyncPath).filePath("selection.json");
-	if (action == Action::Upload || !selected.id.isEmpty()) {
+	if (upload) {
 		workspaceSyncUpload.start(workspaceSyncToken, workspaceSyncReference, choice, workspaceSyncChoiceVersion, workspaceSyncCheckpointFile, workspaceSyncBindingFile,
 			revision, next, binding.commit(), id(), operation, plan, QDir(attempt).filePath("intent.json"), workspaceSyncModel, guard,
 			[] { return CloudWorkspaceModel::currentXml(); }, selected.head, selected.binding);
 	} else {
 		workspaceSyncReceive.start(workspaceSyncToken, workspaceSyncReference, choice, workspaceSyncChoiceVersion, workspaceSyncCheckpointFile, workspaceSyncBindingFile,
 			revision, next, binding.commit(), root.head(), id(), operation, plan, QDir(attempt).filePath("read.json"), QDir(attempt).filePath("recovery"),
-			workspaceSyncModel, guard, [] { return CloudWorkspaceModel::currentXml(); }, project, apply);
+			workspaceSyncModel, guard, [] { return CloudWorkspaceModel::currentXml(); }, project, apply, selected.binding);
 	}
 }
 
@@ -270,6 +271,7 @@ void CloudSyncManager::workspaceSyncCompleted(const QJsonObject &, const QString
 {
 	if (!workspaceSyncScopeCurrent()) { setError(tr("The workspace changed during sync. Your data and recovery records were kept.")); clearSyncOperation(); return; }
 	const auto provider = syncProviderId;
+	workspaceConflictReviews.remove(provider);
 	if (headMatches) recordSuccessfulSync(provider);
 	clearSyncOperation();
 	if (!headMatches) {

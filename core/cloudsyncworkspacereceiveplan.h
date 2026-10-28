@@ -10,7 +10,8 @@ class CloudWorkspaceReceivePlan {
 public:
 	CloudWorkspaceReceivePlan(const QString &directory, const CloudWorkspaceReference &workspace,
 		const QString &choiceVersion, const QString &bindingRevision, const QString &nextRevision,
-		const QString &baseline, const QString &target, const QString &reservation, const QString &operation);
+		const QString &baseline, const QString &target, const QString &reservation, const QString &operation,
+		const QJsonObject &reviewedBinding = {});
 	bool reload();
 	bool prepare(const QByteArray &beforeModel);
 	bool complete(CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,

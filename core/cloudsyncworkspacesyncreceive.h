@@ -22,7 +22,8 @@ public:
 		const QString &planDirectory, const QString &readIntentFile, const QString &recoveryDirectory, const QByteArray &beforeModel,
 		const std::function<bool()> &scopeCurrent, const std::function<QByteArray()> &localSnapshot,
 		const std::function<QByteArray(const QByteArray &, const QByteArray &)> &project,
-		const std::function<bool(const QByteArray &, const QByteArray &, const QByteArray &)> &apply);
+		const std::function<bool(const QByteArray &, const QByteArray &, const QByteArray &)> &apply,
+		const QJsonObject &reviewedBinding = {});
 	void confirmPersisted();
 	void cancel();
 signals:
@@ -42,6 +43,7 @@ private:
 	std::unique_ptr<CloudWorkspaceReceivePlan> plan;
 	std::unique_ptr<QLockFile> operationLock;
 	CloudWorkspaceReference reference;
+	QJsonObject reviewedBinding;
 	Step step = Step::Idle;
 	bool priorPlan = false;
 	quint64 generation = 0;

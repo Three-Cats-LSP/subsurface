@@ -65,16 +65,21 @@ bool saveXml(const QString &path, const QJsonObject &d, const QByteArray &bytes)
 }
 
 CloudWorkspaceReceiveReceipt::CloudWorkspaceReceiveReceipt(const QString &path, const CloudWorkspaceReference &ref,
-	const QString &choice, const QString &revision, const QString &baseline, const QString &target, const QString &reservation, const QString &nextRevision) :
+	const QString &choice, const QString &revision, const QString &baseline, const QString &target, const QString &reservation, const QString &nextRevision,
+	const QJsonObject &reviewedBinding) :
 	directory(path), reference(ref)
 {
 	if (ref.valid() && CloudHistoryRecord::validEpoch(choice) && CloudHistoryRecord::validEpoch(revision) &&
 	    CloudHistoryRecord::validEpoch(baseline) && CloudHistoryRecord::validEpoch(target) &&
 	    CloudHistoryRecord::validEpoch(reservation) && CloudHistoryRecord::validEpoch(nextRevision) && revision != nextRevision &&
-	    baseline != target && reservation != baseline && reservation != target)
-		scope = {{"schema", 1}, {"format", "neo-workspace-receive-development-1"}, {"workspace", ref.value},
+	    baseline != target && reservation != baseline && reservation != target &&
+	    (reviewedBinding.isEmpty() || (reviewedBinding.value("workspace") == ref.value &&
+	     text(reviewedBinding, "choice_version") == choice && text(reviewedBinding, "revision") == revision && text(reviewedBinding, "commit") == baseline))) {
+		scope = {{"schema", 1}, {"format", reviewedBinding.isEmpty() ? "neo-workspace-receive-development-1" : "neo-workspace-conflict-receive-development-1"}, {"workspace", ref.value},
 			{"choice_version", choice}, {"binding_revision", revision}, {"next_revision", nextRevision},
 			{"baseline", baseline}, {"target", target}, {"reservation", reservation}};
+		if (!reviewedBinding.isEmpty()) scope["reviewed_binding"] = reviewedBinding;
+	}
 }
 QString CloudWorkspaceReceiveReceipt::state() const { return text(saved, "state"); }
 QByteArray CloudWorkspaceReceiveReceipt::before() const { return saved.isEmpty() ? QByteArray() : loadXml(QDir(directory).filePath("before.xml"), saved.value("before").toObject()); }
@@ -85,6 +90,12 @@ bool CloudWorkspaceReceiveReceipt::valid(const QJsonObject &body) const
 	auto fixed = body;
 	for (const auto &key : {"state", "acceptance", "baseline_pin", "target_pin", "before", "raw", "after"}) fixed.remove(QLatin1String(key));
 	const auto targetPin = body.value("target_pin").toObject(), rawDigest = body.value("raw").toObject();
+	if (scope.contains("reviewed_binding")) {
+		const auto reviewed = scope.value("reviewed_binding").toObject();
+		if (reviewed.value("schema") != QJsonValue(1) || text(reviewed, "format") != "neo-workspace-sync-binding-development-1" ||
+		    reviewed.value("raw") != body.value("baseline_pin") || reviewed.value("legacy_acceptance") != body.value("acceptance") ||
+		    !validDigest(reviewed.value("model").toObject()) || reviewed.value("model") == body.value("before")) return false;
+	}
 	return !scope.isEmpty() && fixed == scope && QStringList({"prepared", "ready", "applying", "applied", "persisted"}).contains(text(body, "state")) &&
 		CloudHistoryRecord::validEpoch(text(body, "acceptance")) &&
 		validPin(reference, text(scope, "baseline"), body.value("baseline_pin").toObject()) &&
@@ -128,7 +139,8 @@ bool CloudWorkspaceReceiveReceipt::prepare(const CloudWorkspaceBinding &binding,
 	    root.reference().value != reference.value || checkpoint.reference().value != reference.value || !root.follows(checkpoint) ||
 	    root.head() != text(scope, "target") || binding.revision() != text(scope, "binding_revision") ||
 	    binding.commit() != text(scope, "baseline") || binding.value().value("workspace") != reference.value ||
-	    binding.value().value("choice_version") != scope.value("choice_version") || !binding.matchesModel(beforeModel) ||
+	    binding.value().value("choice_version") != scope.value("choice_version") ||
+	    (scope.contains("reviewed_binding") ? (binding.value() != scope.value("reviewed_binding").toObject() || binding.matchesModel(beforeModel)) : !binding.matchesModel(beforeModel)) ||
 	    text(root.latestLegacyAcceptance(), "id") != binding.acceptance() ||
 	    text(checkpoint.latestLegacyAcceptance(), "id") != binding.acceptance()) return false;
 	const auto baselinePin = pin(root.ticket(text(scope, "baseline"))), targetPin = pin(root.ticket(text(scope, "target")));

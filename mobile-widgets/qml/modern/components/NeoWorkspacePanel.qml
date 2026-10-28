@@ -12,12 +12,25 @@ ColumnLayout {
 	property var pendingAcceptance: ({})
 	property var pendingActivation: ({})
 	property var pendingRestore: ({})
+	property string pendingConflictReview: ""
+	property string shownConflictReview: ""
+	property bool conflictUiReady: false
 	signal draftEdited(string value)
 	readonly property var report: provider.workspace || ({})
 	readonly property bool available: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
 	readonly property bool busy: CloudSync.workspaceProviderId === provider.id
 	spacing: 10
 	Modern.DesignTokens { id: tokens }
+	function showConflict(force) {
+		var review = panel.report.conflictReview || ""
+		if (!panel.conflictUiReady || !panel.available || !panel.report.syncConflict || !review || (!force && review === panel.shownConflictReview)) return
+		panel.pendingConflictReview = review
+		panel.shownConflictReview = review
+		conflictDialog.open()
+	}
+	onReportChanged: showConflict(false)
+	onAvailableChanged: if (available) showConflict(false)
+	Component.onCompleted: { conflictUiReady = true; showConflict(false) }
 	Text {
 		text: qsTr("Experimental workspaces")
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
@@ -65,8 +78,13 @@ ColumnLayout {
 		Text {
 			objectName: "workspaceConflictStatus-" + panel.provider.id
 			visible: !!panel.report.syncConflict
-			text: qsTr("This device and the workspace both changed. Your local log and cloud versions are kept. Review the workspace versions before continuing.")
+			text: qsTr("This device and Google Drive both changed. Choose which version to keep.")
 			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
+		NeoButton {
+			objectName: "resolveWorkspaceConflict-" + panel.provider.id; text: qsTr("Choose version…"); compact: true; Layout.fillWidth: true
+			visible: !!panel.report.syncConflict; enabled: panel.available
+			onClicked: panel.showConflict(true)
 		}
 		GridLayout {
 			Layout.fillWidth: true; columns: width > 560 ? 2 : 1; rowSpacing: 8; columnSpacing: 8
@@ -315,6 +333,33 @@ ColumnLayout {
 		objectName: "joinWorkspace-" + panel.provider.id; text: qsTr("Verify and join"); compact: true; Layout.fillWidth: true
 		enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
+	}
+	Popup {
+		id: conflictDialog; objectName: "workspaceConflictDialog-" + panel.provider.id
+		parent: Overlay.overlay; anchors.centerIn: parent; modal: true; focus: true; padding: 16
+		closePolicy: Popup.CloseOnEscape
+		width: Math.max(280, Math.min(460, parent ? parent.width - 32 : panel.width))
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Rectangle {
+			objectName: "workspaceConflictBody-" + panel.provider.id; color: tokens.surfaceRaised; implicitHeight: conflictContent.implicitHeight
+			Accessible.role: Accessible.Dialog; Accessible.name: conflictTitle.text
+			ColumnLayout {
+				id: conflictContent; width: parent.width; spacing: 12
+				Text { id: conflictTitle; text: qsTr("Which version do you want to keep?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: qsTr("Keep this device to upload its log to Google Drive. Keep cloud to replace this device’s log with the cloud version. A recovery copy is kept before replacement."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				NeoButton {
+					objectName: "keepWorkspaceDevice-" + panel.provider.id; text: qsTr("Keep this device"); Layout.fillWidth: true
+					enabled: panel.available && panel.pendingConflictReview === panel.report.conflictReview
+					onClicked: { var review = panel.pendingConflictReview; conflictDialog.close(); CloudSync.resolveWorkspaceConflict(panel.provider.id, review, "device") }
+				}
+				NeoButton {
+					objectName: "keepWorkspaceCloud-" + panel.provider.id; text: qsTr("Keep cloud"); Layout.fillWidth: true
+					enabled: panel.available && panel.pendingConflictReview === panel.report.conflictReview
+					onClicked: { var review = panel.pendingConflictReview; conflictDialog.close(); CloudSync.resolveWorkspaceConflict(panel.provider.id, review, "cloud") }
+				}
+				NeoButton { objectName: "cancelWorkspaceConflict-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: conflictDialog.close() }
+			}
+		}
 	}
 	Popup {
 		id: activationDialog; objectName: "workspaceActivationDialog-" + panel.provider.id

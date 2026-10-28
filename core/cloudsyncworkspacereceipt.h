@@ -13,7 +13,8 @@ class CloudWorkspaceReceiveReceipt {
 public:
 	CloudWorkspaceReceiveReceipt(const QString &directory, const CloudWorkspaceReference &workspace,
 		const QString &choiceVersion, const QString &bindingRevision, const QString &baseline,
-		const QString &target, const QString &reservation, const QString &nextRevision);
+		const QString &target, const QString &reservation, const QString &nextRevision,
+		const QJsonObject &reviewedBinding = {});
 	bool reload();
 	bool prepare(const CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root,
 		const CloudWorkspaceRecord &checkpoint, CloudWorkspaceReadIntent &readIntent,

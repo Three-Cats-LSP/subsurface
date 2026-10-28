@@ -85,9 +85,7 @@ public:
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
 	Q_INVOKABLE void backupDiveLog(const QString &providerId);
 	Q_INVOKABLE void syncDiveLog(const QString &providerId);
-	// Internal candidate only: do not expose to QML until the reviewed cloud
-	// payload is verified and the complete conflict choices are implemented.
-	void resolveWorkspaceConflict(const QString &providerId, const QString &reviewId, const QString &choice);
+	Q_INVOKABLE void resolveWorkspaceConflict(const QString &providerId, const QString &reviewId, const QString &choice);
 	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
 	Q_INVOKABLE void setPrimaryProvider(const QString &providerId);
 	Q_INVOKABLE void setBackupProvider(const QString &providerId);
@@ -255,7 +253,7 @@ private:
 		QJsonObject binding;
 	};
 	QHash<QString, WorkspaceConflictReview> workspaceConflictReviews;
-	QString workspaceConflictRequested, workspaceConflictProvider;
+	QString workspaceConflictRequested, workspaceConflictProvider, workspaceConflictChoice;
 	QHash<QString, WorkspaceCopyReview> workspaceCopyReviews;
 	WorkspaceCopyReview workspaceCopyReview;
 	CloudWorkspaceRecord workspaceReviewedRoot;

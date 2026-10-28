@@ -1352,7 +1352,7 @@ void CloudSyncManager::clearSyncOperation()
 	routeLease.reset(); routeProvider.clear(); rawProtectedName.clear(); legacyRouteOperation = false;
 	workspaceSyncAccount.clear(); workspaceSyncToken.clear(); workspaceSyncPath.clear(); workspaceSyncChoiceVersion.clear(); workspaceSyncBindingFile.clear(); workspaceSyncCheckpointFile.clear();
 	workspaceSyncReference.value = {}; workspaceSyncRoute = {}; workspaceSyncModel.clear();
-	workspaceConflictRequested.clear(); workspaceConflictProvider.clear();
+	workspaceConflictRequested.clear(); workspaceConflictProvider.clear(); workspaceConflictChoice.clear();
 	if (wasActive)
 		emit syncInProgressChanged();
 	if (wasWorkspaceSync)
