@@ -1553,6 +1553,7 @@ void TestCloudSyncManager::testWorkspaceRouteFence()
 	const auto original = manager.serializeCurrentDiveLog();
 	if (mode == 9) {
 		QSettings().setValue(key, false); QVERIFY(manager.workspaceRouteRequired(provider)); QVERIFY(!manager.workspaceRouteConfirmed(provider));
+		QVERIFY(manager.workspaceReport(provider).value("routeRecoveryRequired").toBool());
 		manager.syncDiveLog(provider); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); return;
 	}
 	if (mode == 8) {
@@ -1568,6 +1569,7 @@ void TestCloudSyncManager::testWorkspaceRouteFence()
 	}
 	if (mode == 2) {
 		QVERIFY(QDir().mkpath(QFileInfo(routePath).absolutePath())); QFile f(routePath + ".json"); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("unknown") == 7); f.close();
+		QVERIFY(manager.workspaceReport(provider).value("routeRecoveryRequired").toBool());
 		manager.syncDiveLog(provider); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("unknown")); return;
 	}
 	if (mode == 3) {

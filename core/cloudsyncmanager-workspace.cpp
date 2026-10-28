@@ -145,7 +145,7 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 	const bool activeRoute = required && workspaceRouteConfirmed(providerId) && validRoute && route.state() == "active" &&
 		route.value().value("workspace").toObject() == selected.value && text(route.value(), "choice_version") == choice.version();
 	report["routeActive"] = activeRoute;
-	report["routeRecoveryRequired"] = required && (!validRoute || route.state() != "active" || !activeRoute);
+	report["routeRecoveryRequired"] = !validRoute || (!activeRoute && (required || !route.value().isEmpty()));
 	QVariantList saved;
 	for (auto it = known.begin(); it != known.end(); ++it) {
 		CloudWorkspaceReference ref; ref.value = it.value().toObject();
