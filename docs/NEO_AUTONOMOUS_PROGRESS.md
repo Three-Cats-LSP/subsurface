@@ -9,6 +9,24 @@ engine bundles and full presets imported, syntax translation reproducible,
 comparison, UI/save/export integration and package validation remain open.
 Do not relabel the still-native public planner as LSP before wiring it.
 
+**Current LSP check to resume: `40708771596`, source `151e53b2f`.** The latest
+functional C++ boundary is `aa0f20f70`: requests enter JavaScript through
+`JSON.parse` as plain data, avoiding version-dependent QVariant sequence wrappers.
+The follow-up workflow commit quotes the CMake version argument (locally proven:
+PowerShell split the unquoted `6.8.3` argument into `6` and `.8.3`). Native hosted
+checks remain 55/55; Windows is pending on that source. Do not resume or rerun
+superseded failed runs below.
+
+Correction to earlier startup/cache interpretation: a fresh Qt check confirmed
+all DLLs and the platform plugin existed. Runs **40706143649** and **40706743408**
+failed in windeployqt GUI-plugin discovery, not because the expected plugin file
+was absent. Explicit deployment of the headless four-DLL closure in **40707615383**
+allowed direct file logging: Qt 6.8.3 actually executed **16 passed / 39 failed**,
+rejecting all reference inputs. The initially empty CTest output alone did not
+prove a pre-main launch failure. The plain-JSON fix awaits its Windows result;
+**40708302494** stopped before tests because of the now-corrected argument quoting.
+Retain all failed aggregates; no expectation or LSP algorithm was changed.
+
 LSP adoption implementation **`b2d1df52b`** is pushed. The first non-skipped
 validation source is **`ba0db8dc2`**. In LSP run **40705358571**, source/evidence
 hashes, reproducible syntax generation and original-Node reference reproduction

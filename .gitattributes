@@ -14,3 +14,4 @@ third-party/lsp-planner/** text eol=lf
 third-party/lsp-planner/*.js -whitespace
 qt-models/lspplannerhost.js text eol=lf
 tests/data/lsp-planner/** text eol=lf
+tests/data/neo-lsp-regression.json text eol=lf
