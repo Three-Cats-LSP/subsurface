@@ -106,8 +106,25 @@ bool CloudWorkspaceBinding::activate(const CloudWorkspaceRecord &root, const Clo
 {
 	const QFileInfo parent(QFileInfo(fileName).absolutePath()); if (scope.isEmpty() || fileName.isEmpty() || parent.isSymLink() || !QDir().mkpath(parent.filePath())) return false;
 	QLockFile lock(fileName + ".lock");
-	if (!lock.tryLock(0) || !read() || !saved.isEmpty() || raw != model || !checkpoint.valid() || checkpoint.json() != root.json()) return false;
-	const auto body = next(root, raw, model, newRevision); return !body.isEmpty() && write(body);
+	if (!lock.tryLock(0) || !read() || raw != model || !checkpoint.valid() || checkpoint.json() != root.json()) return false;
+	const auto body = next(root, raw, model, newRevision);
+	return !body.isEmpty() && (saved.isEmpty() ? write(body) : saved == body);
+}
+bool CloudWorkspaceBinding::ownsActivation(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+	const QByteArray &raw, const QByteArray &model, const QString &expectedRevision, const QString &target)
+{
+	if (fileName.isEmpty() || !CloudHistoryRecord::validEpoch(expectedRevision) || !CloudHistoryRecord::validEpoch(target) || raw != model) return false;
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !saved.value("previous").toObject().isEmpty() || revision() != expectedRevision ||
+	    commit() != target || !root.valid() || !checkpoint.valid() || !root.follows(checkpoint) ||
+	    root.reference().value != reference.value || checkpoint.reference().value != reference.value || !matchesModel(model) ||
+	    saved.value("raw").toObject() != pin(root.ticket(target)) || saved.value("raw").toObject() != pin(checkpoint.ticket(target))) return false;
+	const auto t = root.ticket(target);
+	if (text(t, "state") != "committed" || text(t, "sha256") != CloudSyncManifest::sha256(raw) || t.value("bytes").toDouble() != raw.size()) return false;
+	bool foundRoot = false, foundCheckpoint = false;
+	for (const auto &entry : root.value.value("legacy_acceptances").toArray()) if (text(entry.toObject(), "id") == acceptance()) foundRoot = true;
+	for (const auto &entry : checkpoint.value.value("legacy_acceptances").toArray()) if (text(entry.toObject(), "id") == acceptance()) foundCheckpoint = true;
+	return foundRoot && foundCheckpoint;
 }
 bool CloudWorkspaceBinding::advanceOwnedUpload(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 	const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &newRevision)

@@ -15,6 +15,8 @@ public:
 	bool inspect();
 	bool load();
 	bool activate(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &raw, const QByteArray &model, const QString &revision);
+	bool ownsActivation(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &raw,
+		const QByteArray &model, const QString &revision, const QString &target);
 	bool advanceOwnedUpload(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &revision);
 	bool advanceReceived(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
