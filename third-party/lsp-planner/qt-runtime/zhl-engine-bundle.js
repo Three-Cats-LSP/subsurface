@@ -23,6 +23,7 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 (function (global) {
   'use strict';
 
+  var _neoNativeTrace = null;
   var ZHL16C = [[5.0, 1.2599, 0.5050], [8.0, 1.0000, 0.6514], [12.5, 0.8618, 0.7222], [18.5, 0.7562, 0.7825], [27.0, 0.6200, 0.8126], [38.3, 0.5043, 0.8434], [54.3, 0.4410, 0.8693], [77.0, 0.4000, 0.8910], [109.0, 0.3750, 0.9092], [146.0, 0.3500, 0.9222], [187.0, 0.3295, 0.9319], [239.0, 0.3065, 0.9403], [305.0, 0.2835, 0.9477], [390.0, 0.2610, 0.9544], [498.0, 0.2480, 0.9602], [635.0, 0.2327, 0.9653]];
   var ZHL16C_HE_HT_BAKER = [1.88, 3.02, 4.72, 6.99, 10.21, 14.48, 20.53, 29.11, 41.20, 55.19, 70.69, 90.34, 115.29, 147.42, 188.24, 240.03];
   var ZHL16C_HE_HT_BUHL2003 = [1.51, 3.02, 4.72, 6.99, 10.21, 14.48, 20.53, 29.11, 41.20, 55.19, 70.69, 90.34, 115.29, 147.42, 188.24, 240.03];
@@ -1352,6 +1353,7 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
             type: 'deco',
             depth: cur,
             dur: mustStopDisplay,
+            nativeDuration: stopT,
             gas: gasLabel,
             pO2: zhlStepPpo2(cur, stopFN2, stopFHe, 'deco'),
             fN2: stopFN2,
@@ -1420,6 +1422,7 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
               type: 'deco',
               depth: cur,
               dur: minStopDisplay,
+              nativeDuration: _stopT,
               gas: gasLabel,
               pO2: zhlStepPpo2(cur, stopFN2, stopFHe, 'deco'),
               fN2: stopFN2,
@@ -1482,6 +1485,7 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
             type: stopType,
             depth: cur,
             dur: lastStopDisplay,
+            nativeDuration: _stopT2,
             gas: gasLabel,
             pO2: zhlStepPpo2(cur, stopFN2, stopFHe, 'deco'),
             fN2: stopFN2,
@@ -1505,6 +1509,7 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
             type: 'deco',
             depth: cur,
             dur: mdpDisplay,
+            nativeDuration: _stopT3,
             gas: gasLabel,
             pO2: zhlStepPpo2(cur, stopFN2, stopFHe, 'deco'),
             fN2: stopFN2,
@@ -1628,6 +1633,21 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
     // the headless early-return below) so it's available in both headless tests
     // and the live DOM-rendered footer.
     var ttsMin = Math.max(0, rt - bt);
+    _neoNativeTrace = {
+      runtimeMinutes: rt,
+      steps: steps.map(function (step) {
+        return _objectSpread({}, step);
+      }),
+      tissuesAtBottom: tissuesAtBottom.map(function (t) {
+        return _objectSpread({}, t);
+      }),
+      finalTissues: tissues.map(function (t) {
+        return _objectSpread({}, t);
+      }),
+      hitSafetyGuard: !!hitSafetyGuard,
+      bottomRuntimeMinutes: bt,
+      firstStopDepth: firstStopDepth || 0
+    };
     var lastPlan = {
       rt: runTimeMin,
       tts: Math.round(ttsMin * 10) / 10,
@@ -1984,6 +2004,9 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
     return mapToEngineReturn(lp, level, s, isMetric);
   }
   var api = {
+    neoNativeTrace: function neoNativeTrace() {
+      return _neoNativeTrace;
+    },
     runZhlScheduleCore: runZhlScheduleCore,
     buildZhlScheduleParamsFromEngine: buildZhlScheduleParamsFromEngine,
     splitZhlProfileLevels: splitZhlProfileLevels,

@@ -186,6 +186,9 @@ static int neoScopedDiveNumber(const struct dive *target)
 
 static QPair<QString, QString> neoPlanReportParts(const struct dive *d)
 {
+	const auto metadata = neoPlanMetadata(d->notes);
+	if (metadata.value(QStringLiteral("engine")).toMap().value(QStringLiteral("id")).toString() == QLatin1String("lsp-d-planner-plus"))
+		return {metadata.value(QStringLiteral("reportHeader")).toString(), metadata.value(QStringLiteral("reportFooter")).toString()};
 	QTextDocument document;
 	document.setHtml(neoPlanNotesWithoutMetadata(d->notes));
 	const QString report = document.toPlainText().trimmed();
@@ -444,7 +447,7 @@ QVariant DiveTripModelBase::diveData(const struct dive *d, int column, int role)
 {
 #ifdef SUBSURFACE_MOBILE
 	QVariantMap planMetadata = d->is_planned() ? neoPlanMetadata(d->notes) : QVariantMap();
-	if (d->is_planned()) {
+	if (d->is_planned() && planMetadata.value(QStringLiteral("engine")).toMap().value(QStringLiteral("id")).toString() != QLatin1String("lsp-d-planner-plus")) {
 		const QVariantMap fallback = neoSavedPlanFallback(d);
 		for (auto it = fallback.cbegin(); it != fallback.cend(); ++it) {
 			if (!planMetadata.contains(it.key()))

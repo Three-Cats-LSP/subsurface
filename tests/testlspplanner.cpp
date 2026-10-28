@@ -132,4 +132,43 @@ void TestLspPlanner::freshEngineIsolation()
 	QCOMPARE(LspPlanner::calculate(first), before);
 }
 
+void TestLspPlanner::physicalProjection_data()
+{
+	QTest::addColumn<QJsonObject>("fixture");
+	for(const auto &value:reference().value("cases").toArray()) {
+		const auto fixture=value.toObject();
+		if(fixture.value("expectedUpstream").toObject().value("error").isNull()) QTest::newRow(qPrintable(fixture.value("id").toString()))<<fixture;
+	}
+}
+
+void TestLspPlanner::physicalProjection()
+{
+	QFETCH(QJsonObject, fixture);
+	const auto request=fixture.value("request").toObject(), settings=request.value("settings").toObject();
+	const bool loop=settings.value("circuit").toString()!=QLatin1String("OC")&&!settings.value("bailout").toBool();
+	QJsonArray cylinders;
+	auto add=[&](const QJsonObject &gas){
+		for(const auto &value:cylinders){const auto known=value.toObject();if(known.value("o2")==gas.value("o2")&&known.value("he")==gas.value("he"))return;}
+		cylinders.append(QJsonObject{{"o2",gas.value("o2")},{"he",gas.value("he")},{"sizeLitres",24},{"startBar",200},{"role",loop?1:0}});
+	};
+	for(const auto &gas:request.value("levels").toArray())add(gas.toObject());
+	for(const auto &gas:request.value("decoGases").toArray())add(gas.toObject());
+	if(loop&&settings.value("circuit").toString()==QLatin1String("CCR"))cylinders.append(QJsonObject{{"o2",100},{"he",0},{"sizeLitres",3},{"startBar",200},{"role",2}});
+	const QJsonObject input{{"schema",1},{"engineRequest",request},{"cylinders",cylinders},{"priorProfiles",QJsonArray()},
+		{"start",1000000},{"bottomSacLpm",22},{"decoSacLpm",20}};
+	const auto response=LspPlanner::project(input);
+	QVERIFY2(response.value("ok").toBool(),qPrintable(QString::fromUtf8(QJsonDocument(response).toJson(QJsonDocument::Compact))));
+	const auto result=response.value("result").toObject();
+	const auto profile=result.value("profile").toArray(), rows=result.value("timeline").toArray();
+	QVERIFY(profile.size()>2);QCOMPARE(profile.first().toObject().value("depth").toInt(),0);QCOMPARE(profile.last().toObject().value("depth").toInt(),0);
+	int seconds=0;
+	for(const auto &value:rows){const auto row=value.toObject();QCOMPARE(row.value("runTime").toInt()-seconds,row.value("duration").toInt());seconds=row.value("runTime").toInt();}
+	QCOMPARE(seconds,result.value("runtimeSeconds").toInt());
+	QVERIFY(std::abs(seconds-fixture.value("expectedUpstream").toObject().value("totalRuntime").toDouble()*60)<=61);
+	const auto error=compare(fixture.value("expectedUpstream"),result.value("raw"),fixture.value("id").toString());
+	QVERIFY2(error.isEmpty(),qPrintable(error));
+	QCOMPARE(result.value("gasVolumes").toArray().size(),cylinders.size());
+	for(const auto &value:result.value("gasVolumes").toArray())QVERIFY(value.toObject().value("usedLitres").toDouble()>=0);
+}
+
 QTEST_GUILESS_MAIN(TestLspPlanner)

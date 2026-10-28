@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Syntax conversion only; never patch, tune or rebaseline LSP calculations here.
+// Syntax conversion and read-only trace exports; never tune/rebaseline math.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -8,6 +8,7 @@ const dependencyRoot = process.env.NEO_LSP_BUILD_TOOLS || __dirname;
 const load = createRequire(path.join(dependencyRoot, 'package.json'));
 const babel = load('@babel/core');
 const preset = load('@babel/preset-env');
+const nativeTrace = require('./native-trace.cjs');
 const root = path.resolve(__dirname, '../..');
 const vendor = path.join(root, 'third-party/lsp-planner');
 const manifest = JSON.parse(fs.readFileSync(path.join(vendor, 'SOURCE.json'), 'utf8'));
@@ -24,7 +25,7 @@ for (const [name, sha] of Object.entries(manifest.files)) {
     const source = fs.readFileSync(path.join(vendor, name));
     if (crypto.createHash('sha256').update(source).digest('hex') !== sha)
         throw new Error('Upstream source checksum changed: ' + name);
-    const result = babel.transformSync(source.toString('utf8'), {
+    const result = babel.transformSync(nativeTrace(name, source.toString('utf8')), {
         filename: name, sourceType: 'script', babelrc: false, configFile: false,
         comments: true, compact: false,
         presets: [[preset, {targets: {ie: '11'}, modules: false, bugfixes: true, useBuiltIns: false}]],
@@ -42,6 +43,7 @@ for (const [name, sha] of Object.entries(manifest.files)) {
 }
 const generated = {
     schema: 1, sourceCommit: manifest.commit, babel: babel.version,
+    nativeTraceSha256: nativeTrace.sha256,
     presetEnv: load('@babel/preset-env/package.json').version,
     targetSyntax: 'ES5; no algorithm edits or builtin polyfills', files: hashes,
 };

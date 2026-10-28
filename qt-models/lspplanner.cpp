@@ -72,10 +72,10 @@ QJsonArray LspPlanner::presets()
 	return QJsonDocument::fromJson(data).array();
 }
 
-QJsonObject LspPlanner::calculate(const QJsonObject &request)
+static QJsonObject runLsp(const QJsonObject &request, const QString &method, int inputLimit)
 {
 	const QByteArray input = QJsonDocument(request).toJson(QJsonDocument::Compact);
-	if (input.size() > 64 * 1024)
+	if (input.size() > inputLimit)
 		return failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("LSP request exceeds the native input limit."));
 	QJSEngine engine;
 	CalculationDeadline deadline(engine);
@@ -84,7 +84,7 @@ QJsonObject LspPlanner::calculate(const QJsonObject &request)
 	const auto hashes = QJsonDocument::fromJson(resource(QStringLiteral("qt-runtime/SOURCE.json"))).object().value("files").toObject();
 	const QStringList scripts = {QStringLiteral("qt-runtime/zhl-engine-bundle.js"), QStringLiteral("host.js"),
 		QStringLiteral("qt-runtime/schedule-runner-core.js"), QStringLiteral("qt-runtime/zhl-headless-adapter.js"),
-		QStringLiteral("qt-runtime/vpm-engine-bundle.js")};
+		QStringLiteral("qt-runtime/vpm-engine-bundle.js"), QStringLiteral("projection.js")};
 	for (const auto &name : scripts) {
 		const auto source = resource(name);
 		if (source.isEmpty())
@@ -99,7 +99,7 @@ QJsonObject LspPlanner::calculate(const QJsonObject &request)
 			return failure(QStringLiteral("ENGINE_LOAD"), name + QStringLiteral(": ") + evaluated.toString());
 	}
 	const auto object = engine.globalObject().property(QStringLiteral("NeoLspPlanner"));
-	auto function = object.property(QStringLiteral("calculate"));
+	auto function = object.property(method);
 	// QVariant sequences can be exposed as Qt sequence wrappers rather than
 	// genuine JavaScript arrays on some Qt versions. Use the same plain JSON
 	// objects/arrays as the upstream engine's request contract on every target.
@@ -118,8 +118,18 @@ QJsonObject LspPlanner::calculate(const QJsonObject &request)
 	const auto raw = QJsonDocument::fromJson(wire).object();
 	if (encoded.isError() || engine.isInterrupted() || raw.isEmpty() || wire.size() > 4 * 1024 * 1024)
 		return failure(QStringLiteral("INVALID_RESULT"), QStringLiteral("LSP result exceeds the native output limit."));
-	const bool ok = raw.value("error").isNull() && raw.contains("plan");
-	return {{"ok", ok}, {"engine", identity()}, {"model", request.value("model")},
+	const bool ok = raw.value("error").isNull() && (raw.contains("plan") || raw.contains("profile"));
+	return {{"ok", ok}, {"engine", LspPlanner::identity()}, {"model", request.value("model")},
 		{"requestSha256", QString::fromLatin1(QCryptographicHash::hash(input, QCryptographicHash::Sha256).toHex())},
 		{"effectiveRequest", request}, {"result", raw}};
+}
+
+QJsonObject LspPlanner::calculate(const QJsonObject &request)
+{
+	return runLsp(request, QStringLiteral("calculate"), 64 * 1024);
+}
+
+QJsonObject LspPlanner::project(const QJsonObject &input)
+{
+	return runLsp(input, QStringLiteral("project"), 4 * 1024 * 1024);
 }

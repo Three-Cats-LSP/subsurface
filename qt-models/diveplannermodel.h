@@ -116,6 +116,7 @@ slots:
 				const QString &date, const QString &time, int diveMode, int waterType, int surfacePressureMbar, bool shouldSave);
 	Q_INVOKABLE QVariantList calculateGasInfo(const QString &cylinderType, int o2_permille, int he_permille);
 	Q_INVOKABLE QVariantMap calculateLspPlan(const QVariantMap &request);
+	Q_INVOKABLE QVariantMap calculateNeoLspPlan(const QVariantMap &input, bool shouldSave);
 	Q_INVOKABLE QVariantList lspPlannerPresets() const;
 	Q_INVOKABLE QVariantMap lspPlannerIdentity() const;
 		

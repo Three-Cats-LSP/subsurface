@@ -14,7 +14,11 @@ by the native host. No proprietary application binaries or reconstructed
 proprietary implementation code are included.
 
 Qt's JavaScript parser cannot load all of the original syntax. `qt-runtime/`
-contains a reproducible syntax translation using the locked Babel toolchain:
+contains a reproducible syntax translation using the locked Babel toolchain.
+`tools/lsp-planner/native-trace.cjs` adds a read-only physical-step/duration
+trace and an explicit last-stop argument to the existing MOD utility. It changes
+no decompression or exposure calculation. These adapter additions are hashed
+in the generated runtime manifest:
 
 ```
 cd tools/lsp-planner

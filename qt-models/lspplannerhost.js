@@ -7,6 +7,7 @@ var WATER_VAPOR = 0.0577;
 var altAcclimatized = true;
 var allowO2AtMOD = true;
 var OTU_EXPONENT = ZhlEngineBundle.OTU_EXPONENT;
+var units = 'metric'; // LSP utility formatting; all engine requests use SI.
 
 var NeoLspPlanner = {
     calculate: function(request) {

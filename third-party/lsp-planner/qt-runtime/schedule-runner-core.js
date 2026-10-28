@@ -1182,10 +1182,10 @@ function updateCcrGasCardLabels() {
   }
   renumberDecoGasCards();
 }
-function calcGasMODm(fO2, ppO2Limit) {
+function calcGasMODm(fO2, ppO2Limit, nativeLastStop) {
   var _document$getElementB24;
   var o2AtMOD = typeof allowO2AtMOD !== 'undefined' ? allowO2AtMOD : true;
-  var lastStop = parseInt((_document$getElementB24 = document.getElementById('lastDecoStop')) === null || _document$getElementB24 === void 0 ? void 0 : _document$getElementB24.value, 10) || 3;
+  var lastStop = Number.isFinite(nativeLastStop) ? nativeLastStop : parseInt((_document$getElementB24 = document.getElementById('lastDecoStop')) === null || _document$getElementB24 === void 0 ? void 0 : _document$getElementB24.value, 10) || 3;
   var o2MODm = Math.max(lastStop, 6);
   if (fO2 <= 0) return 0;
   if (fO2 >= 0.995) {

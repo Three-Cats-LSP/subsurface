@@ -11,5 +11,7 @@ private slots:
 	void invalidRequest_data();
 	void invalidRequest();
 	void freshEngineIsolation();
+	void physicalProjection_data();
+	void physicalProjection();
 };
 #endif

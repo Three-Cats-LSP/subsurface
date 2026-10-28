@@ -28,6 +28,8 @@ private slots:
 	void testNeoPlannerNativeRegression();
 	void testNeoPlannerFixtureManifest_data();
 	void testNeoPlannerFixtureManifest();
+	void testNeoLspFlow_data();
+	void testNeoLspFlow();
 };
 
 #endif // TESTDIVEPLANNERMODEL_H

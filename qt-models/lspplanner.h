@@ -11,6 +11,7 @@ namespace LspPlanner {
 QJsonObject identity();
 QJsonArray presets();
 QJsonObject calculate(const QJsonObject &request);
+QJsonObject project(const QJsonObject &input);
 }
 
 #endif

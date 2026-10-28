@@ -11,6 +11,7 @@ set(SUBSURFACE_GENERIC_MODELS_LIB_SRCS
 	${NEO_LSP_RESOURCES}
 	lspplanner.cpp
 	lspplanner.h
+	neolspplan.cpp
 	cleanertablemodel.cpp
 	cleanertablemodel.h
 	completionmodels.cpp

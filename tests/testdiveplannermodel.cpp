@@ -20,6 +20,7 @@
 #include <QScopedValueRollback>
 #include <QScopeGuard>
 #include <QSet>
+#include <QTemporaryDir>
 #include <QVariantMap>
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,7 @@
 namespace {
 int lastSavedPlannerDuration = -1;
 QString lastSavedPlannerNotes;
+std::unique_ptr<dive> lastSavedPlannerDive;
 }
 
 #ifdef MAP_SUPPORT
@@ -839,6 +841,69 @@ void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 	}
 }
 
+void TestDivePlannerModel::testNeoLspFlow_data()
+{
+	QTest::addColumn<int>("scenario");
+	const char *names[]={"air-save-roundtrip","nitrox","runtime-waypoints","deco-gases","missing-oxygen","ccr-supplies","pscr","vpmb","imperial","invalid-gas","invalid-date","lost-entered-gas","impossible-runtime","sampled-prior"};
+	for(int i=0;i<14;i++)QTest::newRow(names[i])<<i;
+}
+
+void TestDivePlannerModel::testNeoLspFlow()
+{
+	QFETCH(int,scenario);
+	QScopedValueRollback<decltype(prefs)> restorePrefs(prefs,default_prefs);
+	QScopedValueRollback<decltype(tank_info_table)> restoreTanks(tank_info_table);reset_tank_info_table(tank_info_table);
+	struct divelog original=std::move(divelog);struct divelog empty;divelog=std::move(empty);
+	const auto restoreLog=qScopeGuard([&]{divelog=std::move(original);lastSavedPlannerDive.reset();});
+	prefs.units=SI_units;lastSavedPlannerDive.reset();
+	QVariantList cylinders{QVariantMap{{"type","D12 232 bar"},{"mix","21/0"},{"pressure",200},{"use",0}}};
+	QVariantList segments{QVariantMap{{"depth",18.0},{"duration",20.0},{"gas",0},{"setpoint",1300},{"divemode",0}}};
+	QVariantMap input{{"date","2026-01-01"},{"time","12:00:00"},{"diveMode",0},{"waterType",0},{"surfacePressureBar",1.01325}};
+	QVariantMap parameters;
+	if(scenario==1){auto c=cylinders[0].toMap();c["mix"]="32/0";cylinders[0]=c;}
+	if(scenario==2||scenario==12){segments[0]=QVariantMap{{"depth",30},{"duration",20},{"gas",0},{"setpoint",1300},{"divemode",0}};
+		segments.append(QVariantMap{{"depth",21},{"duration",scenario==12?20.01:35.0},{"gas",0},{"setpoint",1300},{"divemode",0}});}
+	if(scenario==3){segments[0]=QVariantMap{{"depth",45},{"duration",30},{"gas",0},{"setpoint",1300},{"divemode",0}};
+		cylinders.append(QVariantMap{{"type","AL80"},{"mix","50/0"},{"pressure",200},{"use",0}});
+		cylinders.append(QVariantMap{{"type","AL80"},{"mix","100/0"},{"pressure",200},{"use",0}});}
+	if(scenario==4||scenario==5){input["diveMode"]=1;auto c=cylinders[0].toMap();c["use"]=1;cylinders[0]=c;auto s=segments[0].toMap();s["divemode"]=1;segments[0]=s;
+		cylinders.append(QVariantMap{{"type","AL80"},{"mix","21/0"},{"pressure",200},{"use",0}});
+		if(scenario==5)cylinders.append(QVariantMap{{"type","AL80"},{"mix","100/0"},{"pressure",200},{"use",2}});}
+	if(scenario==6){input["diveMode"]=2;auto c=cylinders[0].toMap();c["mix"]="32/0";cylinders[0]=c;auto s=segments[0].toMap();s["divemode"]=2;segments[0]=s;
+		parameters["diluentUseAsBailout"]=true;}
+	if(scenario==7)parameters["model"]="VPMB";
+	if(scenario==8){prefs.units=IMPERIAL_units;auto c=cylinders[0].toMap();c["pressure"]=mbar_to_PSI(200000);cylinders[0]=c;auto s=segments[0].toMap();s["depth"]=18.0/0.3048;segments[0]=s;}
+	if(scenario==9){auto c=cylinders[0].toMap();c["mix"]="80/80";cylinders[0]=c;}
+	if(scenario==10)input["date"]="invalid";
+	if(scenario==11){auto c=cylinders[0].toMap();c["use"]=3;cylinders[0]=c;}
+	if(scenario==13){input["time"]="10:40:00";segments[0]=QVariantMap{{"depth",30},{"duration",30},{"gas",0},{"setpoint",1300},{"divemode",0}};
+		const auto path=QStringLiteral(SUBSURFACE_TEST_DATA "/tests/data/neo-planner-repetitive.ssrf");QCOMPARE(parse_file(path.toUtf8().constData(),&divelog),0);}
+	input["cylinders"]=cylinders;input["segments"]=segments;input["lspParameters"]=parameters;
+	auto *model=DivePlannerPointsModel::instance();
+	const auto result=model->calculateNeoLspPlan(input,true);
+	const bool expected=scenario!=4&&scenario!=9&&scenario!=10&&scenario!=11&&scenario!=12;
+	QVERIFY2(result.value("planSaveAllowed").toBool()==expected,qPrintable(result.value("notes").toString()));
+	if(!expected){QCOMPARE(result.value("newDiveId").toInt(),-1);QVERIFY(!lastSavedPlannerDive);return;}
+	QVERIFY(lastSavedPlannerDive);QVERIFY(lastSavedPlannerDive->is_planned());
+	QVERIFY(result.value("profile").toList().size()>2);
+	QCOMPARE(result.value("engine").toMap().value("id").toString(),QStringLiteral("lsp-d-planner-plus"));
+	QCOMPARE(result.value("bottomTimeSeconds").toInt(),std::lround(segments.last().toMap().value("duration").toDouble()*60));
+	if(scenario==13)QCOMPARE(result.value("surfaceIntervalSeconds").toInt(),600);
+	const auto savedMetadata=neoPlanMetadata(lastSavedPlannerDive->notes);
+	QCOMPARE(savedMetadata.value("profile").toList(),result.value("profile").toList());
+	QCOMPARE(savedMetadata.value("engineRequest").toMap().value("settings").toMap().value("gfLo").toInt(),20);
+	QVERIFY(savedMetadata.value("reportHeader").toString().contains("LSP D-Planner+"));
+	QTemporaryDir directory;QVERIFY(directory.isValid());const QString filename=directory.filePath("lsp plan.ssrf");
+	divelog.dives.record_dive(std::move(lastSavedPlannerDive));QCOMPARE(save_dives(filename.toUtf8().constData()),0);
+	struct divelog reloaded;QCOMPARE(parse_file(filename.toUtf8().constData(),&reloaded),0);
+	const dive *plan=nullptr;for(const dive *entry:reloaded.dives)if(entry->is_planned())plan=entry;
+	QVERIFY(plan);const auto restored=neoPlanMetadata(plan->notes);
+	QCOMPARE(restored.value("engineRequest"),savedMetadata.value("engineRequest"));
+	QCOMPARE(restored.value("schedule"),savedMetadata.value("schedule"));
+	QCOMPARE(restored.value("runtimeSeconds"),result.value("runtimeSeconds"));
+	QCOMPARE(plan->dcs[0].samples.back().time.seconds,result.value("runtimeSeconds").toInt());
+}
+
 // Stubs for symbols referenced by libraries linked into TestDivePlannerModel
 // but not available without the full desktop-widgets and commands libraries.
 
@@ -849,6 +914,7 @@ void addDive(std::unique_ptr<dive> d, bool, bool)
 {
 	lastSavedPlannerDuration = d ? d->duration.seconds : -1;
 	lastSavedPlannerNotes = d ? QString::fromStdString(d->notes) : QString();
+	lastSavedPlannerDive=std::move(d);
 }
 void importDives(struct divelog *, int, const QString &) {}
 void replanDive(dive *) {}

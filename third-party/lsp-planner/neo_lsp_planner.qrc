@@ -8,5 +8,6 @@
     <file>qt-runtime/schedule-runner-core.js</file>
     <file>qt-runtime/zhl-headless-adapter.js</file>
     <file alias="host.js">../../qt-models/lspplannerhost.js</file>
+    <file alias="projection.js">../../qt-models/neolspplanhost.js</file>
   </qresource>
 </RCC>
