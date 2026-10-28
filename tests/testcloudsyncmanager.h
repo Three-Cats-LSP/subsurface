@@ -28,6 +28,8 @@ private slots:
 	void testWorkspaceAcceptance();
 	void testWorkspaceActivation_data();
 	void testWorkspaceActivation();
+	void testWorkspaceEmptyAccount_data();
+	void testWorkspaceEmptyAccount();
 	void testWorkspaceModel_data();
 	void testWorkspaceModel();
 	void testWorkspaceVersions_data();

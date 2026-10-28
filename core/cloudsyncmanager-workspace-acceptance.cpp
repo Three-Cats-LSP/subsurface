@@ -24,8 +24,9 @@ QList<QJsonObject> CloudSyncManager::workspaceAcceptances(const QString &directo
 		if (CloudHistoryRecord::validEpoch(event) && info.isFile() && !info.isSymLink() && info.size() <= 64 * 1024 && file.open(QIODevice::ReadOnly))
 			body = QJsonDocument::fromJson(file.read(64 * 1024 + 1)).object();
 		CloudWorkspaceCopySource source; source.value = body.value("source").toObject();
+		const bool missing = text(body, "format") == "neo-workspace-legacy-absence-development-1";
 		CloudWorkspaceAcceptanceIntent attempt(path, reference, text(body, "choice_version"), source, text(body, "local_sha256"), event,
-			text(body, "previous"), text(body, "head"), text(body, "copy"));
+			text(body, "previous"), text(body, "head"), text(body, "copy"), missing);
 		if (body.isEmpty() || !attempt.inspect() || text(body, "event") != event || body.value("workspace").toObject() != reference.value) {
 			if (invalid) *invalid = true; continue;
 		}

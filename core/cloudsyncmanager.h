@@ -195,6 +195,7 @@ private:
 	bool workspaceScopeCurrent();
 	void finishWorkspace(const QJsonObject &record, const QString &version);
 	void finishWorkspaceSource(const QJsonObject &source);
+	void finishWorkspaceMissingSource();
 	void failWorkspace(const QString &message, bool rejected = false);
 
 	QNetworkAccessManager *networkManager;
@@ -223,6 +224,7 @@ private:
 		QString id, choiceVersion, localSha256, parent, previousAcceptance, copyTicket;
 		CloudWorkspaceReference reference;
 		CloudWorkspaceCopySource source;
+		bool sourceMissing = false;
 	};
 	QHash<QString, WorkspaceCopyReview> workspaceCopyReviews;
 	WorkspaceCopyReview workspaceCopyReview;

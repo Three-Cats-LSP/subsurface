@@ -117,23 +117,25 @@ ColumnLayout {
 		}
 		Text {
 			visible: !!panel.report.copyReview
-			text: qsTr("Cloud log reviewed · %1 bytes. Keep a verified copy in this workspace while preserving your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
+			text: (panel.report.copyReview || {}).missing
+				? qsTr("No existing cloud log was found. Save your local log as a workspace version, then confirm the empty cloud account.")
+				: qsTr("Cloud log reviewed · %1 bytes. Keep a verified copy in this workspace while preserving your local log and original cloud files.").arg((panel.report.copyReview || {}).bytes || 0)
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		NeoButton {
 			objectName: "copyCloudToWorkspace-" + panel.provider.id; text: qsTr("Copy reviewed cloud log…"); compact: true; Layout.fillWidth: true
-			visible: !!panel.report.copyReview; enabled: panel.available
+			visible: !!panel.report.copyReview && !(panel.report.copyReview || {}).missing; enabled: panel.available
 			onClicked: { panel.pendingCopy = panel.report.copyReview; copyDialog.open() }
 		}
 		NeoButton {
-			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: qsTr("Accept copied cloud branch…"); compact: true; Layout.fillWidth: true
+			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: (panel.report.copyReview || {}).missing ? qsTr("Confirm empty cloud account…") : qsTr("Accept copied cloud branch…"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).acceptancePossible && !(panel.report.copyReview || {}).alreadyAccepted
 			enabled: panel.available && !panel.report.acceptanceRecoveryRequired && !panel.report.acceptanceLimitReached
 			onClicked: { panel.pendingAcceptance = panel.report.copyReview; acceptanceDialog.open() }
 		}
 		Text {
 			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).alreadyAccepted
-			text: qsTr("This copied cloud branch is already the latest accepted branch.")
+			text: (panel.report.copyReview || {}).missing ? qsTr("The empty cloud account is already the latest accepted observation.") : qsTr("This copied cloud branch is already the latest accepted branch.")
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
 		Text {
@@ -289,12 +291,12 @@ ColumnLayout {
 			Accessible.role: Accessible.Dialog; Accessible.name: acceptanceTitle.text
 			ColumnLayout {
 				id: acceptanceContent; width: parent.width; spacing: 12
-				Text { id: acceptanceTitle; text: qsTr("Accept this cloud branch?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-				Text { text: qsTr("Neo will verify the original cloud log and its protected workspace copy, then record this branch as accepted. Your local log stays unchanged; workspace sync is not started."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { id: acceptanceTitle; text: panel.pendingAcceptance.missing ? qsTr("Confirm empty cloud account?") : qsTr("Accept this cloud branch?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: panel.pendingAcceptance.missing ? qsTr("Neo will verify that no existing cloud log is present and record this observation. Your local log stays unchanged; workspace sync is not started. If a cloud log appears later, review it before syncing.") : qsTr("Neo will verify the original cloud log and its protected workspace copy, then record this branch as accepted. Your local log stays unchanged; workspace sync is not started."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 				NeoButton { objectName: "cancelWorkspaceAcceptance-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: acceptanceDialog.close() }
 				NeoButton {
-					objectName: "confirmWorkspaceAcceptance-" + panel.provider.id; text: qsTr("Accept branch"); Layout.fillWidth: true; enabled: panel.available
-					onClicked: { var review = panel.pendingAcceptance.id || ""; acceptanceDialog.close(); CloudSync.runWorkspace(panel.provider.id, "accept-copy", review) }
+					objectName: "confirmWorkspaceAcceptance-" + panel.provider.id; text: panel.pendingAcceptance.missing ? qsTr("Confirm empty account") : qsTr("Accept branch"); Layout.fillWidth: true; enabled: panel.available
+					onClicked: { var review = panel.pendingAcceptance.id || ""; var action = panel.pendingAcceptance.missing ? "accept-missing" : "accept-copy"; acceptanceDialog.close(); CloudSync.runWorkspace(panel.provider.id, action, review) }
 				}
 			}
 		}

@@ -117,7 +117,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 		clearSyncOperation(); emit providersChanged(); emit workspaceFinished(provider);
 	});
 	connect(&workspaceAcceptance, &CloudWorkspaceAcceptance::finished, this, [this](const QJsonObject &, const QString &, const QString &event, bool latest, bool changed) {
-		if (!workspaceInProgress() || (workspaceAction != "accept-copy" && workspaceAction != "resume-accept")) return;
+		if (!workspaceInProgress() || (workspaceAction != "accept-copy" && workspaceAction != "accept-missing" && workspaceAction != "resume-accept")) return;
 		const auto provider = syncProviderId;
 		workspaceReports[provider] = {{"verified", true}, {"choiceVersion", workspaceChoiceVersion}, {"acceptedLegacy", event}, {"acceptanceLatest", latest}, {"legacyChanged", changed}};
 		clearSyncOperation(); emit providersChanged(); emit workspaceFinished(provider);
@@ -134,6 +134,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceRestoreApply, &CloudWorkspaceApply::finished, this, &CloudSyncManager::workspaceRestoreCompleted);
 	connect(&workspaceRestoreApply, &CloudWorkspaceApply::failed, this, &CloudSyncManager::workspaceRestoreApplyFailed);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &source, const QByteArray &) { finishWorkspaceSource(source); });
+	connect(&workspaceSource, &CloudWorkspaceSourceReview::absent, this, &CloudSyncManager::finishWorkspaceMissingSource);
 	connect(&workspaceCopy, &CloudWorkspaceCopy::finished, this, [this](const QJsonObject &root, const QString &version, const QString &, bool changed) {
 		workspaceLegacyChanged = changed; finishWorkspace(root, version);
 	});
