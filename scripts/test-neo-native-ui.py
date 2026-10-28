@@ -431,7 +431,7 @@ def main():
             raise RuntimeError(f"Missing actual LSP TXT/PDF exports: {name}")
         contents = texts[0].read_text(encoding="utf-8")
         if not all(label in contents for label in ("Algorithm:", "Gradient factors:", "Descent:", "GASES", "Air")):
-            raise RuntimeError(f"LSP source identity missing from {name}")
+            raise RuntimeError(f"Readable dive settings missing from {name}")
     (output / "lsp-saved-metadata.json").write_text(json.dumps(plan_data, indent=2), encoding="utf-8")
     print(f"Native UI checks passed; logs and screenshots: {output}")
 

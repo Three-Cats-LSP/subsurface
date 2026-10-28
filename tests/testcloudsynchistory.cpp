@@ -4489,7 +4489,7 @@ void TestCloudSyncHistory::workspaceReadWorkflow()
 		if (path == "/drive/v3/files") ++lookups;
 		const bool target = google ? path.endsWith("/4") : arg["path"].toString() == "id:4";
 		const bool data = target && (google ? path.startsWith("/drive/v3/") && QUrlQuery(r.url()).queryItemValue("alt") == "media" : path == "/2/files/download");
-		if (data) { ++payloadReads; const auto root = CloudWorkspaceRecord::parse(n.files[2].data); const auto res = root.value["journal"].toObject()["reservations"].toObject()[reservation].toObject(); registeredBeforePayload &= res["commit"] == QJsonValue(commit) && res["active"] == QJsonValue(true); }
+		if (data) { ++payloadReads; const auto root = n.workspaceRecord(n.files[2].data); const auto res = root.value["journal"].toObject()["reservations"].toObject()[reservation].toObject(); registeredBeforePayload &= res["commit"] == QJsonValue(commit) && res["active"] == QJsonValue(true); }
 		if (mode == 13 && target && !injected) { n.deferReads = true; injected = true; }
 	};
 	n.wrote = [&](const QString &) {
@@ -4516,11 +4516,17 @@ void TestCloudSyncHistory::workspaceReadWorkflow()
 	start(CloudWorkspaceRead::Action::Read);
 	if (mode == 35) { QTest::qWait(250); QCOMPARE(done.size() + errors.size(), 0); QCOMPARE(requests, 0); }
 	else if (mode == 13) { QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0); QVERIFY(CloudWorkspaceRecord::parse(n.files[2].data).value["journal"].toObject()["reservations"].toObject()[reservation].toObject()["active"].toBool()); start(CloudWorkspaceRead::Action::Read); QTRY_COMPARE(done.size(), 1); }
-	else { QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = mode == 0 || mode == 1 || mode == 9 || mode == 21 || mode == 26 || mode == 27 || (mode >= 31 && mode <= 34); QCOMPARE(done.size(), int(success)); }
+	else { QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = mode == 0 || mode == 1 || mode == 9 || mode == 21 || mode == 26 || mode == 27 || mode == 29 || (mode >= 31 && mode <= 34); QCOMPARE(done.size(), int(success)); }
 	if (!done.isEmpty()) {
 		const auto root = done.last()[0].value<QJsonObject>();
 		CloudWorkspaceRecord result; result.value = root; QVERIFY(result.valid()); QCOMPARE(done.last()[4].toByteArray(), A); QCOMPARE(result.ticket(f.commit), f.root.ticket(f.commit)); QCOMPARE(result.ticket(f.pending), f.root.ticket(f.pending));
 		const auto rs = result.value["journal"].toObject()["reservations"].toObject(); QCOMPARE(rs[f.protectedRead], f.root.value["journal"].toObject()["reservations"].toObject()[f.protectedRead]); QVERIFY(rs[reservation].toObject()["active"].toBool());
+		if (mode == 29) {
+			QCOMPARE(result.archivePages().size(), 1);
+			const auto before = f.root.value["journal"].toObject()["reservations"].toObject();
+			QCOMPARE(rs.size(), before.size() + 1);
+			for (auto it = before.begin(); it != before.end(); ++it) QCOMPARE(rs[it.key()], it.value());
+		}
 		QVERIFY(saved.reload()); QCOMPARE(saved.state(), QString("verified")); if (mode == 1) QCOMPARE(result.copySource(f.commit).json(), f.root.copySource(f.commit).json());
 		if (mode == 0) {
 			const auto writes = updates; start(CloudWorkspaceRead::Action::Read); QTRY_COMPARE(done.size(), 2); QCOMPARE(updates, writes);
@@ -4532,7 +4538,7 @@ void TestCloudSyncHistory::workspaceReadWorkflow()
 	if (mode == 14 || mode == 15 || mode == 16 || mode == 19) QCOMPARE(payloadReads, 0);
 	if (mode == 5 || mode == 16) QVERIFY(!QFileInfo::exists(cpFile)); if (mode == 23) QCOMPARE(read(cpFile), cpBytes); if (mode == 30) QVERIFY(errors.first()[1].toBool());
 	if (mode != 3 && mode != 15 && mode != 36) QCOMPARE(read(choiceFile), choiceBytes);
-	QCOMPARE(n.files[0].data, originals[0].data); QCOMPARE(n.files[1].data, originals[1].data); QCOMPARE(creates, 0); QCOMPARE(lookups, 0); QCOMPARE(n.renames, 0); QVERIFY(n.allowed); QVERIFY(!injectionFailed); QVERIFY(registeredBeforePayload);
+	QCOMPARE(n.files[0].data, originals[0].data); QCOMPARE(n.files[1].data, originals[1].data); QCOMPARE(creates, mode == 29 ? 1 : 0); QCOMPARE(lookups, 0); QCOMPARE(n.renames, 0); QVERIFY(n.allowed); QVERIFY(!injectionFailed); QVERIFY(registeredBeforePayload);
 }
 void TestCloudSyncHistory::workspaceReleaseWorkflow_data()
 {
@@ -4587,12 +4593,18 @@ void TestCloudSyncHistory::workspaceReleaseWorkflow()
 	start(mode == 5 ? CloudWorkspaceRead::Action::Read : CloudWorkspaceRead::Action::Release);
 	if (mode == 17) { QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; QTest::qWait(20); QCOMPARE(done.size() + released.size() + errors.size(), 0); start(CloudWorkspaceRead::Action::Release); QTRY_COMPARE(released.size(), 1); }
 	else {
-		QTRY_COMPARE(released.size() + errors.size(), 1); const bool success = mode <= 3 || (mode >= 18 && mode <= 23) || mode == 28; QCOMPARE(released.size(), int(success));
+		QTRY_COMPARE(released.size() + errors.size(), 1); const bool success = mode <= 3 || (mode >= 18 && mode <= 23) || mode == 24 || mode == 28; QCOMPARE(released.size(), int(success));
 	}
 	if (mode == 4 || mode == 27) { QVERIFY(saved.reload()); QCOMPARE(saved.state(), QString("releasing")); start(CloudWorkspaceRead::Action::Release); QTRY_COMPARE(released.size(), 1); }
 	if (!released.isEmpty()) {
-		const auto root = CloudWorkspaceRecord::parse(n.files[2].data); QVERIFY(root.valid()); QVERIFY(root.follows(f.root)); const auto rs = root.value["journal"].toObject()["reservations"].toObject();
+		const auto root = n.workspaceRecord(n.files[2].data); QVERIFY(root.valid()); QVERIFY(root.follows(f.root)); const auto rs = root.value["journal"].toObject()["reservations"].toObject();
 		QCOMPARE(rs[reservation].toObject()["commit"].toString(), f.commit); QVERIFY(!rs[reservation].toObject()["active"].toBool()); QCOMPARE(root.copySource(f.commit).json(), f.root.copySource(f.commit).json()); QCOMPARE(root.ticket(f.pending), f.root.ticket(f.pending));
+		if (mode == 24) {
+			QCOMPARE(root.archivePages().size(), 1);
+			const auto before = f.root.value["journal"].toObject()["reservations"].toObject();
+			QCOMPARE(rs.size(), before.size() + 1);
+			for (auto it = before.begin(); it != before.end(); ++it) QCOMPARE(rs[it.key()], it.value());
+		}
 		QVERIFY(saved.reload()); QCOMPARE(saved.state(), QString("released")); const auto oldWrites = updates;
 		if (mode == 0 || mode == 1) { start(CloudWorkspaceRead::Action::Release); QTRY_COMPARE(released.size(), 2); QCOMPARE(updates, oldWrites); const auto count = requests; start(CloudWorkspaceRead::Action::Read); QCOMPARE(errors.size(), 1); QCOMPARE(requests, count); }
 		auto reused = root; QVERIFY(!reused.reserve(reservation, f.commit));
@@ -4602,10 +4614,10 @@ void TestCloudSyncHistory::workspaceReleaseWorkflow()
 		}
 	}
 	if (mode == 5 || mode == 6 || mode == 7 || mode == 8 || mode == 11 || mode == 13) QCOMPARE(requests, 0);
-	if (mode == 9 || mode == 10 || mode == 24 || mode == 25 || mode == 26) QCOMPARE(updates, 0);
+	if (mode == 9 || mode == 10 || mode == 25 || mode == 26) QCOMPARE(updates, 0);
 	if (mode == 11 || mode == 12) QVERIFY(!QFileInfo::exists(cpFile)); if (mode == 25) QCOMPARE(read(cpFile), cpBytes); if (mode == 16) QVERIFY(errors.first()[1].toBool());
 	if (mode != 15) QCOMPARE(read(choiceFile), choiceBytes);
-	QCOMPARE(done.size(), 0); QCOMPARE(payloadReads, 0); QCOMPARE(creates, 0); QVERIFY(n.allowed); QVERIFY(!injectionFailed); QCOMPARE(n.renames, 0);
+	QCOMPARE(done.size(), 0); QCOMPARE(payloadReads, 0); QCOMPARE(creates, mode == 24 ? 1 : 0); QVERIFY(n.allowed); QVERIFY(!injectionFailed); QCOMPARE(n.renames, 0);
 	QCOMPARE(n.files[0].data, originals[0].data); QCOMPARE(n.files[1].data, originals[1].data); QCOMPARE(n.files[3].data, originals[3].data); QCOMPARE(n.files[4].data, originals[4].data);
 }
 

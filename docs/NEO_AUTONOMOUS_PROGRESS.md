@@ -1,5 +1,23 @@
 # Windows cloud reliability continuation
 
+**Readable report native gate.**
+Report source **f86436550** is in LSP run **40745170718** and matching Windows
+run **40745176973**. The LSP host passed **96 checks**, including all six readable
+report cases; the Windows LSP half and actual application/PDF acceptance are
+pending. The exact saved calculation and header/schedule bodies remain retained.
+After the Windows run, download its UI evidence, run the strengthened PDF gate
+and render every exported page before claiming visual acceptance.
+
+Full history source **84d1c7b28 / 40743204807** passed 2,595 host checks and failed
+four old expectations: the former 512-reservation refusal cases now succeed
+through automatic rollover. The next test update expects that supported result,
+verifies one archive plus all 512 original reservation entries, and checks that
+release tombstones remain irreversible. It does not weaken identity/ownership
+checks. Resume full native testing after this correction; the previous aggregate
+remains failed and is not a milestone pass. Windows **40743210731** is a prior
+product-source validation (before the readable report change), not the final
+report artifact. Original logs, credentials and all schema 1/2 objects are kept.
+
 **Owner correction: readable dive settings in plan exports.**
 The owner approved the plan header/schedules but rejected the internal engine
 JSON displayed as settings. The current presentation change uses one formatter
