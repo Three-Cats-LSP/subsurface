@@ -88,6 +88,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncworkspacereceipt.h
 	cloudsyncworkspacereceive.cpp
 	cloudsyncworkspacereceive.h
+	cloudsyncworkspacereceiveplan.cpp
+	cloudsyncworkspacereceiveplan.h
 	cloudsyncworkspaceroute.cpp
 	cloudsyncworkspaceroute.h
 	cloudsyncworkspaceupload.cpp

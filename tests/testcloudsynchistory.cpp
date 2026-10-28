@@ -8,6 +8,7 @@
 #include "core/cloudsyncworkspacebinding.h"
 #include "core/cloudsyncworkspacereceipt.h"
 #include "core/cloudsyncworkspacereceive.h"
+#include "core/cloudsyncworkspacereceiveplan.h"
 #include "core/cloudsyncworkspaceroute.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
@@ -1869,6 +1870,75 @@ void TestCloudSyncHistory::workspaceReceiveWorkflow()
 	if (mode == 16) QVERIFY(errors.first()[1].toBool());
 	QCOMPARE(n.files[0].data, originalManifest);
 	QCOMPARE(n.files[1].data, A); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspaceReceivePlan_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"prepare-complete-restart", "unknown-file", "invalid-model", "invalid-reference", "corrupt-plan",
+		"missing-before", "changed-before", "locked-plan", "different-revision", "different-choice", "different-model",
+		"receipt-not-persisted", "reservation-still-active", "reader-not-released", "missing-binding", "rolled-back-root",
+		"prepared-before-recovery", "unknown-field"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-receive-plan-%2").arg(g).arg(m))) << g << m;
+}
+void TestCloudSyncHistory::workspaceReceivePlan()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), choice = uid(), revision = uid(), next = uid();
+	const auto baseline = uid(), target = uid(), reservation = uid(), operation = uid(), event = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(baseline, {}, source)); QVERIFY(root.completeUpload(baseline, google ? "a" : "id:a", "rev-a")); QVERIFY(root.publish(baseline, {}));
+	QVERIFY(root.acceptLegacyCopy(event, {}, baseline, baseline, source)); const auto checkpoint = root;
+	QTemporaryDir temp; QVERIFY(temp.isValid()); const auto planDir = temp.filePath("plan"), planFile = QDir(planDir).filePath("plan.json");
+	if (mode == 1) { QVERIFY(QDir().mkpath(planDir)); QFile f(QDir(planDir).filePath("unknown")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("keep") == 4); f.close(); }
+	const auto planRef = mode == 3 ? CloudWorkspaceReference() : ref;
+	CloudWorkspaceReceivePlan plan(planDir, planRef, choice, revision, next, baseline, target, reservation, operation);
+	if (mode == 1 || mode == 2 || mode == 3) { QVERIFY(!plan.prepare(mode == 2 ? QByteArray("bad") : A)); QVERIFY(!QFileInfo::exists(planFile)); return; }
+	QVERIFY(plan.prepare(A)); QCOMPARE(plan.state(), QString("ready")); QCOMPARE(plan.before(), A); QVERIFY(plan.prepare(A));
+	QFile f(planFile); QVERIFY(f.open(QIODevice::ReadOnly)); const auto original = f.readAll(); f.close();
+	if (mode == 4 || mode == 17) {
+		auto bad = QJsonDocument::fromJson(original).object(); bad["unexpected"] = true; const auto bytes = mode == 4 ? QByteArray("corrupt") : QJsonDocument(bad).toJson();
+		QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close();
+		QVERIFY(!plan.reload()); QVERIFY(!plan.prepare(A)); return;
+	}
+	if (mode == 5 || mode == 6) {
+		const auto path = QDir(planDir).filePath("before.xml"); if (mode == 5) QVERIFY(QFile::remove(path));
+		else { QFile b(path); QVERIFY(b.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(b.write("foreign") == 7); b.close(); }
+		QVERIFY(!plan.reload()); QVERIFY(!plan.prepare(A)); return;
+	}
+	if (mode == 7) { QLockFile lock(planFile + ".lock"); QVERIFY(lock.tryLock(0)); QVERIFY(!plan.reload()); QVERIFY(!plan.prepare(A)); return; }
+	if (mode == 8 || mode == 9) {
+		CloudWorkspaceReceivePlan foreign(planDir, ref, mode == 9 ? uid() : choice, mode == 8 ? uid() : revision, next, baseline, target, reservation, operation);
+		QVERIFY(!foreign.reload()); QVERIFY(!foreign.prepare(A)); return;
+	}
+	if (mode == 10) { QVERIFY(!plan.prepare(B)); QCOMPARE(plan.before(), A); return; }
+	if (mode == 16) {
+		auto pending = QJsonDocument::fromJson(original).object(); pending["state"] = "prepared";
+		QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); const auto bytes = QJsonDocument(pending).toJson(); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close();
+		QVERIFY(QFile::remove(QDir(planDir).filePath("before.xml"))); QVERIFY(plan.reload()); QVERIFY(plan.prepare(A)); QCOMPARE(plan.before(), A);
+	}
+	CloudWorkspaceBinding binding(temp.filePath("binding.json"), ref, choice); QVERIFY(binding.activate(root, root, A, A, revision));
+	QVERIFY(root.registerUpload(target, baseline, CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(root.completeUpload(target, google ? "b" : "id:b", "rev-b")); QVERIFY(root.publish(target, baseline)); QVERIFY(root.reserve(reservation, target));
+	const auto t = root.ticket(target); const QJsonObject pin = {{"name", t["name"]}, {"object", t["object"]}, {"version", t["version"]}, {"sha256", t["sha256"]}, {"bytes", t["bytes"]}};
+	CloudWorkspaceReadIntent reader(temp.filePath("reader.json"), ref, target, reservation);
+	QVERIFY(reader.prepare()); QVERIFY(reader.pin(pin)); QVERIFY(reader.markReserved()); QVERIFY(reader.markVerified());
+	CloudWorkspaceReceiveReceipt receipt(temp.filePath("receipt"), ref, choice, revision, baseline, target, reservation, next);
+	QVERIFY(receipt.prepare(binding, root, checkpoint, reader, A, B, B)); QVERIFY(receipt.beginApply()); QVERIFY(receipt.applied(B));
+	if (mode != 11) QVERIFY(receipt.persisted(B));
+	if (mode == 11) { QVERIFY(!plan.complete(binding, root, checkpoint, receipt, reader)); return; }
+	QVERIFY(binding.advanceReceived(revision, root, checkpoint, receipt, reader, B, next)); QVERIFY(reader.beginRelease());
+	if (mode != 13) QVERIFY(reader.markReleased()); if (mode != 12 && mode != 13) QVERIFY(root.release(reservation));
+	CloudWorkspaceBinding missing(temp.filePath("missing-binding.json"), ref, choice);
+	if (mode >= 12 && mode <= 15) {
+		QVERIFY(!plan.complete(mode == 14 ? missing : binding, mode == 15 ? checkpoint : root, checkpoint, receipt, reader)); return;
+	}
+	QVERIFY(plan.complete(binding, root, checkpoint, receipt, reader)); QCOMPARE(plan.state(), QString("completed"));
+	QVERIFY(plan.complete(binding, root, checkpoint, receipt, reader));
+	CloudWorkspaceReceivePlan restarted(planDir, ref, choice, revision, next, baseline, target, reservation, operation);
+	QVERIFY(restarted.reload()); QCOMPARE(restarted.state(), QString("completed")); QCOMPARE(restarted.before(), A);
 }
 
 void TestCloudSyncHistory::workspaceRoute_data()
