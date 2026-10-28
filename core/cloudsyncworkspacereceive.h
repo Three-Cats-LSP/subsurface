@@ -49,6 +49,7 @@ private:
 	std::unique_ptr<CloudWorkspaceReceiveReceipt> receipt;
 	std::unique_ptr<QLockFile> operationLock;
 	CloudWorkspaceReference reference;
+	QJsonObject bindingBefore;
 	Step step = Step::Idle;
 	quint64 generation = 0;
 	bool recoveryEstablished = false;

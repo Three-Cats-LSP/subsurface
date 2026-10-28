@@ -37,6 +37,7 @@ private:
 	std::unique_ptr<CloudWorkspaceUploadPlan> plan;
 	std::unique_ptr<QLockFile> operationLock;
 	CloudWorkspaceReference reference;
+	QJsonObject originalBinding;
 	Step step = Step::Idle;
 	bool priorPlan = false;
 	quint64 generation = 0;

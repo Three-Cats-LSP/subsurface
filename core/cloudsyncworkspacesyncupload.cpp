@@ -22,7 +22,7 @@ CloudWorkspaceSyncUpload::~CloudWorkspaceSyncUpload() { cancel(); }
 void CloudWorkspaceSyncUpload::cancel()
 {
 	++generation; step = Step::Idle; deadline.stop(); reviewer.cancel(); uploader.cancel(); plan.reset(); operationLock.reset();
-	reference.value = {}; priorPlan = false; token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear();
+	reference.value = {}; originalBinding = {}; priorPlan = false; token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear();
 	bindingFile.clear(); bindingRevision.clear(); nextRevision.clear(); baseline.clear(); ticket.clear(); operation.clear();
 	planDirectory.clear(); intentFile.clear(); model.clear(); scopeCurrent = {}; localSnapshot = {};
 }
@@ -49,6 +49,10 @@ void CloudWorkspaceSyncUpload::start(const QString &accessToken, const CloudWork
 	if (!operationLock->tryLock(0)) { fail(); return; }
 	priorPlan = QFileInfo::exists(QDir(planDirectory).filePath("plan.json"));
 	plan = std::make_unique<CloudWorkspaceUploadPlan>(planDirectory, reference, choiceVersion, bindingRevision, nextRevision, baseline, ticket, operation);
+	CloudWorkspaceBinding initial(bindingFile, reference, choiceVersion);
+	if (!initial.load() || (initial.revision() != bindingRevision && initial.revision() != nextRevision) ||
+	    (initial.revision() == nextRevision && !priorPlan)) { fail(); return; }
+	if (initial.revision() == bindingRevision) originalBinding = initial.value();
 	if (!plan->prepare(model) || !current()) { fail(); return; }
 	deadline.start(); review(Step::InitialReview);
 }
@@ -62,6 +66,7 @@ bool CloudWorkspaceSyncUpload::current()
 	CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
 	if (!choice.load() || choice.version() != choiceVersion || choice.selected().value != reference.value ||
 	    !binding.load() || (binding.revision() != bindingRevision && binding.revision() != nextRevision) ||
+	    (binding.revision() == bindingRevision && (originalBinding.isEmpty() || binding.value() != originalBinding)) ||
 	    !plan || !plan->reload() || plan->payload() != model) { fail(); return false; }
 	const auto snapshot = localSnapshot; const auto actual = snapshot(); if (serial != generation || step == Step::Idle) return false;
 	if (actual != model) { fail(); return false; }

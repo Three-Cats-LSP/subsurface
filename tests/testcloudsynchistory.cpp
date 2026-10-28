@@ -1799,7 +1799,7 @@ void TestCloudSyncHistory::workspaceReceiveWorkflow_data()
 		"apply-failed", "apply-did-not-install", "apply-installed-other-model", "edit-before-save",
 		"later-head-before-apply", "later-head-after-save", "cancel-read", "cancel-release-and-restart",
 		"rejected-token", "corrupt-binding", "normalized-model-differs-from-raw", "lost-reservation-ack",
-		"later-edit-after-apply", "corrupt-recovery", "legacy-changed-after-save", "corrupt-target"};
+		"later-edit-after-apply", "corrupt-recovery", "legacy-changed-after-save", "corrupt-target", "same-revision-binding-change"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-receive-workflow-%2").arg(g).arg(cases[m]))) << g << m;
 }
@@ -1835,7 +1835,14 @@ void TestCloudSyncHistory::workspaceReceiveWorkflow()
 	if (mode == 19) n.loseWriteAck = true;
 	if (mode == 23) n.files[4].data = A;
 	QByteArray local = mode == 3 ? B : A, persisted = A; bool resumed = false, edited = false; int installs = 0;
-	n.requested = [&](const QNetworkRequest &) { if (mode == 4 && !edited) { local = B; edited = true; } };
+	n.requested = [&](const QNetworkRequest &) {
+		if (mode == 4 && !edited) { local = B; edited = true; }
+		if (mode == 24 && !edited) {
+			QFile f(bindingFile); QVERIFY(f.open(QIODevice::ReadOnly)); auto body = QJsonDocument::fromJson(f.readAll()).object(); f.close();
+			body["model"] = QJsonObject{{"sha256", CloudSyncManifest::sha256(B)}, {"bytes", double(B.size())}};
+			QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); const auto bytes = QJsonDocument(body).toJson(); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close(); edited = true;
+		}
+	};
 	n.wrote = [&](const QString &name) {
 		if (mode != 15 || name != ref.rootName()) return;
 		const auto observed = CloudWorkspaceRecord::parse(n.files[2].data);
@@ -2215,7 +2222,7 @@ void TestCloudSyncHistory::workspaceSyncUpload_data()
 	const QStringList cases = {"upload-complete-restart", "concurrent-remote-before-review", "stale-choice", "legacy-changed",
 		"local-edit-during-review", "legacy-changed-after-upload", "remote-head-after-upload", "cancel-before-read",
 		"cancel-after-publish-resume", "lost-root-ack", "corrupt-plan", "scope-changed", "invalid-model",
-		"recover-after-binding-save", "recover-after-later-head", "later-local-edit"};
+		"recover-after-binding-save", "recover-after-later-head", "later-local-edit", "same-revision-binding-change"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-sync-upload-%2").arg(g).arg(m))) << g << m;
 }
@@ -2244,7 +2251,14 @@ void TestCloudSyncHistory::workspaceSyncUpload()
 	if (mode == 7) n.deferReads = true; if (mode == 9) n.loseWriteAck = true;
 	if (mode == 10) { QVERIFY(QDir().mkpath(planDir)); QFile f(QDir(planDir).filePath("plan.json")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("corrupt") == 7); f.close(); }
 	QByteArray local = B; bool edited = false, interrupted = false;
-	n.requested = [&](const QNetworkRequest &) { if (mode == 4 && !edited) { local = A; edited = true; } };
+	n.requested = [&](const QNetworkRequest &) {
+		if (mode == 4 && !edited) { local = A; edited = true; }
+		if (mode == 16 && !edited) {
+			QFile f(bindingFile); QVERIFY(f.open(QIODevice::ReadOnly)); auto body = QJsonDocument::fromJson(f.readAll()).object(); f.close();
+			body["model"] = QJsonObject{{"sha256", CloudSyncManifest::sha256(B)}, {"bytes", double(B.size())}};
+			QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); const auto bytes = QJsonDocument(body).toJson(); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close(); edited = true;
+		}
+	};
 	n.wrote = [&](const QString &name) {
 		if (name != ref.rootName()) return;
 		auto current = CloudWorkspaceRecord::parse(n.files[2].data); if (current.head() != ticket || interrupted) return;

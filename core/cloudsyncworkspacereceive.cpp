@@ -38,7 +38,7 @@ CloudWorkspaceReceive::~CloudWorkspaceReceive() { cancel(); }
 void CloudWorkspaceReceive::cancel()
 {
 	++generation; step = Step::Idle; reader.cancel(); opener.cancel(); deadline.stop(); startupRetry.stop(); startupWait.invalidate();
-	receipt.reset(); operationLock.reset(); reference.value = {}; recoveryEstablished = false;
+	receipt.reset(); operationLock.reset(); reference.value = {}; bindingBefore = {}; recoveryEstablished = false;
 	token.clear(); baseline.clear(); target.clear(); reservation.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear();
 	bindingFile.clear(); bindingRevision.clear(); nextRevision.clear(); readFile.clear(); recoveryDirectory.clear(); before.clear(); raw.clear(); after.clear();
 	scopeCurrent = {}; localSnapshot = {}; projectPayload = {}; applyPayload = {};
@@ -97,6 +97,7 @@ void CloudWorkspaceReceive::begin()
 	if (!authority.record().valid() || (binding.revision() != bindingRevision && binding.revision() != nextRevision) ||
 	    (binding.revision() == bindingRevision && (binding.commit() != baseline || !binding.matchesModel(before))) ||
 	    (binding.revision() == nextRevision && (!receipt || receipt->state() != "persisted"))) { fail(); return; }
+	if (binding.revision() == bindingRevision) bindingBefore = binding.value();
 	startupRetry.stop(); startupWait.invalidate(); deadline.start();
 	if (receipt && receipt->state() == "persisted") { readFinalRoot(); return; }
 	step = Step::Reading;
@@ -111,6 +112,11 @@ bool CloudWorkspaceReceive::current(bool local)
 	CloudWorkspaceSelection choice(choiceFile, text(reference.value, "provider"), text(reference.value, "account"));
 	if (!choice.load()) { if (step == Step::Starting) retryStartupOrFail(choiceFile); else fail(); return false; }
 	if (choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return false; }
+	if (!bindingBefore.isEmpty()) {
+		CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
+		if (!binding.load() || (binding.revision() == bindingRevision && binding.value() != bindingBefore) ||
+		    (binding.revision() != bindingRevision && binding.revision() != nextRevision)) { fail(); return false; }
+	}
 	const auto path = QDir(recoveryDirectory).filePath("intent.json");
 	if ((recoveryEstablished || QFileInfo::exists(path)) && (!receipt || !receipt->reload())) {
 		if (step == Step::Starting) retryStartupOrFail(path); else fail(); return false;
