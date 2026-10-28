@@ -1528,7 +1528,7 @@ void TestCloudSyncManager::testWorkspaceRouteFence_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"legacy-lock-excludes-second-process", "required-marker-missing", "corrupt-marker", "live-route-lock",
-		"workspace-excludes-legacy", "route-changes-during-sync", "protected-raw-upload-excludes-legacy", "unrelated-raw-upload"};
+		"workspace-excludes-legacy", "route-changes-during-sync", "protected-raw-upload-excludes-legacy", "unrelated-raw-upload", "durable-required-flag"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-route-fence-%2").arg(google).arg(mode))) << google << mode;
 }
@@ -1546,6 +1546,12 @@ void TestCloudSyncManager::testWorkspaceRouteFence()
 	other.tokens.insert(provider, token); other.verifiedAccountTokens.insert(provider, token.accessToken);
 	const auto routePath = manager.workspaceRoutePath(provider), key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + provider;
 	const auto original = manager.serializeCurrentDiveLog();
+	if (mode == 8) {
+		QVERIFY(!manager.requireWorkspaceRoute(provider)); QVERIFY(manager.acquireCloudRoute(provider, false));
+		QVERIFY(manager.requireWorkspaceRoute(provider)); QVERIFY(manager.workspaceRouteRequired(provider));
+		manager.routeLease.reset(); manager.routeProvider.clear(); manager.disconnectProvider(provider);
+		QVERIFY(manager.workspaceRouteRequired(provider)); other.syncDiveLog(provider); QVERIFY(!other.syncInProgress()); QCOMPARE(otherNetwork.requests, 0); return;
+	}
 	if (mode == 1) {
 		QSettings().setValue(key, true); manager.syncDiveLog(provider); manager.backupDiveLog(provider); manager.useCloudDiveLog(provider);
 		manager.uploadBytes(provider, "subsurface-neo.json", QByteArray("data"));

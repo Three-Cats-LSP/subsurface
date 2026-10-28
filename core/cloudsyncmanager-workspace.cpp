@@ -46,9 +46,8 @@ bool CloudSyncManager::acquireCloudRoute(const QString &providerId, bool legacy)
 	if (path.isEmpty()) { setError(tr("A local cloud operation lock cannot be stored on this device.")); return false; }
 	auto lease = std::make_unique<CloudWorkspaceRouteLease>(path + ".operation.lock");
 	if (!lease->acquire()) { setError(tr("Another cloud operation is using this profile. Try again after it finishes.")); return false; }
-	const auto key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId;
 	CloudWorkspaceRoute route(path + ".json", providerId);
-	if (legacy && !route.legacyAllowed(QSettings().contains(key))) {
+	if (legacy && !route.legacyAllowed(workspaceRouteRequired(providerId))) {
 		setError(tr("This cloud profile uses a workspace or needs workspace recovery. Review the workspace before syncing.")); return false;
 	}
 	routeProvider = providerId; legacyRouteOperation = legacy; routeLease = std::move(lease); return true;
@@ -56,12 +55,26 @@ bool CloudSyncManager::acquireCloudRoute(const QString &providerId, bool legacy)
 bool CloudSyncManager::legacyRouteCurrent()
 {
 	if (!legacyRouteOperation) return true;
-	const auto path = workspaceRoutePath(routeProvider), key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + routeProvider;
+	const auto path = workspaceRoutePath(routeProvider);
 	CloudWorkspaceRoute route(path + ".json", routeProvider);
-	if (!routeLease || !routeLease->held() || path.isEmpty() || !route.legacyAllowed(QSettings().contains(key))) {
+	if (!routeLease || !routeLease->held() || path.isEmpty() || !route.legacyAllowed(workspaceRouteRequired(routeProvider))) {
 		setError(tr("The cloud workspace route changed. Local data and cloud versions were kept.")); return false;
 	}
 	return true;
+}
+bool CloudSyncManager::workspaceRouteRequired(const QString &providerId) const
+{
+	if (providerId != "google-drive" && providerId != "dropbox") return true;
+	QSettings settings; settings.sync();
+	return settings.status() != QSettings::NoError || settings.contains(QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId);
+}
+bool CloudSyncManager::requireWorkspaceRoute(const QString &providerId)
+{
+	if (!routeLease || !routeLease->held() || routeProvider != providerId || legacyRouteOperation) return false;
+	QSettings settings; settings.sync(); if (settings.status() != QSettings::NoError) return false;
+	const auto key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId;
+	settings.setValue(key, true); settings.sync();
+	return settings.status() == QSettings::NoError && settings.contains(key) && settings.value(key).toBool();
 }
 QString CloudSyncManager::workspaceDirectory(const QString &providerId, const QString &account) const
 {
