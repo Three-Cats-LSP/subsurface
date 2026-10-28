@@ -54,6 +54,8 @@ private slots:
 	void workspaceAcceptanceWorkflow();
 	void workspaceAbsenceWorkflow_data();
 	void workspaceAbsenceWorkflow();
+	void workspaceConflictBinding_data();
+	void workspaceConflictBinding();
 	void workspaceBinding_data();
 	void workspaceBinding();
 	void workspaceReceiveReceipt_data();

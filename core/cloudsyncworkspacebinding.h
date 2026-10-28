@@ -20,6 +20,15 @@ public:
 		const QByteArray &model, const QString &revision, const QString &target);
 	bool advanceOwnedUpload(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &revision);
+	// Advance a separately confirmed conflict only after the saved local
+	// snapshot is an owned child of the reviewed remote head. The caller must
+	// first validate the durable confirmation and recheck the legacy source.
+	bool advanceConflictUpload(const QJsonObject &reviewedBinding, const QString &reviewedHead,
+		const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &model,
+		const QString &uploadIntentFile, const QString &newRevision);
+	bool ownsConflictUpload(const QJsonObject &reviewedBinding, const QString &reviewedHead,
+		const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &model,
+		const QString &ticket, const QString &uploadIntentFile, const QString &newRevision);
 	bool advanceReceived(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader, const QByteArray &currentModel, const QString &revision);
 	// Recognize a persisted receive after the binding was saved, including

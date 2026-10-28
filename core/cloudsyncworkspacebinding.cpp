@@ -150,6 +150,84 @@ bool CloudWorkspaceBinding::advanceOwnedUpload(const QString &expectedRevision, 
 	auto nextBody = body; nextBody["previous"] = QJsonObject{{"revision", old.value("revision")}, {"commit", old.value("commit")}, {"raw", old.value("raw")}, {"model", old.value("model")}};
 	return replay ? saved == nextBody : write(nextBody);
 }
+bool CloudWorkspaceBinding::advanceConflictUpload(const QJsonObject &reviewedBinding, const QString &reviewedHead,
+	const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &model,
+	const QString &uploadIntentFile, const QString &newRevision)
+{
+	const auto oldRevision = text(reviewedBinding, "revision"), baseline = text(reviewedBinding, "commit"), ticket = root.head();
+	if (fileName.isEmpty() || uploadIntentFile.isEmpty() || !CloudHistoryRecord::validEpoch(oldRevision) ||
+	    !CloudHistoryRecord::validEpoch(newRevision) || !CloudHistoryRecord::validEpoch(reviewedHead) ||
+	    !CloudHistoryRecord::validEpoch(baseline) || oldRevision == newRevision || reviewedHead == baseline ||
+	    !validXml(model) || reviewedBinding.value("model").toObject() ==
+		QJsonObject{{"sha256", CloudSyncManifest::sha256(model)}, {"bytes", double(model.size())}}) return false;
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
+	if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
+	const QJsonObject previous{{"revision", reviewedBinding.value("revision")}, {"commit", reviewedBinding.value("commit")},
+		{"raw", reviewedBinding.value("raw")}, {"model", reviewedBinding.value("model")}};
+	const bool replay = revision() == newRevision && saved.value("previous").toObject() == previous;
+	if (!replay && saved != reviewedBinding) return false;
+	const auto body = next(root, model, model, newRevision), t = root.ticket(ticket);
+	if (body.isEmpty() || !checkpoint.valid() || !root.follows(checkpoint) || checkpoint.reference().value != reference.value ||
+	    reviewedBinding.value("workspace") != reference.value || reviewedBinding.value("choice_version") != scope.value("choice_version") ||
+	    body.value("legacy_acceptance") != reviewedBinding.value("legacy_acceptance") ||
+	    text(checkpoint.latestLegacyAcceptance(), "id") != text(reviewedBinding, "legacy_acceptance") ||
+	    reviewedBinding.value("raw").toObject() != pin(root.ticket(baseline)) ||
+	    reviewedBinding.value("raw").toObject() != pin(checkpoint.ticket(baseline)) ||
+	    pin(root.ticket(reviewedHead)) != pin(checkpoint.ticket(reviewedHead)) ||
+	    text(root.ticket(reviewedHead), "state") != "committed" || text(t, "state") != "committed" ||
+	    text(t, "parent") != reviewedHead || !text(t, "restore_source").isEmpty() || root.copySource(ticket).valid()) return false;
+	const auto history = root.value.value("journal").toObject().value("history").toArray();
+	int baselineIndex = -1, headIndex = -1, ticketIndex = -1;
+	for (int i = 0; i < history.size(); ++i) {
+		if (history[i].toString() == baseline) baselineIndex = i;
+		if (history[i].toString() == reviewedHead) headIndex = i;
+		if (history[i].toString() == ticket) ticketIndex = i;
+	}
+	if (baselineIndex < 0 || headIndex <= baselineIndex || ticketIndex != headIndex + 1) return false;
+	CloudWorkspaceUploadIntent owned(uploadIntentFile, reference, text(t, "sha256"), qint64(t.value("bytes").toDouble()), ticket, reviewedHead);
+	if (!owned.reload() || owned.state() != "committed" || owned.id() != text(t, "object") || owned.version() != text(t, "version")) return false;
+	auto nextBody = body; nextBody["previous"] = previous;
+	return replay ? saved == nextBody : write(nextBody);
+}
+
+bool CloudWorkspaceBinding::ownsConflictUpload(const QJsonObject &reviewedBinding, const QString &reviewedHead,
+	const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &model,
+	const QString &ticket, const QString &uploadIntentFile, const QString &newRevision)
+{
+	const auto oldRevision = text(reviewedBinding, "revision"), baseline = text(reviewedBinding, "commit");
+	if (fileName.isEmpty() || uploadIntentFile.isEmpty() || !CloudHistoryRecord::validEpoch(oldRevision) ||
+	    !CloudHistoryRecord::validEpoch(newRevision) || !CloudHistoryRecord::validEpoch(reviewedHead) ||
+	    !CloudHistoryRecord::validEpoch(baseline) || !CloudHistoryRecord::validEpoch(ticket) ||
+	    oldRevision == newRevision || reviewedHead == baseline || !validXml(model) ||
+	    reviewedBinding.value("model").toObject() ==
+		QJsonObject{{"sha256", CloudSyncManifest::sha256(model)}, {"bytes", double(model.size())}}) return false;
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
+	const QJsonObject previous{{"revision", reviewedBinding.value("revision")}, {"commit", reviewedBinding.value("commit")},
+		{"raw", reviewedBinding.value("raw")}, {"model", reviewedBinding.value("model")}};
+	if (!lock.tryLock(0) || !read() || saved.isEmpty() || revision() != newRevision || commit() != ticket ||
+	    saved.value("previous").toObject() != previous || saved.value("legacy_acceptance") != reviewedBinding.value("legacy_acceptance") ||
+	    reviewedBinding.value("workspace") != reference.value || reviewedBinding.value("choice_version") != scope.value("choice_version") ||
+	    !root.valid() || !checkpoint.valid() || !root.follows(checkpoint) || root.reference().value != reference.value ||
+	    checkpoint.reference().value != reference.value || !matchesModel(model)) return false;
+	const auto t = root.ticket(ticket);
+	if (reviewedBinding.value("raw").toObject() != pin(root.ticket(baseline)) ||
+	    reviewedBinding.value("raw").toObject() != pin(checkpoint.ticket(baseline)) ||
+	    pin(root.ticket(reviewedHead)) != pin(checkpoint.ticket(reviewedHead)) ||
+	    saved.value("raw").toObject() != pin(t) || text(t, "state") != "committed" ||
+	    text(t, "parent") != reviewedHead || !text(t, "restore_source").isEmpty() || root.copySource(ticket).valid() ||
+	    text(t, "sha256") != CloudSyncManifest::sha256(model) || t.value("bytes").toDouble() != model.size()) return false;
+	const auto history = root.value.value("journal").toObject().value("history").toArray();
+	int baselineIndex = -1, headIndex = -1, ticketIndex = -1;
+	for (int i = 0; i < history.size(); ++i) {
+		if (history[i].toString() == baseline) baselineIndex = i;
+		if (history[i].toString() == reviewedHead) headIndex = i;
+		if (history[i].toString() == ticket) ticketIndex = i;
+	}
+	if (baselineIndex < 0 || headIndex <= baselineIndex || ticketIndex != headIndex + 1) return false;
+	CloudWorkspaceUploadIntent owned(uploadIntentFile, reference, text(t, "sha256"), qint64(t.value("bytes").toDouble()), ticket, reviewedHead);
+	return owned.reload() && owned.state() == "committed" && owned.id() == text(t, "object") && owned.version() == text(t, "version");
+}
+
 bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 	CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader, const QByteArray &currentModel, const QString &newRevision)
 {

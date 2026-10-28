@@ -1558,6 +1558,58 @@ void TestCloudSyncHistory::workspaceAbsenceWorkflow()
 	QCOMPARE(n.files[1].data, A); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
 }
 
+void TestCloudSyncHistory::workspaceConflictBinding_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"confirmed-local", "wrong-review", "wrong-head", "missing-proof",
+		"uncommitted-proof", "checkpoint-rollback", "changed-acceptance", "unchanged-local",
+		"corrupt-review", "later-cloud-head", "idempotent-replay", "wrong-owned-head"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-conflict-binding-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceConflictBinding()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), choice = uid(), baseline = uid(), event = uid(), revision = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(baseline, {}, source)); QVERIFY(root.completeUpload(baseline, google ? "base" : "id:base", "rev-base"));
+	QVERIFY(root.publish(baseline, {})); QVERIFY(root.acceptLegacyCopy(event, {}, baseline, baseline, source));
+	const auto oldCheckpoint = root;
+	QTemporaryDir dir; QVERIFY(dir.isValid()); const auto file = dir.filePath("binding.json");
+	CloudWorkspaceBinding binding(file, ref, choice); QVERIFY(binding.activate(root, root, A, A, revision)); const auto prior = binding.value();
+	const auto remote = uid(); QVERIFY(root.registerUpload(remote, baseline, CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(root.completeUpload(remote, google ? "remote" : "id:remote", "rev-remote")); QVERIFY(root.publish(remote, baseline));
+	const auto ticket = uid(), next = uid(), object = QString(google ? "local" : "id:local");
+	QVERIFY(root.registerUpload(ticket, remote, CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(root.completeUpload(ticket, object, "rev-local")); QVERIFY(root.publish(ticket, remote));
+	const auto intentFile = dir.filePath("upload.json");
+	CloudWorkspaceUploadIntent intent(intentFile, ref, CloudSyncManifest::sha256(B), B.size(), ticket, remote);
+	QVERIFY(intent.prepare()); QVERIFY(intent.beginRegistration()); QVERIFY(intent.registerTicket()); QVERIFY(intent.submit());
+	QVERIFY(intent.identify(object)); QVERIFY(intent.verify("rev-local")); QVERIFY(intent.upload()); if (mode != 4) QVERIFY(intent.commit());
+	if (mode == 6) QVERIFY(root.acceptLegacyCopy(uid(), event, ticket, baseline, source));
+	if (mode == 9) {
+		const auto later = uid(); QVERIFY(root.registerUpload(later, ticket, CloudSyncManifest::sha256(A), A.size()));
+		QVERIFY(root.completeUpload(later, google ? "later" : "id:later", "rev-later")); QVERIFY(root.publish(later, ticket));
+	}
+	auto supplied = prior;
+	if (mode == 1) supplied["revision"] = uid();
+	if (mode == 8) { auto raw = supplied["raw"].toObject(); raw["sha256"] = CloudSyncManifest::sha256(B); supplied["raw"] = raw; }
+	const auto head = mode == 2 ? uid() : remote;
+	const auto proofFile = mode == 3 ? dir.filePath("missing.json") : intentFile;
+	const auto &checkpoint = mode == 5 ? oldCheckpoint : root;
+	const auto model = mode == 7 ? A : B;
+	const bool ok = binding.advanceConflictUpload(supplied, head, root, checkpoint, model, proofFile, next);
+	if (mode == 0 || mode == 10 || mode == 11) {
+		QVERIFY(ok); QCOMPARE(binding.commit(), ticket); QVERIFY(binding.matchesModel(B));
+		CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load());
+		QVERIFY(restarted.advanceConflictUpload(prior, remote, root, root, B, intentFile, next));
+		QCOMPARE(restarted.ownsConflictUpload(prior, mode == 11 ? uid() : remote, root, root, B, ticket, intentFile, next), mode != 11);
+		QCOMPARE(root.ticket(remote).value("state").toString(), QString("committed"));
+		QCOMPARE(root.ticket(baseline).value("state").toString(), QString("committed"));
+	} else { QVERIFY(!ok); CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), prior); }
+}
+
 void TestCloudSyncHistory::workspaceBinding_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
