@@ -18,6 +18,8 @@ private slots:
 	void testHistoryGuard();
 	void testWorkspaceGuard_data();
 	void testWorkspaceGuard();
+	void testWorkspaceRouteFence_data();
+	void testWorkspaceRouteFence();
 	void testWorkspaceSelection_data();
 	void testWorkspaceSelection();
 	void testWorkspaceCopy_data();

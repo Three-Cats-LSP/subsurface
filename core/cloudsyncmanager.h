@@ -11,6 +11,7 @@
 #include "cloudsyncworkspaceacceptance.h"
 #include "cloudsyncworkspaceupload.h"
 #include "cloudsyncworkspaceapply.h"
+#include "cloudsyncworkspaceroute.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -119,6 +120,7 @@ private:
 		StorageReview,
 		History,
 		Workspace,
+		RawProtectedUpload,
 		BackupUploadPayload,
 		BackupUploadManifest,
 		SyncDownloadManifest,
@@ -156,6 +158,9 @@ private:
 	void handleDownloadedManifest(const QString &providerId, const QByteArray &data);
 	void handleDownloadedDiveLog(const QString &providerId, const QByteArray &data);
 	void clearSyncOperation();
+	QString workspaceRoutePath(const QString &providerId) const;
+	bool acquireCloudRoute(const QString &providerId, bool legacy);
+	bool legacyRouteCurrent();
 	static QString syncStateCredentialKey(const QString &providerId);
 	bool localDiveLogUnchanged();
 	void downloadSyncManifest(const QString &providerId);
@@ -233,6 +238,9 @@ private:
 	WorkspaceRestoreStep workspaceRestoreStep = WorkspaceRestoreStep::None;
 	int workspaceRestoreApplyRetries = 0;
 	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.
+	std::unique_ptr<CloudWorkspaceRouteLease> routeLease;
+	QString routeProvider, rawProtectedName;
+	bool legacyRouteOperation = false;
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;
 	QPointer<QNetworkReply> accountReply;

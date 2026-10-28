@@ -226,6 +226,9 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&fileStore, &CloudSyncFileStore::uploadFinished, this,
 		[this](CloudSyncProviderType type, const QString &fileName) {
 			const QString providerId = cloudSyncProviderDescriptor(type).id;
+			if (providerId == syncProviderId && syncOperation == SyncOperation::RawProtectedUpload && fileName == rawProtectedName) {
+				clearSyncOperation(); emit uploadFinished(providerId, fileName); return;
+			}
 			emit uploadFinished(providerId, fileName);
 
 			if (providerId != syncProviderId)
@@ -930,9 +933,12 @@ void CloudSyncManager::runHistory(const QString &providerId, const QString &acti
 	if (historyReports.remove(providerId)) emit providersChanged();
 	syncLocalPayload = serializeCurrentDiveLog();
 	if (syncLocalPayload.isEmpty()) return;
+	if (!acquireCloudRoute(providerId, true)) return;
 	syncLocalSha256 = CloudSyncManifest::sha256(syncLocalPayload);
 	syncProviderId = providerId; syncOperation = SyncOperation::History;
-	emit syncInProgressChanged(); verifiedAccountTokens.remove(providerId);
+	emit syncInProgressChanged();
+	if (!historyInProgress() || syncProviderId != providerId) return;
+	verifiedAccountTokens.remove(providerId);
 	refreshThen(*provider, providerId, [this, providerId, action, revision, type = provider->type](const QString &token) {
 		if (!historyInProgress() || syncProviderId != providerId) return;
 		const QString account = CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8());
@@ -1117,12 +1123,23 @@ void CloudSyncManager::refreshThen(const CloudSyncProviderDescriptor &provider, 
 
 void CloudSyncManager::uploadBytes(const QString &providerId, const QString &fileName, const QByteArray &data)
 {
-	if (storageReviewInProgress() || historyInProgress() || workspaceInProgress()) return;
+	if (storageReviewInProgress() || historyInProgress() || workspaceInProgress() || syncOperation == SyncOperation::RawProtectedUpload) return;
 	clearStorageReview(providerId);
 	const CloudSyncProviderDescriptor *provider = descriptorForId(providerId);
 	if (!provider)
 		return;
-	refreshThen(*provider, providerId, [this, type = provider->type, fileName, data](const QString &accessToken) {
+	const bool protectedName = provider->type != CloudSyncProviderType::SubsurfaceCloud &&
+		fileName.toLower().startsWith(QStringLiteral("subsurface-neo"));
+	if (protectedName) {
+		if (syncInProgress() || accountCheckInProgress() || !acquireCloudRoute(providerId, true)) return;
+		syncProviderId = providerId; syncOperation = SyncOperation::RawProtectedUpload; rawProtectedName = fileName; emit syncInProgressChanged();
+		if (syncOperation != SyncOperation::RawProtectedUpload || syncProviderId != providerId || rawProtectedName != fileName) return;
+	}
+	refreshThen(*provider, providerId, [this, type = provider->type, providerId, fileName, data, protectedName](const QString &accessToken) {
+		if (protectedName && (syncOperation != SyncOperation::RawProtectedUpload || syncProviderId != providerId || fileName != rawProtectedName || !legacyRouteCurrent())) {
+			if (syncOperation == SyncOperation::RawProtectedUpload && syncProviderId == providerId) clearSyncOperation();
+			return;
+		}
 		fileStore.upload(type, accessToken, fileName, data);
 	});
 }
@@ -1251,6 +1268,7 @@ void CloudSyncManager::recordSuccessfulSync(const QString &providerId)
 
 bool CloudSyncManager::localDiveLogUnchanged()
 {
+	if (!legacyRouteCurrent()) return false;
 	const QByteArray current = serializeCurrentDiveLog();
 	if (current.isEmpty())
 		return false;
@@ -1283,6 +1301,7 @@ void CloudSyncManager::clearSyncOperation()
 	syncBackupOnly = false;
 	syncRemoteVersion.clear();
 	syncRemoteFileId.clear();
+	routeLease.reset(); routeProvider.clear(); rawProtectedName.clear(); legacyRouteOperation = false;
 	if (wasActive)
 		emit syncInProgressChanged();
 }
@@ -1322,6 +1341,7 @@ void CloudSyncManager::backupDiveLog(const QString &providerId)
 	const QByteArray payload = serializeCurrentDiveLog();
 	if (payload.isEmpty())
 		return;
+	if (!acquireCloudRoute(providerId, true)) return;
 
 	setError(QString());
 	forceLocalUpload = true;
@@ -1348,6 +1368,7 @@ void CloudSyncManager::syncDiveLog(const QString &providerId)
 	const QByteArray payload = serializeCurrentDiveLog();
 	if (payload.isEmpty())
 		return;
+	if (!acquireCloudRoute(providerId, true)) return;
 
 	setError(QString());
 	forceCloudDownload = false;
@@ -1373,6 +1394,7 @@ void CloudSyncManager::useCloudDiveLog(const QString &providerId)
 	const QByteArray payload = serializeCurrentDiveLog();
 	if (payload.isEmpty())
 		return;
+	if (!acquireCloudRoute(providerId, true)) return;
 	setError(QString());
 	forceCloudDownload = true;
 	syncProviderId = providerId;
@@ -1469,9 +1491,13 @@ void CloudSyncManager::handleDownloadedDiveLog(const QString &providerId, const 
 void CloudSyncManager::downloadSyncManifest(const QString &providerId)
 {
 	const auto *provider = descriptorForId(providerId);
-	if (!provider)
+	if (!provider || syncProviderId != providerId || !syncInProgress())
 		return;
-	refreshThen(*provider, providerId, [this, type = provider->type](const QString &token) {
+	if (!legacyRouteCurrent()) { clearSyncOperation(); return; }
+	const auto expected = syncOperation;
+	refreshThen(*provider, providerId, [this, type = provider->type, providerId, expected](const QString &token) {
+		if (syncProviderId != providerId || syncOperation != expected) return;
+		if (!legacyRouteCurrent()) { clearSyncOperation(); return; }
 		fileStore.downloadVersioned(type, token, QString::fromLatin1(NEO_MANIFEST_FILENAME));
 	});
 }
@@ -1480,9 +1506,13 @@ void CloudSyncManager::uploadSyncFile(const QString &providerId, const QString &
 				     const QString &version, const QString &fileId)
 {
 	const auto *provider = descriptorForId(providerId);
-	if (!provider)
+	if (!provider || syncProviderId != providerId || !syncInProgress())
 		return;
-	refreshThen(*provider, providerId, [this, type = provider->type, fileName, data, version, fileId](const QString &token) {
+	if (!legacyRouteCurrent()) { clearSyncOperation(); return; }
+	const auto expected = syncOperation;
+	refreshThen(*provider, providerId, [this, type = provider->type, providerId, expected, fileName, data, version, fileId](const QString &token) {
+		if (syncProviderId != providerId || syncOperation != expected) return;
+		if (!legacyRouteCurrent()) { clearSyncOperation(); return; }
 		fileStore.uploadConditional(type, token, fileName, data, version, fileId);
 	});
 }

@@ -29,6 +29,40 @@ QJsonObject readCreation(const QString &directory, const QString &provider, cons
 }
 }
 
+QString CloudSyncManager::workspaceRoutePath(const QString &providerId) const
+{
+	const auto base = workspaceDataRootOverride.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) : workspaceDataRootOverride;
+	if (base.isEmpty() || (providerId != "google-drive" && providerId != "dropbox")) return {};
+	const auto scope = CloudSyncManifest::sha256((QSettings().fileName() + "|" + providerId).toUtf8());
+	return QDir(base).filePath("neo-workspace-routes/" + scope);
+}
+bool CloudSyncManager::acquireCloudRoute(const QString &providerId, bool legacy)
+{
+	const auto *provider = descriptorForId(providerId);
+	if (!provider) return false;
+	if (provider->type == CloudSyncProviderType::SubsurfaceCloud) return true;
+	if (routeLease) { setError(tr("Another cloud operation is already in progress.")); return false; }
+	const auto path = workspaceRoutePath(providerId);
+	if (path.isEmpty()) { setError(tr("A local cloud operation lock cannot be stored on this device.")); return false; }
+	auto lease = std::make_unique<CloudWorkspaceRouteLease>(path + ".operation.lock");
+	if (!lease->acquire()) { setError(tr("Another cloud operation is using this profile. Try again after it finishes.")); return false; }
+	const auto key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId;
+	CloudWorkspaceRoute route(path + ".json", providerId);
+	if (legacy && !route.legacyAllowed(QSettings().contains(key))) {
+		setError(tr("This cloud profile uses a workspace or needs workspace recovery. Review the workspace before syncing.")); return false;
+	}
+	routeProvider = providerId; legacyRouteOperation = legacy; routeLease = std::move(lease); return true;
+}
+bool CloudSyncManager::legacyRouteCurrent()
+{
+	if (!legacyRouteOperation) return true;
+	const auto path = workspaceRoutePath(routeProvider), key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + routeProvider;
+	CloudWorkspaceRoute route(path + ".json", routeProvider);
+	if (!routeLease || !routeLease->held() || path.isEmpty() || !route.legacyAllowed(QSettings().contains(key))) {
+		setError(tr("The cloud workspace route changed. Local data and cloud versions were kept.")); return false;
+	}
+	return true;
+}
 QString CloudSyncManager::workspaceDirectory(const QString &providerId, const QString &account) const
 {
 	const auto base = workspaceDataRootOverride.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) : workspaceDataRootOverride;
@@ -126,7 +160,7 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 }
 bool CloudSyncManager::workspaceScopeCurrent()
 {
-	const bool current = workspaceInProgress() && workspaceEnabled() && !workspaceToken.isEmpty() && !autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty() &&
+	const bool current = workspaceInProgress() && workspaceEnabled() && routeLease && routeLease->held() && !workspaceToken.isEmpty() && !autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty() &&
 		tokens.value(syncProviderId).accessToken == workspaceToken && verifiedAccountTokens.value(syncProviderId) == workspaceToken &&
 		CloudSyncManifest::sha256(tokens.value(syncProviderId).accountId.toUtf8()) == workspaceAccount;
 	if (!current) return false;
@@ -222,6 +256,7 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		}
 	}
 	clearStorageReview(providerId); setError({});
+	if (!acquireCloudRoute(providerId, false)) return;
 	syncProviderId = providerId; syncOperation = SyncOperation::Workspace; workspaceAction = action; workspaceChoiceVersion = expectedVersion; workspaceReference = reference;
 	if (inspecting || copying || accepting) { syncLocalSha256 = CloudSyncManifest::sha256(local); workspaceCopyReview = reviewed; }
 	if (versioning) { syncLocalPayload = local; syncLocalSha256 = CloudSyncManifest::sha256(local); }

@@ -1524,6 +1524,69 @@ void TestCloudSyncManager::testWorkspaceGuard()
 	QCOMPARE(manager.serializeCurrentDiveLog(), local);
 	if (mode != 4 && mode != 5) QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(provider)), baseline);
 }
+void TestCloudSyncManager::testWorkspaceRouteFence_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"legacy-lock-excludes-second-process", "required-marker-missing", "corrupt-marker", "live-route-lock",
+		"workspace-excludes-legacy", "route-changes-during-sync", "protected-raw-upload-excludes-legacy", "unrelated-raw-upload"};
+	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
+		QTest::newRow(qPrintable(QString("%1-route-fence-%2").arg(google).arg(mode))) << google << mode;
+}
+void TestCloudSyncManager::testWorkspaceRouteFence()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	const auto previous = qgetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	const auto restore = qScopeGuard([&] { if (previous.isNull()) qunsetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH"); else qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", previous); });
+	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
+	const auto provider = QString(google ? "google-drive" : "dropbox"); QTemporaryDir temp; QVERIFY(temp.isValid());
+	FakeNetwork network, otherNetwork; network.deferred = true; otherNetwork.deferred = true;
+	CloudSyncManager manager(&network), other(&otherNetwork); manager.workspaceDataRootOverride = temp.path(); other.workspaceDataRootOverride = temp.path();
+	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600);
+	manager.tokens.insert(provider, token); manager.verifiedAccountTokens.insert(provider, token.accessToken);
+	other.tokens.insert(provider, token); other.verifiedAccountTokens.insert(provider, token.accessToken);
+	const auto routePath = manager.workspaceRoutePath(provider), key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + provider;
+	const auto original = manager.serializeCurrentDiveLog();
+	if (mode == 1) {
+		QSettings().setValue(key, true); manager.syncDiveLog(provider); manager.backupDiveLog(provider); manager.useCloudDiveLog(provider);
+		manager.uploadBytes(provider, "subsurface-neo.json", QByteArray("data"));
+		QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); QCOMPARE(manager.serializeCurrentDiveLog(), original); return;
+	}
+	if (mode == 2) {
+		QVERIFY(QDir().mkpath(QFileInfo(routePath).absolutePath())); QFile f(routePath + ".json"); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("unknown") == 7); f.close();
+		manager.syncDiveLog(provider); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); QVERIFY(f.open(QIODevice::ReadOnly)); QCOMPARE(f.readAll(), QByteArray("unknown")); return;
+	}
+	if (mode == 3) {
+		CloudWorkspaceRouteLease held(routePath + ".operation.lock"); QVERIFY(held.acquire()); manager.syncDiveLog(provider);
+		QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); QVERIFY(held.held()); return;
+	}
+	if (mode == 4) {
+		network.accountDeferred = true; manager.verifiedAccountTokens.remove(provider); manager.runWorkspace(provider, "create");
+		QVERIFY(manager.workspaceInProgress()); QVERIFY(manager.routeLease && manager.routeLease->held());
+		other.syncDiveLog(provider); QVERIFY(!other.syncInProgress()); QCOMPARE(otherNetwork.requests, 0);
+		manager.cancelWorkspace(); QVERIFY(!manager.syncInProgress()); other.syncDiveLog(provider); QVERIFY(other.syncInProgress());
+		other.disconnectProvider(provider); QVERIFY(!other.syncInProgress()); return;
+	}
+	if (mode == 6 || mode == 7) {
+		manager.uploadBytes(provider, mode == 6 ? "subsurface-neo.json" : "unrelated.txt", QByteArray("data"));
+		QTRY_VERIFY(network.requests > 0);
+		if (mode == 6) {
+			QVERIFY(manager.syncInProgress()); CloudWorkspaceRouteLease held(routePath + ".operation.lock"); QVERIFY(!held.acquire());
+			other.syncDiveLog(provider); QVERIFY(!other.syncInProgress()); QCOMPARE(otherNetwork.requests, 0);
+			manager.disconnectProvider(provider); QVERIFY(!manager.syncInProgress()); QVERIFY(held.acquire());
+		} else { QVERIFY(!manager.syncInProgress()); CloudWorkspaceRouteLease held(routePath + ".operation.lock"); QVERIFY(held.acquire()); manager.disconnectProvider(provider); }
+		return;
+	}
+	if (mode == 5) {
+		network.status = 404; manager.syncDiveLog(provider); QTRY_VERIFY(network.requests > 0); QVERIFY(manager.syncInProgress());
+		QSettings().setValue(key, true); QVERIFY(network.lastReply); network.lastReply->complete(); QTRY_VERIFY(!manager.syncInProgress());
+		QCOMPARE(network.requests, 1); QCOMPARE(manager.serializeCurrentDiveLog(), original); QVERIFY(!manager.lastError().isEmpty()); return;
+	}
+	manager.syncDiveLog(provider); QTRY_VERIFY(network.requests > 0); QVERIFY(manager.syncInProgress());
+	other.syncDiveLog(provider); QVERIFY(!other.syncInProgress()); QCOMPARE(otherNetwork.requests, 0);
+	manager.disconnectProvider(provider); QVERIFY(!manager.syncInProgress()); other.syncDiveLog(provider); QVERIFY(other.syncInProgress());
+	other.disconnectProvider(provider); QVERIFY(!other.syncInProgress());
+}
+
 void TestCloudSyncManager::testWorkspaceSelection_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
