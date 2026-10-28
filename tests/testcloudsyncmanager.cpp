@@ -1905,7 +1905,7 @@ void TestCloudSyncManager::testWorkspaceActivation_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"activate-and-resume", "wrong-review", "local-edit-after-review", "choice-away-back",
-		"legacy-changed", "different-workspace-model", "cancel-and-resume", "foreign-required-flag", "unknown-attempt", "local-edit-during-read", "missing-checkpoint"};
+		"legacy-changed", "different-workspace-model", "cancel-and-resume", "foreign-required-flag", "unknown-attempt", "local-edit-during-read", "missing-checkpoint", "missing-local-save"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-activation-%2").arg(google).arg(mode))) << google << mode;
 }
@@ -1917,6 +1917,7 @@ void TestCloudSyncManager::testWorkspaceActivation()
 	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
 	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
 	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	manager.setWorkspacePersistenceHandlers([] { return true; }, [] { return true; });
 	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
 	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
 	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
@@ -1952,6 +1953,7 @@ void TestCloudSyncManager::testWorkspaceActivation()
 		QVERIFY(QDir().mkpath(bad)); QFile f(QDir(bad).filePath("plan.json")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("unknown") == 7); f.close();
 	}
 	if (mode == 10) QVERIFY(QFile::remove(checkpointFile));
+	if (mode == 11) manager.setWorkspacePersistenceHandlers({}, {});
 	if (mode == 6 || mode == 9) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
 	manager.runWorkspace(provider, "activate", mode == 1 ? QUuid::createUuid().toString(QUuid::WithoutBraces) : review.id);
 	if (mode == 6 || mode == 9) {
@@ -1997,6 +1999,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
 	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
 	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	manager.setWorkspacePersistenceHandlers([] { return true; }, [] { return true; });
 	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
 	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
 	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
@@ -2044,7 +2047,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2056,6 +2059,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
 	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
 	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	manager.setWorkspacePersistenceHandlers([] { return true; }, [] { return true; });
 	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
 	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
 	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
@@ -2083,16 +2087,26 @@ void TestCloudSyncManager::testWorkspaceSync()
 		QVERIFY(root.completeUpload(ticket, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(ticket, initial));
 		network.files[0].data = root.json(); network.files[0].version = "remote-head";
 	}
-	if (mode == 1 || mode == 3 || mode == 6) ::divelog.dives[0]->notes = "Local workspace version";
+	if (mode == 1 || mode == 3 || mode == 6 || mode == 10) ::divelog.dives[0]->notes = "Local workspace version";
 	if (mode == 4) { auto manifest = CloudSyncManifest::forPayload(original); manifest.schemaVersion = 2; manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml"; network.add("subsurface-neo-sync.json", manifest.toJson()); network.add(manifest.payloadFileName(), original); }
 	if (mode == 5) QVERIFY(QFile::remove(manager.workspaceRoutePath(provider) + ".json"));
 	if (mode == 8) { const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "other" : "id:other"); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), other)); QVERIFY(choice.select(choice.version(), ref)); }
+	if (mode == 9) {
+		const auto attempt = QDir(directory).filePath("sync-uploads/" + ref.key() + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces) + "/plan");
+		QVERIFY(QDir().mkpath(attempt)); QFile bad(QDir(attempt).filePath("plan.json")); QVERIFY(bad.open(QIODevice::WriteOnly)); QCOMPARE(bad.write("unknown"), qint64(7)); bad.close();
+	}
+	if (mode == 10) network.workspacePayloadAckLost = true;
 	const auto before = CloudWorkspaceModel::currentXml(), rootBefore = network.files[0].data; const auto writes = network.puts;
 	QSignalSpy finished(&manager, &CloudSyncManager::diveLogSyncFinished);
 	if (mode == 6) { manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); QVERIFY(manager.syncPrimaryIfReady()); }
 	else manager.syncDiveLog(provider);
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 	if (mode == 7) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); allowSave = true; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000); }
+	if (mode == 10) {
+		QVERIFY(!manager.lastError().isEmpty()); const auto files = network.files.size(), writesAfter = network.puts; const auto rootAfter = network.files[0].data;
+		network.workspacePayloadAckLost = false; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(network.files.size(), files); QCOMPARE(network.puts, writesAfter); QCOMPARE(network.files[0].data, rootAfter);
+	}
 	const bool success = mode == 0 || mode == 1 || mode == 2 || mode == 6 || mode == 7;
 	QCOMPARE(finished.size(), success ? 1 : 0);
 	if (success) {
@@ -2101,7 +2115,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 		else QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 		if (mode == 1 || mode == 6) { root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.head() != initial); QCOMPARE(network.content(ref.payloadName(root.head())), before); }
 		if (mode == 0) QCOMPARE(network.puts, writes);
-	} else { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), before); QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(network.puts, writes); }
+	} else { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), before); if (mode != 10) { QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(network.puts, writes); } }
 	QCOMPARE(network.renames, 0);
 }
 

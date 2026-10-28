@@ -10,6 +10,7 @@ ColumnLayout {
 	property string draft: ""
 	property var pendingCopy: ({})
 	property var pendingAcceptance: ({})
+	property var pendingActivation: ({})
 	property var pendingRestore: ({})
 	signal draftEdited(string value)
 	readonly property var report: provider.workspace || ({})
@@ -22,7 +23,7 @@ ColumnLayout {
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
-		text: qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. These workspaces do not yet replace existing cloud sync.")
+		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. To manage its versions or review branches, turn automatic sync off and clear provider assignments first.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
 		color: tokens.textSecondary; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	GridLayout {
@@ -138,6 +139,18 @@ ColumnLayout {
 			text: (panel.report.copyReview || {}).missing ? qsTr("The empty cloud account is already the latest accepted observation.") : qsTr("This copied cloud branch is already the latest accepted branch.")
 			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
+		NeoButton {
+			objectName: "activateWorkspace-" + panel.provider.id; text: qsTr("Activate workspace sync…"); compact: true; Layout.fillWidth: true
+			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).alreadyAccepted && !panel.report.routeActive
+			enabled: panel.available && !panel.report.activationRecoveryRequired && !panel.report.activationLimitReached
+			onClicked: { panel.pendingActivation = panel.report.copyReview; activationDialog.open() }
+		}
+		Text {
+			objectName: "workspaceActivationStatus-" + panel.provider.id
+			visible: !!panel.report.routeActive || !!panel.report.routeRecoveryRequired || !!panel.report.activationRecoveryRequired || !!panel.report.activationLimitReached
+			text: panel.report.routeRecoveryRequired || panel.report.activationRecoveryRequired || panel.report.activationLimitReached ? qsTr("Workspace routing needs review. Existing local and cloud data were kept.") : qsTr("This workspace is selected for sync on this device. Choose this provider as primary to use automatic sync.")
+			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
 		Text {
 			objectName: "workspaceAcceptanceStatus-" + panel.provider.id
 			visible: !!panel.report.acceptedLegacy || !!panel.report.acceptanceRecoveryRequired || !!panel.report.acceptanceLimitReached
@@ -219,6 +232,23 @@ ColumnLayout {
 		}
 	}
 	Repeater {
+		model: panel.report.activations || []
+		delegate: ColumnLayout {
+			required property var modelData
+			required property int index
+			Layout.fillWidth: true
+			Text {
+				text: modelData.choiceChanged ? qsTr("Sync setup %1 belongs to an earlier workspace choice. Its recovery records were kept.").arg(index + 1) : qsTr("Sync setup %1 has saved recovery information and can be checked again.").arg(index + 1)
+				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+			}
+			NeoButton {
+				objectName: "resumeWorkspaceActivation-" + panel.provider.id + "-" + index; text: qsTr("Check and resume sync setup"); compact: true; Layout.fillWidth: true
+				enabled: panel.available && modelData.canResume
+				onClicked: CloudSync.runWorkspace(panel.provider.id, "resume-activation", modelData.id)
+			}
+		}
+	}
+	Repeater {
 		model: panel.report.uploads || []
 		delegate: ColumnLayout {
 			required property var modelData
@@ -279,6 +309,27 @@ ColumnLayout {
 		objectName: "joinWorkspace-" + panel.provider.id; text: qsTr("Verify and join"); compact: true; Layout.fillWidth: true
 		enabled: panel.available && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
+	}
+	Popup {
+		id: activationDialog; objectName: "workspaceActivationDialog-" + panel.provider.id
+		parent: Overlay.overlay; anchors.centerIn: parent; modal: true; focus: true; padding: 16
+		closePolicy: Popup.CloseOnEscape
+		width: Math.max(280, Math.min(460, parent ? parent.width - 32 : panel.width))
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Rectangle {
+			objectName: "workspaceActivationBody-" + panel.provider.id; color: tokens.surfaceRaised; implicitHeight: activationContent.implicitHeight
+			Accessible.role: Accessible.Dialog; Accessible.name: activationTitle.text
+			ColumnLayout {
+				id: activationContent; width: parent.width; spacing: 12
+				Text { id: activationTitle; text: qsTr("Activate this workspace for sync?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: qsTr("Neo will verify that the current local log matches the workspace version and that the reviewed cloud branch is still current. Future sync for this provider will use this workspace. Choose it as primary to enable automatic sync."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				NeoButton { objectName: "cancelWorkspaceActivation-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: activationDialog.close() }
+				NeoButton {
+					objectName: "confirmWorkspaceActivation-" + panel.provider.id; text: qsTr("Activate workspace"); Layout.fillWidth: true; enabled: panel.available
+					onClicked: { var review = panel.pendingActivation.id || ""; activationDialog.close(); CloudSync.runWorkspace(panel.provider.id, "activate", review) }
+				}
+			}
+		}
 	}
 	Popup {
 		id: acceptanceDialog; objectName: "workspaceAcceptanceDialog-" + panel.provider.id

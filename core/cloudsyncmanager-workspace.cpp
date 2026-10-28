@@ -139,6 +139,12 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 	if (report.value("choiceVersion").toString() != choice.version()) report.clear();
 	const auto selected = choice.selected(); const auto known = choice.knownReferences();
 	report["selected"] = selected.valid(); report["reference"] = selected.valid() ? QString::fromUtf8(selected.json()) : QString();
+	CloudWorkspaceRoute route(workspaceRoutePath(providerId) + ".json", providerId);
+	const bool required = workspaceRouteRequired(providerId), validRoute = route.load();
+	const bool activeRoute = required && workspaceRouteConfirmed(providerId) && validRoute && route.state() == "active" &&
+		route.value().value("workspace").toObject() == selected.value && text(route.value(), "choice_version") == choice.version();
+	report["routeActive"] = activeRoute;
+	report["routeRecoveryRequired"] = required && (!validRoute || route.state() != "active" || !activeRoute);
 	QVariantList saved;
 	for (auto it = known.begin(); it != known.end(); ++it) {
 		CloudWorkspaceReference ref; ref.value = it.value().toObject();
@@ -227,6 +233,9 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	const bool accepting = action == "accept-copy" || action == "accept-missing" || action == "resume-accept";
 	const bool activating = action == "activate" || action == "resume-activation";
 	if (action != "create" && action != "join" && action != "review" && action != "resume" && action != "inspect-copy" && action != "copy" && action != "resume-copy" && !accepting && !activating && !versioning) { setError(tr("Choose a valid workspace action.")); return; }
+	if (activating && (!workspacePersistenceAvailable || !workspacePersist || !workspacePersistenceAvailable())) {
+		setError(tr("Open this profile's local dive log before activating workspace sync.")); return;
+	}
 	if ((action == "version-resume-save" || action == "version-resume-restore") && !CloudHistoryRecord::validEpoch(argument)) { setError(tr("The saved version attempt is invalid.")); return; }
 	WorkspaceVersionReview versionReview; QString restoreSource;
 	if (action == "version-restore") {
