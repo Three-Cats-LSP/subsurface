@@ -210,6 +210,7 @@ DRIVER = r'''
                     neoPlannerLab.loadBuiltInProfile(2)
                     neoPlannerLab.loadPreset(0)
                     smokeCheck(Math.abs(neoPlannerLab.lspParameters.ascentRate-9.876543)<1e-9, "preset retains precise SI rates")
+					smokeCheck(neoPlannerLab.planSaveAllowed && neoPlannerLab.lastLspRequest.levels[0].depth===30, "preset retains owned gas and level rows: " + neoPlannerLab.planNotes)
                     smokeCheck(neoPlannerLab.fullPlanExport().indexOf("Engine: LSP D-Planner+") >= 0, "LSP export source")
                     smokeLspRuntime=neoPlannerLab.runtimeSeconds
                     smokeLspProfile=JSON.parse(JSON.stringify(neoPlannerLab.profileData))
@@ -221,7 +222,7 @@ DRIVER = r'''
                     break
                 case 16:
                     neoPlannerLab.generatePlan(false, true)
-                    smokeCheck(neoPlannerLab.planSaveAllowed, "imperial LSP plan")
+                    smokeCheck(neoPlannerLab.planSaveAllowed, "imperial LSP plan: " + neoPlannerLab.planNotes)
                     smokeCheck(Math.abs(neoPlannerLab.lastLspRequest.levels[0].depth-30)<1e-7, "imperial depth preserves SI geometry")
                     smokeCheck(Math.abs(neoPlannerLab.lastLspRequest.settings.ascentRate-9.876543)<1e-9, "imperial rate preserves precise SI preset")
                     smokeCheck(Math.abs(neoPlannerLab.runtimeSeconds-smokeLspRuntime)<=1, "units preserve LSP runtime")

@@ -1,5 +1,27 @@
 # Windows cloud reliability continuation
 
+**Windows actual-flow failure and correction, 28 October 16:18 UTC.**
+Windows **40721665308 at 0c167b879** passed compilation, packaged launch,
+Clean/Modern baseline flows and the six actual LSP preset calculations, then
+failed the new imperial-plan assertion. The preceding saved-preset load had
+lost its gas/level data: `modelData()` retained live `ListModel.get()` QObject
+rows, which became empty when load cleared the models. Logs also show Qt could
+not serialize `QObject*` into Settings. This was not evidence of an LSP math or
+imperial-rate defect.
+
+The fix snapshots explicit plain cylinder/level values before model mutation.
+A real local Qt 6.10.3 probe executed the old and corrected production function:
+the old snapshot became `[{}]` after clear; the corrected snapshot retained all
+gas/level fields. Evidence is `work/lsp-row-ownership-proof-0c167-fix.json`.
+The Windows gate now checks successful calculation immediately after preset
+reload and prints the planner's refusal reason if the later imperial check
+fails. Opening the shared page also refreshes the current prior-dive calculation.
+Resume the next matching Windows run recorded below; do not repeat focused
+engine/native tests because their C++/engine code is unchanged. The existing
+0c full native run **40721658217** is still running desktop tests. No Google
+objects, credentials or original logs changed. Failed aggregate 40721665308 is
+retained; it did not complete Save/reopen/export/restart acceptance.
+
 **CURRENT SOURCE: `0c167b8799612d020194b5410c10fde8cb063927` (pushed).**
 Focused native/source gate **40721651443 PASSED** on Windows Qt 6.8.3 and the
 host: **90 checks**, including the new original-LSP NDL action and malformed

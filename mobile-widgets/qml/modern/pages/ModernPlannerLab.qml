@@ -22,6 +22,7 @@ Kirigami.ScrollablePage {
 	property var lastLspRequest: ({})
 	property real totalPlanCns: -1
 	property bool plannerReady: false
+	onVisibleChanged: { if (visible && plannerReady) generatePlan(false, true) }
 	property int observedLengthUnit: Backend.length
 	property int observedPressureUnit: Backend.pressure
 	property int renderedLengthUnit: Backend.length
@@ -134,8 +135,16 @@ Kirigami.ScrollablePage {
 	FolderDialog { id: contingencyPdfFolder; currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation); onAccepted: page.contingencyPdfExport = manager.exportNeoPlannerPdf(selectedFolder, page.contingencySlate(), page.contingencyResult ? page.contingencyResult.profile || [] : []) }
 	function modelData(model) {
 		var values = []
-		for (var i = 0; i < model.count; ++i)
-			values.push(model.get(i))
+		// ListModel.get() exposes live QObject-backed rows. Retaining those in
+		// Settings loses the roles after clear()/reload and cannot survive disk
+		// serialization. Capture plain, owned values before the model changes.
+		for (var i = 0; i < model.count; ++i) {
+			var row = model.get(i)
+			if (model === cylinders)
+				values.push({type: String(row.type), mix: String(row.mix), pressure: Number(row.pressure), use: Number(row.use)})
+			else
+				values.push({depth: Number(row.depth), duration: Number(row.duration), gas: Number(row.gas), setpoint: Number(row.setpoint), divemode: Number(row.divemode)})
+		}
 		return values
 	}
 	function savePreset(name) {
