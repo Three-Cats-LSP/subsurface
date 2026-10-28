@@ -5,6 +5,7 @@
 #include "cloudsyncworkspace.h"
 class CloudWorkspaceReadIntent;
 class CloudWorkspaceReceiveReceipt;
+class CloudWorkspaceApplyIntent;
 
 // Durable per-workspace sync baseline. This stores metadata only; caller must
 // freshly verify the provider/account, selected choice, root, accepted legacy
@@ -29,6 +30,13 @@ public:
 	// This is recovery evidence only, not authority for another sync.
 	bool ownsUpload(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		const QString &expectedPreviousRevision, const QString &ticket, const QString &uploadIntentFile, const QByteArray &uploadedModel);
+	// Caller must freshly verify the account, choice, root and accepted legacy
+	// observation, and recompute the raw-to-model projection before calling.
+	// The durable explicit restore intent must bind both revision IDs first.
+	bool advanceRestored(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+		CloudWorkspaceApplyIntent &receipt, CloudWorkspaceReadIntent &sourceReader, CloudWorkspaceReadIntent &applyReader,
+		const QString &uploadIntentFile, const QByteArray &beforeModel, const QByteArray &currentModel,
+		const QJsonObject &projection, const QString &planSha256, const QString &newRevision);
 	QJsonObject value() const { return saved; }
 	QString revision() const;
 	QString commit() const;

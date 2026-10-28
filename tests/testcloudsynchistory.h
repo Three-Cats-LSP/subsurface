@@ -58,6 +58,8 @@ private slots:
 	void workspaceBinding();
 	void workspaceReceiveReceipt_data();
 	void workspaceReceiveReceipt();
+	void workspaceRestoredBinding_data();
+	void workspaceRestoredBinding();
 	void workspaceReceiveWorkflow_data();
 	void workspaceReceiveWorkflow();
 	void workspaceReceivePlan_data();

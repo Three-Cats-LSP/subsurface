@@ -1739,6 +1739,65 @@ void TestCloudSyncHistory::workspaceReceiveReceipt_data()
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-receive-receipt-%2").arg(g).arg(cases[m]))) << g << m;
 }
+
+void TestCloudSyncHistory::workspaceRestoredBinding_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"persisted-restore-and-replay", "wrong-revision", "wrong-before-model", "wrong-after-model", "source-release-incomplete",
+		"application-release-incomplete", "not-persisted", "legacy-changed", "wrong-choice", "changed-projection", "missing-upload-proof", "stale-checkpoint", "later-head-replay", "reused-revision", "active-reservation"};
+	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
+		QTest::newRow(qPrintable(QString("%1-restored-binding-%2").arg(google).arg(cases[mode]))) << google << mode;
+}
+void TestCloudSyncHistory::workspaceRestoredBinding()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google); QVERIFY(source.valid());
+	const auto provider = QString(google ? "google-drive" : "dropbox"), choice = uid(), revision = uid(), event = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "restore-root" : "id:restore-root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); const auto sourceId = uid(), baseline = uid();
+	QVERIFY(root.registerCopy(sourceId, {}, source)); QVERIFY(root.completeUpload(sourceId, google ? "source-copy" : "id:source-copy", "source-rev")); QVERIFY(root.publish(sourceId, {}));
+	QVERIFY(root.registerUpload(baseline, sourceId, CloudSyncManifest::sha256(B), B.size()));
+	QVERIFY(root.completeUpload(baseline, google ? "baseline-object" : "id:baseline-object", "baseline-rev")); QVERIFY(root.publish(baseline, sourceId));
+	QVERIFY(root.acceptLegacyCopy(event, {}, baseline, sourceId, source)); const auto initial = root;
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); CloudWorkspaceBinding binding(temporary.filePath("binding.json"), ref, choice);
+	QVERIFY(binding.activate(root, root, B, B, revision));
+	const auto sourceReservation = uid(), target = uid(), applyReservation = uid(), next = uid();
+	const auto pin = [](const QJsonObject &t) { return QJsonObject{{"name", t["name"]}, {"object", t["object"]}, {"version", t["version"]}, {"sha256", t["sha256"]}, {"bytes", t["bytes"]}}; };
+	const auto sourceSnapshot = pin(root.ticket(sourceId)); QVERIFY(root.reserve(sourceReservation, sourceId));
+	CloudWorkspaceReadIntent sourceRead(temporary.filePath("source.json"), ref, sourceId, sourceReservation);
+	QVERIFY(sourceRead.prepare()); QVERIFY(sourceRead.pin(sourceSnapshot)); QVERIFY(sourceRead.markReserved()); QVERIFY(sourceRead.markVerified());
+	const QJsonObject restore{{"source", sourceId}, {"reservation", sourceReservation}, {"snapshot", sourceSnapshot}};
+	const auto uploadFile = temporary.filePath("upload.json"); CloudWorkspaceUploadIntent upload(uploadFile, ref, CloudSyncManifest::sha256(A), A.size(), target, baseline, restore);
+	QVERIFY(upload.prepare()); QVERIFY(upload.beginRegistration()); QVERIFY(root.registerUpload(target, baseline, CloudSyncManifest::sha256(A), A.size(), sourceId, sourceReservation));
+	QVERIFY(upload.registerTicket()); QVERIFY(upload.submit()); const auto object = QString(google ? "restored-object" : "id:restored-object");
+	QVERIFY(upload.identify(object)); QVERIFY(upload.verify("restored-rev")); QVERIFY(upload.upload()); QVERIFY(root.completeUpload(target, object, "restored-rev")); QVERIFY(root.publish(target, baseline)); QVERIFY(upload.commit());
+	QVERIFY(root.reserve(applyReservation, target)); CloudWorkspaceReadIntent applyRead(temporary.filePath("application.json"), ref, target, applyReservation);
+	QVERIFY(applyRead.prepare()); QVERIFY(applyRead.pin(pin(root.ticket(target)))); QVERIFY(applyRead.markReserved()); QVERIFY(applyRead.markVerified());
+	CloudWorkspaceApplyIntent receipt(temporary.filePath("receipt"), ref, choice, target, applyReservation);
+	QVERIFY(receipt.prepare(B, A, root)); QVERIFY(receipt.beginApply()); QVERIFY(receipt.applied(A)); if (mode != 6) QVERIFY(receipt.persisted(A));
+	QVERIFY(sourceRead.beginRelease()); if (mode != 4) QVERIFY(sourceRead.markReleased());
+	QVERIFY(applyRead.beginRelease()); if (mode != 5) QVERIFY(applyRead.markReleased());
+	if (mode != 14) QVERIFY(root.release(sourceReservation));
+	QVERIFY(root.release(applyReservation));
+	if (mode == 7) QVERIFY(root.acceptLegacyCopy(uid(), event, target, sourceId, source));
+	auto projection = QJsonObject{{"schema", 1}, {"format", "neo-workspace-model-projection-development-1"}, {"plan_sha256", CloudSyncManifest::sha256("restore-plan")},
+		{"source_snapshot", sourceSnapshot}, {"model_sha256", CloudSyncManifest::sha256(A)}, {"model_bytes", double(A.size())}};
+	if (mode == 9) projection["model_sha256"] = CloudSyncManifest::sha256(B);
+	CloudWorkspaceApplyIntent foreign(temporary.filePath("receipt"), ref, uid(), target, applyReservation);
+	const auto currentBefore = binding.value(); const auto intended = mode == 13 ? revision : next;
+	const auto attempt = [&] (const CloudWorkspaceRecord &observed, const CloudWorkspaceRecord &checkpoint) {
+		return binding.advanceRestored(mode == 1 ? uid() : revision, observed, checkpoint, mode == 8 ? foreign : receipt, sourceRead, applyRead,
+			mode == 10 ? temporary.filePath("missing.json") : uploadFile, mode == 2 ? A : B, mode == 3 ? B : A, projection,
+			CloudSyncManifest::sha256("restore-plan"), intended);
+	};
+	const bool advanced = attempt(root, mode == 11 ? initial : root);
+	if (mode != 0 && mode != 12) { QVERIFY(!advanced); QVERIFY(binding.load()); QCOMPARE(binding.value(), currentBefore); return; }
+	QVERIFY(advanced); QCOMPARE(binding.commit(), target); QCOMPARE(binding.revision(), next); QVERIFY(binding.matchesModel(A)); QVERIFY(attempt(root, root));
+	if (mode == 12) {
+		const auto later = uid(); QVERIFY(root.registerUpload(later, target, CloudSyncManifest::sha256(B), B.size()));
+		QVERIFY(root.completeUpload(later, google ? "later-object" : "id:later-object", "later-rev")); QVERIFY(root.publish(later, target));
+		QVERIFY(attempt(root, root)); QCOMPARE(binding.commit(), target); QCOMPARE(root.head(), later);
+	}
+}
 void TestCloudSyncHistory::workspaceReceiveReceipt()
 {
 	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);

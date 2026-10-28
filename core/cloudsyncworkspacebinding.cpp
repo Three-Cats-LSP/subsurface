@@ -3,6 +3,7 @@
 #include "cloudsyncmanifest.h"
 #include "cloudsyncworkspaceupload.h"
 #include "cloudsyncworkspacereceipt.h"
+#include "cloudsyncworkspaceapply.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -227,4 +228,56 @@ bool CloudWorkspaceBinding::ownsUpload(const CloudWorkspaceRecord &root, const C
 	if (oldIndex < 0 || newIndex != oldIndex + 1) return false;
 	CloudWorkspaceUploadIntent proof(uploadIntentFile, reference, text(t, "sha256"), qint64(t.value("bytes").toDouble()), ticket, previousCommit);
 	return proof.reload() && proof.state() == "committed" && proof.id() == text(t, "object") && proof.version() == text(t, "version");
+}
+
+bool CloudWorkspaceBinding::advanceRestored(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+	CloudWorkspaceApplyIntent &receipt, CloudWorkspaceReadIntent &sourceReader, CloudWorkspaceReadIntent &applyReader,
+	const QString &uploadIntentFile, const QByteArray &beforeModel, const QByteArray &currentModel,
+	const QJsonObject &projection, const QString &planSha256, const QString &newRevision)
+{
+	if (fileName.isEmpty() || uploadIntentFile.isEmpty() || !CloudHistoryRecord::validEpoch(expectedRevision) ||
+	    !CloudHistoryRecord::validEpoch(newRevision) || expectedRevision == newRevision || !validXml(beforeModel) || !validXml(currentModel)) return false;
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
+	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.inspect() || receipt.state() != "persisted") return false;
+	const bool replay = revision() == newRevision && text(saved.value("previous").toObject(), "revision") == expectedRevision;
+	if (!replay && revision() != expectedRevision) return false;
+	const auto old = replay ? saved.value("previous").toObject() : saved, proof = receipt.proof();
+	const auto baseline = text(old, "commit"), target = text(proof, "commit"), source = text(proof, "source");
+	const auto sourceReservation = text(proof, "source_reservation"), applyReservation = text(proof, "reservation");
+	const auto beforeRaw = receipt.before(), afterRaw = receipt.after();
+	const auto body = nextAt(root, target, afterRaw, currentModel, newRevision);
+	const QJsonObject beforeDigest{{"sha256", CloudSyncManifest::sha256(beforeModel)}, {"bytes", double(beforeModel.size())}};
+	if (!fields(projection, {"schema", "format", "plan_sha256", "source_snapshot", "model_sha256", "model_bytes"}) ||
+	    projection.value("schema") != QJsonValue(1) || text(projection, "format") != "neo-workspace-model-projection-development-1" ||
+	    !hash(planSha256) || text(projection, "plan_sha256") != planSha256 || projection.value("source_snapshot") != proof.value("source_snapshot") ||
+	    text(projection, "model_sha256") != CloudSyncManifest::sha256(currentModel) || projection.value("model_bytes") != QJsonValue(double(currentModel.size())) ||
+	    body.isEmpty() || !checkpoint.valid() || !root.follows(checkpoint) || checkpoint.reference().value != reference.value ||
+	    proof.value("workspace") != reference.value || proof.value("choice_version") != scope.value("choice_version") ||
+	    text(proof, "parent") != baseline || proof.value("before") != old.value("raw") || old.value("model").toObject() != beforeDigest ||
+	    old.value("raw").toObject() != pin(root.ticket(baseline)) || old.value("raw").toObject() != pin(checkpoint.ticket(baseline)) ||
+	    text(old.value("raw").toObject(), "sha256") != CloudSyncManifest::sha256(beforeRaw) ||
+	    proof.value("after").toObject() != pin(root.ticket(target)) || proof.value("after").toObject() != pin(checkpoint.ticket(target)) ||
+	    proof.value("source_snapshot").toObject() != pin(root.ticket(source)) || proof.value("source_snapshot").toObject() != pin(checkpoint.ticket(source)) ||
+	    body.value("legacy_acceptance") != saved.value("legacy_acceptance") || text(checkpoint.latestLegacyAcceptance(), "id") != acceptance() ||
+	    !sourceReader.matches(reference, source, sourceReservation) || !sourceReader.reload() || sourceReader.state() != "released" ||
+	    sourceReader.snapshot() != proof.value("source_snapshot").toObject() || !applyReader.matches(reference, target, applyReservation) ||
+	    !applyReader.reload() || applyReader.state() != "released" || applyReader.snapshot() != proof.value("after").toObject()) return false;
+	const auto reservationsReleased = [&](const CloudWorkspaceRecord &record) {
+		const auto entries = record.value.value("journal").toObject().value("reservations").toObject();
+		const auto sourceEntry = entries.value(sourceReservation).toObject(), applyEntry = entries.value(applyReservation).toObject();
+		return text(sourceEntry, "commit") == source && sourceEntry.value("active") == QJsonValue(false) &&
+			text(applyEntry, "commit") == target && applyEntry.value("active") == QJsonValue(false);
+	};
+	if (!reservationsReleased(root) || !reservationsReleased(checkpoint)) return false;
+	const auto ticket = root.ticket(target), sourceTicket = root.ticket(source);
+	if (text(ticket, "state") != "committed" || text(ticket, "parent") != baseline || text(ticket, "restore_source") != source ||
+	    text(ticket, "reservation") != sourceReservation || root.copySource(target).valid() || text(sourceTicket, "state") != "committed") return false;
+	const auto history = root.value.value("journal").toObject().value("history").toArray(); int oldIndex = -1, targetIndex = -1;
+	for (int i = 0; i < history.size(); ++i) { if (history[i].toString() == baseline) oldIndex = i; if (history[i].toString() == target) targetIndex = i; }
+	if (oldIndex < 0 || targetIndex != oldIndex + 1) return false;
+	const QJsonObject restore{{"source", source}, {"reservation", sourceReservation}, {"snapshot", sourceReader.snapshot()}};
+	CloudWorkspaceUploadIntent upload(uploadIntentFile, reference, CloudSyncManifest::sha256(afterRaw), afterRaw.size(), target, baseline, restore);
+	if (!upload.reload() || upload.state() != "committed" || upload.id() != text(ticket, "object") || upload.version() != text(ticket, "version")) return false;
+	auto nextBody = body; nextBody["previous"] = QJsonObject{{"revision", old.value("revision")}, {"commit", old.value("commit")}, {"raw", old.value("raw")}, {"model", old.value("model")}};
+	return replay ? saved == nextBody : write(nextBody);
 }
