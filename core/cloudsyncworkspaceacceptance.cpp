@@ -16,13 +16,15 @@ constexpr qint64 IntentLimit = 64 * 1024;
 
 CloudWorkspaceAcceptanceIntent::CloudWorkspaceAcceptanceIntent(const QString &path, const CloudWorkspaceReference &workspace,
 	const QString &choice, const CloudWorkspaceCopySource &source, const QString &localHash, const QString &event, const QString &previous,
-	const QString &head, const QString &copy) : fileName(path)
+	const QString &head, const QString &copy, bool missing) : fileName(path)
 {
-	if (workspace.valid() && source.matches(text(workspace.value, "provider"), text(workspace.value, "account")) &&
+	const bool sourceValid = missing ? source.value.isEmpty() && copy.isEmpty() :
+		source.matches(text(workspace.value, "provider"), text(workspace.value, "account")) && CloudHistoryRecord::validEpoch(copy);
+	if (workspace.valid() && sourceValid &&
 	    CloudHistoryRecord::validEpoch(choice) && QRegularExpression("^[a-f0-9]{64}$").match(localHash).hasMatch() && CloudHistoryRecord::validEpoch(event) && CloudHistoryRecord::validEpoch(head) &&
-	    CloudHistoryRecord::validEpoch(copy) && (previous.isEmpty() || CloudHistoryRecord::validEpoch(previous)) &&
+	    (previous.isEmpty() || CloudHistoryRecord::validEpoch(previous)) &&
 	    event != previous && event != head && event != copy)
-		scope = {{"schema", 1}, {"format", "neo-workspace-legacy-acceptance-development-1"}, {"workspace", workspace.value},
+		scope = {{"schema", 1}, {"format", missing ? "neo-workspace-legacy-absence-development-1" : "neo-workspace-legacy-acceptance-development-1"}, {"workspace", workspace.value},
 			{"choice_version", choice}, {"source", source.value}, {"local_sha256", localHash}, {"event", event}, {"previous", previous}, {"head", head}, {"copy", copy}};
 }
 QString CloudWorkspaceAcceptanceIntent::state() const { return text(saved, "state"); }
@@ -89,10 +91,20 @@ CloudWorkspaceAcceptance::CloudWorkspaceAcceptance(QNetworkAccessManager *networ
 	});
 	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &) { fail(); });
 	connect(&sourceReview, &CloudWorkspaceSourceReview::failed, this, [this](const QString &, bool rejected) { fail(rejected); });
+	connect(&sourceReview, &CloudWorkspaceSourceReview::absent, this, [this] {
+		if (!missing || !current() || !intent->inspect()) { fail(); return; }
+		if (step == Step::SourceBefore) readRoot(Step::PublishRoot);
+		else if (step == Step::SourceAfter) { sourceChanged = false; readRoot(Step::FinalRoot); }
+		else fail();
+	});
 	connect(&sourceReview, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &value, const QByteArray &body) {
 		if (!current() || !intent->inspect()) { fail(); return; }
 		CloudWorkspaceCopySource observed; observed.value = value;
 		if (!observed.valid() || !observed.accepts(body)) { fail(); return; }
+		if (missing) {
+			if (step != Step::SourceAfter) { fail(); return; }
+			sourceChanged = true; readRoot(Step::FinalRoot); return;
+		}
 		if (step == Step::SourceBefore) {
 			if (observed.json() != source.json()) { fail(); return; }
 			const auto t = root.ticket(copyTicket); step = Step::CopiedPayload; files.setResponseLimit(64 * 1024 * 1024);
@@ -109,7 +121,7 @@ CloudWorkspaceAcceptance::~CloudWorkspaceAcceptance() { cancel(); }
 void CloudWorkspaceAcceptance::cancel()
 {
 	++generation; step = Step::Idle; deadline.stop(); startupRetry.stop(); startupWait.invalidate(); files.cancel(provider); sourceReview.cancel(); intent.reset(); operationLock.reset();
-	reference.value = {}; source.value = {}; root.value = {}; pending.value = {}; sourceChanged = false; token.clear(); choiceFile.clear(); choiceVersion.clear();
+	reference.value = {}; source.value = {}; root.value = {}; pending.value = {}; sourceChanged = false; missing = false; token.clear(); choiceFile.clear(); choiceVersion.clear();
 	checkpointFile.clear(); intentFile.clear(); localHash.clear(); event.clear(); previous.clear(); expectedHead.clear(); copyTicket.clear(); rootVersion.clear(); scopeCurrent = {};
 }
 void CloudWorkspaceAcceptance::fail(bool rejected)
@@ -126,6 +138,20 @@ void CloudWorkspaceAcceptance::start(const QString &accessToken, const CloudWork
 	if (token.isEmpty() || !reference.valid() || !source.matches(text(reference.value, "provider"), text(reference.value, "account")) ||
 	    !CloudHistoryRecord::validEpoch(choiceVersion) || !QRegularExpression("^[a-f0-9]{64}$").match(localHash).hasMatch() || !CloudHistoryRecord::validEpoch(event) || !CloudHistoryRecord::validEpoch(expectedHead) ||
 	    !CloudHistoryRecord::validEpoch(copyTicket) || (!previous.isEmpty() && !CloudHistoryRecord::validEpoch(previous)) ||
+	    choiceFile.isEmpty() || checkpointFile.isEmpty() || intentFile.isEmpty() || !scopeCurrent) { fail(); return; }
+	provider = text(reference.value, "provider") == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
+	startupWait.start(); begin();
+}
+void CloudWorkspaceAcceptance::startMissing(const QString &accessToken, const CloudWorkspaceReference &workspace,
+	const QString &choice, const QString &choiceVer, const QString &checkpoint, const QString &intentPath, const QString &expectedLocalHash,
+	const QString &eventId, const QString &expectedPrevious, const QString &head, const std::function<bool()> &guard)
+{
+	cancel(); token = accessToken; reference = workspace; choiceFile = choice; choiceVersion = choiceVer; checkpointFile = checkpoint;
+	intentFile = intentPath; localHash = expectedLocalHash; event = eventId; previous = expectedPrevious; expectedHead = head; scopeCurrent = guard;
+	missing = true; step = Step::Starting;
+	if (token.isEmpty() || !reference.valid() || !CloudHistoryRecord::validEpoch(choiceVersion) ||
+	    !QRegularExpression("^[a-f0-9]{64}$").match(localHash).hasMatch() || !CloudHistoryRecord::validEpoch(event) ||
+	    !CloudHistoryRecord::validEpoch(expectedHead) || (!previous.isEmpty() && !CloudHistoryRecord::validEpoch(previous)) ||
 	    choiceFile.isEmpty() || checkpointFile.isEmpty() || intentFile.isEmpty() || !scopeCurrent) { fail(); return; }
 	provider = text(reference.value, "provider") == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
 	startupWait.start(); begin();
@@ -160,7 +186,7 @@ void CloudWorkspaceAcceptance::begin()
 	if (parent.isSymLink() || !QDir().mkpath(parent.filePath())) { fail(); return; }
 	if (!operationLock) operationLock = std::make_unique<QLockFile>(intentFile + ".operation.lock");
 	if (!operationLock->isLocked() && !operationLock->tryLock(0)) { retryStartupOrFail(intentFile + ".operation"); return; }
-	intent = std::make_unique<CloudWorkspaceAcceptanceIntent>(intentFile, reference, choiceVersion, source, localHash, event, previous, expectedHead, copyTicket);
+	intent = std::make_unique<CloudWorkspaceAcceptanceIntent>(intentFile, reference, choiceVersion, source, localHash, event, previous, expectedHead, copyTicket, missing);
 	if (!intent->prepare()) { retryStartupOrFail(intentFile); return; }
 	if (!current()) return;
 	startupRetry.stop(); startupWait.invalidate(); deadline.start(); readRoot(Step::InitialRoot);
@@ -173,14 +199,15 @@ void CloudWorkspaceAcceptance::readRoot(Step next)
 }
 bool CloudWorkspaceAcceptance::eventPresent(const CloudWorkspaceRecord &observed) const
 {
-	const QJsonObject expected{{"id", event}, {"parent", previous}, {"ticket", copyTicket}, {"head", expectedHead}};
+	const QJsonObject expected = missing ? QJsonObject{{"id", event}, {"parent", previous}, {"head", expectedHead}, {"kind", "absent"}} :
+		QJsonObject{{"id", event}, {"parent", previous}, {"ticket", copyTicket}, {"head", expectedHead}};
 	for (const auto &entry : observed.value.value("legacy_acceptances").toArray()) if (entry.toObject() == expected) return true;
 	return false;
 }
 void CloudWorkspaceAcceptance::observeSource(Step next)
 {
 	if (!current()) return;
-	step = next; sourceReview.start(token, text(reference.value, "provider"), text(reference.value, "account"), [this] { return current(); });
+	step = next; sourceReview.start(token, text(reference.value, "provider"), text(reference.value, "account"), [this] { return current(); }, missing);
 }
 void CloudWorkspaceAcceptance::received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id)
 {
@@ -201,19 +228,26 @@ void CloudWorkspaceAcceptance::received(const QString &name, const QByteArray &b
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
 	if (step == Step::FinalRoot) {
-		if (!eventPresent(root) || root.copySource(copyTicket).json() != source.json() || (intent->state() != "committed" && intent->state() != "completed")) { fail(); return; }
+		if (!eventPresent(root) || (!missing && root.copySource(copyTicket).json() != source.json()) ||
+		    (intent->state() != "committed" && intent->state() != "completed")) { fail(); return; }
+		if (missing) {
+			if (!intent->completed()) { fail(); return; }
+			const auto result = root.value; const auto v = rootVersion, eventId = event;
+			const bool latest = text(root.latestLegacyAcceptance(), "id") == event, changed = sourceChanged;
+			cancel(); emit finished(result, v, eventId, latest, changed); return;
+		}
 		const auto t = root.ticket(copyTicket); step = Step::FinalPayload; files.setResponseLimit(64 * 1024 * 1024);
 		files.downloadExact(provider, token, text(t, "name"), text(t, "object"), text(t, "version")); return;
 	}
 	if (eventPresent(root)) {
-		if (root.copySource(copyTicket).json() != source.json() || intent->state() == "prepared" || (intent->state() != "completed" && !intent->committed())) { fail(); return; }
+		if ((!missing && root.copySource(copyTicket).json() != source.json()) || intent->state() == "prepared" || (intent->state() != "completed" && !intent->committed())) { fail(); return; }
 		observeSource(Step::SourceAfter); return;
 	}
 	if (intent->state() == "committed" || intent->state() == "completed" || step == Step::ConfirmRoot || root.head() != expectedHead ||
-	    text(root.latestLegacyAcceptance(), "id") != previous || root.copySource(copyTicket).json() != source.json()) { fail(); return; }
+	    text(root.latestLegacyAcceptance(), "id") != previous || (!missing && root.copySource(copyTicket).json() != source.json())) { fail(); return; }
 	if (step == Step::InitialRoot) { observeSource(Step::SourceBefore); return; }
 	if (step != Step::PublishRoot) { fail(); return; }
-	auto next = root; if (!next.acceptLegacyCopy(event, previous, expectedHead, copyTicket, source) ||
+	auto next = root; if (!(missing ? next.acceptLegacyAbsence(event, previous, expectedHead) : next.acceptLegacyCopy(event, previous, expectedHead, copyTicket, source)) ||
 	    !intent->submitted() || !current()) { fail(); return; }
 	pending = next; step = Step::WriteRoot;
 	files.uploadIdentity(provider, token, reference.rootName(), next.json(), rootVersion, text(reference.value, "root_id"));

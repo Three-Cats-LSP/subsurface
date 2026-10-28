@@ -15,7 +15,7 @@ class CloudWorkspaceAcceptanceIntent {
 public:
 	CloudWorkspaceAcceptanceIntent(const QString &path, const CloudWorkspaceReference &workspace,
 		const QString &choiceVersion, const CloudWorkspaceCopySource &source, const QString &localHash, const QString &event,
-		const QString &previous, const QString &head, const QString &copyTicket);
+		const QString &previous, const QString &head, const QString &copyTicket, bool missing = false);
 	bool inspect();
 	bool prepare();
 	bool submitted();
@@ -43,6 +43,12 @@ public:
 		const QString &choiceFile, const QString &choiceVersion, const QString &checkpointFile, const QString &intentFile,
 		const QString &localHash, const QString &event, const QString &previous, const QString &head, const QString &copyTicket,
 		const std::function<bool()> &scopeCurrent);
+	// Unused by the app until the complete activation workflow is validated.
+	// The caller confirms the observation and supplies a local-edit guard.
+	void startMissing(const QString &token, const CloudWorkspaceReference &workspace,
+		const QString &choiceFile, const QString &choiceVersion, const QString &checkpointFile, const QString &intentFile,
+		const QString &localHash, const QString &event, const QString &previous, const QString &head,
+		const std::function<bool()> &scopeCurrent);
 	void cancel();
 signals:
 	void finished(const QJsonObject &root, const QString &version, const QString &event, bool latest, bool sourceChanged);
@@ -69,6 +75,7 @@ private:
 	CloudSyncProviderType provider = CloudSyncProviderType::GoogleDrive;
 	Step step = Step::Idle;
 	bool sourceChanged = false;
+	bool missing = false;
 	quint64 generation = 0;
 	QString token, choiceFile, choiceVersion, checkpointFile, intentFile, localHash, event, previous, expectedHead, copyTicket, rootVersion;
 	std::function<bool()> scopeCurrent;

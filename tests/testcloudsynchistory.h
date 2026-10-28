@@ -52,6 +52,8 @@ private slots:
 	void workspaceAcceptanceIntent();
 	void workspaceAcceptanceWorkflow_data();
 	void workspaceAcceptanceWorkflow();
+	void workspaceAbsenceWorkflow_data();
+	void workspaceAbsenceWorkflow();
 	void workspaceBinding_data();
 	void workspaceBinding();
 	void workspaceReceiveReceipt_data();
