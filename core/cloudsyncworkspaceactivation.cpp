@@ -63,7 +63,7 @@ void CloudWorkspaceActivation::start(const QString &accessToken, const CloudWork
 	    !CloudHistoryRecord::validEpoch(acceptance) || choiceFile.isEmpty() || checkpointFile.isEmpty() || bindingFile.isEmpty() || routeFile.isEmpty() ||
 	    planDirectory.isEmpty() || readFile.isEmpty() || model.isEmpty() || model.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(model) ||
 	    !requireRoute || !routeRequired || !scopeCurrent || !localSnapshot || QFileInfo(planDirectory).isSymLink() || !QDir().mkpath(planDirectory)) { fail(); return; }
-	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock"); if (!operationLock->tryLock(0)) { fail(); return; }
+	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); if (!operationLock->tryLock(0)) { fail(); return; }
 	plan = std::make_unique<CloudWorkspaceActivationPlan>(planDirectory, reference, choiceVersion, revision, target, reservation, operation, acceptance);
 	if (!plan->prepare(model) || !current()) { fail(); return; }
 	const auto serial = generation; const auto requireFn = requireRoute; const bool required = requireFn(); if (serial != generation || step == Step::Idle) return;

@@ -79,7 +79,7 @@ bool CloudWorkspaceBinding::load()
 {
 	if (fileName.isEmpty()) return false;
 	if (!QFileInfo(QFileInfo(fileName).absolutePath()).exists()) return read();
-	QLockFile lock(fileName + ".lock"); return lock.tryLock(0) && read();
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0); return lock.tryLock(0) && read();
 }
 bool CloudWorkspaceBinding::write(const QJsonObject &body)
 {
@@ -105,7 +105,7 @@ QJsonObject CloudWorkspaceBinding::nextAt(const CloudWorkspaceRecord &root, cons
 bool CloudWorkspaceBinding::activate(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &raw, const QByteArray &model, const QString &newRevision)
 {
 	const QFileInfo parent(QFileInfo(fileName).absolutePath()); if (scope.isEmpty() || fileName.isEmpty() || parent.isSymLink() || !QDir().mkpath(parent.filePath())) return false;
-	QLockFile lock(fileName + ".lock");
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || raw != model || !checkpoint.valid() || checkpoint.json() != root.json()) return false;
 	const auto body = next(root, raw, model, newRevision);
 	return !body.isEmpty() && (saved.isEmpty() ? write(body) : saved == body);
@@ -114,7 +114,7 @@ bool CloudWorkspaceBinding::ownsActivation(const CloudWorkspaceRecord &root, con
 	const QByteArray &raw, const QByteArray &model, const QString &expectedRevision, const QString &target)
 {
 	if (fileName.isEmpty() || !CloudHistoryRecord::validEpoch(expectedRevision) || !CloudHistoryRecord::validEpoch(target) || raw != model) return false;
-	QLockFile lock(fileName + ".lock");
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !saved.value("previous").toObject().isEmpty() || revision() != expectedRevision ||
 	    commit() != target || !root.valid() || !checkpoint.valid() || !root.follows(checkpoint) ||
 	    root.reference().value != reference.value || checkpoint.reference().value != reference.value || !matchesModel(model) ||
@@ -130,7 +130,7 @@ bool CloudWorkspaceBinding::advanceOwnedUpload(const QString &expectedRevision, 
 	const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &newRevision)
 {
 	if (fileName.isEmpty() || !CloudHistoryRecord::validEpoch(expectedRevision) || expectedRevision == newRevision) return false;
-	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
 	const bool replay = revision() == newRevision && text(saved.value("previous").toObject(), "revision") == expectedRevision;
 	if (!replay && revision() != expectedRevision) return false;
 	const auto body = next(root, raw, model, newRevision);
@@ -153,7 +153,7 @@ bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, con
 	CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader, const QByteArray &currentModel, const QString &newRevision)
 {
 	if (fileName.isEmpty() || !CloudHistoryRecord::validEpoch(expectedRevision) || expectedRevision == newRevision) return false;
-	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted") return false;
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted") return false;
 	const bool replay = revision() == newRevision && text(saved.value("previous").toObject(), "revision") == expectedRevision;
 	if (!replay && revision() != expectedRevision) return false;
 	const auto old = replay ? saved.value("previous").toObject() : saved, proof = receipt.proof();
@@ -185,7 +185,7 @@ bool CloudWorkspaceBinding::ownsReceived(const CloudWorkspaceRecord &root, const
 	CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader)
 {
 	if (fileName.isEmpty()) return false;
-	QLockFile lock(fileName + ".lock");
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted" ||
 	    !root.valid() || !checkpoint.valid() || !root.follows(checkpoint) || root.reference().value != reference.value ||
 	    checkpoint.reference().value != reference.value) return false;
@@ -212,7 +212,7 @@ bool CloudWorkspaceBinding::ownsUpload(const CloudWorkspaceRecord &root, const C
 	const QString &expectedPreviousRevision, const QString &ticket, const QString &uploadIntentFile, const QByteArray &uploadedModel)
 {
 	if (fileName.isEmpty() || uploadIntentFile.isEmpty() || !CloudHistoryRecord::validEpoch(expectedPreviousRevision)) return false;
-	QLockFile lock(fileName + ".lock");
+	QLockFile lock(fileName + ".lock"); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !root.valid() || !checkpoint.valid() ||
 	    !root.follows(checkpoint) || root.reference().value != reference.value || checkpoint.reference().value != reference.value ||
 	    commit() != ticket || !matchesModel(uploadedModel)) return false;

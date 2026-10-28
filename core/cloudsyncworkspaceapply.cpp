@@ -97,7 +97,7 @@ bool CloudWorkspaceApplyIntent::read(bool verifyXml)
 bool CloudWorkspaceApplyIntent::inspect() { return read() && !saved.isEmpty(); }
 bool CloudWorkspaceApplyIntent::reload()
 {
-	QLockFile lock(QDir(directory).filePath("intent.json.lock")); return !directory.isEmpty() && lock.tryLock(0) && read(false) && !saved.isEmpty();
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0); return !directory.isEmpty() && lock.tryLock(0) && read(false) && !saved.isEmpty();
 }
 bool CloudWorkspaceApplyIntent::write(const QJsonObject &body)
 {
@@ -109,7 +109,7 @@ bool CloudWorkspaceApplyIntent::write(const QJsonObject &body)
 bool CloudWorkspaceApplyIntent::prepare(const QByteArray &before, const QByteArray &after, const CloudWorkspaceRecord &root)
 {
 	if (scope.isEmpty() || directory.isEmpty() || QFileInfo(directory).isSymLink() || !root.valid() || root.reference().value != reference.value || !QDir().mkpath(directory)) return false;
-	QLockFile lock(QDir(directory).filePath("intent.json.lock")); if (!lock.tryLock(0) || !read()) return false;
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read()) return false;
 	const auto commit = text(scope, "commit"); const auto ticket = root.ticket(commit); const auto source = text(ticket, "restore_source"), sourceReservation = text(ticket, "reservation"), parent = text(ticket, "parent");
 	auto next = scope; next["state"] = "prepared"; next["parent"] = parent; next["source"] = source; next["source_reservation"] = sourceReservation;
 	next["before"] = pin(root, parent); next["after"] = pin(root, commit); next["source_snapshot"] = pin(root, source);
@@ -127,7 +127,7 @@ bool CloudWorkspaceApplyIntent::prepare(const QByteArray &before, const QByteArr
 }
 bool CloudWorkspaceApplyIntent::transition(const QString &from, const QString &to, const QByteArray &observed)
 {
-	QLockFile lock(QDir(directory).filePath("intent.json.lock")); if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
 	if (!observed.isEmpty() && !accepts(saved.value("after").toObject(), observed)) return false;
 	if (state() == to) return true;
 	if (state() != from) return false;
@@ -173,7 +173,7 @@ void CloudWorkspaceApply::start(const QString &accessToken, const CloudWorkspace
 }
 void CloudWorkspaceApply::retryStartupOrFail(const QString &path)
 {
-	QLockFile lock(path + ".lock"); const QFileInfo info(lock.fileName()); qint64 pid = 0; QString host, application;
+	QLockFile lock(path + ".lock"); lock.setStaleLockTime(0); const QFileInfo info(lock.fileName()); qint64 pid = 0; QString host, application;
 	if (startupWait.isValid() && !startupWait.hasExpired(35000) && info.isFile() && !info.isSymLink() && !lock.getLockInfo(&pid, &host, &application)) { startupRetry.start(150); return; }
 	fail();
 }
@@ -181,7 +181,7 @@ void CloudWorkspaceApply::begin()
 {
 	if (step != Step::Starting) return;
 	if (QFileInfo(recoveryDirectory).isSymLink() || !QDir().mkpath(recoveryDirectory)) { fail(); return; }
-	if (!operationLock) operationLock = std::make_unique<QLockFile>(recoveryDirectory + ".operation.lock");
+	if (!operationLock) { operationLock = std::make_unique<QLockFile>(recoveryDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); }
 	if (!operationLock->isLocked() && !operationLock->tryLock(0)) { retryStartupOrFail(recoveryDirectory + ".operation"); return; }
 	intent = std::make_unique<CloudWorkspaceApplyIntent>(recoveryDirectory, reference, choiceVersion, commit, reservation);
 	const auto path = QDir(recoveryDirectory).filePath("intent.json"); recoveryEstablished = QFileInfo::exists(path);

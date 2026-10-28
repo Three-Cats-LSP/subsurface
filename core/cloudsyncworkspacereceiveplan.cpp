@@ -64,7 +64,7 @@ bool CloudWorkspaceReceivePlan::read()
 }
 bool CloudWorkspaceReceivePlan::reload()
 {
-	QLockFile lock(QDir(directory).filePath("plan.json.lock")); return !directory.isEmpty() && lock.tryLock(0) && read() && !saved.isEmpty();
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0); return !directory.isEmpty() && lock.tryLock(0) && read() && !saved.isEmpty();
 }
 bool CloudWorkspaceReceivePlan::write(const QJsonObject &body)
 {
@@ -76,7 +76,7 @@ bool CloudWorkspaceReceivePlan::prepare(const QByteArray &model)
 {
 	if (scope.isEmpty() || directory.isEmpty() || QFileInfo(directory).isSymLink() || model.isEmpty() || model.size() > Limit ||
 	    !CloudHistoryRecord::validXml(model) || !QDir().mkpath(directory)) return false;
-	QLockFile lock(QDir(directory).filePath("plan.json.lock")); if (!lock.tryLock(0) || !read()) return false;
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read()) return false;
 	auto next = scope; next["state"] = "prepared"; next["before"] = digest(model);
 	if (saved.isEmpty()) {
 		for (const auto &name : QDir(directory).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
@@ -96,7 +96,7 @@ bool CloudWorkspaceReceivePlan::prepare(const QByteArray &model)
 bool CloudWorkspaceReceivePlan::complete(CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 	CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader)
 {
-	QLockFile lock(QDir(directory).filePath("plan.json.lock"));
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted" ||
 	    !reader.reload() || reader.state() != "released") return false;
 	const auto proof = receipt.proof();

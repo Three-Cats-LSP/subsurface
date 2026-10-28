@@ -184,7 +184,7 @@ void CloudWorkspaceAcceptance::begin()
 	if (!authority.record().valid()) { fail(); return; }
 	const QFileInfo parent(QFileInfo(intentFile).absolutePath());
 	if (parent.isSymLink() || !QDir().mkpath(parent.filePath())) { fail(); return; }
-	if (!operationLock) operationLock = std::make_unique<QLockFile>(intentFile + ".operation.lock");
+	if (!operationLock) { operationLock = std::make_unique<QLockFile>(intentFile + ".operation.lock"); operationLock->setStaleLockTime(0); }
 	if (!operationLock->isLocked() && !operationLock->tryLock(0)) { retryStartupOrFail(intentFile + ".operation"); return; }
 	intent = std::make_unique<CloudWorkspaceAcceptanceIntent>(intentFile, reference, choiceVersion, source, localHash, event, previous, expectedHead, copyTicket, missing);
 	if (!intent->prepare()) { retryStartupOrFail(intentFile); return; }

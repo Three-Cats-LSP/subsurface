@@ -70,6 +70,7 @@ private slots:
 	void workspaceActivationWorkflow();
 	void workspaceRoute_data();
 	void workspaceRoute();
+	void workspaceRouteLease();
 	void workspaceSyncDecision_data();
 	void workspaceSyncDecision();
 	void workspaceSyncReview_data();

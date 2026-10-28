@@ -110,7 +110,7 @@ bool CloudWorkspaceReceiveReceipt::read()
 }
 bool CloudWorkspaceReceiveReceipt::reload()
 {
-	QLockFile lock(QDir(directory).filePath("intent.json.lock"));
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0);
 	return !directory.isEmpty() && lock.tryLock(0) && read() && !saved.isEmpty();
 }
 bool CloudWorkspaceReceiveReceipt::write(const QJsonObject &body)
@@ -149,7 +149,7 @@ bool CloudWorkspaceReceiveReceipt::prepare(const CloudWorkspaceBinding &binding,
 	next["baseline_pin"] = baselinePin; next["target_pin"] = targetPin;
 	next["before"] = digest(beforeModel); next["raw"] = digest(targetRaw); next["after"] = digest(afterModel);
 	if (!valid(next) || !QDir().mkpath(directory)) return false;
-	QLockFile lock(QDir(directory).filePath("intent.json.lock")); if (!lock.tryLock(0) || !read()) return false;
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read()) return false;
 	if (saved.isEmpty()) {
 		for (const auto &name : QDir(directory).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
 			if (name != "intent.json.lock") return false;
@@ -163,7 +163,7 @@ bool CloudWorkspaceReceiveReceipt::prepare(const CloudWorkspaceBinding &binding,
 }
 bool CloudWorkspaceReceiveReceipt::transition(const QString &from, const QString &to, const QByteArray &observed)
 {
-	QLockFile lock(QDir(directory).filePath("intent.json.lock"));
+	QLockFile lock(QDir(directory).filePath("intent.json.lock")); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
 	if (!observed.isEmpty() && !accepts(saved.value("after").toObject(), observed)) return false;
 	if (state() == to) return true;

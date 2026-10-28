@@ -56,7 +56,7 @@ bool CloudWorkspaceActivationPlan::read()
 }
 bool CloudWorkspaceActivationPlan::reload()
 {
-	QLockFile lock(QDir(directory).filePath("plan.json.lock")); return !directory.isEmpty() && lock.tryLock(0) && read() && !saved.isEmpty();
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0); return !directory.isEmpty() && lock.tryLock(0) && read() && !saved.isEmpty();
 }
 bool CloudWorkspaceActivationPlan::write(const QJsonObject &body)
 {
@@ -68,7 +68,7 @@ bool CloudWorkspaceActivationPlan::prepare(const QByteArray &value)
 {
 	if (scope.isEmpty() || directory.isEmpty() || QFileInfo(directory).isSymLink() || value.isEmpty() || value.size() > Limit ||
 	    !CloudHistoryRecord::validXml(value) || !QDir().mkpath(directory)) return false;
-	QLockFile lock(QDir(directory).filePath("plan.json.lock")); if (!lock.tryLock(0) || !read()) return false;
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0) || !read()) return false;
 	auto next = scope; next["state"] = "prepared"; next["model"] = digest(value);
 	if (saved.isEmpty()) {
 		for (const auto &name : QDir(directory).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
@@ -88,7 +88,7 @@ bool CloudWorkspaceActivationPlan::prepare(const QByteArray &value)
 bool CloudWorkspaceActivationPlan::complete(CloudWorkspaceRoute &route, CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root,
 	const CloudWorkspaceRecord &checkpoint, CloudWorkspaceReadIntent &reader)
 {
-	QLockFile lock(QDir(directory).filePath("plan.json.lock"));
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !route.load() || route.state() != "active" ||
 	    !reader.matches(reference, text(scope, "target"), text(scope, "reservation")) || !reader.reload() || reader.state() != "released") return false;
 	const auto routeValue = route.value(); const auto bytes = model(); const auto r = root.value.value("journal").toObject().value("reservations").toObject().value(text(scope, "reservation")).toObject();

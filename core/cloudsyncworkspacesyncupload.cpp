@@ -46,6 +46,7 @@ void CloudWorkspaceSyncUpload::start(const QString &accessToken, const CloudWork
 	    model.isEmpty() || model.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(model) || !scopeCurrent || !localSnapshot) { fail(); return; }
 	if (QFileInfo(planDirectory).isSymLink() || !QDir().mkpath(planDirectory)) { fail(); return; }
 	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock");
+	operationLock->setStaleLockTime(0);
 	if (!operationLock->tryLock(0)) { fail(); return; }
 	priorPlan = QFileInfo::exists(QDir(planDirectory).filePath("plan.json"));
 	plan = std::make_unique<CloudWorkspaceUploadPlan>(planDirectory, reference, choiceVersion, bindingRevision, nextRevision, baseline, ticket, operation);

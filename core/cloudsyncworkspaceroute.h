@@ -2,6 +2,23 @@
 #ifndef CLOUD_SYNC_WORKSPACE_ROUTE_H
 #define CLOUD_SYNC_WORKSPACE_ROUTE_H
 #include "cloudsyncworkspacebinding.h"
+#include <memory>
+class QLockFile;
+
+// Shared by every legacy and workspace operation for the same profile/provider.
+// The caller must use a stable local absolute path and hold this lease for the
+// entire asynchronous operation. Unknown or incomplete lock files are retained.
+class CloudWorkspaceRouteLease {
+public:
+	explicit CloudWorkspaceRouteLease(const QString &file);
+	~CloudWorkspaceRouteLease();
+	bool acquire();
+	bool held() const;
+	void release();
+private:
+	QString fileName;
+	std::unique_ptr<QLockFile> lock;
+};
 
 // Profile/provider-wide fail-closed route marker. Preparing is durable before
 // binding creation; both preparing and active block legacy fallback. Caller

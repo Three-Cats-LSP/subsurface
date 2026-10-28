@@ -2545,6 +2545,23 @@ void TestCloudSyncHistory::workspaceSyncReceive()
 	QCOMPARE(n.files[0].data, originalManifest); QCOMPARE(n.files[1].data, A); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
 }
 
+void TestCloudSyncHistory::workspaceRouteLease()
+{
+	QTemporaryDir temp; QVERIFY(temp.isValid()); const auto path = temp.filePath("profile/provider.operation.lock");
+	CloudWorkspaceRouteLease first(path), second(path); QVERIFY(first.acquire()); QVERIFY(first.held()); QVERIFY(first.acquire());
+	QFile old(path);
+	if (old.open(QIODevice::ReadWrite)) {
+		old.setFileTime(QDateTime::currentDateTimeUtc().addSecs(-3600), QFileDevice::FileModificationTime); old.close();
+	}
+	QVERIFY(!second.acquire()); QVERIFY(first.held()); QVERIFY(!second.held());
+	first.release(); QVERIFY(!first.held()); QVERIFY(second.acquire()); QVERIFY(second.held()); second.release();
+	QFile unknown(path); QVERIFY(unknown.open(QIODevice::WriteOnly)); QVERIFY(unknown.write("keep") == 4); unknown.close();
+	CloudWorkspaceRouteLease guarded(path); QVERIFY(!guarded.acquire()); QVERIFY(unknown.open(QIODevice::ReadOnly)); QCOMPARE(unknown.readAll(), QByteArray("keep")); unknown.close();
+	CloudWorkspaceRouteLease relative("relative.operation.lock"); QVERIFY(!relative.acquire());
+	const auto blocked = temp.filePath("blocked"); QFile file(blocked); QVERIFY(file.open(QIODevice::WriteOnly)); QVERIFY(file.write("keep") == 4); file.close();
+	CloudWorkspaceRouteLease blockedLease(blocked + "/operation.lock"); QVERIFY(!blockedLease.acquire()); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("keep"));
+}
+
 void TestCloudSyncHistory::workspaceCopyIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");

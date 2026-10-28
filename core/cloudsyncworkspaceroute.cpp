@@ -16,6 +16,23 @@ bool fields(const QJsonObject &o, const QStringList &keys)
 	return true;
 }
 }
+CloudWorkspaceRouteLease::CloudWorkspaceRouteLease(const QString &file) : fileName(file) {}
+CloudWorkspaceRouteLease::~CloudWorkspaceRouteLease() = default;
+bool CloudWorkspaceRouteLease::held() const { return lock && lock->isLocked(); }
+void CloudWorkspaceRouteLease::release() { if (lock) lock->unlock(); lock.reset(); }
+bool CloudWorkspaceRouteLease::acquire()
+{
+	if (held()) return true;
+	const QFileInfo info(fileName), parent(info.absolutePath());
+	if (fileName.isEmpty() || !info.isAbsolute() || info.isSymLink() || parent.isSymLink() || !QDir().mkpath(parent.filePath())) return false;
+	lock = std::make_unique<QLockFile>(fileName); lock->setStaleLockTime(0);
+	if (info.exists()) {
+		qint64 pid = 0; QString host, application;
+		if (!info.isFile() || !lock->getLockInfo(&pid, &host, &application)) { lock.reset(); return false; }
+	}
+	if (!lock->tryLock(0)) { lock.reset(); return false; }
+	return true;
+}
 CloudWorkspaceRoute::CloudWorkspaceRoute(const QString &file, const QString &id) : fileName(file), provider(id) {}
 QString CloudWorkspaceRoute::state() const { return text(saved, "state"); }
 bool CloudWorkspaceRoute::read()

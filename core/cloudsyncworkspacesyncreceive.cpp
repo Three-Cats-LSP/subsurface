@@ -51,7 +51,7 @@ void CloudWorkspaceSyncReceive::start(const QString &accessToken, const CloudWor
 	    planDirectory.isEmpty() || readFile.isEmpty() || recoveryDirectory.isEmpty() || before.isEmpty() ||
 	    before.size() > 64 * 1024 * 1024 || !CloudHistoryRecord::validXml(before) || !scopeCurrent || !localSnapshot || !projectPayload || !applyPayload) { fail(); return; }
 	if (QFileInfo(planDirectory).isSymLink() || !QDir().mkpath(planDirectory)) { fail(); return; }
-	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock"); if (!operationLock->tryLock(0)) { fail(); return; }
+	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); if (!operationLock->tryLock(0)) { fail(); return; }
 	priorPlan = QFileInfo::exists(QDir(planDirectory).filePath("plan.json"));
 	plan = std::make_unique<CloudWorkspaceReceivePlan>(planDirectory, reference, choiceVersion, bindingRevision, nextRevision, baseline, target, reservation, operation);
 	if (!plan->prepare(before) || !current()) { fail(); return; }

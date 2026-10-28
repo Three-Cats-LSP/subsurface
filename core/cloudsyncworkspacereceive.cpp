@@ -78,7 +78,7 @@ void CloudWorkspaceReceive::begin()
 {
 	if (step != Step::Starting) return;
 	if (QFileInfo(recoveryDirectory).isSymLink() || !QDir().mkpath(recoveryDirectory)) { fail(); return; }
-	if (!operationLock) operationLock = std::make_unique<QLockFile>(recoveryDirectory + ".operation.lock");
+	if (!operationLock) { operationLock = std::make_unique<QLockFile>(recoveryDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); }
 	if (!operationLock->isLocked() && !operationLock->tryLock(0)) { retryStartupOrFail(recoveryDirectory + ".operation"); return; }
 	receipt = std::make_unique<CloudWorkspaceReceiveReceipt>(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision);
 	const auto path = QDir(recoveryDirectory).filePath("intent.json"); recoveryEstablished = QFileInfo::exists(path);
