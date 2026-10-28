@@ -2245,7 +2245,9 @@ void TestCloudSyncManager::testWorkspaceSync()
 		if (mode == 32) {
 			::divelog.dives[0]->notes = "Edited after choosing a version"; const auto edited = CloudWorkspaceModel::currentXml();
 			manager.resolveWorkspaceConflict(provider, review, "cloud"); QVERIFY(!manager.syncInProgress());
-			QCOMPARE(CloudWorkspaceModel::currentXml(), edited); QCOMPARE(network.puts, writes); return;
+			QCOMPARE(CloudWorkspaceModel::currentXml(), edited); QCOMPARE(network.puts, writes);
+			QVERIFY(!manager.workspaceReport(provider).value("syncConflict").toBool());
+			QVERIFY(manager.workspaceReport(provider).value("conflictReview").toString().isEmpty()); return;
 		}
 		if (mode == 33) {
 			const auto peer = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -2316,6 +2318,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 		::divelog.dives[0]->notes = "An edit after conflict review";
 		manager.resolveWorkspaceConflict(provider, review, "device");
 		QVERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, writes);
+		QVERIFY(!manager.workspaceReport(provider).value("syncConflict").toBool());
 		::divelog.dives[0]->notes = "Local workspace version";
 		QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 		manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
@@ -2328,6 +2331,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 		const auto peerRoot = network.files[0].data;
 		manager.resolveWorkspaceConflict(provider, fresh, "device"); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(network.files[0].data, peerRoot); QCOMPARE(network.puts, writes);
+		QVERIFY(!manager.workspaceReport(provider).value("syncConflict").toBool());
 		QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 		manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 		const auto currentReview = manager.workspaceReport(provider).value("conflictReview").toString();

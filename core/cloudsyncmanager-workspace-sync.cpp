@@ -46,6 +46,8 @@ void CloudSyncManager::resolveWorkspaceConflict(const QString &providerId, const
 	const auto local = CloudWorkspaceModel::currentXml();
 	if (CloudSyncManifest::sha256(local) != review.localSha256) {
 		workspaceConflictReviews.remove(providerId);
+		workspaceReports[providerId].remove("syncConflict"); workspaceReports[providerId].remove("conflictReview");
+		emit providersChanged();
 		setError(tr("The local log changed. Review the conflict again.")); return;
 	}
 	workspaceConflictRequested = reviewId; workspaceConflictProvider = providerId; workspaceConflictChoice = choice;
@@ -217,6 +219,7 @@ void CloudSyncManager::workspaceSyncReviewed(int result, const QJsonObject &valu
 		    selected.localSha256 != CloudSyncManifest::sha256(workspaceSyncModel) || selected.head != root.head() ||
 		    selected.binding != binding.value() || action != Action::Conflict) {
 			workspaceConflictReviews.remove(provider);
+			workspaceReports[provider].remove("syncConflict"); workspaceReports[provider].remove("conflictReview");
 			setError(tr("The conflict changed. Review both versions again; your data was kept."));
 			clearSyncOperation(); return;
 		}
