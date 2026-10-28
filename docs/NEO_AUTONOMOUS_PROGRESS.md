@@ -54,7 +54,7 @@ Native run **40642842273** at b62 failed compilation because the activation pref
 
 The prepared `work/test-native-workspace-sync-ui.py` now additionally exercises a confirmed restore while the workspace route is active, another Windows profile receiving that restored version, and restart. Its optional `--interrupt-restore` stops only its own isolated test process after observing a durable local-application phase and resumes the same attempt. It has passed Python compilation only; it has **not run** and may need driver corrections. Retain all failed experiments and exact test roots. Do not use it until the matching native suite and Windows package pass.
 
-The prepared driver also contains a real Windows foreground activation stage with automatic sync enabled for its isolated test profile. It observes one `up-to-date` completion without invoking the sync method in that stage, then restores the profile's automatic and primary settings. Python compilation passed; the stage is not yet runtime-validated and must not be claimed as evidence until the matching app and native tests pass and the live stage succeeds.
+The prepared driver also contains real Windows foreground activation stages with automatic sync enabled for isolated test profiles: one unchanged log, one edited local upload and one receive on the second profile, followed by restart. They observe the expected result without invoking the sync method in those stages, then restore the profiles' automatic and primary settings. These stages are not yet runtime-validated and must not be claimed as evidence until the matching app and native tests pass and the live stages succeed.
 
 ## Current restore, Windows and planner checkpoint
 
