@@ -54,11 +54,32 @@ jobs:
         run: cmake -S tests/lsp-planner -B build-lsp
       - name: Build native LSP regression
         run: cmake --build build-lsp --config Release --parallel 2
+      - name: Deploy Windows test runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          windeployqt --no-translations --dir build-lsp/Release build-lsp/Release/TestLspPlanner.exe
+          exit $LASTEXITCODE
       - name: Compare native engine with pinned upstream results
-        run: ctest --test-dir build-lsp --build-config Release --output-on-failure
+        if: runner.os != 'Windows'
+        run: ctest --test-dir build-lsp --build-config Release --output-on-failure --verbose
+      - name: Compare Windows engine and preserve startup failures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ctest --test-dir build-lsp --build-config Release --output-on-failure --verbose
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) {
+            & build-lsp/Release/TestLspPlanner.exe -o build-lsp/windows-direct-results.txt,txt
+            Write-Output "Direct native test exit code: $LASTEXITCODE"
+            if (Test-Path build-lsp/windows-direct-results.txt) { Get-Content build-lsp/windows-direct-results.txt }
+          }
+          exit $testExit
       - name: Retain native comparison evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: Neo-LSP-native-${{ runner.os }}
-          path: build-lsp/Testing/Temporary/*.log
+          path: |
+            build-lsp/Testing/Temporary/*.log
+            build-lsp/windows-direct-results.txt
