@@ -28,12 +28,31 @@ capability. Capture a matching SHA-verified package after Windows succeeds and
 inspect the expanded fixture/native-export gates. No Google write is needed for
 these offline acceptance checks.
 
-The successful 3c46 Windows package is being downloaded and SHA-verified into
-`work/windows-planner-export-app-3c46e4edf-20261028/` (shell session **35395**).
-Resume that download; never start a duplicate over its partial archive. Use it
-only for offline planner/export evidence: it predates ready-retry code. The
-capture helper now requires the actual native surface interval of 600 seconds
-for the repetitive case, rather than relying only on the entered timestamps.
+**LATEST INTEGRATED APP CANDIDATE: `1cc711e7f`.** The parser-include correction,
+ready retry and copied cancellation guard are pushed. Resume
+[full native 40698333716](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40698333716)
+and [matching Windows 40698501000](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40698501000).
+They supersede the failed 3c46 full-app compile for final acceptance; the earlier
+successful 3c46 Windows run remains valid for its own export/planner code.
+Do not dispatch duplicate checks or run live writes before the new regression
+passes. The targeted 50e Windows real-sharing run continues separately.
+
+The successful 3c46 Windows package was independently SHA-verified into
+`work/windows-planner-export-app-3c46e4edf-20261028/`. Artifact **12818834767**
+matched GitHub archive SHA-256
+`33c82528bd3b919595fbcff3bddab2867fca7c9510fb57eeb185d62080ea75da`;
+inner package SHA-256 is
+`f6539d5deb4470de51b1438cc4683e11d8533a78cceb86efcfe6dd381e0d07f1`.
+The helper's `verified-package.json` records the executable hash too. Use it
+only for offline planner/export evidence: it predates ready-retry code. A fresh
+18-case capture **passed** at
+`work/planner-native-reference-3c46e4edf-20261028-final-18/`: every runtime, OTU
+and stop count/depth/time matches the reviewed manifest within its tolerances.
+The repetitive case also returned **600 seconds from the native engine's actual
+surface-interval output**, rather than only the entered timestamps. The app
+used a fresh credential-free profile and no Google writes. This is matching
+Windows calculation evidence, while the corrected C++ regression remains
+pending. No owner action is needed.
 
 **Next reliability candidate:** a failed pre-application receive can now retry
 the same ready receipt at most twice, 250 ms apart, without extending its overall
