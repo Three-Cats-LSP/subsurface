@@ -66,6 +66,8 @@ private slots:
 	void workspaceUploadPlan();
 	void workspaceActivationPlan_data();
 	void workspaceActivationPlan();
+	void workspaceActivationWorkflow_data();
+	void workspaceActivationWorkflow();
 	void workspaceRoute_data();
 	void workspaceRoute();
 	void workspaceSyncDecision_data();
