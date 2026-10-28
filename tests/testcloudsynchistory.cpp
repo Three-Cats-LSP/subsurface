@@ -1553,7 +1553,7 @@ void TestCloudSyncHistory::workspaceLegacyAbsence_data()
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"empty-legacy-copy-and-return", "stale-head", "stale-acceptance", "reused-event-id",
 		"unknown-event-field", "unknown-event-kind", "invalid-event-head", "changed-event", "downgrade", "missing-copies", "empty-workspace",
-		"upgrade-accepted-copy", "upgrade-unaccepted-copy"};
+		"upgrade-accepted-copy", "upgrade-unaccepted-copy", "upgrade-without-absence"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-legacy-absence-%2").arg(g).arg(cases[m]))) << g << m;
 }
@@ -1566,10 +1566,11 @@ void TestCloudSyncHistory::workspaceLegacyAbsence()
 	if (mode == 10) { QVERIFY(!root.acceptLegacyAbsence(uid(), {}, {})); return; }
 	const auto baseline = uid(); QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
 	QVERIFY(root.completeUpload(baseline, google ? "object-a" : "id:object-a", "rev-a")); QVERIFY(root.publish(baseline, {}));
-	if (mode == 11 || mode == 12) {
+	if (mode == 11 || mode == 12 || mode == 13) {
 		const auto copy = uid(), accepted = uid(); QVERIFY(root.registerCopy(copy, baseline, source));
 		QVERIFY(root.completeUpload(copy, google ? "object-copy" : "id:object-copy", "rev-copy")); QVERIFY(root.publish(copy, baseline));
-		if (mode == 11) QVERIFY(root.acceptLegacyCopy(accepted, {}, copy, copy, source));
+		if (mode == 11 || mode == 13) QVERIFY(root.acceptLegacyCopy(accepted, {}, copy, copy, source));
+		if (mode == 13) { auto forged = root; forged.value["format"] = "neo-workspace-history-development-4"; QVERIFY(forged.valid()); QVERIFY(!forged.follows(root)); return; }
 		const auto old = root; QVERIFY(root.acceptLegacyAbsence(uid(), mode == 11 ? accepted : QString(), copy));
 		QVERIFY(root.follows(old)); QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4"));
 		QCOMPARE(root.copySource(copy).json(), source.json()); return;

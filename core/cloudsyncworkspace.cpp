@@ -147,6 +147,8 @@ bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 		const auto oldEvents = previous.value.value("legacy_acceptances").toArray(), events = value.value("legacy_acceptances").toArray();
 		if (events.size() < oldEvents.size() || (oldFormat != format && events.isEmpty())) return false;
 		for (int i = 0; i < oldEvents.size(); ++i) if (events[i] != oldEvents[i]) return false;
+		if (format == "neo-workspace-history-development-4" && oldFormat != format &&
+		    (events.size() == oldEvents.size() || string(events[oldEvents.size()].toObject(), "kind") != "absent")) return false;
 		return true;
 	}
 	return value.value("format") == previous.value.value("format") ||
