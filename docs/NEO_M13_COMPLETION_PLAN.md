@@ -67,8 +67,14 @@ must show what is kept and require confirmation.
 
 ## 2. Make history sustainable
 
-**Open; next implementation item in this plan.** Do not rerun the completed
-conflict sequence to substitute for delivering this behavior.
+**Partially delivered, Windows/live rollover accepted.** Versioned pinned
+archive pages, expanded checkpoints and automatic coordinator rollover passed
+full b7d native/Windows protocol checks. The fresh f864 Windows Google run
+passed 11 actual-app stages beyond 512 pending tickets, including exact-ID
+interruption/resume and preservation. Do not repeat completed conflict or
+manual rollover sequences unchanged. Remaining: bounded local manual recovery
+scans and actual post-rollover restore/automatic sync; finite safety limits
+still apply. The checkpoint records exact source, runs and audit digest.
 
 Define and implement a versioned transition for bounded workspace history and
 local recovery records. Preserve pending operations, active read reservations,
@@ -83,7 +89,13 @@ and no general cleanup until separately proven safe.
 
 ## 3. Sync Neo metadata
 
-**Open.** Current cloud payloads still exclude the separate Neo metadata.
+**Open; f72 persistence foundation under validation.** Opaque full-log XML/Git
+storage, typed versioned JSON/XML extraction and a capability/hash extension in
+workspace record/page codecs are committed. The 160 focused checks passed on
+Windows and host. Full XML/Git application checks are pending. Application
+capture, cache notifications, guarded migration and production publication/read
+integration are unfinished; current normal cloud payloads still exclude the
+separate profile libraries. This is not metadata-sync acceptance.
 
 Add a versioned payload and migration/merge policy for equipment, collections
 and planner presets alongside canonical dive XML. Preserve unknown fields and

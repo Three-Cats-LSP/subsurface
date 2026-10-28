@@ -22,7 +22,7 @@ profile and schedules. This is implemented at product source `f86436550`; exact
 calculation data stays in the hidden saved-plan marker. Existing version-2 plans
 are rendered from their saved metadata without rewriting/recalculating them.
 
-## Resume these pending checks; do not dispatch duplicates
+## Current validation; resume pending checks without duplicates
 
 - **40745176973**, Windows at **f86436550**: compiled and passed the actual
   readable preview/save/export flow, then failed an obsolete restart assertion
@@ -56,8 +56,8 @@ are rendered from their saved metadata without rewriting/recalculating them.
   readable-report cases (old saved metadata, imperial units, CCR roles/setpoints,
   VPM/hybrid settings and unavailable input). Do not repeat unchanged.
 
-- **40753650677**, focused metadata at **f72d11540**: host **PASSED 160 rows**;
-  matching Windows job **123046671852** is pending. Includes versioned profile
+- **40753650677**, focused metadata at **f72d11540**: host and Windows **PASSED 160 rows each**
+  (jobs **123046671413 / 123046671852**). Includes versioned profile
   codec/XML extraction, immutable metadata hash claims, legacy capability
   upgrade, two archive pages/checkpoint restart, old-format refusal, corrupt
   fields and unchanged old ticket facts. This is foundation validation, not
@@ -67,13 +67,30 @@ are rendered from their saved metadata without rewriting/recalculating them.
 - **40754388166**, Windows/Clean/Modern/package at **f72d11540**: pending,
   including the corrected human report restart/exact hidden-input test. Resume
   this run. No release was published.
-- Current live Google sequence **work/native-workspace-rollover-google-ui-b7d-f864-20261029-a**
-  is running with verified f864 product bytes (identical C++/QML to the full
-  b7d regression above). It has already passed create, app rollover/save beyond
-  the 512-pending-ticket fixture, restart/history and same-head repeat-save.
-  Do not start another namespace while this run is active; inspect its result
-  and continue owned recovery if needed. All fixture seeding is restricted by
-  exact physical ID and CAS to the fresh root created by this sequence.
+- **Live Google PASSED all 11 stages** at exact f864 product source/runtime:
+  `work/native-workspace-rollover-google-ui-b7d-f864-20261029-a/result.json`,
+  SHA-256 `a6abaf91ca861ff22b0aefcaea0d7643f19f1f03ec557d191ea90de53ad68ff7`.
+  Clean create; Modern native archive/save beyond a fresh 512-pending-ticket
+  fixture; restart/history; repeat-save idempotence; second-profile join/list;
+  cancellation; native process termination at **identified** with exact object
+  acknowledgement; same-ticket resume in Clean; repeat-save and final Modern
+  restart/history. The independent audit verified the pinned archive bytes and
+  revision, both actual XML payloads, all 512 unchanged pending tickets, original
+  inventory/credentials/local XML/legacy baseline, and credential/proxy cleanup.
+  Exactly four new objects were retained: fresh root, archive and two payloads.
+  Fixture seeding used exact-ID CAS only on this sequence's newly created root.
+  No deletion. This is manual-version rollover acceptance, not post-rollover
+  restore/automatic-sync or simultaneous app-writer acceptance.
+
+Visual QA of the live captures found pre-existing mojibake in the shared
+workspace labels. Fourteen broken punctuation sequences in ten strings are
+corrected after f72. Actual Qt component verification at
+`work/workspace-labels-20261029-a2` passed 110 rendered labels plus all 605-row /
+31-page navigation and restore-cancellation checks. The first label probe used
+QObject ownership traversal and missed visual delegate children; its failed
+probe is retained. The corrected probe uses actual QQuickItem visual children.
+The pending f72 package run precedes this text-only repair; do not call it an
+exact-source validation of later product QML.
 
 ## Completed evidence and preserved failures
 
@@ -130,31 +147,25 @@ This is a synthetic component report, not a 605-version live Google test.
 
 1. Close current readable-report PDF and full native/Windows gates; repair any
    failures. No mathematics changed. Keep unsupported external-parity claims off.
-2. Run fresh Google rollover + post-limit real application save/history/restart
-   and interruption checks after regression passes. Prepared, Python-compiled
-   **`work/test-native-workspace-rollover-ui.py` is running** in the fresh namespace recorded above. It uses fresh
-   disposable profiles/root, conditionally seeds only that new empty root with
-   512 synthetic pending tickets, then leaves archival and actual publication
-   to Neo. Expected retained objects: root + archive + two actual payloads. It
-   independently compares pinned page bytes, all pending records, logical/native
-   checkpoints, original inventory/credentials/XML/baselines. Run with a verified
-   matching package and new tag; never replay an existing failed namespace.
-   This driver covers manual versions; actual post-rollover restore/automatic
-   sync remain separate acceptance steps.
+2. The fresh Google manual-version rollover sequence above is complete. Do not
+   repeat it unchanged. Continue actual **post-rollover restore and automatic
+   sync** acceptance in disposable profiles, preserving every pinned page,
+   pending ticket, recovery XML and old object. The retained driver is
+   `work/test-native-workspace-rollover-ui.py`; never reuse an existing failed
+   namespace or replay a submitted create with uncertain identity.
 3. Finish bounded local receipt growth. Automatic sync already moves **verified
    completed** receipts to `sync-completed` in `resumeWorkspaceSync`; do not
    duplicate that feature. Manual uploads/restores/copies/acceptance/activation
    still have bounded active-attempt scans that require guarded completion
    archival. Preserve all recovery XML and unknown/pending records; no deletion.
-4. Deliver versioned Neo equipment/collections/planner-preset sync with unknown
-   fields, whole-payload conflict choices, migration and interruption recovery.
-   **Not implemented yet.** Local no-cloud storage is a **Git repository**, so
-   atomic persistence must cover both canonical XML and Git save/load, not just
-   a QSettings sidecar. Stage parsing must have no global settings effects.
-   An engineering option is a versioned log-owned metadata field persisted in
-   XML/Git commits, typed QSettings/UI caches, pre-migration durable baseline and
-   a workspace capability upgrade that old clients refuse. This is a design
-   direction, not delivered code or a request for a product decision.
+4. Complete application metadata sync from the f72 foundation below: strict
+   staged XML extraction, deterministic legacy-baseline inheritance, exact
+   immutable metadata-hash publication/read verification, one-time legacy-head
+   migration, accepted model/cache projection, UI notifications and durable
+   no-cloud Git persistence. Preserve unknown fields and whole-payload conflict
+   choices. A remote legacy log must not silently clear local libraries; a
+   confirmed new-format empty library must be able to clear one intentionally.
+   Normal unrelated file opens/imports keep existing global-library behavior.
 5. Remaining actual Windows concurrent apps, large/progressing slow transfers,
    offline/reconnect/account changes and preservation gates; prepare an
    unpublished Windows candidate and concrete OAuth/signing/legal artifacts.
@@ -163,15 +174,18 @@ This is a synthetic component report, not a 605-version live Google test.
 
 ## Metadata persistence foundation under development
 
-Metadata foundation code is being committed for focused development checks; it is not enabled as a complete application feature. Modified tracked files include `core/divelog.*`, `core/load-git.cpp`,
-`core/parse-xml.cpp`, `core/save-git.cpp`, `core/save-xml.cpp` and the TestParse /
-TestGitStorage source/header pairs. Preserve and resume these changes. They add
-an opaque log-owned metadata string, full-log XML and Git-commit preservation,
-clear/reset handling and XML/Git round-trip tests; selected/anonymized exports
-exclude it. **Host codec checks have passed; matching Windows and full XML/Git application checks are pending.** No UI/settings capture or complete cloud metadata feature is enabled by this foundation. The new `core/neologmetadata.h/.cpp` adds 4 MiB, versioned JSON
-validation, strict side-effect-free extraction from XML and explicit profile-cache capture/projection; it is not called by production flows yet. The development-5 workspace capability and immutable per-ticket metadata hash map are implemented in the record/page codecs, with paired protocol cases, but no production writer enables them yet. Deterministic legacy normalization,
-UI cache notifications and restart-safe local-baseline migration still need
-integration. Do not claim metadata sync complete or publish the WIP as such.
+Committed **f72d11540** preserves a log-owned opaque metadata string through
+full XML and Git commits; clear/reset handles it, and selected/anonymized XML
+exports omit it. Full native XML/Git round-trip checks are pending in
+40754381172. `core/neologmetadata.*` has a 4 MiB versioned JSON codec, strict
+side-effect-free XML extraction and explicit profile-cache capture/projection.
+Workspace development-5 record/page codecs preserve immutable per-ticket
+metadata hashes and refuse downgrades or retrospective tagging. Focused native
+checks passed 160 rows on both Windows and host, including two archive pages
+and checkpoint restart. These are necessary persistence/protocol foundations;
+production capture, writer/read integration, deterministic normalization,
+cache/UI notifications and local-baseline migration are **not delivered yet**.
+Do not claim full metadata sync or enable production activation on this evidence.
 
 Git commits, not a loose QSettings sidecar, must be the durable authority for
 no-cloud workspace recovery. Retain existing global-library behavior for ordinary
@@ -183,10 +197,13 @@ is needed for this engineering work.
 
 ## Workspace and secrets
 
-All commits above are pushed to `modern-ui`. A fresh disposable Google rollover sequence is now active after the full b7d regression passed. It created only its isolated root/archive/payloads so far; final inventory and credential preservation checks remain pending. Do not claim live completion before its result and audit pass. The original saved Google test access token
-is expired, but refresh credentials exist; the read-only expiry check changed
-nothing. Obtain a fresh token in memory through the existing helper when live
-checks start; never log tokens/JSON contents or mutate original credentials.
+All commits above are pushed to `modern-ui`. The fresh Google rollover audit
+passed preservation of the original inventory, credentials, local XML and
+legacy baseline. Its four new disposable objects remain intact. All test app
+processes exited and only its temporary cloned credential/proxy keys were
+removed. The original saved Google test access token remains expired; refresh
+works in memory through the existing helper without changing original
+credentials. Never log tokens/JSON contents or rewrite original credentials.
 
 Preserve unrelated untracked `aqtinstall.log`, `docs/NEO_CHAT_HANDOFF.md`,
 `scripts/__pycache__/`, `tmp/` and `work/`. Use explicit staging, no broad cleanup.
