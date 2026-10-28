@@ -1554,7 +1554,9 @@ void TestCloudSyncHistory::workspaceReceiveReceipt_data()
 	const QStringList cases = {"durable-receive", "different-local-model", "wrong-raw", "wrong-choice", "wrong-revision",
 		"wrong-reader-reservation", "unverified-reader", "released-reservation", "later-head", "unexpected-recovery-file",
 		"corrupt-recovery-file", "wrong-apply-observation", "wrong-persist-observation", "changed-legacy-acceptance",
-		"stale-checkpoint", "prepared-recovery", "locked-receipt"};
+		"stale-checkpoint", "prepared-recovery", "locked-receipt", "advance-persisted-and-replay",
+		"advance-wrong-revision", "advance-released-reader", "advance-with-later-head",
+		"advance-changed-acceptance", "advance-corrupt-recovery", "advance-not-persisted", "advance-released-reservation", "advance-later-local-edit"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-receive-receipt-%2").arg(g).arg(cases[m]))) << g << m;
 }
@@ -1601,9 +1603,25 @@ void TestCloudSyncHistory::workspaceReceiveReceipt()
 	if (mode == 11) { QVERIFY(!receipt.applied(A)); QCOMPARE(receipt.state(), QString("applying")); return; }
 	QVERIFY(receipt.applied(B));
 	if (mode == 12) { QVERIFY(!receipt.persisted(A)); QCOMPARE(receipt.state(), QString("applied")); return; }
+	if (mode == 23) { QVERIFY(!binding.advanceReceived(revision, root, checkpoint, receipt, reader, B, uid())); QCOMPARE(binding.commit(), baseline); return; }
 	QVERIFY(receipt.persisted(B)); QVERIFY(receipt.persisted(B)); QVERIFY(!receipt.beginApply());
 	CloudWorkspaceReceiveReceipt restarted(dir, ref, choice, revision, baseline, target, reservation);
 	QVERIFY(restarted.reload()); QCOMPARE(restarted.state(), QString("persisted")); QCOMPARE(restarted.before(), A); QCOMPARE(restarted.raw(), B); QCOMPARE(restarted.after(), B);
+	if (mode < 17) return;
+	if (mode == 19) { QVERIFY(reader.beginRelease()); QVERIFY(reader.markReleased()); }
+	if (mode == 20) {
+		const auto later = uid(); QVERIFY(root.registerUpload(later, target, CloudSyncManifest::sha256(A), A.size()));
+		QVERIFY(root.completeUpload(later, google ? "object-c" : "id:object-c", "rev-c")); QVERIFY(root.publish(later, target));
+	}
+	if (mode == 21) QVERIFY(root.acceptLegacyCopy(uid(), event, target, baseline, source));
+	if (mode == 22) { QFile f(QDir(dir).filePath("after.xml")); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("foreign") == 7); f.close(); }
+	if (mode == 24) QVERIFY(root.release(reservation));
+	const auto newRevision = uid(); const auto advanced = binding.advanceReceived(mode == 18 ? uid() : revision, root, checkpoint, restarted, reader, mode == 25 ? A : B, newRevision);
+	if (mode == 17 || mode == 20) {
+		QVERIFY(advanced); QCOMPARE(binding.commit(), target); QCOMPARE(binding.revision(), newRevision); QVERIFY(binding.matchesModel(B));
+		QVERIFY(binding.advanceReceived(revision, root, checkpoint, restarted, reader, B, newRevision));
+		QVERIFY(!binding.advanceReceived(revision, root, checkpoint, restarted, reader, B, uid()));
+	} else { QVERIFY(!advanced); QCOMPARE(binding.commit(), baseline); QCOMPARE(binding.revision(), revision); }
 }
 
 void TestCloudSyncHistory::workspaceCopyIntent_data()

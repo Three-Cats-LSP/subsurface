@@ -3,6 +3,8 @@
 #define CLOUD_SYNC_WORKSPACE_BINDING_H
 
 #include "cloudsyncworkspace.h"
+class CloudWorkspaceReadIntent;
+class CloudWorkspaceReceiveReceipt;
 
 // Durable per-workspace sync baseline. This stores metadata only; caller must
 // freshly verify the provider/account, selected choice, root, accepted legacy
@@ -15,6 +17,8 @@ public:
 	bool activate(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint, const QByteArray &raw, const QByteArray &model, const QString &revision);
 	bool advanceOwnedUpload(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &revision);
+	bool advanceReceived(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+		CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader, const QByteArray &currentModel, const QString &revision);
 	QJsonObject value() const { return saved; }
 	QString revision() const;
 	QString commit() const;
@@ -24,6 +28,7 @@ private:
 	bool read();
 	bool write(const QJsonObject &value);
 	QJsonObject next(const CloudWorkspaceRecord &root, const QByteArray &raw, const QByteArray &model, const QString &revision) const;
+	QJsonObject nextAt(const CloudWorkspaceRecord &root, const QString &commit, const QByteArray &raw, const QByteArray &model, const QString &revision) const;
 	QString fileName;
 	CloudWorkspaceReference reference;
 	QJsonObject scope, saved;
