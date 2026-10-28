@@ -2091,6 +2091,12 @@ void TestCloudSyncManager::testWorkspaceSync()
 	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
 	const auto ref = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "1" : "id:1");
 	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); network.add(ref.rootName(), root.json());
+	if (mode == 34) {
+		// Start the restart fixture from a genuinely loaded model, including
+		// the parser's canonical defaults, rather than hand-built dive fields.
+		CloudWorkspaceModel loaded; const auto initialModel = CloudWorkspaceModel::currentXml();
+		QVERIFY(loaded.prepare(initialModel, initialModel)); QVERIFY(loaded.install());
+	}
 	const auto original = CloudWorkspaceModel::currentXml(); const auto initial = QUuid::createUuid().toString(QUuid::WithoutBraces);
 	QVERIFY(root.registerUpload(initial, {}, CloudSyncManifest::sha256(original), original.size())); network.add(ref.payloadName(initial), original);
 	QVERIFY(root.completeUpload(initial, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(initial, {}));
@@ -2266,7 +2272,8 @@ void TestCloudSyncManager::testWorkspaceSync()
 			QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); QCOMPARE(CloudWorkspaceModel::currentXml(), after);
 			allowSave = true;
 			if (mode == 34) {
-				::divelog.dives[0]->notes = "Local workspace version"; QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+				CloudWorkspaceModel reloaded; QVERIFY(reloaded.prepare(before, CloudWorkspaceModel::currentXml()));
+				QCOMPARE(reloaded.normalizedXml(), before); QVERIFY(reloaded.install()); QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 				CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path(); restarted.tokens.insert(provider, token);
 				restarted.setWorkspacePersistenceHandlers([] { return true; }, [&] { ++saves; persisted = CloudWorkspaceModel::currentXml(); return true; });
 				QSignalSpy resumed(&restarted, &CloudSyncManager::diveLogSyncFinished); restarted.syncDiveLog(provider);
