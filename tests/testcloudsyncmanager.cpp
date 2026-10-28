@@ -2220,6 +2220,11 @@ void TestCloudSyncManager::testWorkspaceSync()
 		network.workspaceReadDeferred = false; late->complete();
 	}
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+	if (mode == 3) {
+		const auto report = manager.workspaceReport(provider);
+		QVERIFY(report.value("syncConflict").toBool()); QVERIFY(report.value("routeActive").toBool());
+		QCOMPARE(CloudWorkspaceModel::currentXml(), before); QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(network.puts, writes);
+	}
 	if (mode == 7) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); allowSave = true; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000); }
 	if (mode == 11) {
 		QCOMPARE(finished.size(), 1);

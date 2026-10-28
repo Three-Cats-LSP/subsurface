@@ -62,6 +62,12 @@ ColumnLayout {
 			objectName: "verifyWorkspace-" + panel.provider.id; text: qsTr("Verify selected workspace"); compact: true; Layout.fillWidth: true
 			enabled: panel.available; onClicked: CloudSync.runWorkspace(panel.provider.id, "review")
 		}
+		Text {
+			objectName: "workspaceConflictStatus-" + panel.provider.id
+			visible: !!panel.report.syncConflict
+			text: qsTr("This device and the workspace both changed. Your local log and cloud versions are kept. Review the workspace versions before continuing.")
+			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
 		GridLayout {
 			Layout.fillWidth: true; columns: width > 560 ? 2 : 1; rowSpacing: 8; columnSpacing: 8
 			NeoButton {

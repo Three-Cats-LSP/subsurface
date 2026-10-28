@@ -185,10 +185,18 @@ void CloudSyncManager::workspaceSyncReviewed(int result, const QJsonObject &valu
 		setError(tr("The workspace sync baseline needs review. Your data was kept.")); clearSyncOperation(); return;
 	}
 	const auto action = Action(result); const auto provider = syncProviderId;
+	if (action == Action::Conflict) {
+		// This observation is informational only. A later resolution must review
+		// account, workspace, local data and cloud head again before any write.
+		workspaceReports[provider] = {{"choiceVersion", workspaceSyncChoiceVersion}, {"syncConflict", true}};
+		setError(tr("This device and the workspace both changed. Both versions were kept; review them before syncing."));
+		clearSyncOperation(); return;
+	}
+	workspaceReports[provider].remove("syncConflict");
 	if (action == Action::InSync) { recordSuccessfulSync(provider); clearSyncOperation(); emit diveLogSyncFinished(provider, "up-to-date"); return; }
 	if (action != Action::Upload && action != Action::Receive) {
 		setError(action == Action::LegacyChanged ? tr("The previous cloud log changed. Both branches were kept; review them before continuing.") :
-			tr("This device and the workspace both changed. Both versions were kept; review them before syncing."));
+			tr("The workspace needs review. Your local log and cloud versions were kept."));
 		clearSyncOperation(); return;
 	}
 	if (action == Action::Receive && (!workspacePersistenceAvailable || !workspacePersist || !workspacePersistenceAvailable())) {
