@@ -74,7 +74,8 @@ void TestLspPlanner::upstreamReference()
 	const auto response = LspPlanner::calculate(request);
 	QVERIFY2(response.contains("result"), qPrintable(QString::fromUtf8(QJsonDocument(response).toJson())));
 	const auto expected = fixture.value("expectedUpstream").toObject();
-	QCOMPARE(response.value("ok").toBool(), expected.value("error").isNull());
+	QVERIFY2(response.value("ok").toBool() == expected.value("error").isNull(),
+		qPrintable(QString::fromUtf8(QJsonDocument(response).toJson(QJsonDocument::Compact))));
 	const auto error = compare(expected, response.value("result"), fixture.value("id").toString());
 	QVERIFY2(error.isEmpty(), qPrintable(error));
 	QCOMPARE(response.value("effectiveRequest").toObject(), request);

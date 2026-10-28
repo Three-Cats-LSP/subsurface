@@ -100,7 +100,14 @@ QJsonObject LspPlanner::calculate(const QJsonObject &request)
 	}
 	const auto object = engine.globalObject().property(QStringLiteral("NeoLspPlanner"));
 	auto function = object.property(QStringLiteral("calculate"));
-	const auto result = function.callWithInstance(object, {engine.toScriptValue(request.toVariantMap())});
+	// QVariant sequences can be exposed as Qt sequence wrappers rather than
+	// genuine JavaScript arrays on some Qt versions. Use the same plain JSON
+	// objects/arrays as the upstream engine's request contract on every target.
+	auto parse = engine.globalObject().property(QStringLiteral("JSON")).property(QStringLiteral("parse"));
+	const auto argument = parse.call({QJSValue(QString::fromUtf8(input))});
+	if (argument.isError())
+		return failure(QStringLiteral("INVALID_REQUEST"), argument.toString());
+	const auto result = function.callWithInstance(object, {argument});
 	if (engine.isInterrupted())
 		return failure(QStringLiteral("ENGINE_TIMEOUT"), QStringLiteral("LSP calculation exceeded the native deadline."));
 	if (result.isError() || !result.isObject())

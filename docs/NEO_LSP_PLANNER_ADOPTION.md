@@ -42,6 +42,14 @@ are open-reference implementations; MultiDeco/DiveKit captures cover C1–C3;
 the existing precision and multilevel/repetitive comparator limitations do not
 become new third-party parity claims.
 
+One input-contract detail must be retained during UI integration: the imported
+CCR fixtures label `timeConvention` as `at-depth`, but their original
+`levelsFromFixture` passes that value unchanged to LSP's descent-inclusive
+first-level runtime. The capture intentionally reproduces that existing call;
+it does not validate the label or silently add another descent. Neo's runtime
+waypoints and LSP continuation durations need explicit conversion tests and
+clear display labels before enabling the public path.
+
 ## Current executable evidence
 
 `tools/lsp-planner/capture-reference.cjs` calls the **original**, untranslated

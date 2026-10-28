@@ -60,7 +60,14 @@ jobs:
             if (-not (Test-Path -LiteralPath $dependency)) { throw "Incomplete Qt runtime: $dependency" }
           }
       - name: Configure native LSP regression
+        if: runner.os != 'Windows'
         run: cmake -S tests/lsp-planner -B build-lsp
+      - name: Configure against the exact Windows runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S tests/lsp-planner -B build-lsp "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DQt6_DIR=$env:QT_ROOT_DIR/lib/cmake/Qt6" -DNEO_EXPECT_QT_VERSION=6.8.3
+          exit $LASTEXITCODE
       - name: Build native LSP regression
         run: cmake --build build-lsp --config Release --parallel 2
       - name: Deploy Windows test runtime
