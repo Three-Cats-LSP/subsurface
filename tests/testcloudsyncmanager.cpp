@@ -2073,7 +2073,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion", "active-restore-same-revision-binding-change", "active-restore-intent-changed", "conflict-corrupt-cloud", "conflict-missing-cloud", "keep-cloud", "keep-cloud-save-retry", "keep-cloud-cancel", "keep-cloud-local-edited", "keep-cloud-head-changed", "keep-cloud-restart", "keep-cloud-corrupt-payload"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion", "active-restore-same-revision-binding-change", "active-restore-intent-changed", "conflict-corrupt-cloud", "conflict-missing-cloud", "keep-cloud", "keep-cloud-save-retry", "keep-cloud-cancel", "keep-cloud-local-edited", "keep-cloud-head-changed", "keep-cloud-restart", "keep-cloud-corrupt-payload", "keep-cloud-peer-during-save"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2242,6 +2242,18 @@ void TestCloudSyncManager::testWorkspaceSync()
 		root = CloudWorkspaceRecord::parse(rootBefore); const auto head = root.head();
 		const auto remote = network.content(ref.payloadName(head));
 		CloudWorkspaceModel expected; QVERIFY(expected.prepare(remote, before)); const auto after = expected.normalizedXml();
+		QString laterHead; bool wrotePeer = false;
+		if (mode == 36) manager.setWorkspacePersistenceHandlers([] { return true; }, [&] {
+			++saves; persisted = CloudWorkspaceModel::currentXml();
+			if (wrotePeer) return true;
+			auto peerRoot = CloudWorkspaceRecord::parse(network.files[0].data); laterHead = QUuid::createUuid().toString(QUuid::WithoutBraces);
+			const auto parent = peerRoot.head();
+			if (!peerRoot.registerUpload(laterHead, parent, CloudSyncManifest::sha256(before), before.size())) return false;
+			network.add(ref.payloadName(laterHead), before);
+			if (!peerRoot.completeUpload(laterHead, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version) ||
+			    !peerRoot.publish(laterHead, parent)) return false;
+			network.files[0].data = peerRoot.json(); network.files[0].version = "peer-during-cloud-save"; wrotePeer = true; return true;
+		});
 		if (mode == 32) {
 			::divelog.dives[0]->notes = "Edited after choosing a version"; const auto edited = CloudWorkspaceModel::currentXml();
 			manager.resolveWorkspaceConflict(provider, review, "cloud"); QVERIFY(!manager.syncInProgress());
@@ -2265,6 +2277,24 @@ void TestCloudSyncManager::testWorkspaceSync()
 			QCOMPARE(CloudWorkspaceModel::currentXml(), before); QCOMPARE(network.puts, writes); QCOMPARE(saves, 0); return;
 		}
 		QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		if (mode == 36) {
+			QVERIFY(wrotePeer); QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(finished.size(), 0);
+			QCOMPARE(CloudWorkspaceModel::currentXml(), after); QCOMPARE(persisted, after);
+			root = CloudWorkspaceRecord::parse(network.files[0].data); QCOMPARE(root.head(), laterHead);
+			CloudWorkspaceBinding completed(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version());
+			QVERIFY(completed.load()); QCOMPARE(completed.commit(), head); QVERIFY(completed.matchesModel(after));
+			CloudWorkspaceModel next; QVERIFY(next.prepare(before, after)); const auto nextModel = next.normalizedXml();
+			manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+			QVERIFY2(manager.lastError().isEmpty(), qPrintable(manager.lastError())); QCOMPARE(finished.size(), 1);
+			QCOMPARE(CloudWorkspaceModel::currentXml(), nextModel); QCOMPARE(persisted, nextModel);
+			QCOMPARE(CloudWorkspaceRecord::parse(network.files[0].data).head(), laterHead);
+			QCOMPARE(network.content(ref.payloadName(head)), remote); QCOMPARE(network.content(ref.payloadName(laterHead)), before);
+			QCOMPARE(network.files.size(), fileCount + 1);
+			const auto archived = QDir(directory).filePath("sync-completed/sync-receives/" + ref.key());
+			const auto archives = QDir(archived).entryList(QDir::Dirs | QDir::NoDotAndDotDot); QCOMPARE(archives.size(), 1);
+			QFile backup(QDir(archived).filePath(archives[0] + "/recovery/before.xml")); QVERIFY(backup.open(QIODevice::ReadOnly)); QCOMPARE(backup.readAll(), before);
+			return;
+		}
 		if (mode == 33 || mode == 35) {
 			QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), before); QCOMPARE(saves, 0);
 			CloudWorkspaceBinding unchanged(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version());

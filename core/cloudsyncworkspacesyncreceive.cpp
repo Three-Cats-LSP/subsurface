@@ -91,9 +91,11 @@ void CloudWorkspaceSyncReceive::reviewed(int result, const QJsonObject &value, c
 	CloudWorkspaceReceiveReceipt receipt(recoveryDirectory, reference, choiceVersion, bindingRevision, baseline, target, reservation, nextRevision, reviewedBinding);
 	const bool known = receipt.reload();
 	if (step == Step::PostReview) {
+		// The selected model has already been installed and saved. Finish its
+		// owned receipt even if a peer advanced the head, keeping that newer
+		// version current so the next ordinary sync can receive it.
 		if (revision != bindingRevision || !known || receipt.state() != "applied" || receipt.before() != before ||
-		    text(root.ticket(target), "state") != "committed" || (action != Action::Conflict && action != Action::Receive) ||
-		    (!reviewedBinding.isEmpty() && root.head() != target)) { fail(); return; }
+		    text(root.ticket(target), "state") != "committed" || (action != Action::Conflict && action != Action::Receive)) { fail(); return; }
 		step = Step::Receiving; receiver.confirmPersisted(); return;
 	}
 	if (revision == bindingRevision) {

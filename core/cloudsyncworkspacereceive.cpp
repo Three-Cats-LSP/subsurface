@@ -189,7 +189,6 @@ void CloudWorkspaceReceive::completed(const QJsonObject &value, const QString &v
 	if (!root.valid() || !authority.observe(root, version, true) || !binding.load() || !owned.reload()) { fail(); return; }
 	const auto serial = generation; const auto snapshot = localSnapshot; const auto actual = snapshot(); if (serial != generation || step == Step::Idle) return;
 	if (binding.revision() == bindingRevision) {
-		if (!reviewedBinding.isEmpty() && root.head() != target) { fail(); return; }
 		if (!binding.advanceReceived(bindingRevision, root, authority.record(), *receipt, owned, actual, nextRevision)) { fail(); return; }
 	} else if (binding.revision() != nextRevision || !binding.ownsReceived(root, authority.record(), *receipt, owned)) { fail(); return; }
 	if (!current() || !binding.ownsReceived(root, authority.record(), *receipt, owned)) { fail(); return; }
