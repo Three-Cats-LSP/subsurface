@@ -10,6 +10,7 @@
 #include "core/cloudsyncworkspacereceive.h"
 #include "core/cloudsyncworkspacereceiveplan.h"
 #include "core/cloudsyncworkspaceroute.h"
+#include "core/cloudsyncworkspacedecision.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
 #include "core/cloudsyncworkspaceapply.h"
@@ -1999,6 +2000,54 @@ void TestCloudSyncHistory::workspaceRoute()
 	if (mode >= 9 && mode <= 13) { QVERIFY(!route.activate(binding)); QCOMPARE(route.value(), original); QVERIFY(!route.legacyAllowed()); return; }
 	QVERIFY(route.activate(binding)); QCOMPARE(route.state(), QString("active")); QVERIFY(route.activate(binding)); QVERIFY(!route.legacyAllowed());
 	CloudWorkspaceRoute restarted(file, provider); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), route.value()); QVERIFY(!restarted.legacyAllowed());
+}
+
+void TestCloudSyncHistory::workspaceSyncDecision_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"unchanged", "local-only", "remote-only", "both-changed", "legacy-changed", "legacy-missing",
+		"acceptance-changed", "checkpoint-before-acceptance", "root-rollback", "invalid-model", "foreign-root",
+		"changed-baseline-pin", "accepted-absence", "source-appeared", "absence-local-only", "contradictory-observation",
+		"invalid-root", "missing-binding"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-sync-decision-%2").arg(g).arg(m))) << g << m;
+}
+void TestCloudSyncHistory::workspaceSyncDecision()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), choice = uid(), baseline = uid(), event = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); const bool absence = mode >= 12 && mode <= 15;
+	if (absence) QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
+	else QVERIFY(root.registerCopy(baseline, {}, source));
+	QVERIFY(root.completeUpload(baseline, google ? "a" : "id:a", "rev-a")); QVERIFY(root.publish(baseline, {}));
+	const auto beforeAcceptance = root;
+	if (absence) QVERIFY(root.acceptLegacyAbsence(event, {}, baseline));
+	else QVERIFY(root.acceptLegacyCopy(event, {}, baseline, baseline, source));
+	const auto checkpoint = root;
+	QTemporaryDir temp; QVERIFY(temp.isValid()); CloudWorkspaceBinding binding(temp.filePath("binding.json"), ref, choice);
+	if (mode != 17) QVERIFY(binding.activate(root, root, A, A, uid()));
+	if (mode == 2 || mode == 3 || mode == 8) {
+		const auto later = uid(); QVERIFY(root.registerUpload(later, baseline, CloudSyncManifest::sha256(B), B.size()));
+		QVERIFY(root.completeUpload(later, google ? "b" : "id:b", "rev-b")); QVERIFY(root.publish(later, baseline));
+	}
+	if (mode == 6) QVERIFY(root.acceptLegacyCopy(uid(), event, baseline, baseline, source));
+	if (mode == 10) root = CloudWorkspaceRecord::create(CloudWorkspaceReference::create(provider, Account, uid(), google ? "other" : "id:other"), CloudSyncManifest::sha256("genesis"));
+	if (mode == 11) { auto j = root.value["journal"].toObject(); auto tickets = j["tickets"].toObject(); auto ticket = tickets[baseline].toObject(); ticket["sha256"] = CloudSyncManifest::sha256(B); tickets[baseline] = ticket; j["tickets"] = tickets; root.value["journal"] = j; }
+	if (mode == 16) root.value = {};
+	auto observed = source;
+	if (mode == 4) { auto manifest = observed.value["manifest"].toObject(); manifest["version"] = "changed"; observed.value["manifest"] = manifest; }
+	const bool missing = mode == 5 || mode == 12 || mode == 14 || mode == 15;
+	if (missing && mode != 15) observed.value = {};
+	if (mode == 12 || mode == 14) observed.value = {};
+	const auto action = CloudWorkspaceSyncDecision::evaluate(binding, mode == 8 ? checkpoint : root,
+		mode == 7 ? beforeAcceptance : mode == 8 ? root : checkpoint,
+		mode == 9 ? QByteArray("bad") : mode == 1 || mode == 3 || mode == 14 ? B : A, observed, missing);
+	using Action = CloudWorkspaceSyncDecision::Action;
+	const Action expected[] = {Action::InSync, Action::Upload, Action::Receive, Action::Conflict, Action::LegacyChanged, Action::LegacyChanged,
+		Action::LegacyChanged, Action::LegacyChanged, Action::Invalid, Action::Invalid, Action::Invalid, Action::Invalid,
+		Action::InSync, Action::LegacyChanged, Action::Upload, Action::Invalid, Action::Invalid, Action::Invalid};
+	QCOMPARE(int(action), int(expected[mode]));
 }
 
 void TestCloudSyncHistory::workspaceCopyIntent_data()

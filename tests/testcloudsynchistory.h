@@ -64,6 +64,8 @@ private slots:
 	void workspaceReceivePlan();
 	void workspaceRoute_data();
 	void workspaceRoute();
+	void workspaceSyncDecision_data();
+	void workspaceSyncDecision();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();
