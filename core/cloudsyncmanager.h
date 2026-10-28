@@ -85,8 +85,9 @@ public:
 	Q_INVOKABLE void downloadBytes(const QString &providerId, const QString &fileName);
 	Q_INVOKABLE void backupDiveLog(const QString &providerId);
 	Q_INVOKABLE void syncDiveLog(const QString &providerId);
-	// Kept separate from normal sync: this requires the explicit review ID.
-	Q_INVOKABLE void resolveWorkspaceConflict(const QString &providerId, const QString &reviewId, const QString &choice);
+	// Internal candidate only: do not expose to QML until the reviewed cloud
+	// payload is verified and the complete conflict choices are implemented.
+	void resolveWorkspaceConflict(const QString &providerId, const QString &reviewId, const QString &choice);
 	Q_INVOKABLE void useCloudDiveLog(const QString &providerId);
 	Q_INVOKABLE void setPrimaryProvider(const QString &providerId);
 	Q_INVOKABLE void setBackupProvider(const QString &providerId);
