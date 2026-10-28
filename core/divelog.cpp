@@ -68,6 +68,7 @@ void divelog::clear()
 	trips.clear();
 	devices.clear();
 	filter_presets.clear();
+	neo_metadata.clear();
 }
 
 /* check if we have a trip right before / after this dive */

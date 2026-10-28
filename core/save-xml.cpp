@@ -654,6 +654,9 @@ static void save_log_buffer(struct membuffer *b, bool select_only, bool anonymiz
 
 	if (log.autogroup)
 		put_format(b, "  <autogroup state='1' />\n");
+	// Personal libraries belong only in a complete, non-anonymized log.
+	if (!select_only && !anonymize && !log.neo_metadata.empty())
+		show_utf8(b, log.neo_metadata.c_str(), "  <neo-metadata>", "</neo-metadata>\n", 0);
 	put_format(b, "</settings>\n");
 
 	/* save the dive sites */

@@ -116,6 +116,7 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncworkspaceapply.cpp
 	cloudsyncworkspaceapply.h
 	cloudsyncworkspacemodel.cpp
+	neologmetadata.cpp
 	cloudsyncworkspacemodel.h
 	oauth2pkce.cpp
 	oauth2pkce.h

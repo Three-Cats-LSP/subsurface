@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testcloudsynchistory.h"
+#include "core/neologmetadata.h"
+#include <QSettings>
 #include "core/cloudsynchistory.h"
 #include "core/cloudsyncworkspace.h"
 #include "core/cloudsyncworkspacearchive.h"
@@ -259,6 +261,155 @@ CloudWorkspaceCopySource copySource(const Network &n, bool google)
 		{"payload", QJsonObject{{"name", p.name}, {"id", google ? p.id.mid(3) : p.id}, {"version", p.rev}, {"sha256", CloudSyncManifest::sha256(p.data)}, {"bytes", p.data.size()}}}};
 	return source;
 }
+}
+
+void TestCloudSyncHistory::neoMetadata_data()
+{
+	QTest::addColumn<int>("mode");
+	const QStringList modes = {"empty-profile-migration", "unknown-field-roundtrip", "future-version", "wrong-format", "wrong-equipment-shape", "wrong-collections-shape", "wrong-presets-shape", "too-large", "corrupt-profile-kit", "corrupt-profile-collections", "corrupt-profile-presets", "edit-preserves-unknown", "absent-cache-preserves-snapshot", "blocked-cache", "truncated-json"};
+	for (int i = 0; i < modes.size(); ++i) QTest::newRow(qPrintable(modes[i])) << i;
+}
+void TestCloudSyncHistory::neoMetadata()
+{
+	QFETCH(int, mode); QTemporaryDir directory; QVERIFY(directory.isValid());
+	QSettings settings(directory.filePath("profile.ini"), QSettings::IniFormat);
+	settings.setValue("unrelated/preserve", "untouched"); settings.sync();
+	QJsonObject body{{"schema", 1}, {"format", "neo-log-metadata-1"},
+		{"equipmentKits", QJsonObject{{"kits", QJsonArray{QJsonObject{{"name", "Main"}, {"futureKitField", QJsonArray{1, true}}}}}, {"unknownEquipmentField", "A & B <item>"}}},
+		{"collections", QJsonArray{QJsonObject{{"name", "Trips"}, {"dives", QJsonArray{123}}, {"futureCollectionField", "keep"}}}},
+		{"plannerPresets", QJsonArray{QJsonObject{{"name", "Preset"}, {"futurePresetField", QJsonObject{{"keep", true}}}}}},
+		{"unknownTopLevel", QJsonObject{{"retained", QJsonArray{QJsonValue::Null, true, 42}}}}};
+	const auto compact = [](const QJsonObject &value) { return QJsonDocument(value).toJson(QJsonDocument::Compact); };
+	const auto original = compact(body);
+	if (mode == 0) {
+		const auto migrated = NeoLogMetadata::captureProfile(settings); QVERIFY(migrated); const auto value = NeoLogMetadata::parse(*migrated); QVERIFY(value);
+		QVERIFY(value->value("equipmentKits").toObject().isEmpty()); QVERIFY(value->value("collections").toArray().isEmpty()); QVERIFY(value->value("plannerPresets").toArray().isEmpty());
+	} else if ((mode >= 2 && mode <= 7) || mode == 14) {
+		if (mode == 2) body["schema"] = 999;
+		if (mode == 3) body["format"] = "unknown-format";
+		if (mode == 4) body["equipmentKits"] = QJsonArray();
+		if (mode == 5) body["collections"] = QJsonObject();
+		if (mode == 6) body["plannerPresets"] = QJsonObject();
+		if (mode == 7) body["unknownTopLevel"] = QString(NeoLogMetadata::Limit, 'x');
+		auto invalid = compact(body); if (mode == 14) invalid.chop(7);
+		QVERIFY(!NeoLogMetadata::parse(invalid)); QVERIFY(!NeoLogMetadata::captureProfile(settings, invalid)); QVERIFY(!NeoLogMetadata::projectProfile(settings, invalid));
+		QVERIFY(!settings.contains("subsurface-neo/equipment-kits"));
+	} else if (mode == 13) {
+		const auto blocker = directory.filePath("blocker"); QFile file(blocker); QVERIFY(file.open(QIODevice::WriteOnly)); QCOMPARE(file.write("preserve"), 8); file.close();
+		QSettings blocked(blocker + "/profile.ini", QSettings::IniFormat); QVERIFY(!NeoLogMetadata::projectProfile(blocked, original));
+		QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("preserve"));
+	} else if (mode == 12) {
+		const auto captured = NeoLogMetadata::captureProfile(settings, original); QVERIFY(captured); QCOMPARE(*captured, original);
+	} else {
+		QVERIFY(NeoLogMetadata::projectProfile(settings, original));
+		const auto captured = NeoLogMetadata::captureProfile(settings, original); QVERIFY(captured); QCOMPARE(*captured, original);
+		if (mode >= 8 && mode <= 10) {
+			if (mode == 8) settings.setValue("subsurface-neo/equipment-kits", QByteArray("corrupt"));
+			if (mode == 9) settings.setValue("subsurface-neo/dive-collections", QByteArray("{}"));
+			if (mode == 10) settings.setValue("subsurface-neo/planner/presets", QVariantMap{{"invalid", true}});
+			QVERIFY(!NeoLogMetadata::captureProfile(settings, original));
+		} else if (mode == 11) {
+			auto equipment = body.value("equipmentKits").toObject(); equipment["defaultKit"] = "Main";
+			settings.setValue("subsurface-neo/equipment-kits", compact(equipment));
+			const auto changed = NeoLogMetadata::captureProfile(settings, original); QVERIFY(changed); const auto value = NeoLogMetadata::parse(*changed); QVERIFY(value);
+			QCOMPARE(value->value("unknownTopLevel"), body.value("unknownTopLevel")); QCOMPARE(value->value("equipmentKits"), QJsonValue(equipment));
+			QCOMPARE(value->value("collections"), body.value("collections")); QCOMPARE(value->value("plannerPresets"), body.value("plannerPresets"));
+		}
+	}
+	QCOMPARE(settings.value("unrelated/preserve").toString(), QString("untouched"));
+}
+
+void TestCloudSyncHistory::neoMetadataXml_data()
+{
+	QTest::addColumn<int>("mode");
+	const QStringList cases = {"legacy", "canonical", "pretty-json", "duplicate", "wrong-parent", "nested-element", "future-schema", "empty-metadata", "truncated-xml", "dtd", "foreign-root", "namespace", "metadata-attribute", "trailing-document", "namespaced-parent"};
+	for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(cases[m])) << m;
+}
+void TestCloudSyncHistory::neoMetadataXml()
+{
+	QFETCH(int, mode); QTemporaryDir directory; QVERIFY(directory.isValid());
+	QSettings settings(directory.filePath("untouched.ini"), QSettings::IniFormat);
+	const auto captured = NeoLogMetadata::captureProfile(settings); QVERIFY(captured);
+	auto body = *NeoLogMetadata::parse(*captured); body["unknown"] = "A & B <item>";
+	const auto canonical = QJsonDocument(body).toJson(QJsonDocument::Compact);
+	QByteArray metadata = mode == 2 ? QJsonDocument(body).toJson() : canonical;
+	if (mode == 6) { body["schema"] = 999; metadata = QJsonDocument(body).toJson(QJsonDocument::Compact); }
+	metadata.replace("&", "&amp;"); metadata.replace("<", "&lt;"); metadata.replace(">", "&gt;");
+	QByteArray element = "<neo-metadata>" + metadata + "</neo-metadata>";
+	if (mode == 0) element.clear();
+	if (mode == 3) element += element;
+	if (mode == 5) element = "<neo-metadata><nested>" + metadata + "</nested></neo-metadata>";
+	if (mode == 7) element = "<neo-metadata/>";
+	if (mode == 11) element = "<x:neo-metadata xmlns:x='foreign'>" + metadata + "</x:neo-metadata>";
+	if (mode == 12) element = "<neo-metadata unknown='true'>" + metadata + "</neo-metadata>";
+	if (mode == 14) element = "<neo-metadata xmlns=''>" + metadata + "</neo-metadata>";
+	QByteArray xml = "<divelog><settings>" + element + "</settings><dives/></divelog>";
+	if (mode == 4) xml = "<divelog><dives>" + element + "</dives></divelog>";
+	if (mode == 8) xml.chop(3);
+	if (mode == 9) xml.prepend("<!DOCTYPE divelog [<!ENTITY external SYSTEM 'file:///never-read'>]>");
+	if (mode == 10) xml.replace("divelog", "foreign");
+	if (mode == 13) xml += "<divelog/>";
+	if (mode == 14) xml.replace("<settings>", "<settings xmlns='foreign'>");
+	const auto observed = NeoLogMetadata::fromLog(xml);
+	if (mode <= 2) { QVERIFY(observed); QCOMPARE(*observed, mode == 0 ? QByteArray() : canonical); }
+	else QVERIFY(!observed);
+	QVERIFY(settings.allKeys().isEmpty());
+}
+void TestCloudSyncHistory::workspaceMetadata_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"legacy-upgrade", "published-roundtrip", "two-page-roundtrip", "changed-hash", "removed-hash", "retag-old-ticket", "invalid-hash", "unknown-ticket", "wrong-map-shape", "downgrade", "old-format-extra-field", "paged-delta-retag", "copy-upgrade", "absence-preserved"};
+	for (bool google : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-metadata-%2").arg(google).arg(cases[m]))) << google << m;
+}
+void TestCloudSyncHistory::workspaceMetadata()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	Network network; network.seed(); const auto source = copySource(network, google);
+	const auto ref = CloudWorkspaceReference::create(google ? "google-drive" : "dropbox", Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("legacy"));
+	const auto first = uid(), next = uid(), legacyHash = CloudSyncManifest::sha256("metadata-one");
+	QVERIFY(root.registerCopy(first, {}, source)); QVERIFY(root.completeUpload(first, google ? "first" : "id:first", "v1")); QVERIFY(root.publish(first, {}));
+	QVERIFY(root.acceptLegacyCopy(uid(), {}, first, first, source));
+	if (mode == 13) QVERIFY(root.acceptLegacyAbsence(uid(), root.latestLegacyAcceptance()["id"].toString(), first));
+	const auto legacy = root;
+	if (mode == 0 || mode == 13) {
+		QVERIFY(root.enableMetadata()); QVERIFY(root.metadataEnabled()); QVERIFY(root.valid()); QVERIFY(root.follows(legacy));
+		QCOMPARE(root.latestLegacyAcceptance(), legacy.latestLegacyAcceptance()); QCOMPARE(root.ticket(first), legacy.ticket(first));
+		QCOMPARE(CloudWorkspaceRecord::parse(root.json()).value, root.value); return;
+	}
+	if (mode == 12) QVERIFY(root.registerCopy(next, first, source, legacyHash));
+	else QVERIFY(root.registerUpload(next, first, CloudSyncManifest::sha256(B), B.size(), {}, {}, legacyHash));
+	QVERIFY(root.metadataEnabled()); QCOMPARE(root.metadataHash(next), legacyHash); QVERIFY(root.follows(legacy));
+	QVERIFY(root.completeUpload(next, google ? "second" : "id:second", "v2")); QVERIFY(root.publish(next, first));
+	const auto published = root;
+	if (mode == 1 || mode == 12) { QCOMPARE(CloudWorkspaceRecord::parse(root.json()).value, root.value); return; }
+	if (mode == 2 || mode == 11) {
+		QVERIFY(root.archiveTo(root.archivePin(uid(), google ? "archive-one" : "id:archive-one", "page1")));
+		const auto third = uid(); QVERIFY(root.registerUpload(third, next, CloudSyncManifest::sha256(A), A.size(), {}, {}, CloudSyncManifest::sha256("metadata-two")));
+		QVERIFY(root.archiveTo(root.archivePin(uid(), google ? "archive-two" : "id:archive-two", "page2")));
+		if (mode == 2) {
+			QVERIFY(root.follows(published)); QCOMPARE(root.archivePages().size(), 2); QCOMPARE(CloudWorkspaceRecord::parsePages(root.json(), root.archivePages()).value, root.value);
+			QTemporaryDir directory; QVERIFY(directory.isValid()); CloudWorkspaceAuthority authority(directory.filePath("checkpoint.json"), ref);
+			QVERIFY(authority.observe(root, "root-v3")); CloudWorkspaceAuthority restarted(directory.filePath("checkpoint.json"), ref);
+			QVERIFY(restarted.load()); QCOMPARE(restarted.record().value, root.value); return;
+		}
+		auto wire = QJsonDocument::fromJson(root.json()).object(), changes = wire["changes"].toObject();
+		changes["metadata_payloads"] = QJsonObject{{first, legacyHash}}; wire["changes"] = changes;
+		QVERIFY(!CloudWorkspaceRecord::parsePages(QJsonDocument(wire).toJson(QJsonDocument::Compact), root.archivePages()).valid()); return;
+	}
+	auto facts = root.value["metadata_payloads"].toObject();
+	if (mode == 3) facts[next] = CloudSyncManifest::sha256("changed");
+	if (mode == 4) facts.remove(next);
+	if (mode == 5) facts[first] = legacyHash;
+	if (mode == 6) facts[next] = "bad-hash";
+	if (mode == 7) facts[uid()] = legacyHash;
+	root.value["metadata_payloads"] = facts;
+	if (mode == 8) root.value["metadata_payloads"] = QJsonArray();
+	if (mode == 9 || mode == 10) { root.value["format"] = legacy.value["format"]; if (mode == 9) root.value.remove("metadata_payloads"); }
+	if (mode == 3 || mode == 4 || mode == 5 || mode == 9) QVERIFY(root.valid());
+	else QVERIFY(!root.valid());
+	QVERIFY(!root.follows(published));
 }
 
 void TestCloudSyncHistory::stateTransitions()

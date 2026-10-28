@@ -35,13 +35,16 @@ bool pinValid(const QJsonObject &pin, const CloudWorkspaceReference &ref)
 bool changesValid(const QJsonObject &changes)
 {
 	const auto journal = changes.value("journal").toObject();
-	return fields(changes, {"format", "journal", "copies", "legacy_acceptances"}) && changes.value("format").isString() &&
+	const bool metadata = text(changes, "format") == "neo-workspace-history-development-5";
+	QStringList keys = {"format", "journal", "copies", "legacy_acceptances"}; if (metadata) keys.append("metadata_payloads");
+	return fields(changes, keys) && changes.value("format").isString() &&
 		changes.value("journal").isObject() && fields(journal, {"format", "legacy_sha256", "sequence", "head", "history", "tickets", "reservations"}) &&
 		journal.value("history").isArray() && journal.value("tickets").isObject() && journal.value("reservations").isObject() &&
 		changes.value("copies").isObject() && changes.value("legacy_acceptances").isArray() &&
 		journal.value("history").toArray().size() <= DeltaEntryLimit && journal.value("tickets").toObject().size() <= DeltaEntryLimit &&
 		journal.value("reservations").toObject().size() <= DeltaEntryLimit && changes.value("copies").toObject().size() <= DeltaEntryLimit &&
-		changes.value("legacy_acceptances").toArray().size() <= DeltaEntryLimit;
+		changes.value("legacy_acceptances").toArray().size() <= DeltaEntryLimit &&
+		(!metadata || (changes.value("metadata_payloads").isObject() && changes.value("metadata_payloads").toObject().size() <= DeltaEntryLimit));
 }
 QJsonObject wireObject(const QByteArray &bytes, const CloudWorkspaceReference &ref)
 {
@@ -68,13 +71,16 @@ QJsonArray suffix(const QJsonArray &after, int previousSize)
 QJsonObject delta(const QJsonObject &after, const QJsonObject &before)
 {
 	const auto a = after.value("journal").toObject(), b = before.value("journal").toObject();
-	return {{"format", after.value("format")}, {"journal", QJsonObject{
+	QJsonObject result{{"format", after.value("format")}, {"journal", QJsonObject{
 		{"format", a.value("format")}, {"legacy_sha256", a.value("legacy_sha256")}, {"sequence", a.value("sequence")}, {"head", a.value("head")},
 		{"history", suffix(a.value("history").toArray(), b.value("history").toArray().size())},
 		{"tickets", difference(a.value("tickets").toObject(), b.value("tickets").toObject())},
 		{"reservations", difference(a.value("reservations").toObject(), b.value("reservations").toObject())}}},
 		{"copies", difference(after.value("copies").toObject(), before.value("copies").toObject())},
 		{"legacy_acceptances", suffix(after.value("legacy_acceptances").toArray(), before.value("legacy_acceptances").toArray().size())}};
+	if (text(after, "format") == "neo-workspace-history-development-5")
+		result["metadata_payloads"] = difference(after.value("metadata_payloads").toObject(), before.value("metadata_payloads").toObject());
+	return result;
 }
 void overlay(QJsonObject &base, const QJsonObject &changes)
 {
@@ -93,9 +99,12 @@ QJsonObject apply(const QJsonObject &before, const QJsonObject &changes)
 	if (format != "neo-workspace-history-development-1") {
 		auto copies = after.value("copies").toObject(); overlay(copies, changes.value("copies").toObject()); after["copies"] = copies;
 	}
-	if (format == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-4") {
+	if (format == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-4" || format == "neo-workspace-history-development-5") {
 		auto events = after.value("legacy_acceptances").toArray(); for (const auto &v : changes.value("legacy_acceptances").toArray()) events.append(v);
 		after["legacy_acceptances"] = events;
+	}
+	if (format == "neo-workspace-history-development-5") {
+		auto metadata = after.value("metadata_payloads").toObject(); overlay(metadata, changes.value("metadata_payloads").toObject()); after["metadata_payloads"] = metadata;
 	}
 	return after;
 }
@@ -215,8 +224,9 @@ bool CloudWorkspaceRecord::needsArchive() const
 	if (json().size() >= WireLimit * 3 / 4) return true;
 	const auto journal = value.value("journal").toObject();
 	const auto current = value.contains("segments") ? delta(logicalValue(), value.value("segments").toObject().value("base").toObject()) :
-		QJsonObject{{"journal", journal}, {"copies", value.value("copies")}, {"legacy_acceptances", value.value("legacy_acceptances")}};
+		QJsonObject{{"journal", journal}, {"copies", value.value("copies")}, {"legacy_acceptances", value.value("legacy_acceptances")}, {"metadata_payloads", value.value("metadata_payloads")}};
 	const auto changes = current.value("journal").toObject();
 	return changes.value("tickets").toObject().size() >= 448 || changes.value("reservations").toObject().size() >= 448 ||
-		current.value("copies").toObject().size() >= 448 || current.value("legacy_acceptances").toArray().size() >= 448;
+		current.value("copies").toObject().size() >= 448 || current.value("legacy_acceptances").toArray().size() >= 448 ||
+		current.value("metadata_payloads").toObject().size() >= 448;
 }

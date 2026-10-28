@@ -17,6 +17,7 @@
 #include <libxslt/transform.h>
 #include <libxslt/xsltutils.h>
 #include <QTextStream>
+#include <QTemporaryDir>
 #include <QXmlStreamReader>
 
 /* We have to use a macro since QCOMPARE
@@ -139,6 +140,23 @@ void TestParse::testParse()
 	QCOMPARE(save_dives("./testout.ssrf"), 0);
 	FILE_COMPARE("./testout.ssrf",
 		     SUBSURFACE_TEST_DATA "/dives/test40-42.xml");
+}
+
+void TestParse::testNeoMetadataRoundTrip()
+{
+	QCOMPARE(parse_file(SUBSURFACE_TEST_DATA "/dives/neo-ui-regression.ssrf", &divelog), 0);
+	const std::string metadata = u8R"({"schema":1,"format":"neo-log-metadata-1","equipmentKits":{"future":{"keep":"A & B <test>"}},"collections":[],"plannerPresets":[{"name":"日本語 \"Profile\""}],"unknown":{"array":[true,7,null]}})";
+	divelog.neo_metadata = metadata;
+	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto file = directory.filePath("metadata.ssrf");
+	QCOMPARE(save_dives(file.toUtf8().constData()), 0);
+	struct divelog restored; QCOMPARE(parse_file(file.toUtf8().constData(), &restored), 0);
+	QCOMPARE(restored.neo_metadata, metadata); QCOMPARE(restored.dives.size(), divelog.dives.size());
+	for (bool selected : {false, true}) {
+		const auto privateExport = directory.filePath(selected ? "selected.ssrf" : "anonymous.ssrf");
+		QCOMPARE(save_dives_logic(privateExport.toUtf8().constData(), selected, !selected), 0);
+		QFile exported(privateExport); QVERIFY(exported.open(QIODevice::ReadOnly)); QVERIFY(!exported.readAll().contains("<neo-metadata>"));
+	}
+	restored.clear(); QVERIFY(restored.neo_metadata.empty());
 }
 
 void TestParse::testNeoUiRegressionLog()

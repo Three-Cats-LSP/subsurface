@@ -393,6 +393,19 @@ void TestGitStorage::testGitSaveClassify()
 	QVERIFY(classifyGitSave(deletedCacheTarget) == git_save_kind::normal);
 }
 
+void TestGitStorage::testNeoMetadataCommitRoundTrip()
+{
+	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto target = directory.path().toStdString() + "[main]";
+	git_repository *repo = nullptr; QCOMPARE(git_repository_init(&repo, directory.path().toUtf8().constData(), false), 0); git_repository_free(repo);
+	QCOMPARE(parse_file(SUBSURFACE_TEST_DATA "/dives/neo-ui-regression.ssrf", &divelog), 0);
+	const auto count = divelog.dives.size();
+	for (const auto &value : {std::string(u8R"({"schema":1,"format":"neo-log-metadata-1","equipmentKits":{"unknown":"A & B"},"collections":[],"plannerPresets":[{"name":"日本語 \"Profile\""}]})"), std::string(R"({"schema":999,"unknownFuturePayload":{"keep":[null,true,42]}})")}) {
+		divelog.neo_metadata = value; mark_divelist_changed(true); QCOMPARE(save_dives(target.c_str()), 0);
+		clear_dive_file_data(); QCOMPARE(parse_file(target.c_str(), &divelog), 0);
+		QCOMPARE(divelog.neo_metadata, value); QCOMPARE(divelog.dives.size(), count);
+	}
+}
+
 // AI-generated (Claude): Empty sites referenced by dives must survive git
 // serialization, while genuinely unused empty sites remain omitted.
 void TestGitStorage::testGitStorageReferencedEmptyDiveSite()

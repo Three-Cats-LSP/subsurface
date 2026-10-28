@@ -904,6 +904,11 @@ static void parse_settings_autogroup(char *, struct git_parser_state *state)
 	state->log->autogroup = true;
 }
 
+static void parse_settings_neometadata(char *, struct git_parser_state *state)
+{
+	state->log->neo_metadata = get_first_converted_string(state);
+}
+
 static void parse_settings_units(char *line, struct git_parser_state *)
 {
 	if (line)
@@ -1130,7 +1135,7 @@ static void trip_parser(char *line, struct git_parser_state *state)
 static const std::array settings_action {
 #undef D
 #define D(x) keyword_action { #x, parse_settings_ ## x }
-	D(autogroup), D(divecomputerid), D(fingerprint), D(prefs), D(subsurface), D(units), D(userid), D(version)
+	D(autogroup), D(divecomputerid), D(fingerprint), D(neometadata), D(prefs), D(subsurface), D(units), D(userid), D(version)
 };
 
 static void settings_parser(char *line, struct git_parser_state *state)

@@ -5,6 +5,12 @@
 class TestCloudSyncHistory : public QObject {
 	Q_OBJECT
 private slots:
+	void neoMetadata_data();
+	void neoMetadata();
+	void neoMetadataXml_data();
+	void neoMetadataXml();
+	void workspaceMetadata_data();
+	void workspaceMetadata();
 	void stateTransitions();
 	void fenceTransitions_data();
 	void fenceTransitions();

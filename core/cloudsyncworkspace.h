@@ -69,6 +69,9 @@ public:
 	bool follows(const CloudWorkspaceRecord &previous) const;
 	QByteArray json() const;
 	QString head() const;
+	bool metadataEnabled() const;
+	QString metadataHash(const QString &ticket) const;
+	bool enableMetadata();
 	QJsonObject ticket(const QString &id) const;
 	CloudWorkspaceCopySource copySource(const QString &ticket) const;
 	// Append a separately confirmed legacy observation. The caller must freshly
@@ -79,9 +82,9 @@ public:
 	// The caller must freshly verify absence before and after its CAS and
 	// treat a subsequently appearing source as a branch requiring review.
 	bool acceptLegacyAbsence(const QString &id, const QString &expectedAcceptance, const QString &expectedHead);
-	bool registerCopy(const QString &id, const QString &expectedHead, const CloudWorkspaceCopySource &source);
+	bool registerCopy(const QString &id, const QString &expectedHead, const CloudWorkspaceCopySource &source, const QString &metadataHash = {});
 	bool registerUpload(const QString &id, const QString &expectedHead, const QString &hash, qint64 bytes,
-		const QString &restoreSource = {}, const QString &reservation = {});
+		const QString &restoreSource = {}, const QString &reservation = {}, const QString &metadataHash = {});
 	bool completeUpload(const QString &id, const QString &objectId, const QString &version);
 	bool publish(const QString &id, const QString &expectedHead);
 	bool reserve(const QString &id, const QString &commit);

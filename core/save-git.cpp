@@ -818,7 +818,7 @@ static void save_one_fingerprint(struct membuffer *b, const fingerprint_record &
 		   fp.model, fp.serial, fp.fdeviceid, fp.fdiveid, fp.get_data().c_str());
 }
 
-static void save_settings(git_repository *repo, struct dir *tree)
+static void save_settings(git_repository *repo, struct dir *tree, bool select_only)
 {
 	membuffer b;
 
@@ -830,6 +830,8 @@ static void save_settings(git_repository *repo, struct dir *tree)
 		save_one_fingerprint(&b, fp);
 
 	cond_put_format(divelog.autogroup, &b, "autogroup\n");
+	if (!select_only && !divelog.neo_metadata.empty())
+		show_utf8(&b, "neometadata ", divelog.neo_metadata.c_str(), "\n");
 	save_units(&b);
 	if (prefs.tankbar)
 		put_string(&b, "prefs TANKBAR\n");
@@ -953,7 +955,7 @@ static int create_git_tree(git_repository *repo, struct dir *root, bool select_o
 	// AI-generated (Claude): Track serialized trips locally so failed saves do not mutate the log.
 	std::unordered_set<const dive_trip *> saved_trips;
 	git_storage_update_progress(translate("gettextFromC", "Start saving data"));
-	save_settings(repo, root);
+	save_settings(repo, root, select_only);
 
 	save_divesites(repo, root);
 	save_filter_presets(repo, root);

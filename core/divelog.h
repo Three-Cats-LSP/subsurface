@@ -9,6 +9,7 @@
 #include "triptable.h"
 
 #include <vector>
+#include <string>
 
 struct device;
 
@@ -27,6 +28,9 @@ struct divelog {
 	std::vector<device> devices;
 	filter_preset_table filter_presets;
 	bool autogroup = false;
+	// Opaque versioned Neo metadata. Keep it with the log in XML/Git commits;
+	// staged parsing never applies these values to process-wide UI settings.
+	std::string neo_metadata;
 
 	divelog();
 	~divelog();

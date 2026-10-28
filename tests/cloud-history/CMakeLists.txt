@@ -11,6 +11,7 @@ get_filename_component(NEO_ROOT "../.." ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURC
 add_executable(TestCloudSyncHistory
     ../testcloudsynchistory.cpp ../testcloudsynchistory.h
     ${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
+    ${NEO_ROOT}/core/neologmetadata.cpp ${NEO_ROOT}/core/neologmetadata.h
     ${NEO_ROOT}/core/cloudsyncworkspace.cpp ${NEO_ROOT}/core/cloudsyncworkspace.h
     ${NEO_ROOT}/core/cloudsyncworkspacepages.cpp
     ${NEO_ROOT}/core/cloudsyncworkspacearchive.cpp ${NEO_ROOT}/core/cloudsyncworkspacearchive.h
@@ -49,6 +50,7 @@ add_test(NAME TestCloudSyncHistory COMMAND TestCloudSyncHistory ${NEO_HISTORY_TE
 # Its caller verifies the disposable account and newly created fixture IDs.
 add_executable(NeoCloudIdentityProbe identityprobe.cpp
 	${NEO_ROOT}/core/cloudsynchistory.cpp ${NEO_ROOT}/core/cloudsynchistory.h
+    ${NEO_ROOT}/core/neologmetadata.cpp ${NEO_ROOT}/core/neologmetadata.h
 	${NEO_ROOT}/core/cloudsyncworkspace.cpp ${NEO_ROOT}/core/cloudsyncworkspace.h
 	${NEO_ROOT}/core/cloudsyncworkspacepages.cpp
     ${NEO_ROOT}/core/cloudsyncworkspacearchive.cpp ${NEO_ROOT}/core/cloudsyncworkspacearchive.h

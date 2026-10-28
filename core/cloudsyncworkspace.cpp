@@ -48,16 +48,18 @@ CloudHistoryRecord CloudWorkspaceRecord::journal(bool expanded) const
 	CloudHistoryRecord result;
 	const auto ref = reference();
 	const auto format = string(value, "format");
-	const bool absenceFormat = format == "neo-workspace-history-development-4";
+	const bool metadata = format == "neo-workspace-history-development-5";
+	const bool absenceFormat = metadata || format == "neo-workspace-history-development-4";
 	const bool acceptance = absenceFormat || format == "neo-workspace-history-development-3";
 	const bool copies = acceptance || format == "neo-workspace-history-development-2";
 	QStringList keys = {"schema", "format", "workspace", "journal"}; if (copies) keys.append("copies");
 	if (acceptance) keys.append("legacy_acceptances");
+	if (metadata) keys.append("metadata_payloads");
 	if (value.contains("segments")) keys.append("segments");
 	if (!ref.valid() || !fields(value, keys) || value.value("schema") != QJsonValue(4) ||
 	    (!copies && format != "neo-workspace-history-development-1") || !value.value("journal").isObject() ||
 	    (copies && (!value.value("copies").isObject() || (!absenceFormat && value.value("copies").toObject().isEmpty()))) ||
-	    (acceptance && (!value.value("legacy_acceptances").isArray() || value.value("legacy_acceptances").toArray().isEmpty()))) return result;
+	    (acceptance && (!value.value("legacy_acceptances").isArray() || (!metadata && value.value("legacy_acceptances").toArray().isEmpty())))) return result;
 	auto journal = value.value("journal").toObject();
 	if (!journal.value("tickets").isObject()) return result;
 	for (const auto &key : {"provider", "account", "epoch"}) if (journal.value(QLatin1String(key)) != ref.value.value(QLatin1String(key))) return result;
@@ -98,7 +100,13 @@ bool CloudWorkspaceRecord::validLogical(bool expanded) const
 		    (!string(t, "object").isEmpty() && (string(t, "object") == string(p, "id") || string(t, "object") == string(m, "id")))) return false;
 	}
 	const auto format = string(value, "format");
-	if (format == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-4") {
+	if (metadataEnabled()) {
+		if (!value.value("metadata_payloads").isObject()) return false;
+		const auto facts = value.value("metadata_payloads").toObject();
+		for (auto it = facts.begin(); it != facts.end(); ++it)
+			if (!uuid(it.key()) || !tickets.contains(it.key()) || !it.value().isString() || !hash(it.value().toString())) return false;
+	}
+	if (format == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-4" || metadataEnabled()) {
 		const auto events = value.value("legacy_acceptances").toArray();
 		const auto history = internal.value.value("history").toArray();
 		if (events.size() > (expanded ? 65536 : 512)) return false;
@@ -115,7 +123,7 @@ bool CloudWorkspaceRecord::validLogical(bool expanded) const
 			}
 			if (!uuid(id) || ids.contains(id) || tickets.contains(id) || internal.value.value("reservations").toObject().contains(id) ||
 			    previous != parent || !uuid(observedHead) || id == observedHead || headIndex < lastHeadIndex || headIndex < 0) return false;
-			const bool absent = format == "neo-workspace-history-development-4" && fields(event, {"id", "parent", "head", "kind"}) && string(event, "kind") == "absent";
+			const bool absent = (format == "neo-workspace-history-development-4" || metadataEnabled()) && fields(event, {"id", "parent", "head", "kind"}) && string(event, "kind") == "absent";
 			if (!absent && (!fields(event, {"id", "parent", "ticket", "head"}) || !uuid(copy) || id == copy ||
 			    copyIndex < 0 || headIndex < copyIndex || string(ticket(copy), "state") != "committed" || !copySource(copy).valid())) return false;
 			ids.insert(id); parent = id; lastHeadIndex = headIndex;
@@ -157,9 +165,15 @@ bool CloudWorkspaceRecord::followsLogical(const CloudWorkspaceRecord &previous, 
 	for (auto it = before.begin(); it != before.end(); ++it) if (after.value(it.key()) != it.value()) return false;
 	for (auto it = after.begin(); it != after.end(); ++it) if (!before.contains(it.key()) && !previous.ticket(it.key()).isEmpty()) return false;
 	const auto format = string(value, "format"), oldFormat = string(previous.value, "format");
+	if (previous.metadataEnabled() && !metadataEnabled()) return false;
+	if (metadataEnabled()) {
+		const auto oldFacts = previous.value.value("metadata_payloads").toObject(), facts = value.value("metadata_payloads").toObject();
+		for (auto it = oldFacts.begin(); it != oldFacts.end(); ++it) if (facts.value(it.key()) != it.value()) return false;
+		for (auto it = facts.begin(); it != facts.end(); ++it) if (!oldFacts.contains(it.key()) && !previous.ticket(it.key()).isEmpty()) return false;
+	}
 	if (oldFormat == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-3" ||
-	    oldFormat == "neo-workspace-history-development-4" || format == "neo-workspace-history-development-4") {
-		if (format != "neo-workspace-history-development-3" && format != "neo-workspace-history-development-4") return false;
+	    oldFormat == "neo-workspace-history-development-4" || format == "neo-workspace-history-development-4" || metadataEnabled()) {
+		if (format != "neo-workspace-history-development-3" && format != "neo-workspace-history-development-4" && !metadataEnabled()) return false;
 		if (format == "neo-workspace-history-development-3" && oldFormat != "neo-workspace-history-development-1" &&
 		    oldFormat != "neo-workspace-history-development-2" && oldFormat != format) return false;
 		// A reader may miss the intermediate copy envelope entirely. Upgrading
@@ -171,7 +185,7 @@ bool CloudWorkspaceRecord::followsLogical(const CloudWorkspaceRecord &previous, 
 		    oldFormat != "neo-workspace-history-development-1" && oldFormat != "neo-workspace-history-development-2" &&
 		    oldFormat != "neo-workspace-history-development-3" && oldFormat != format) return false;
 		const auto oldEvents = previous.value.value("legacy_acceptances").toArray(), events = value.value("legacy_acceptances").toArray();
-		if (events.size() < oldEvents.size() || (oldFormat != format && events.isEmpty())) return false;
+		if (events.size() < oldEvents.size() || (oldFormat != format && events.isEmpty() && !metadataEnabled())) return false;
 		for (int i = 0; i < oldEvents.size(); ++i) if (events[i] != oldEvents[i]) return false;
 		if (format == "neo-workspace-history-development-4" && oldFormat != format) {
 			// Several copied observations may have occurred before the first
@@ -187,6 +201,18 @@ bool CloudWorkspaceRecord::followsLogical(const CloudWorkspaceRecord &previous, 
 		(oldFormat == "neo-workspace-history-development-1" && format == "neo-workspace-history-development-2" &&
 		 journal(expanded).value.value("sequence").toInt() > previous.journal(expanded).value.value("sequence").toInt());
 }
+bool CloudWorkspaceRecord::metadataEnabled() const { return string(value, "format") == "neo-workspace-history-development-5"; }
+QString CloudWorkspaceRecord::metadataHash(const QString &ticket) const { return value.value("metadata_payloads").toObject().value(ticket).toString(); }
+bool CloudWorkspaceRecord::enableMetadata()
+{
+	if (!valid()) return false;
+	if (metadataEnabled()) return true;
+	auto next = *this; next.value["format"] = "neo-workspace-history-development-5";
+	next.value["copies"] = value.value("copies").toObject(); next.value["legacy_acceptances"] = value.value("legacy_acceptances").toArray();
+	next.value["metadata_payloads"] = QJsonObject();
+	if (!next.valid() || !next.follows(*this)) return false;
+	value = next.value; return true;
+}
 QJsonObject CloudWorkspaceRecord::latestLegacyAcceptance() const
 {
 	const auto events = value.value("legacy_acceptances").toArray();
@@ -200,7 +226,7 @@ bool CloudWorkspaceRecord::acceptLegacyCopy(const QString &id, const QString &ex
 	auto next = *this; auto events = value.value("legacy_acceptances").toArray();
 	if (events.size() >= (value.contains("segments") ? 65536 : 512)) return false;
 	events.append(QJsonObject{{"id", id}, {"parent", expectedAcceptance}, {"ticket", copyTicket}, {"head", expectedHead}});
-	next.value["format"] = string(value, "format") == "neo-workspace-history-development-4" ? "neo-workspace-history-development-4" : "neo-workspace-history-development-3";
+	next.value["format"] = metadataEnabled() ? "neo-workspace-history-development-5" : string(value, "format") == "neo-workspace-history-development-4" ? "neo-workspace-history-development-4" : "neo-workspace-history-development-3";
 	next.value["legacy_acceptances"] = events;
 	if (!next.valid() || !next.follows(*this)) return false;
 	value = next.value; return true;
@@ -212,18 +238,18 @@ bool CloudWorkspaceRecord::acceptLegacyAbsence(const QString &id, const QString 
 	auto next = *this; auto events = value.value("legacy_acceptances").toArray();
 	if (events.size() >= (value.contains("segments") ? 65536 : 512)) return false;
 	events.append(QJsonObject{{"id", id}, {"parent", expectedAcceptance}, {"head", expectedHead}, {"kind", "absent"}});
-	next.value["format"] = "neo-workspace-history-development-4"; next.value["copies"] = value.value("copies").toObject();
+	next.value["format"] = metadataEnabled() ? "neo-workspace-history-development-5" : "neo-workspace-history-development-4"; next.value["copies"] = value.value("copies").toObject();
 	next.value["legacy_acceptances"] = events;
 	if (!next.valid() || !next.follows(*this)) return false;
 	value = next.value; return true;
 }
-bool CloudWorkspaceRecord::registerCopy(const QString &id, const QString &parent, const CloudWorkspaceCopySource &source)
+bool CloudWorkspaceRecord::registerCopy(const QString &id, const QString &parent, const CloudWorkspaceCopySource &source, const QString &metadata)
 {
 	const auto ref = reference(); const auto payload = source.value.value("payload").toObject(); auto next = *this;
 	if (!valid() || !source.matches(string(ref.value, "provider"), string(ref.value, "account")) ||
-	    !next.registerUpload(id, parent, string(payload, "sha256"), qint64(payload.value("bytes").toDouble()))) return false;
+	    !next.registerUpload(id, parent, string(payload, "sha256"), qint64(payload.value("bytes").toDouble()), {}, {}, metadata)) return false;
 	auto copies = value.value("copies").toObject(); copies[id] = source.value;
-	if (string(value, "format") != "neo-workspace-history-development-3" && string(value, "format") != "neo-workspace-history-development-4")
+	if (!next.metadataEnabled() && string(value, "format") != "neo-workspace-history-development-3" && string(value, "format") != "neo-workspace-history-development-4")
 		next.value["format"] = "neo-workspace-history-development-2";
 	next.value["copies"] = copies;
 	if (!next.valid() || !next.follows(*this)) return false;
@@ -240,9 +266,15 @@ bool CloudWorkspaceRecord::replaceJournal(const CloudHistoryRecord &record)
 	if (!next.valid()) return false;
 	value = next.value; return true;
 }
-bool CloudWorkspaceRecord::registerUpload(const QString &id, const QString &expectedHead, const QString &hash, qint64 bytes, const QString &source, const QString &reservation)
+bool CloudWorkspaceRecord::registerUpload(const QString &id, const QString &expectedHead, const QString &payloadHash, qint64 bytes, const QString &source, const QString &reservation, const QString &metadata)
 {
-	auto next = journal(); return next.registerUpload(id, expectedHead, hash, bytes, source, reservation) && replaceJournal(next);
+	if (!metadata.isEmpty() && !hash(metadata)) return false;
+	auto next = *this;
+	if (!metadata.isEmpty() && !next.enableMetadata()) return false;
+	auto updated = next.journal(); if (!updated.registerUpload(id, expectedHead, payloadHash, bytes, source, reservation) || !next.replaceJournal(updated)) return false;
+	if (!metadata.isEmpty()) { auto facts = next.value.value("metadata_payloads").toObject(); facts[id] = metadata; next.value["metadata_payloads"] = facts; }
+	if (!next.valid() || !next.follows(*this)) return false;
+	value = next.value; return true;
 }
 bool CloudWorkspaceRecord::completeUpload(const QString &id, const QString &object, const QString &version)
 {

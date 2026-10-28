@@ -1518,6 +1518,8 @@ static bool entry(const char *name, char *buf, struct parser_state *state)
 		return true;
 	}
 	if (state->in_settings) {
+		if (MATCH("neo-metadata", utf8_string_std, &state->log->neo_metadata))
+			return true;
 		try_to_fill_fingerprint(name, buf, state);
 		try_to_fill_dc_settings(name, buf, state);
 		try_to_match_autogroup(name, buf, state);

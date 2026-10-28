@@ -36,15 +36,19 @@ are rendered from their saved metadata without rewriting/recalculating them.
   rendered and inspected. Saved PDF:
   `native-ui/lsp-saved/subsurface-neo-plan-20261028-184345.pdf`, SHA-256
   `dabfee55eb750346d11de49f5135fee729e2392f57136d7a5f4173e26071e40d`.
-  Failed debug runtime artifact **12842801259** is downloading into
-  `work/lsp-readable-runtime-f86436550-20261029` (shell session **22173**).
-  Resume that download, verify the recorded GitHub digest and executable hash,
-  then run the corrected `scripts/test-neo-native-ui.py` in a fresh output/profile.
+  Failed debug runtime artifact **12842801259** was downloaded and SHA-verified
+  under `work/lsp-readable-runtime-f86436550-20261029`: archive
+  `926d159f28110bbfaa0017bfce65bc072705cc817fefe5b39b5a157053551369`, exe
+  `5cd42bfe555009f387145ecfe4c3ebe2b3db28fadd5e5f32d5adcf12c56b6378`.
+  The corrected actual UI run **work/lsp-readable-local-f86436550-20261029-a
+  PASSED**, including save/reopen/restart and exact hidden request equality
+  from the separately restarted canonical export.
   Its C++ and product QML are unchanged from f864; only the test driver changed.
   This development retry does not turn the failed aggregate into a package pass.
 - **40745740061**, full cloud/native at **b7d5b7425**: host protocol **PASSED all
-  2,599 checks** (270 s). Matching Windows protocol has also PASSED; full desktop/mobile-target
-  host application suites are pending. Native full job is **123022651637**.
+  2,599 checks** (270 s). Matching Windows protocol **PASSED 2,631 checks**. Full native job
+  **123022651637 PASSED** desktop and mobile-target host suites. Exact suite counts
+  are being extracted from its completed log; do not dispatch a duplicate.
   b7d changes only corrected old barrier expectations and a test error message
   after f864; product C++/QML is unchanged.
 - **40745170718**, LSP native at **f86436550**: **PASSED** original-source parity
@@ -138,16 +142,17 @@ This is a synthetic component report, not a 605-version live Google test.
    Ask for owner action only when that concrete dependency is reached. No
    publication authorization exists. Android hardware stays deferred.
 
-## Uncommitted metadata persistence foundation
+## Metadata persistence foundation under development
 
-Ten tracked files are currently modified: `core/divelog.*`, `core/load-git.cpp`,
+Metadata foundation code is being committed for focused development checks; it is not enabled as a complete application feature. Modified tracked files include `core/divelog.*`, `core/load-git.cpp`,
 `core/parse-xml.cpp`, `core/save-git.cpp`, `core/save-xml.cpp` and the TestParse /
 TestGitStorage source/header pairs. Preserve and resume these changes. They add
 an opaque log-owned metadata string, full-log XML and Git-commit preservation,
 clear/reset handling and XML/Git round-trip tests; selected/anonymized exports
 exclude it. **Not compiled or accepted yet**, no UI/settings capture or cloud
-metadata feature is enabled by this foundation. Typed version/unknown-field
-validation, workspace capability upgrade, deterministic legacy normalization,
+metadata feature is enabled by this foundation. The new `core/neologmetadata.h/.cpp` adds 4 MiB, versioned JSON
+validation and explicit profile-cache capture/projection; it is also uncompiled
+and not called by production flows yet. The development-5 workspace capability and immutable per-ticket metadata hash map are implemented in the record/page codecs, with paired protocol cases, but no production writer enables them yet. Deterministic legacy normalization,
 UI cache notifications and restart-safe local-baseline migration still need
 integration. Do not claim metadata sync complete or publish the WIP as such.
 
@@ -161,8 +166,8 @@ is needed for this engineering work.
 
 ## Workspace and secrets
 
-All commits above are pushed to `modern-ui`. No live Google writes occurred
-in these history/report increments. The original saved Google test access token
+All commits above are pushed to `modern-ui`. No live Google writes have occurred
+in these history/report increments yet. Full b7d regression is now green; the prepared isolated live rollover driver is the next acceptance action. The original saved Google test access token
 is expired, but refresh credentials exist; the read-only expiry check changed
 nothing. Obtain a fresh token in memory through the existing helper when live
 checks start; never log tokens/JSON contents or mutate original credentials.

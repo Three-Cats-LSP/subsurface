@@ -30,6 +30,7 @@ private slots:
 	void testParseMerge();
 	void testParseMergeTankSensors();
 	void testNeoUiRegressionLog();
+	void testNeoMetadataRoundTrip();
 
 	int parseCSVmanual(int, std::string);
 	void exportSubsurfaceCSV();
