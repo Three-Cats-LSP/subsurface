@@ -96,6 +96,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncworkspacedecision.h
 	cloudsyncworkspacesyncreview.cpp
 	cloudsyncworkspacesyncreview.h
+	cloudsyncworkspacesyncupload.cpp
+	cloudsyncworkspacesyncupload.h
 	cloudsyncworkspaceupload.cpp
 	cloudsyncworkspaceupload.h
 	cloudsyncworkspaceuploadplan.cpp

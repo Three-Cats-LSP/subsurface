@@ -12,6 +12,7 @@
 #include "core/cloudsyncworkspaceroute.h"
 #include "core/cloudsyncworkspacedecision.h"
 #include "core/cloudsyncworkspacesyncreview.h"
+#include "core/cloudsyncworkspacesyncupload.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceuploadplan.h"
 #include "core/cloudsyncworkspaceread.h"
@@ -2206,6 +2207,82 @@ void TestCloudSyncHistory::workspaceSyncReview()
 	}
 	if (mode == 12) QVERIFY(errors.first()[1].toBool());
 	QCOMPARE(n.mutations, 0); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspaceSyncUpload_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"upload-complete-restart", "concurrent-remote-before-review", "stale-choice", "legacy-changed",
+		"local-edit-during-review", "legacy-changed-after-upload", "remote-head-after-upload", "cancel-before-read",
+		"cancel-after-publish-resume", "lost-root-ack", "corrupt-plan", "scope-changed", "invalid-model",
+		"recover-after-binding-save", "recover-after-later-head", "later-local-edit"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-sync-upload-%2").arg(g).arg(m))) << g << m;
+}
+void TestCloudSyncHistory::workspaceSyncUpload()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); n.workspaceWrites = n.workspaceUploads = true;
+	const auto source = copySource(n, google); const auto originalManifest = n.files[0].data;
+	const auto provider = QString(google ? "google-drive" : "dropbox"), baseline = uid(), event = uid(), revision = uid(), nextRevision = uid(), ticket = uid(), operation = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "3" : "id:3");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(baseline, {}, source)); QVERIFY(root.completeUpload(baseline, google ? "4" : "id:4", "rev-4")); QVERIFY(root.publish(baseline, {}));
+	QVERIFY(root.acceptLegacyCopy(event, {}, baseline, baseline, source)); const auto checkpoint = root;
+	QTemporaryDir temp; QVERIFY(temp.isValid());
+	const auto choiceFile = temp.filePath("choice.json"), checkpointFile = temp.filePath("checkpoint.json"), bindingFile = temp.filePath("binding.json");
+	const auto planDir = temp.filePath("plan"), intentFile = temp.filePath("intent.json");
+	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, ref)); const auto choiceVersion = choice.version();
+	CloudWorkspaceAuthority authority(checkpointFile, ref); QVERIFY(authority.observe(root, "rev-3"));
+	CloudWorkspaceBinding binding(bindingFile, ref, choiceVersion); QVERIFY(binding.activate(root, root, A, A, revision));
+	const auto appendLater = [&](CloudWorkspaceRecord &record) {
+		const auto later = uid(), parent = record.head(); QVERIFY(record.registerUpload(later, parent, CloudSyncManifest::sha256(A), A.size()));
+		QVERIFY(record.completeUpload(later, google ? "other" : "id:other", "later-rev")); QVERIFY(record.publish(later, parent));
+	};
+	if (mode == 1) appendLater(root);
+	n.add(ref.rootName(), root.json()); n.add(ref.payloadName(baseline), A);
+	if (mode == 3) n.files[0].rev += "-changed";
+	if (mode == 7) n.deferReads = true; if (mode == 9) n.loseWriteAck = true;
+	if (mode == 10) { QVERIFY(QDir().mkpath(planDir)); QFile f(QDir(planDir).filePath("plan.json")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("corrupt") == 7); f.close(); }
+	QByteArray local = B; bool edited = false, interrupted = false;
+	n.requested = [&](const QNetworkRequest &) { if (mode == 4 && !edited) { local = A; edited = true; } };
+	n.wrote = [&](const QString &name) {
+		if (name != ref.rootName()) return;
+		auto current = CloudWorkspaceRecord::parse(n.files[2].data); if (current.head() != ticket || interrupted) return;
+		if (mode == 5) { n.files[0].rev += "-later"; interrupted = true; }
+		if (mode == 6) { appendLater(current); n.files[2].data = current.json(); n.files[2].rev += "-later"; interrupted = true; }
+		if (mode == 8) { n.deferReads = true; interrupted = true; }
+	};
+	CloudWorkspaceSyncUpload client(&n); QSignalSpy done(&client, &CloudWorkspaceSyncUpload::finished), errors(&client, &CloudWorkspaceSyncUpload::failed);
+	const auto start = [&] {
+		client.start("token", ref, choiceFile, mode == 2 ? uid() : choiceVersion, checkpointFile, bindingFile, revision, nextRevision,
+			baseline, ticket, operation, planDir, intentFile, mode == 12 ? QByteArray("bad") : B, [&] { return mode != 11 && n.guard; }, [&] { return local; });
+	};
+	start();
+	if (mode == 7 || mode == 8) {
+		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; n.wrote = {}; QTest::qWait(20);
+		QCOMPARE(done.size() + errors.size(), 0);
+		if (mode == 8) { start(); QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), 1); }
+	} else {
+		QTRY_COMPARE(done.size() + errors.size(), 1);
+		QCOMPARE(done.size(), int(mode == 0 || mode == 9 || mode == 13 || mode == 14 || mode == 15));
+	}
+	if (!done.isEmpty()) {
+		CloudWorkspaceBinding actual(bindingFile, ref, choiceVersion); QVERIFY(actual.load()); QCOMPARE(actual.commit(), ticket); QCOMPARE(actual.revision(), nextRevision);
+		QCOMPARE(done.last()[2].toString(), ticket); QVERIFY(done.last()[3].toBool());
+		if (mode == 0 || mode == 13 || mode == 14 || mode == 15) {
+			const auto writes = n.mutations;
+			if (mode == 13 || mode == 14) {
+				const auto path = QDir(planDir).filePath("plan.json"); QFile f(path); QVERIFY(f.open(QIODevice::ReadOnly)); auto body = QJsonDocument::fromJson(f.readAll()).object(); f.close(); body["state"] = "ready";
+				QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); const auto bytes = QJsonDocument(body).toJson(); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close();
+			}
+			if (mode == 14) { auto later = CloudWorkspaceRecord::parse(n.files[2].data); appendLater(later); n.files[2].data = later.json(); n.files[2].rev += "-later"; }
+			if (mode == 15) local = A;
+			start(); QTRY_COMPARE(done.size() + errors.size(), 2);
+			if (mode == 15) QCOMPARE(errors.size(), 1); else { QCOMPARE(done.size(), 2); QCOMPARE(done.last()[3].toBool(), mode != 14); }
+			QCOMPARE(n.mutations, writes);
+		}
+	}
+	QCOMPARE(n.files[0].data, originalManifest); QCOMPARE(n.files[1].data, A); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
 }
 
 void TestCloudSyncHistory::workspaceCopyIntent_data()
