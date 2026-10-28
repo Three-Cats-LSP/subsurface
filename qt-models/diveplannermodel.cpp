@@ -1669,6 +1669,7 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	results["maxDepth"] = get_depth_string(d->maxdepth, true);
 	results["duration"] = QString::number((runtimeSeconds + 30) / 60) + " min";
 	results["runtimeSeconds"] = runtimeSeconds;
+	results["surfaceIntervalSeconds"] = diveplan.surface_interval;
 	results["bottomTimeSeconds"] = enteredProfileRuntime;
 	// AI-generated (Claude)
 	// Only flag the recreational no-decompression-limit violation here: other

@@ -5,16 +5,21 @@
 #include "core/subsurfacestartup.h"
 #include "commands/command.h"
 #include "core/divelog.h"
+#include "core/equipment.h"
 #include "core/pref.h"
+#include "core/parse.h"
 #include "core/string-format.h"
 #include "core/units.h"
 #include <QSignalSpy>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScopedValueRollback>
 #include <QScopeGuard>
+#include <QSet>
 #include <QVariantMap>
 #include <algorithm>
 #include <cmath>
@@ -697,80 +702,141 @@ void TestDivePlannerModel::testNeoPlannerNativeRegression()
 	prefs = default_prefs;
 }
 
+void TestDivePlannerModel::testNeoPlannerFixtureManifest_data()
+{
+	QFile file(QStringLiteral(SUBSURFACE_TEST_DATA) + QStringLiteral("/tests/data/neo-planner-regression.json"));
+	QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.errorString()));
+	QJsonParseError error;
+	const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+	QCOMPARE(error.error, QJsonParseError::NoError);
+	QVERIFY(document.isObject());
+	const auto manifest = document.object();
+	QCOMPARE(manifest.value("schema").toInt(), 2);
+	QCOMPARE(manifest.value("inputContract").toString(), QStringLiteral("native-runtime-waypoints-1"));
+	QTest::addColumn<QJsonObject>("fixture");
+	QTest::addColumn<QJsonObject>("reference");
+	const auto reference = manifest.value("numericalReference").toObject();
+	QVERIFY(!reference.isEmpty());
+	QSet<QString> ids;
+	const auto scenarios = manifest.value("scenarios").toArray();
+	QVERIFY(scenarios.size() >= 18);
+	for (const auto &entry : scenarios) {
+		const auto fixture = entry.toObject();
+		const auto id = fixture.value("id").toString();
+		QVERIFY(!id.isEmpty() && !ids.contains(id));
+		QVERIFY2(!fixture.value("expectedNative").toObject().isEmpty(), qPrintable(id));
+		ids.insert(id);
+		QTest::newRow(qPrintable(id)) << fixture << reference;
+	}
+}
+
 void TestDivePlannerModel::testNeoPlannerFixtureManifest()
 {
-	QFile fixtureFile(QStringLiteral(SUBSURFACE_TEST_DATA) + QStringLiteral("/tests/data/neo-planner-regression.json"));
-	QVERIFY2(fixtureFile.open(QIODevice::ReadOnly), qPrintable(fixtureFile.errorString()));
-	QJsonParseError parseError;
-	const QJsonDocument fixtureDocument = QJsonDocument::fromJson(fixtureFile.readAll(), &parseError);
-	QCOMPARE(parseError.error, QJsonParseError::NoError);
-	QVERIFY(fixtureDocument.isObject());
-	QCOMPARE(fixtureDocument.object().value(QStringLiteral("schema")).toInt(), 1);
-
+	QFETCH(QJsonObject, fixture);
+	QFETCH(QJsonObject, reference);
+	QScopedValueRollback<decltype(prefs)> restorePrefs(prefs, default_prefs);
+	struct divelog savedLog = std::move(divelog);
+	struct divelog emptyLog;
+	divelog = std::move(emptyLog);
+	const auto restoreLog = qScopeGuard([&] {
+		divelog = std::move(savedLog);
+	});
+	QScopedValueRollback<decltype(tank_info_table)> restoreTanks(tank_info_table);
+	reset_tank_info_table(tank_info_table);
 	DivePlannerPointsModel *model = DivePlannerPointsModel::instance();
 	const auto oldLow = model->gfLow(), oldHigh = model->gfHigh();
 	const auto restoreModel = qScopeGuard([&] { model->setGFLow(oldLow); model->setGFHigh(oldHigh); });
-	const auto reference = fixtureDocument.object().value(QStringLiteral("numericalReference")).toObject();
-	QVERIFY(!reference.isEmpty());
-	const int runtimeTolerance = reference.value(QStringLiteral("runtimeToleranceSeconds")).toInt(-1);
-	const int stopTolerance = reference.value(QStringLiteral("stopTimeToleranceSeconds")).toInt(-1);
-	const int otuTolerance = reference.value(QStringLiteral("otuTolerance")).toInt(-1);
+	const auto fixed = reference.value("effectivePreferences").toObject();
+	prefs.unit_system = METRIC; prefs.units = SI_units;
+	prefs.descrate = fixed.value("descentMmPerSecond").toInt();
+	prefs.ascrate75 = fixed.value("ascent75MmPerSecond").toInt();
+	prefs.ascrate50 = fixed.value("ascent50MmPerSecond").toInt();
+	prefs.ascratestops = fixed.value("ascentStopsMmPerSecond").toInt();
+	prefs.ascratelast6m = fixed.value("ascentLast6mMmPerSecond").toInt();
+	prefs.bottomsac = fixed.value("bottomSacMlPerMinute").toInt();
+	prefs.decosac = fixed.value("decoSacMlPerMinute").toInt();
+	prefs.bottompo2 = fixed.value("bottomPpO2Mbar").toInt();
+	prefs.decopo2 = fixed.value("decoPpO2Mbar").toInt();
+	prefs.drop_stone_mode = fixed.value("dropStone").toBool();
+	prefs.last_stop = fixed.value("lastStop6m").toBool();
+	prefs.switch_at_req_stop = fixed.value("switchAtRequiredStop").toBool();
+	prefs.min_switch_duration = fixed.value("minimumSwitchSeconds").toInt();
+	prefs.safetystop = fixed.value("safetyStop").toBool();
+	prefs.o2narcotic = fixed.value("o2Narcotic").toBool();
+	prefs.surface_segment = fixed.value("surfaceSegmentSeconds").toInt();
+	prefs.problemsolvingtime = fixed.value("problemSolvingMinutes").toInt();
+	prefs.sacfactor = fixed.value("sacFactorPercent").toInt();
+	prefs.doo2breaks = fixed.value("oxygenBreaks").toBool();
+	prefs.dobailout = fixed.value("bailout").toBool();
+	prefs.display_variations = fixed.value("variations").toBool();
+	prefs.reserve_gas = fixed.value("reservePressureMbar").toInt();
+	prefs.pscr_ratio = fixed.value("pscrDumpRatioPermille").toInt();
+	prefs.o2consumption = fixed.value("oxygenConsumptionMlPerMinute").toInt();
+	const auto algorithm = fixture.value("algorithm").toString();
+	QVERIFY(QStringList({"buehlmann", "vpmb", "recreational"}).contains(algorithm));
+	prefs.planner_deco_mode = algorithm == "vpmb" ? VPMB : algorithm == "recreational" ? RECREATIONAL : BUEHLMANN;
+	prefs.gflow = fixture.value("gfLow").toInt(30); prefs.gfhigh = fixture.value("gfHigh").toInt(75);
+	model->setGFLow(prefs.gflow); model->setGFHigh(prefs.gfhigh);
+	prefs.vpmb_conservatism = fixture.value("vpmbConservatism").toInt(0);
+	const auto modeName = fixture.value("mode").toString("oc");
+	QVERIFY(QStringList({"oc", "ccr", "pscr"}).contains(modeName));
+	const auto mode = modeName == "ccr" ? CCR : modeName == "pscr" ? PSCR : OC;
+	QVariantList cylinders = fixture.value("cylinders").toArray().toVariantList();
+	if (!fixture.contains("cylinders"))
+		cylinders.append(QVariantMap{{"type", "D12 232 bar"}, {"mix", fixture.value("mix").toString("21/0")},
+			{"pressure", 200}, {"use", mode == CCR ? DILUENT : OC_GAS}});
+	QVariantList segments = fixture.value("segments").toArray().toVariantList();
+	if (!fixture.contains("segments"))
+		segments.append(QVariantMap{{"depth", fixture.value("depthMeters").toInt()}, {"duration", fixture.value("durationMinutes").toInt()},
+			{"gas", 0}, {"setpoint", mode == CCR ? 1300 : 0}, {"divemode", mode}});
+	QVERIFY(!cylinders.empty() && !segments.empty());
+	if (fixture.contains("previousDiveFile")) {
+		const auto name = QStringLiteral(SUBSURFACE_TEST_DATA) + "/" + fixture.value("previousDiveFile").toString();
+		QFile prior(name); QVERIFY(prior.open(QIODevice::ReadOnly));
+		QCOMPARE(QString::fromLatin1(QCryptographicHash::hash(prior.readAll(), QCryptographicHash::Sha256).toHex()), fixture.value("previousDiveSha256").toString());
+		QVERIFY(parse_file(name.toUtf8().constData(), &divelog) == 0);
+		QCOMPARE(divelog.dives.size(), size_t(1));
+		QCOMPARE(divelog.dives[0]->duration.seconds, 1800);
+		const auto start = QDateTime::fromString("2026-01-01T" + fixture.value("startTime").toString("12:00:00") + "Z", Qt::ISODate);
+		QVERIFY(start.isValid());
+		QCOMPARE(start.toSecsSinceEpoch() - divelog.dives[0]->endtime(), qint64(600));
+	}
+	const auto result = model->calculatePlan(cylinders, segments, "2026-01-01", fixture.value("startTime").toString("12:00:00"), mode,
+		fixture.value("waterDensity").toInt(10300), fixture.value("surfacePressureMbar").toInt(1013), false);
+	QCOMPARE(result.value("planSaveAllowed").toBool(), fixture.value("planSaveAllowed").toBool());
+	if (fixture.contains("previousDiveFile")) QCOMPARE(result.value("surfaceIntervalSeconds").toInt(), 600);
+	QVERIFY(result.value("profile").toList().size() >= fixture.value("minimumProfileSamples").toInt(2));
+	const auto actualStops = result.value("schedule").toList();
+	if (fixture.value("requiresSchedule").toBool()) QVERIFY(!actualStops.empty());
+	QVERIFY(!result.value("gasAnalysis").toList().empty());
+	const auto expected = fixture.value("expectedNative").toObject();
+	const int runtimeTolerance = reference.value("runtimeToleranceSeconds").toInt(-1);
+	const int stopTolerance = reference.value("stopTimeToleranceSeconds").toInt(-1);
+	const int otuTolerance = reference.value("otuTolerance").toInt(-1);
 	QVERIFY(runtimeTolerance >= 0 && stopTolerance >= 0 && otuTolerance >= 0);
-	for (const QJsonValue &fixtureValue : fixtureDocument.object().value(QStringLiteral("scenarios")).toArray()) {
-		const QJsonObject fixture = fixtureValue.toObject();
-		const QByteArray fixtureName = fixture.value(QStringLiteral("id")).toString().toUtf8();
-		QScopedValueRollback<decltype(prefs)> restorePrefs(prefs, default_prefs);
-		prefs.unit_system = METRIC;
-		prefs.units = SI_units;
-		prefs.drop_stone_mode = false;
-		const QString algorithm = fixture.value(QStringLiteral("algorithm")).toString();
-		prefs.planner_deco_mode = algorithm == QStringLiteral("vpmb") ? VPMB : BUEHLMANN;
-		prefs.gflow = fixture.value(QStringLiteral("gfLow")).toInt(30);
-		prefs.gfhigh = fixture.value(QStringLiteral("gfHigh")).toInt(75);
-		model->setGFLow(prefs.gflow);
-		model->setGFHigh(prefs.gfhigh);
-		prefs.vpmb_conservatism = fixture.value(QStringLiteral("vpmbConservatism")).toInt(0);
-
-		QVariantMap cylinder;
-		// Use enough back-gas capacity for every fixture so a required schedule
-		// is not suppressed by an already exhausted cylinder.
-		cylinder.insert(QStringLiteral("type"), QStringLiteral("D12 232 bar"));
-		cylinder.insert(QStringLiteral("mix"), fixture.value(QStringLiteral("mix")).toString(QStringLiteral("21/0")));
-		cylinder.insert(QStringLiteral("pressure"), 200);
-		cylinder.insert(QStringLiteral("use"), OC_GAS);
-		QVariantMap segment;
-		segment.insert(QStringLiteral("depth"), fixture.value(QStringLiteral("depthMeters")).toInt());
-		segment.insert(QStringLiteral("duration"), fixture.value(QStringLiteral("durationMinutes")).toInt());
-		segment.insert(QStringLiteral("gas"), 0);
-		segment.insert(QStringLiteral("setpoint"), 0);
-		segment.insert(QStringLiteral("divemode"), OC);
-
-		const QVariantMap result = model->calculatePlan(QVariantList { cylinder }, QVariantList { segment },
-			QStringLiteral("2026-01-01"), QStringLiteral("12:00:00"), OC, 10300,
-			fixture.value(QStringLiteral("surfacePressureMbar")).toInt(1013), false);
-		QVERIFY2(result.value(QStringLiteral("planSaveAllowed")).toBool() == fixture.value(QStringLiteral("planSaveAllowed")).toBool(), fixtureName.constData());
-		QVERIFY2(result.value(QStringLiteral("profile")).toList().size() >= fixture.value(QStringLiteral("minimumProfileSamples")).toInt(2), fixtureName.constData());
-		const bool hasSchedule = !result.value(QStringLiteral("schedule")).toList().empty();
-		if (fixture.value(QStringLiteral("requiresSchedule")).toBool())
-			QVERIFY2(hasSchedule, fixtureName.constData());
-		QVERIFY2(result.value(QStringLiteral("otu")).toInt() >= 0, fixtureName.constData());
-		QVERIFY2(!result.value(QStringLiteral("gasAnalysis")).toList().empty(), fixtureName.constData());
-		const auto expected = fixture.value(QStringLiteral("expectedNative")).toObject();
-		QVERIFY2(!expected.isEmpty(), fixtureName.constData());
-		QVERIFY2(std::abs(result.value(QStringLiteral("runtimeSeconds")).toInt() - expected.value(QStringLiteral("runtimeSeconds")).toInt()) <= runtimeTolerance, fixtureName.constData());
-		QVERIFY2(std::abs(result.value(QStringLiteral("otu")).toInt() - expected.value(QStringLiteral("otu")).toInt()) <= otuTolerance, fixtureName.constData());
-		const auto actualStops = result.value(QStringLiteral("schedule")).toList();
-		const auto expectedStops = expected.value(QStringLiteral("stops")).toArray();
-		QVERIFY2(actualStops.size() == expectedStops.size(), fixtureName.constData());
-		for (int i = 0; i < actualStops.size(); ++i) {
-			const auto actual = actualStops[i].toMap();
-			const auto expectedStop = expectedStops[i].toObject();
-			QVERIFY2(actual.value(QStringLiteral("depth")).toInt() == expectedStop.value(QStringLiteral("depthMm")).toInt(), fixtureName.constData());
-			QVERIFY2(std::abs(actual.value(QStringLiteral("duration")).toInt() - expectedStop.value(QStringLiteral("durationSeconds")).toInt()) <= stopTolerance, fixtureName.constData());
-			QVERIFY2(std::abs(actual.value(QStringLiteral("runTime")).toInt() - expectedStop.value(QStringLiteral("runTimeSeconds")).toInt()) <= runtimeTolerance, fixtureName.constData());
+	QVERIFY(std::abs(result.value("runtimeSeconds").toInt() - expected.value("runtimeSeconds").toInt()) <= runtimeTolerance);
+	QVERIFY(std::abs(result.value("otu").toInt() - expected.value("otu").toInt()) <= otuTolerance);
+	if (expected.contains("exceedsNDL")) QCOMPARE(result.value("exceedsNDL").toBool(), expected.value("exceedsNDL").toBool());
+	if (expected.contains("gasFlags")) {
+		const auto gases = result.value("gasAnalysis").toList();
+		const auto flags = expected.value("gasFlags").toArray();
+		QCOMPARE(gases.size(), flags.size());
+		for (int i = 0; i < gases.size(); ++i) {
+			const auto actual = gases[i].toMap(), wanted = flags[i].toObject().toVariantMap();
+			QCOMPARE(actual.value("mix").toString(), wanted.value("mix").toString());
+			QCOMPARE(actual.value("belowMinimum").toBool(), wanted.value("belowMinimum").toBool());
+			QCOMPARE(actual.value("belowReserve").toBool(), wanted.value("belowReserve").toBool());
 		}
 	}
-	prefs = default_prefs;
+	const auto expectedStops = expected.value("stops").toArray();
+	QCOMPARE(actualStops.size(), expectedStops.size());
+	for (int i = 0; i < actualStops.size(); ++i) {
+		const auto actual = actualStops[i].toMap(), stop = expectedStops[i].toObject().toVariantMap();
+		QCOMPARE(actual.value("depth").toInt(), stop.value("depthMm").toInt());
+		QVERIFY(std::abs(actual.value("duration").toInt() - stop.value("durationSeconds").toInt()) <= stopTolerance);
+		QVERIFY(std::abs(actual.value("runTime").toInt() - stop.value("runTimeSeconds").toInt()) <= runtimeTolerance);
+		if (stop.contains("gas")) QCOMPARE(actual.value("gas").toString(), stop.value("gas").toString());
+	}
 }
 
 // Stubs for symbols referenced by libraries linked into TestDivePlannerModel

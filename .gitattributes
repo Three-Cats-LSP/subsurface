@@ -5,3 +5,5 @@ theme/jqplot.canvasTextRenderer.js binary
 theme/jqplot.highlighter.js binary
 theme/jquery.jqplot.min.js binary
 theme/jquery.min.js binary
+# This sampled input is pinned by SHA-256 in the planner reference manifest.
+tests/data/neo-planner-repetitive.ssrf text eol=lf

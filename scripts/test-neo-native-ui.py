@@ -141,6 +141,9 @@ DRIVER = r'''
                     if (NeoDashboard.activityYear === 2026)
                         smokeCheck(NeoDashboard.monthlyActivity[6] === 2, "real July activity")
                     if (!smokeCapture("modern-populated-light-wide")) return
+                    manager.exportToFile(0, smokeConfig.exportUrl, false, false)
+                    manager.exportToFile(0, smokeConfig.exportLegacyUrl, false, false)
+                    manager.exportToFile(0, smokeConfig.exportPath, false, false)
                     rootItem.openNeoDiveDetails(dive.id, false, false)
                     break
                 case 6:
@@ -243,9 +246,14 @@ def main():
         ET.SubElement(computer, "sample", time=sample_time, depth=depth)
     fixture_path = output / "fixture.ssrf"
     fixture.write(fixture_path, encoding="utf-8", xml_declaration=True)
+    exports = [output / name for name in ("standard URL export", "legacy URL export", "raw path export")]
+    for folder in exports:
+        folder.mkdir()
     for restart in (False, True):
         config = dict(output=output.as_posix(), fixture=fixture_path.as_uri(),
-                      expectedStyle="Modern" if restart else "Clean", restartOnly=restart)
+                      expectedStyle="Modern" if restart else "Clean", restartOnly=restart,
+                      exportUrl=exports[0].as_uri(), exportLegacyUrl="file://" + exports[1].as_posix(),
+                      exportPath=str(exports[2]))
         driver = DRIVER.replace("CONFIG", json.dumps(config))
         (qml / "main.qml").write_text(source.rstrip()[:-1] + driver + "\n}\n", encoding="utf-8")
         log_path = output / ("restart.log" if restart else "runtime.log")
@@ -257,6 +265,9 @@ def main():
             raise RuntimeError(text[-12000:])
     if len(list(output.glob("*.png"))) != 8:
         raise RuntimeError("Expected eight rendered page screenshots")
+    exported = [(folder / "Subsurface_export.ssrf").read_bytes() for folder in exports]
+    if len(set(exported)) != 1 or len(ET.fromstring(exported[0]).findall(".//dive")) != 13:
+        raise RuntimeError("Standard URL, legacy URL and raw-path exports must preserve all dives and the plan")
     print(f"Native UI checks passed; logs and screenshots: {output}")
 
 

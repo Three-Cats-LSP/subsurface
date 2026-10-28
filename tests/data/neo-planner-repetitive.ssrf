@@ -1,0 +1,17 @@
+<divelog program='subsurface' version='3'>
+<settings/>
+<dives>
+<dive number='1' date='2026-01-01' time='10:00:00' duration='30:00 min'>
+  <notes>Synthetic prior profile for native repetitive-planner regression only.</notes>
+  <cylinder size='24.0 l' workpressure='232.0 bar' description='D12 232 bar' o2='21.0%'/>
+  <divecomputer model='Neo regression fixture' date='2026-01-01' time='10:00:00' duration='30:00 min'>
+    <depth max='30.0 m' mean='25.5 m'/>
+    <surface pressure='1.013 bar'/>
+    <sample time='0:00 min' depth='0.0 m'/>
+    <sample time='3:00 min' depth='30.0 m'/>
+    <sample time='27:00 min' depth='30.0 m'/>
+    <sample time='30:00 min' depth='0.0 m'/>
+  </divecomputer>
+</dive>
+</dives>
+</divelog>

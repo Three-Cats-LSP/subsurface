@@ -62,3 +62,29 @@ This audit is a validation input, not a decompression-engine implementation or a
 
 The audited preset values and their field-by-field native representability are
 recorded in [Neo planner compatibility-profile matrix](NEO_PLANNER_COMPATIBILITY_MATRIX.md).
+
+## Windows-first coverage expansion, 28 October 2026
+
+The fixture candidate now contains 18 data-driven scenarios, retaining the five
+earlier expected schedules and adding nitrox, CCR/trimix setpoint, pSCR,
+multilevel, three-gas/lost-oxygen, freshwater/altitude, recreational NDL refusal,
+low reserve, exhausted gas and repetitive tissue initialization. A hashed sampled
+prior dive ends ten minutes before the repetitive target; its captured runtime
+is 3200 seconds versus 2060 for the otherwise identical fresh-tissue profile.
+The manifest fixes effective native preferences and numerical tolerances, and
+the native runner isolates global dive/catalog state for each row.
+
+`scripts/capture-neo-planner-reference.py` checks the Windows executable against
+its verified-package metadata, archives the matching source QML and uses a fresh
+credential-free profile. It records actual outputs and effective preferences;
+it never changes expected values. Final Windows evidence is retained under
+`work/planner-native-reference-a92c17bf0-20261028-final-18/`. Earlier exploratory
+captures remain retained, including a corrected capture-helper pO2 unit error
+and a generated-primer attempt that did not establish the final sampled-profile
+case. Do not use them as additional accepted references.
+
+The captured calculation source is a92; new C++ fixture assertions and the
+surface-interval output still require their own native regression. Until that
+passes this expansion is a candidate, not a completed release gate. These
+references compare this engine with itself. Independent cross-engine parity,
+unrepresentable compatibility presets and physical Android remain unproven.

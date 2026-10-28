@@ -3168,9 +3168,14 @@ void QMLManager::appInitialized()
 #if !defined(Q_OS_ANDROID)
 void QMLManager::exportToFile(export_types type, QString dir, bool anonymize, bool selected)
 {
-	// dir starts with "file://" e.g. "file:///tmp"
-	// remove prefix and add standard filenamel
-	QString fileName = dir.right(dir.size() - 7) + "/Subsurface_export";
+	// Decode standard file URLs, including Windows drive letters and spaces.
+	// Retain the earlier Windows caller form file://C:/path as well.
+	QString directory = localFileName(dir);
+#ifdef Q_OS_WIN
+	if (dir.startsWith("file://") && dir.size() > 9 && dir.at(7).isLetter() && dir.at(8) == ':')
+		directory = dir.mid(7);
+#endif
+	const QString fileName = QDir(directory).filePath("Subsurface_export");
 
 	switch (type)
 	{

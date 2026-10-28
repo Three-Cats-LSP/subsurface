@@ -1,5 +1,53 @@
 # Windows cloud reliability continuation
 
+**ACTIVE WINDOWS COMPLETION (owner renewed 28 October):** continue the latest
+report's steps **1, 2, 3, 4 and Windows portions of 6** automatically: sustainable
+history, Neo metadata sync, remaining Windows reliability, broader planner
+reference checks and production preparation. Physical Android step 5 is
+explicitly deferred. No manual action is needed now. The former conflict
+automation was confirmed absent by an update error; the app created active
+heartbeat **`finish-neo-windows-development`** at five-minute intervals. Do not
+create a duplicate. Notify on meaningful changes; if owner action becomes
+necessary, pause dependent work, play one available Windows Exclamation alert
+and ask clearly, while continuing independent work.
+
+**Current increment awaiting native CI:** the native planner fixture manifest
+now contains **18 scenarios** (the original five numerical expectations remain
+unchanged): nitrox, CCR/trimix setpoint, pSCR, multilevel, three gases/lost oxygen,
+freshwater/altitude, recreational NDL refusal, low reserve, exhaustion and a
+sampled prior dive with a verified ten-minute surface interval. Windows capture
+at the unchanged a92 calculation source matched all 18 reviewed expectations
+at `work/planner-native-reference-a92c17bf0-20261028-final-18/`; the repetitive
+case increased runtime from 2060 to 3200 seconds. This is same-engine regression
+evidence, not independent numerical validation or third-party compatibility.
+The data-driven native test now gives each case its own result, fixes effective
+preferences and cylinder-catalog inputs, isolates prior dives, compares stop
+gases/reserve flags, and checks the engine's newly exposed surface interval.
+The reusable capture tool never updates goldens automatically. Early capture
+attempts and their inputs remain retained; the helper's pO2 setter-unit mistake
+was corrected before final expectations were accepted. Generated-plan primer
+experiments are not repetitive-profile acceptance evidence; the final case
+uses the hashed sampled XML fixture.
+
+An actual Windows export-path bug was found during capture: stripping seven
+characters from a standard `file:///C:/...` URL produces an invalid drive path.
+The candidate decodes file URLs and spaces with Qt, retaining the earlier
+`file://C:/...` caller form and raw local paths. The native Clean/Modern driver
+now compares all three exports in spaced directories and requires all twelve
+dives plus the plan. This fix and the changed C++ tests are **not yet compiled
+or validated**; dispatch and inspect their exact-source regression/Windows runs
+before claiming them complete or using a new package for acceptance.
+
+**Next cloud implementation:** the existing active journal is append-only and
+bounded at 512 tickets/reservations and about 1 MiB. Raising those constants or
+discarding inactive records is insufficient. Deliver verified archive pages
+and bounded active history integrated with save/read/restore/sync, preserving
+all pending work and old object identities. History and metadata sync remain
+open; no cloud object was changed by the planner capture work. Do not repeat the
+completed a92 conflict live sequence. The historical stop/pause instructions
+below applied to the finished conflict-only increment and are superseded by
+this renewed Windows scope.
+
 **CURRENT VALIDATED SOURCE: a92c17bf0. Two-choice Windows conflict coding is complete.** Clean and Modern share the actual pop-up: **Keep this device** uploads the reviewed device version, **Keep cloud** replaces and saves this device from the reviewed cloud version, and Cancel changes neither side. Both originals remain recoverable. Combine is removed. Google Drive is the sole selectable Neo sync provider; stored Dropbox assignments are paused and its credentials, files and backend are retained. Workspace routing remains development-gated; this is not Milestone 13 or public-release completion.
 
 **Completed exact-source validation:** [full native/protocol 40677903018](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40677903018) passed both host and Windows protocol jobs (**2439** host cases, zero failures), all **38 desktop** and **35 mobile-target host** application suites, including the peer-during-save and complete-model restart cases. Matching [Windows 40677903639](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40677903639) passed packaged launch, Clean/Modern, lifecycle and packaging. No physical Android claim is made. Superseded 9cf runs **40675242945 / 40675243614** were cancelled, not overall passes.

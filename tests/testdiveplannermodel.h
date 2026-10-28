@@ -26,6 +26,7 @@ private slots:
 	void testRecreationalPlanSaveAllowed();
 	void testNeoPlanResultContract();
 	void testNeoPlannerNativeRegression();
+	void testNeoPlannerFixtureManifest_data();
 	void testNeoPlannerFixtureManifest();
 };
 

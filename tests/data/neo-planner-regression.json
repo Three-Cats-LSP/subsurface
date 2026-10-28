@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "engine": "Subsurface native planner",
   "purpose": "Portable safety-contract fixtures; not third-party schedule compatibility claims.",
   "scenarios": [
@@ -184,6 +184,579 @@
           }
         ]
       }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2,
+      "id": "oc-ean32",
+      "mix": "32/0",
+      "depthMeters": 30,
+      "durationMinutes": 30,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 2002,
+        "otu": 22,
+        "exceedsNDL": false,
+        "stops": [],
+        "gasFlags": [
+          {
+            "mix": "32/0",
+            "belowMinimum": false,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2,
+      "id": "ccr-air-setpoint",
+      "mode": "ccr",
+      "mix": "21/0",
+      "depthMeters": 30,
+      "durationMinutes": 25,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 1702,
+        "otu": 36,
+        "exceedsNDL": false,
+        "stops": [],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "ccr-trimix-setpoint",
+      "mode": "ccr",
+      "mix": "18/45",
+      "depthMeters": 50,
+      "durationMinutes": 25,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 2120,
+        "otu": 47,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 9000,
+            "durationSeconds": 26,
+            "runTimeSeconds": 1800,
+            "gas": "18/45"
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 1920,
+            "gas": "18/45"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 2100,
+            "gas": "18/45"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "18/45",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "pscr-air",
+      "mode": "pscr",
+      "mix": "21/0",
+      "depthMeters": 30,
+      "durationMinutes": 25,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 1940,
+        "otu": 0,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 6000,
+            "durationSeconds": 78,
+            "runTimeSeconds": 1740,
+            "gas": "Air"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 1920,
+            "gas": "Air"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "oc-multilevel",
+      "segments": [
+        {
+          "depth": 40,
+          "duration": 15,
+          "gas": 0,
+          "setpoint": 0,
+          "divemode": 0
+        },
+        {
+          "depth": 25,
+          "duration": 30,
+          "gas": 0,
+          "setpoint": 0,
+          "divemode": 0
+        }
+      ],
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 3020,
+        "otu": 19,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 12000,
+            "durationSeconds": 92,
+            "runTimeSeconds": 1980,
+            "gas": "Air"
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 2160,
+            "gas": "Air"
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 280,
+            "runTimeSeconds": 2460,
+            "gas": "Air"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 520,
+            "runTimeSeconds": 3000,
+            "gas": "Air"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "oc-trimix-three-gas",
+      "cylinders": [
+        {
+          "type": "D12 232 bar",
+          "mix": "18/45",
+          "pressure": 200,
+          "use": 0
+        },
+        {
+          "type": "D12 232 bar",
+          "mix": "50/0",
+          "pressure": 200,
+          "use": 0
+        },
+        {
+          "type": "D12 232 bar",
+          "mix": "100/0",
+          "pressure": 200,
+          "use": 0
+        }
+      ],
+      "mix": "18/45",
+      "depthMeters": 60,
+      "durationMinutes": 25,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 2960,
+        "otu": 45,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 15000,
+            "durationSeconds": 58,
+            "runTimeSeconds": 1920,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 12000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 2040,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 2220,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 2340,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 5000,
+            "durationSeconds": 172,
+            "runTimeSeconds": 2520,
+            "gas": "100%"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 406,
+            "runTimeSeconds": 2940,
+            "gas": "100%"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "18/45",
+            "belowMinimum": false,
+            "belowReserve": false
+          },
+          {
+            "mix": "50/0",
+            "belowMinimum": false,
+            "belowReserve": false
+          },
+          {
+            "mix": "100%",
+            "belowMinimum": false,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "oc-trimix-lost-oxygen",
+      "cylinders": [
+        {
+          "type": "D12 232 bar",
+          "mix": "18/45",
+          "pressure": 200,
+          "use": 0
+        },
+        {
+          "type": "D12 232 bar",
+          "mix": "50/0",
+          "pressure": 200,
+          "use": 0
+        }
+      ],
+      "mix": "18/45",
+      "depthMeters": 60,
+      "durationMinutes": 25,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 3200,
+        "otu": 35,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 15000,
+            "durationSeconds": 58,
+            "runTimeSeconds": 1920,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 12000,
+            "durationSeconds": 100,
+            "runTimeSeconds": 2040,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 9000,
+            "durationSeconds": 160,
+            "runTimeSeconds": 2220,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 6000,
+            "durationSeconds": 280,
+            "runTimeSeconds": 2520,
+            "gas": "50/0"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 640,
+            "runTimeSeconds": 3180,
+            "gas": "50/0"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "18/45",
+            "belowMinimum": false,
+            "belowReserve": false
+          },
+          {
+            "mix": "50/0",
+            "belowMinimum": false,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 850,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2,
+      "id": "oc-freshwater-altitude",
+      "mix": "21/0",
+      "depthMeters": 30,
+      "durationMinutes": 25,
+      "waterDensity": 10000,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 1702,
+        "otu": 5,
+        "exceedsNDL": false,
+        "stops": [],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": false,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "algorithm": "recreational",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": false,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "id": "recreational-ndl-refusal",
+      "mix": "21/0",
+      "depthMeters": 50,
+      "durationMinutes": 50,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 3514,
+        "otu": 32,
+        "exceedsNDL": true,
+        "stops": [
+          {
+            "depthMm": 5000,
+            "durationSeconds": 180,
+            "runTimeSeconds": 3480,
+            "gas": "Air"
+          }
+        ],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "oc-air-low-reserve",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "cylinders": [
+        {
+          "type": "D12 232 bar",
+          "mix": "21/0",
+          "pressure": 70,
+          "use": 0
+        }
+      ],
+      "depthMeters": 15,
+      "durationMinutes": 20,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 1302,
+        "otu": 0,
+        "exceedsNDL": false,
+        "stops": [],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": false,
+            "belowReserve": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "oc-air-exhausted",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "cylinders": [
+        {
+          "type": "D12 232 bar",
+          "mix": "21/0",
+          "pressure": 20,
+          "use": 0
+        }
+      ],
+      "depthMeters": 15,
+      "durationMinutes": 20,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": false,
+      "minimumProfileSamples": 2,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 1302,
+        "otu": 0,
+        "exceedsNDL": false,
+        "stops": [],
+        "gasFlags": [
+          {
+            "mix": "Air",
+            "belowMinimum": true,
+            "belowReserve": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "oc-air-before-repetitive",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "mix": "21/0",
+      "depthMeters": 30,
+      "durationMinutes": 30,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 2060,
+        "otu": 7,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 3000,
+            "durationSeconds": 58,
+            "runTimeSeconds": 2040,
+            "gas": "Air"
+          }
+        ]
+      }
+    },
+    {
+      "id": "oc-air-repetitive-10min-surface",
+      "algorithm": "buehlmann",
+      "gfLow": 30,
+      "gfHigh": 75,
+      "mix": "21/0",
+      "depthMeters": 30,
+      "durationMinutes": 30,
+      "surfacePressureMbar": 1013,
+      "planSaveAllowed": true,
+      "requiresSchedule": true,
+      "minimumProfileSamples": 2,
+      "previousDiveFile": "tests/data/neo-planner-repetitive.ssrf",
+      "previousDiveSha256": "4f2af775308e71c7d478ded466fc155736f9bad8a70e4e786791c35ae3a70d29",
+      "startTime": "10:40:00",
+      "referenceRevision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+      "expectedNative": {
+        "runtimeSeconds": 3200,
+        "otu": 7,
+        "exceedsNDL": false,
+        "stops": [
+          {
+            "depthMm": 6000,
+            "durationSeconds": 198,
+            "runTimeSeconds": 2160,
+            "gas": "Air"
+          },
+          {
+            "depthMm": 3000,
+            "durationSeconds": 1000,
+            "runTimeSeconds": 3180,
+            "gas": "Air"
+          }
+        ],
+        "surfaceIntervalSeconds": 600
+      }
     }
   ],
   "numericalReference": {
@@ -223,7 +796,18 @@
       "sacFactorPercent": 400,
       "oxygenBreaks": false,
       "bailout": false,
-      "variations": false
+      "variations": false,
+      "reservePressureMbar": 40000,
+      "pscrDumpRatioPermille": 100,
+      "oxygenConsumptionMlPerMinute": 720
     }
+  },
+  "inputContract": "native-runtime-waypoints-1",
+  "additionalReference": {
+    "revision": "a92c17bf0cfca4d0eaaa123832d071cf55a7d569",
+    "platform": "Windows x64 native Neo planner",
+    "executableSha256": "96f46f54ba6a6a90193af66b8a72dd4e66e72b48ebbcb3ec5f30238fba70c309",
+    "captureTool": "scripts/capture-neo-planner-reference.py",
+    "meaning": "Same-engine regression capture with explicit native preferences; no third-party compatibility claim."
   }
 }

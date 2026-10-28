@@ -4,6 +4,15 @@ Status: 28 October 2026. Product targets are Windows and Android. The detailed
 [continuation checkpoint](NEO_AUTONOMOUS_PROGRESS.md) records source revisions,
 live runs, failed experiments and preservation evidence.
 
+The owner renewed automatic **Windows-first** execution of the latest status
+report's steps 1–4 and the Windows portions of step 6. Physical Android (that
+report's step 5) remains deferred and is not a reason to pause independent
+Windows work. Continue through the remaining coding and candidate preparation
+without next-step commands; request owner involvement only for an actual
+authorization, signing/configuration requirement or product decision. Sound
+one available Windows alert when making that request. Public publication still
+requires explicit authorization.
+
 The owner has deferred Dropbox sync to a possible future version. Product
 choices, new acceptance runs and production access target Google Drive only;
 retain existing Dropbox credentials, cloud data and implementation.
