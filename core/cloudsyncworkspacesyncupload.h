@@ -19,7 +19,8 @@ public:
 	void start(const QString &token, const CloudWorkspaceReference &workspace, const QString &choiceFile, const QString &choiceVersion,
 		const QString &checkpointFile, const QString &bindingFile, const QString &bindingRevision, const QString &nextRevision,
 		const QString &baseline, const QString &ticket, const QString &operation, const QString &planDirectory, const QString &intentFile,
-		const QByteArray &localModel, const std::function<bool()> &scopeCurrent, const std::function<QByteArray()> &localSnapshot);
+		const QByteArray &localModel, const std::function<bool()> &scopeCurrent, const std::function<QByteArray()> &localSnapshot,
+		const QString &reviewedHead = {}, const QJsonObject &reviewedBinding = {});
 	void cancel();
 signals:
 	void finished(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches);
@@ -37,12 +38,12 @@ private:
 	std::unique_ptr<CloudWorkspaceUploadPlan> plan;
 	std::unique_ptr<QLockFile> operationLock;
 	CloudWorkspaceReference reference;
-	QJsonObject originalBinding;
+	QJsonObject originalBinding, reviewedBinding;
 	Step step = Step::Idle;
 	bool priorPlan = false;
 	quint64 generation = 0;
 	QString token, choiceFile, choiceVersion, checkpointFile, bindingFile, bindingRevision, nextRevision;
-	QString baseline, ticket, operation, planDirectory, intentFile;
+	QString baseline, ticket, operation, planDirectory, intentFile, reviewedHead;
 	QByteArray model;
 	std::function<bool()> scopeCurrent;
 	std::function<QByteArray()> localSnapshot;

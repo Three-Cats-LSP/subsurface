@@ -2223,7 +2223,40 @@ void TestCloudSyncManager::testWorkspaceSync()
 	if (mode == 3) {
 		const auto report = manager.workspaceReport(provider);
 		QVERIFY(report.value("syncConflict").toBool()); QVERIFY(report.value("routeActive").toBool());
+		const auto review = report.value("conflictReview").toString(); QVERIFY(CloudHistoryRecord::validEpoch(review));
 		QCOMPARE(CloudWorkspaceModel::currentXml(), before); QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(network.puts, writes);
+		manager.resolveWorkspaceConflict(provider, QUuid::createUuid().toString(QUuid::WithoutBraces), "device");
+		QVERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, writes);
+		::divelog.dives[0]->notes = "An edit after conflict review";
+		manager.resolveWorkspaceConflict(provider, review, "device");
+		QVERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, writes);
+		::divelog.dives[0]->notes = "Local workspace version";
+		QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		const auto fresh = manager.workspaceReport(provider).value("conflictReview").toString();
+		QVERIFY(CloudHistoryRecord::validEpoch(fresh)); QVERIFY(fresh != review);
+		root = CloudWorkspaceRecord::parse(network.files[0].data); const auto peer = QUuid::createUuid().toString(QUuid::WithoutBraces);
+		const auto previousHead = root.head(); QVERIFY(root.registerUpload(peer, previousHead, CloudSyncManifest::sha256(before), before.size()));
+		network.add(ref.payloadName(peer), before); QVERIFY(root.completeUpload(peer, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version));
+		QVERIFY(root.publish(peer, previousHead)); network.files[0].data = root.json(); network.files[0].version = "peer-after-review";
+		const auto peerRoot = network.files[0].data;
+		manager.resolveWorkspaceConflict(provider, fresh, "device"); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(network.files[0].data, peerRoot); QCOMPARE(network.puts, writes);
+		QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		const auto currentReview = manager.workspaceReport(provider).value("conflictReview").toString();
+		QVERIFY(CloudHistoryRecord::validEpoch(currentReview)); QVERIFY(currentReview != fresh);
+		const auto cloudHead = CloudWorkspaceRecord::parse(peerRoot).head();
+		manager.resolveWorkspaceConflict(provider, currentReview, "device");
+		QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QVERIFY2(manager.lastError().isEmpty(), qPrintable(manager.lastError())); QCOMPARE(finished.size(), 1);
+		root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.valid()); QVERIFY(root.head() != cloudHead);
+		QCOMPARE(root.ticket(root.head()).value("parent").toString(), cloudHead);
+		QCOMPARE(root.ticket(cloudHead).value("state").toString(), QString("committed"));
+		QCOMPARE(network.content(ref.payloadName(root.head())), before); QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		CloudWorkspaceBinding resolved(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version());
+		QVERIFY(resolved.load()); QCOMPARE(resolved.commit(), root.head()); QVERIFY(resolved.matchesModel(before));
+		return;
 	}
 	if (mode == 7) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); allowSave = true; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000); }
 	if (mode == 11) {

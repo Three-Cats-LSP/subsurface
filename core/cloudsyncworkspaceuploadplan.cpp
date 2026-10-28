@@ -29,13 +29,21 @@ QByteArray readXml(const QString &path, const QJsonObject &p)
 }
 CloudWorkspaceUploadPlan::CloudWorkspaceUploadPlan(const QString &path, const CloudWorkspaceReference &ref,
 	const QString &choice, const QString &revision, const QString &next, const QString &baseline,
-	const QString &ticket, const QString &operation) : directory(path)
+	const QString &ticket, const QString &operation, const QString &reviewedHead, const QJsonObject &reviewedBinding) : directory(path)
 {
+	const bool ordinary = reviewedHead.isEmpty() && reviewedBinding.isEmpty();
+	const bool conflict = CloudHistoryRecord::validEpoch(reviewedHead) && reviewedHead != baseline && reviewedHead != ticket &&
+		operation != reviewedHead && reviewedBinding.value("workspace") == ref.value &&
+		text(reviewedBinding, "choice_version") == choice && text(reviewedBinding, "revision") == revision &&
+		text(reviewedBinding, "commit") == baseline && CloudHistoryRecord::validEpoch(text(reviewedBinding, "legacy_acceptance"));
 	if (ref.valid() && CloudHistoryRecord::validEpoch(choice) && CloudHistoryRecord::validEpoch(revision) && CloudHistoryRecord::validEpoch(next) &&
 	    CloudHistoryRecord::validEpoch(baseline) && CloudHistoryRecord::validEpoch(ticket) && CloudHistoryRecord::validEpoch(operation) &&
-	    revision != next && baseline != ticket && operation != baseline && operation != ticket)
-		scope = {{"schema", 1}, {"format", "neo-workspace-upload-plan-development-1"}, {"workspace", ref.value}, {"choice_version", choice},
-			{"binding_revision", revision}, {"next_revision", next}, {"baseline", baseline}, {"ticket", ticket}, {"operation", operation}};
+	    revision != next && baseline != ticket && operation != baseline && operation != ticket && (ordinary || conflict)) {
+		scope = {{"schema", 1}, {"format", ordinary ? "neo-workspace-upload-plan-development-1" : "neo-workspace-conflict-local-plan-development-1"},
+			{"workspace", ref.value}, {"choice_version", choice}, {"binding_revision", revision}, {"next_revision", next},
+			{"baseline", baseline}, {"ticket", ticket}, {"operation", operation}};
+		if (conflict) { scope["reviewed_head"] = reviewedHead; scope["reviewed_binding"] = reviewedBinding; }
+	}
 }
 QString CloudWorkspaceUploadPlan::state() const { return text(saved, "state"); }
 QByteArray CloudWorkspaceUploadPlan::payload() const { return saved.isEmpty() ? QByteArray() : readXml(QDir(directory).filePath("payload.xml"), saved.value("payload").toObject()); }
@@ -91,7 +99,11 @@ bool CloudWorkspaceUploadPlan::complete(CloudWorkspaceBinding &binding, const Cl
 	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0);
 	if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
 	const auto model = payload();
-	if (model.isEmpty() || !binding.ownsUpload(root, checkpoint, text(scope, "binding_revision"), text(scope, "ticket"), uploadIntentFile, model) ||
+	const bool conflict = text(scope, "format") == "neo-workspace-conflict-local-plan-development-1";
+	const bool owned = conflict ? binding.ownsConflictUpload(scope.value("reviewed_binding").toObject(), text(scope, "reviewed_head"),
+		root, checkpoint, model, text(scope, "ticket"), uploadIntentFile, text(scope, "next_revision")) :
+		binding.ownsUpload(root, checkpoint, text(scope, "binding_revision"), text(scope, "ticket"), uploadIntentFile, model);
+	if (model.isEmpty() || !owned ||
 	    binding.value().value("workspace") != scope.value("workspace") || binding.value().value("choice_version") != scope.value("choice_version") ||
 	    binding.revision() != text(scope, "next_revision") || text(binding.value().value("previous").toObject(), "commit") != text(scope, "baseline")) return false;
 	if (state() == "completed") return true;

@@ -9,7 +9,8 @@ class CloudWorkspaceUploadPlan {
 public:
 	CloudWorkspaceUploadPlan(const QString &directory, const CloudWorkspaceReference &workspace,
 		const QString &choiceVersion, const QString &bindingRevision, const QString &nextRevision,
-		const QString &baseline, const QString &ticket, const QString &operation);
+		const QString &baseline, const QString &ticket, const QString &operation,
+		const QString &reviewedHead = {}, const QJsonObject &reviewedBinding = {});
 	bool reload();
 	bool prepare(const QByteArray &model);
 	bool complete(CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,

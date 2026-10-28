@@ -1587,6 +1587,11 @@ void TestCloudSyncHistory::workspaceConflictBinding()
 	CloudWorkspaceUploadIntent intent(intentFile, ref, CloudSyncManifest::sha256(B), B.size(), ticket, remote);
 	QVERIFY(intent.prepare()); QVERIFY(intent.beginRegistration()); QVERIFY(intent.registerTicket()); QVERIFY(intent.submit());
 	QVERIFY(intent.identify(object)); QVERIFY(intent.verify("rev-local")); QVERIFY(intent.upload()); if (mode != 4) QVERIFY(intent.commit());
+	const auto operation = uid(), planDir = dir.filePath("confirmed-plan");
+	CloudWorkspaceUploadPlan plan(planDir, ref, choice, revision, next, baseline, ticket, operation, remote, prior);
+	QVERIFY(plan.prepare(B)); QCOMPARE(plan.state(), QString("ready"));
+	CloudWorkspaceUploadPlan foreign(planDir, ref, choice, revision, next, baseline, ticket, operation, uid(), prior);
+	QVERIFY(!foreign.reload());
 	if (mode == 6) QVERIFY(root.acceptLegacyCopy(uid(), event, ticket, baseline, source));
 	if (mode == 9) {
 		const auto later = uid(); QVERIFY(root.registerUpload(later, ticket, CloudSyncManifest::sha256(A), A.size()));
@@ -1605,6 +1610,9 @@ void TestCloudSyncHistory::workspaceConflictBinding()
 		CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load());
 		QVERIFY(restarted.advanceConflictUpload(prior, remote, root, root, B, intentFile, next));
 		QCOMPARE(restarted.ownsConflictUpload(prior, mode == 11 ? uid() : remote, root, root, B, ticket, intentFile, next), mode != 11);
+		QVERIFY(plan.complete(restarted, root, root, intentFile)); QCOMPARE(plan.state(), QString("completed"));
+		CloudWorkspaceUploadPlan reloaded(planDir, ref, choice, revision, next, baseline, ticket, operation, remote, prior);
+		QVERIFY(reloaded.reload()); QVERIFY(reloaded.complete(restarted, root, root, intentFile));
 		QCOMPARE(root.ticket(remote).value("state").toString(), QString("committed"));
 		QCOMPARE(root.ticket(baseline).value("state").toString(), QString("committed"));
 	} else { QVERIFY(!ok); CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), prior); }
