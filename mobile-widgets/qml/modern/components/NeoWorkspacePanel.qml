@@ -23,7 +23,7 @@ ColumnLayout {
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
-		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. To manage its versions or review branches, turn automatic sync off and clear provider assignments first.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
+		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. You can review versions and cloud branches; turn automatic sync off and clear provider assignments before changing them.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
 		color: tokens.textSecondary; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	GridLayout {

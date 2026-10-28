@@ -233,6 +233,9 @@ private:
 	QString workspaceAction, workspaceAccount, workspaceToken, workspacePath, workspaceChoiceVersion, workspaceVersionTicket;
 	CloudWorkspaceReference workspaceReference;
 	bool workspaceCheckpointRequired = false;
+	bool workspaceAssignedReview = false, workspaceExpectedAutoSync = false;
+	QString workspaceExpectedPrimary, workspaceExpectedBackup;
+	QJsonObject workspaceExpectedRoute;
 	quint64 workspaceSerial = 0;
 	struct WorkspaceCopyReview {
 		QString id, choiceVersion, localSha256, parent, previousAcceptance, copyTicket;

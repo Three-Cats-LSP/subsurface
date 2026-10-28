@@ -1323,6 +1323,7 @@ void CloudSyncManager::clearSyncOperation()
 	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceActivation.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
 	if (workspaceSyncInProgress()) { workspaceSyncReview.cancel(); workspaceSyncUpload.cancel(); workspaceSyncReceive.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
+	workspaceAssignedReview = false; workspaceExpectedAutoSync = false; workspaceExpectedPrimary.clear(); workspaceExpectedBackup.clear(); workspaceExpectedRoute = {};
 	workspaceCopyReview = {}; workspaceReviewedRoot.value = {}; workspaceLegacyChanged = false;
 	workspaceVersionTicket.clear();
 	workspaceRestorePlan = {}; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();

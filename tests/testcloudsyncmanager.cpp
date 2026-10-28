@@ -2056,7 +2056,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2086,6 +2086,21 @@ void TestCloudSyncManager::testWorkspaceSync()
 	manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(workspaceDone.size(), 3);
 	manager.runWorkspace(provider, "activate", manager.workspaceCopyReviews.value(provider).id); QTRY_COMPARE(workspaceDone.size(), 4);
 	QVERIFY(manager.workspaceRouteConfirmed(provider));
+	if (mode == 13 || mode == 14) {
+		manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); const auto writes = network.puts; const auto rootBefore = network.files[0].data;
+		if (mode == 14) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
+		manager.runWorkspaceVersion(provider, "list");
+		if (mode == 14) {
+			QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply; manager.setAutoSyncEnabled(false); network.workspaceReadDeferred = false; late->complete();
+			QTRY_VERIFY(!manager.syncInProgress()); QCOMPARE(workspaceDone.size(), 4); QVERIFY(!manager.lastError().isEmpty());
+		} else {
+			QTRY_COMPARE(workspaceDone.size(), 5); QVERIFY(!manager.workspaceReport(provider).value("versionRows").toList().isEmpty());
+			manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(workspaceDone.size(), 6);
+			manager.runWorkspace(provider, "review"); QTRY_COMPARE(workspaceDone.size(), 7);
+			manager.runWorkspaceVersion(provider, "save"); QVERIFY(!manager.syncInProgress()); QVERIFY(!manager.lastError().isEmpty());
+		}
+		QCOMPARE(network.puts, writes); QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(CloudWorkspaceModel::currentXml(), original); return;
+	}
 	bool allowSave = mode != 7; int saves = 0; QByteArray persisted;
 	manager.setWorkspacePersistenceHandlers([] { return true; }, [&] { ++saves; if (!allowSave) return false; persisted = CloudWorkspaceModel::currentXml(); return true; });
 	const auto oldNotes = ::divelog.dives[0]->notes;

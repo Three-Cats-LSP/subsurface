@@ -140,15 +140,27 @@ bool CloudWorkspaceRecord::follows(const CloudWorkspaceRecord &previous) const
 	if (oldFormat == "neo-workspace-history-development-3" || format == "neo-workspace-history-development-3" ||
 	    oldFormat == "neo-workspace-history-development-4" || format == "neo-workspace-history-development-4") {
 		if (format != "neo-workspace-history-development-3" && format != "neo-workspace-history-development-4") return false;
-		if (format == "neo-workspace-history-development-3" && oldFormat != "neo-workspace-history-development-2" && oldFormat != format) return false;
+		if (format == "neo-workspace-history-development-3" && oldFormat != "neo-workspace-history-development-1" &&
+		    oldFormat != "neo-workspace-history-development-2" && oldFormat != format) return false;
+		// A reader may miss the intermediate copy envelope entirely. Upgrading
+		// from the original format must still contain a newer journal, because
+		// registering the first copy changes that journal before acceptance.
+		if (format == "neo-workspace-history-development-3" && oldFormat == "neo-workspace-history-development-1" &&
+		    journal().value.value("sequence").toInt() <= previous.journal().value.value("sequence").toInt()) return false;
 		if (format == "neo-workspace-history-development-4" &&
 		    oldFormat != "neo-workspace-history-development-1" && oldFormat != "neo-workspace-history-development-2" &&
 		    oldFormat != "neo-workspace-history-development-3" && oldFormat != format) return false;
 		const auto oldEvents = previous.value.value("legacy_acceptances").toArray(), events = value.value("legacy_acceptances").toArray();
 		if (events.size() < oldEvents.size() || (oldFormat != format && events.isEmpty())) return false;
 		for (int i = 0; i < oldEvents.size(); ++i) if (events[i] != oldEvents[i]) return false;
-		if (format == "neo-workspace-history-development-4" && oldFormat != format &&
-		    (events.size() == oldEvents.size() || string(events[oldEvents.size()].toObject(), "kind") != "absent")) return false;
+		if (format == "neo-workspace-history-development-4" && oldFormat != format) {
+			// Several copied observations may have occurred before the first
+			// absence upgrade while this reader was offline.
+			bool hasAbsence = false;
+			for (int i = oldEvents.size(); i < events.size(); ++i)
+				if (string(events[i].toObject(), "kind") == "absent") { hasAbsence = true; break; }
+			if (!hasAbsence) return false;
+		}
 		return true;
 	}
 	return value.value("format") == previous.value.value("format") ||

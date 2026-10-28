@@ -193,10 +193,16 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 }
 bool CloudSyncManager::workspaceScopeCurrent()
 {
-	const bool current = workspaceInProgress() && workspaceEnabled() && routeLease && routeLease->held() && !workspaceToken.isEmpty() && !autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty() &&
+	const bool assignments = workspaceAssignedReview ? autoSyncEnabled() == workspaceExpectedAutoSync && primaryProviderId() == workspaceExpectedPrimary && backupProviderId() == workspaceExpectedBackup :
+		!autoSyncEnabled() && primaryProviderId().isEmpty() && backupProviderId().isEmpty();
+	const bool current = workspaceInProgress() && workspaceEnabled() && routeLease && routeLease->held() && !workspaceToken.isEmpty() && assignments &&
 		tokens.value(syncProviderId).accessToken == workspaceToken && verifiedAccountTokens.value(syncProviderId) == workspaceToken &&
 		CloudSyncManifest::sha256(tokens.value(syncProviderId).accountId.toUtf8()) == workspaceAccount;
 	if (!current) return false;
+	if (workspaceAssignedReview) {
+		CloudWorkspaceRoute route(workspaceRoutePath(syncProviderId) + ".json", syncProviderId);
+		if (!workspaceRouteConfirmed(syncProviderId) || !route.load() || route.value() != workspaceExpectedRoute) return false;
+	}
 	if (workspaceAction == "activate" || workspaceAction == "resume-activation")
 		return CloudWorkspaceModel::currentXml() == syncLocalPayload;
 	if (workspaceAction == "version-save" || workspaceAction == "version-resume-save" ||
@@ -227,7 +233,9 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	if (!workspaceEnabled() || !provider || provider->type == CloudSyncProviderType::SubsurfaceCloud || syncInProgress() ||
 	    authorizationInProgress() || accountCheckInProgress() || pendingTokenContinuation) return;
 	if (action == "refresh") { workspaceReports.remove(providerId); workspaceCopyReviews.remove(providerId); workspaceVersionReviews.remove(providerId); setError({}); emit providersChanged(); return; }
-	if (autoSyncEnabled() || !primaryProviderId().isEmpty() || !backupProviderId().isEmpty()) {
+	const bool assigned = autoSyncEnabled() || !primaryProviderId().isEmpty() || !backupProviderId().isEmpty();
+	const bool assignedReview = assigned && (action == "review" || action == "inspect-copy" || action == "version-list");
+	if (assigned && !assignedReview) {
 		setError(tr("Experimental workspaces require automatic sync off and no primary or backup assignment. Use an isolated test profile.")); return;
 	}
 	const bool versioning = action == "version-list" || action == "version-save" || action == "version-resume-save" || action == "version-restore" || action == "version-resume-restore";
@@ -313,7 +321,17 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	}
 	clearStorageReview(providerId); setError({});
 	if (!acquireCloudRoute(providerId, false)) return;
+	QJsonObject reviewRoute;
+	if (assignedReview) {
+		CloudWorkspaceRoute route(workspaceRoutePath(providerId) + ".json", providerId);
+		if (!workspaceRouteConfirmed(providerId) || !route.load() || route.state() != "active" ||
+		    route.value().value("workspace").toObject() != reference.value || text(route.value(), "choice_version") != expectedVersion) {
+			routeLease.reset(); routeProvider.clear(); setError(tr("The selected workspace route needs review. Your data was kept.")); return;
+		}
+		reviewRoute = route.value();
+	}
 	syncProviderId = providerId; syncOperation = SyncOperation::Workspace; workspaceAction = action; workspaceChoiceVersion = expectedVersion; workspaceReference = reference;
+	workspaceAssignedReview = assignedReview; workspaceExpectedAutoSync = autoSyncEnabled(); workspaceExpectedPrimary = primaryProviderId(); workspaceExpectedBackup = backupProviderId(); workspaceExpectedRoute = reviewRoute;
 	if (inspecting || copying || accepting) { syncLocalSha256 = CloudSyncManifest::sha256(local); workspaceCopyReview = reviewed; }
 	if (versioning) { syncLocalPayload = local; syncLocalSha256 = CloudSyncManifest::sha256(local); }
 	if (activating) { syncLocalPayload = local; workspaceCopyReview = reviewed; }

@@ -1337,6 +1337,7 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 	const auto provider = QString(google ? "google-drive" : "dropbox");
 	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "accept-root" : "id:accept-root");
 	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	const auto empty = root;
 	const auto copyA = uid(), eventA = uid(), copyB = uid(), eventB = uid(), eventAgain = uid();
 	QVERIFY(root.registerCopy(copyA, {}, sourceA)); const auto registered = root;
 	if (mode == 6) { QVERIFY(!root.acceptLegacyCopy(eventA, {}, {}, copyA, sourceA)); QCOMPARE(root.json(), registered.json()); return; }
@@ -1348,7 +1349,11 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 		QCOMPARE(root.json(), beforeAcceptance.json()); return;
 	}
 	QVERIFY(root.acceptLegacyCopy(eventA, {}, copyA, copyA, sourceA)); const auto acceptedA = root;
-	QVERIFY(root.valid()); QVERIFY(root.follows(beforeAcceptance)); QVERIFY(!beforeAcceptance.follows(root));
+	QVERIFY(root.valid()); QVERIFY(root.follows(beforeAcceptance)); QVERIFY(root.follows(empty)); QVERIFY(root.follows(registered)); QVERIFY(!beforeAcceptance.follows(root));
+	if (mode == 0) {
+		QTemporaryDir dir; CloudWorkspaceAuthority stale(dir.filePath("stale.json"), ref);
+		QVERIFY(stale.observe(empty, "empty")); QVERIFY(stale.observe(root, "accepted", true)); QVERIFY(!stale.observe(empty, "rollback", true));
+	}
 	QCOMPARE(root.latestLegacyAcceptance().value("id").toString(), eventA);
 	QVERIFY(!CloudHistoryRecord::parse(root.json()).valid()); QCOMPARE(CloudWorkspaceRecord::parse(root.json()).json(), root.json());
 	if (mode == 5) { QVERIFY(!root.acceptLegacyCopy(eventA, eventA, copyA, copyA, sourceA)); QCOMPARE(root.json(), acceptedA.json()); return; }
@@ -1358,7 +1363,7 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 	QCOMPARE(root.latestLegacyAcceptance().value("id").toString(), eventA); QVERIFY(root.follows(acceptedA));
 	QVERIFY(root.acceptLegacyCopy(eventB, eventA, copyB, copyB, sourceB)); const auto acceptedB = root;
 	QVERIFY(root.acceptLegacyCopy(eventAgain, eventB, copyB, copyA, sourceA)); const auto acceptedAgain = root;
-	QVERIFY(root.follows(acceptedB)); QVERIFY(root.follows(acceptedA)); QVERIFY(!acceptedB.follows(root));
+	QVERIFY(root.follows(acceptedB)); QVERIFY(root.follows(acceptedA)); QVERIFY(root.follows(empty)); QVERIFY(!acceptedB.follows(root));
 	QCOMPARE(root.latestLegacyAcceptance().value("ticket").toString(), copyA);
 	if (mode == 15) {
 		QTemporaryDir dir; CloudWorkspaceAuthority checkpoint(dir.filePath("root.json"), ref);
@@ -1666,16 +1671,22 @@ void TestCloudSyncHistory::workspaceLegacyAbsence()
 	const auto provider = QString(google ? "google-drive" : "dropbox");
 	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
 	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	const auto empty = root;
 	if (mode == 10) { QVERIFY(!root.acceptLegacyAbsence(uid(), {}, {})); return; }
 	const auto baseline = uid(); QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
 	QVERIFY(root.completeUpload(baseline, google ? "object-a" : "id:object-a", "rev-a")); QVERIFY(root.publish(baseline, {}));
 	if (mode == 11 || mode == 12 || mode == 13) {
+		const auto beforeCopy = root;
 		const auto copy = uid(), accepted = uid(); QVERIFY(root.registerCopy(copy, baseline, source));
 		QVERIFY(root.completeUpload(copy, google ? "object-copy" : "id:object-copy", "rev-copy")); QVERIFY(root.publish(copy, baseline));
 		if (mode == 11 || mode == 13) QVERIFY(root.acceptLegacyCopy(accepted, {}, copy, copy, source));
 		if (mode == 13) { auto forged = root; forged.value["format"] = "neo-workspace-history-development-4"; QVERIFY(forged.valid()); QVERIFY(!forged.follows(root)); return; }
 		const auto old = root; QVERIFY(root.acceptLegacyAbsence(uid(), mode == 11 ? accepted : QString(), copy));
-		QVERIFY(root.follows(old)); QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4"));
+		QVERIFY(root.follows(old)); QVERIFY(root.follows(beforeCopy)); QVERIFY(root.follows(empty)); QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4"));
+		if (mode == 11) {
+			auto forged = root; auto events = forged.value["legacy_acceptances"].toArray(); events.removeLast(); forged.value["legacy_acceptances"] = events;
+			QVERIFY(forged.valid()); QVERIFY(!forged.follows(beforeCopy)); QVERIFY(!forged.follows(empty));
+		}
 		QCOMPARE(root.copySource(copy).json(), source.json()); return;
 	}
 	const auto before = root; const auto event = uid();
