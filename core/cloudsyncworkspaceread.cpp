@@ -22,6 +22,10 @@ CloudWorkspaceReadIntent::CloudWorkspaceReadIntent(const QString &file, const Cl
 }
 QString CloudWorkspaceReadIntent::state() const { return text(saved, "state"); }
 QJsonObject CloudWorkspaceReadIntent::snapshot() const { return saved.value("snapshot").toObject(); }
+bool CloudWorkspaceReadIntent::matches(const CloudWorkspaceReference &ref, const QString &id, const QString &reservation) const
+{
+	return !scope.isEmpty() && scope.value("workspace") == ref.value && text(scope, "commit") == id && text(scope, "reservation") == reservation;
+}
 bool CloudWorkspaceReadIntent::validSnapshot(const QJsonObject &s) const
 {
 	if (s.size() != 5 || text(s, "name") != reference.payloadName(commit) || text(s, "object") == text(reference.value, "root_id") ||

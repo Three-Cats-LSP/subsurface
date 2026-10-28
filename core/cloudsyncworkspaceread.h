@@ -19,6 +19,7 @@ public:
 	bool markReleased();
 	QString state() const;
 	QJsonObject snapshot() const;
+	bool matches(const CloudWorkspaceReference &ref, const QString &commit, const QString &reservation) const;
 private:
 	bool validSnapshot(const QJsonObject &snapshot) const;
 	bool read();
