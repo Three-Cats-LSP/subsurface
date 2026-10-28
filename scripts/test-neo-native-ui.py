@@ -301,7 +301,9 @@ DRIVER = r'''
                 case 24:
                     var restored=pageStack.currentItem.currentItem
                     smokeCheck(restored && restored.isLspPlan, "LSP identity survives restart")
-                    smokeCheck(restored.modelData.planReportHeader.indexOf("9.876543")>=0, "resolved LSP settings survive restart")
+                    smokeCheck(restored.modelData.planReportHeader.indexOf("Algorithm:")>=0 && restored.modelData.planReportHeader.indexOf("GASES")>=0, "readable saved settings survive restart")
+                    smokeCheck(restored.modelData.planReportHeader.indexOf("Resolved LSP")<0 && restored.modelData.planReportHeader.indexOf("Source:")<0, "restart report contains no internal dump")
+                    manager.exportToFile(0, smokeConfig.lspRestartLog, false, false)
                     smokeCheck(restored.modelData.planTimeline.length>2 && restored.modelData.planProfile.length>2, "LSP schedule and geometry survive restart")
                     console.log("NEO_UI_PASS restart persistence and LSP plan")
                     smokeTimer.stop()
@@ -385,7 +387,7 @@ def main():
     exports = [output / name for name in ("standard URL export", "legacy URL export", "raw path export")]
     for folder in exports:
         folder.mkdir()
-    lsp_folders = {name: output / name for name in ("lsp-preview", "lsp-saved", "lsp-log")}
+    lsp_folders = {name: output / name for name in ("lsp-preview", "lsp-saved", "lsp-log", "lsp-restart-log")}
     for folder in lsp_folders.values():
         folder.mkdir()
     for restart in (False, True):
@@ -393,7 +395,7 @@ def main():
                       expectedStyle="Modern" if restart else "Clean", restartOnly=restart,
                       exportUrl=exports[0].as_uri(), exportLegacyUrl="file://" + exports[1].as_posix(),
                       exportPath=str(exports[2]), lspPreview=lsp_folders["lsp-preview"].as_uri(),
-                      lspSaved=lsp_folders["lsp-saved"].as_uri(), lspLog=lsp_folders["lsp-log"].as_uri())
+                      lspSaved=lsp_folders["lsp-saved"].as_uri(), lspLog=lsp_folders["lsp-log"].as_uri(), lspRestartLog=lsp_folders["lsp-restart-log"].as_uri())
         driver = DRIVER.replace("CONFIG", json.dumps(config))
         (qml / "main.qml").write_text(source.rstrip()[:-1] + driver + "\n}\n", encoding="utf-8")
         log_path = output / ("restart.log" if restart else "runtime.log")
@@ -422,6 +424,17 @@ def main():
     plan_data = metadata[0]
     if abs(plan_data["engineRequest"]["settings"]["ascentRate"] - 9.876543) > 1e-9:
         raise RuntimeError("LSP precise settings did not survive save/export")
+    restarted = []
+    restarted_xml = ET.parse(lsp_folders["lsp-restart-log"] / "Subsurface_export.ssrf").getroot()
+    for notes in restarted_xml.findall(".//dive/notes"):
+        match = re.search(r"<!--NEO_PLAN:([A-Za-z0-9_-]+)-->", notes.text or "")
+        if match:
+            encoded = match.group(1)
+            value = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+            if value.get("engine", {}).get("id") == "lsp-d-planner-plus":
+                restarted.append(value)
+    if len(restarted) != 1 or restarted[0]["engineRequest"] != plan_data["engineRequest"]:
+        raise RuntimeError("Exact saved calculation settings did not survive disk restart")
     if plan_data["profile"][-1]["depth"] != 0 or plan_data["profile"][-1]["time"] != plan_data["runtimeSeconds"]:
         raise RuntimeError("Saved LSP profile must prove a complete physical return to surface")
     for name in ("lsp-preview", "lsp-saved"):

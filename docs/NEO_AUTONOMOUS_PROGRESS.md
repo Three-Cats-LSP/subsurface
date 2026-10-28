@@ -24,13 +24,26 @@ are rendered from their saved metadata without rewriting/recalculating them.
 
 ## Resume these pending checks; do not dispatch duplicates
 
-- **40745176973**, Windows at **f86436550**: actual readable report/PDF candidate,
-  currently building. Download its UI evidence, verify GitHub digest, run the PDF
-  content/geometry gate, render and inspect every page. The earlier passed PDF
-  candidate below still contains the settings dump and is superseded for this
-  owner requirement.
+- **40745176973**, Windows at **f86436550**: compiled and passed the actual
+  readable preview/save/export flow, then failed an obsolete restart assertion
+  expecting `9.876543` in the visible header. Product reports correctly show the
+  readable rounded value. The test now checks readable restart text and exports
+  the restarted canonical log to separately verify exact hidden request equality.
+  Preserve the failed aggregate. UI artifact **12842950902**, SHA-256
+  `0776809078b3fe0b6dae376a83640432cfe6558dcc6682f56b1af4c0b6684935`,
+  was verified at `work/lsp-readable-ui-evidence-f86436550-20261029`. Both PDFs
+  passed the new readable-settings/content/geometry gate; all four pages were
+  rendered and inspected. Saved PDF:
+  `native-ui/lsp-saved/subsurface-neo-plan-20261028-184345.pdf`, SHA-256
+  `dabfee55eb750346d11de49f5135fee729e2392f57136d7a5f4173e26071e40d`.
+  Failed debug runtime artifact **12842801259** is downloading into
+  `work/lsp-readable-runtime-f86436550-20261029` (shell session **22173**).
+  Resume that download, verify the recorded GitHub digest and executable hash,
+  then run the corrected `scripts/test-neo-native-ui.py` in a fresh output/profile.
+  Its C++ and product QML are unchanged from f864; only the test driver changed.
+  This development retry does not turn the failed aggregate into a package pass.
 - **40745740061**, full cloud/native at **b7d5b7425**: host protocol **PASSED all
-  2,599 checks** (270 s). Matching Windows protocol and full desktop/mobile-target
+  2,599 checks** (270 s). Matching Windows protocol has also PASSED; full desktop/mobile-target
   host application suites are pending. Native full job is **123022651637**.
   b7d changes only corrected old barrier expectations and a test error message
   after f864; product C++/QML is unchanged.
@@ -124,6 +137,27 @@ This is a synthetic component report, not a 605-version live Google test.
    unpublished Windows candidate and concrete OAuth/signing/legal artifacts.
    Ask for owner action only when that concrete dependency is reached. No
    publication authorization exists. Android hardware stays deferred.
+
+## Uncommitted metadata persistence foundation
+
+Ten tracked files are currently modified: `core/divelog.*`, `core/load-git.cpp`,
+`core/parse-xml.cpp`, `core/save-git.cpp`, `core/save-xml.cpp` and the TestParse /
+TestGitStorage source/header pairs. Preserve and resume these changes. They add
+an opaque log-owned metadata string, full-log XML and Git-commit preservation,
+clear/reset handling and XML/Git round-trip tests; selected/anonymized exports
+exclude it. **Not compiled or accepted yet**, no UI/settings capture or cloud
+metadata feature is enabled by this foundation. Typed version/unknown-field
+validation, workspace capability upgrade, deterministic legacy normalization,
+UI cache notifications and restart-safe local-baseline migration still need
+integration. Do not claim metadata sync complete or publish the WIP as such.
+
+Git commits, not a loose QSettings sidecar, must be the durable authority for
+no-cloud workspace recovery. Retain existing global-library behavior for ordinary
+non-workspace file opens: an explicit metadata-enabled workspace can project its
+log-owned metadata into UI caches after load/apply; arbitrary imports must not
+silently replace the global libraries. The first metadata migration must save a
+complete local baseline before remote replacement. No additional owner choice
+is needed for this engineering work.
 
 ## Workspace and secrets
 
