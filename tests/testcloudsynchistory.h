@@ -46,6 +46,8 @@ private slots:
 	void workspaceCopyRecord();
 	void workspaceLegacyAcceptance_data();
 	void workspaceLegacyAcceptance();
+	void workspaceLegacyAbsence_data();
+	void workspaceLegacyAbsence();
 	void workspaceAcceptanceIntent_data();
 	void workspaceAcceptanceIntent();
 	void workspaceAcceptanceWorkflow_data();

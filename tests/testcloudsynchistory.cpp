@@ -1548,6 +1548,67 @@ void TestCloudSyncHistory::workspaceBinding()
 	} else { QVERIFY(!ok); CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), saved); }
 }
 
+void TestCloudSyncHistory::workspaceLegacyAbsence_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"empty-legacy-copy-and-return", "stale-head", "stale-acceptance", "reused-event-id",
+		"unknown-event-field", "unknown-event-kind", "invalid-event-head", "changed-event", "downgrade", "missing-copies", "empty-workspace",
+		"upgrade-accepted-copy", "upgrade-unaccepted-copy"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-legacy-absence-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceLegacyAbsence()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox");
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	if (mode == 10) { QVERIFY(!root.acceptLegacyAbsence(uid(), {}, {})); return; }
+	const auto baseline = uid(); QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
+	QVERIFY(root.completeUpload(baseline, google ? "object-a" : "id:object-a", "rev-a")); QVERIFY(root.publish(baseline, {}));
+	if (mode == 11 || mode == 12) {
+		const auto copy = uid(), accepted = uid(); QVERIFY(root.registerCopy(copy, baseline, source));
+		QVERIFY(root.completeUpload(copy, google ? "object-copy" : "id:object-copy", "rev-copy")); QVERIFY(root.publish(copy, baseline));
+		if (mode == 11) QVERIFY(root.acceptLegacyCopy(accepted, {}, copy, copy, source));
+		const auto old = root; QVERIFY(root.acceptLegacyAbsence(uid(), mode == 11 ? accepted : QString(), copy));
+		QVERIFY(root.follows(old)); QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4"));
+		QCOMPARE(root.copySource(copy).json(), source.json()); return;
+	}
+	const auto before = root; const auto event = uid();
+	if (mode == 1 || mode == 2) {
+		QVERIFY(!root.acceptLegacyAbsence(event, mode == 2 ? uid() : QString(), mode == 1 ? uid() : baseline)); QCOMPARE(root.json(), before.json()); return;
+	}
+	QVERIFY(root.acceptLegacyAbsence(event, {}, baseline)); QVERIFY(root.valid()); QVERIFY(root.follows(before));
+	QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4")); QCOMPARE(root.latestLegacyAcceptance()["kind"].toString(), QString("absent"));
+	QVERIFY(CloudWorkspaceRecord::parse(root.json()).valid());
+	if (mode == 3) { const auto saved = root.json(); QVERIFY(!root.acceptLegacyAbsence(event, event, baseline)); QCOMPARE(root.json(), saved); return; }
+	if (mode >= 4 && mode <= 9) {
+		auto bad = root;
+		if (mode == 9) bad.value.remove("copies");
+		else if (mode == 8) bad.value["format"] = "neo-workspace-history-development-3";
+		else {
+			auto events = bad.value["legacy_acceptances"].toArray(); auto entry = events[0].toObject();
+			if (mode == 4) entry["unexpected"] = true;
+			if (mode == 5) entry["kind"] = "unknown";
+			if (mode == 6) entry["head"] = uid();
+			if (mode == 7) entry["parent"] = uid();
+			events[0] = entry; bad.value["legacy_acceptances"] = events;
+		}
+		QVERIFY(!bad.valid()); QVERIFY(!bad.follows(root)); return;
+	}
+	const auto first = root; const auto copy = uid(), accepted = uid();
+	QVERIFY(root.registerCopy(copy, baseline, source)); QVERIFY(root.completeUpload(copy, google ? "object-b" : "id:object-b", "rev-b")); QVERIFY(root.publish(copy, baseline));
+	QVERIFY(root.acceptLegacyCopy(accepted, event, copy, copy, source)); QVERIFY(root.follows(first)); QCOMPARE(root.value["format"].toString(), QString("neo-workspace-history-development-4"));
+	const auto second = root; const auto missingAgain = uid(); QVERIFY(root.acceptLegacyAbsence(missingAgain, accepted, copy)); QVERIFY(root.follows(second));
+	QCOMPARE(root.latestLegacyAcceptance()["parent"].toString(), accepted); QCOMPARE(root.latestLegacyAcceptance()["kind"].toString(), QString("absent"));
+	auto changed = root; auto events = changed.value["legacy_acceptances"].toArray(); auto firstEvent = events[0].toObject();
+	firstEvent["head"] = copy; events[0] = firstEvent; changed.value["legacy_acceptances"] = events;
+	QVERIFY(!changed.follows(first));
+	changed = root; events = changed.value["legacy_acceptances"].toArray(); auto lastEvent = events.last().toObject();
+	lastEvent["head"] = baseline; events[events.size() - 1] = lastEvent; changed.value["legacy_acceptances"] = events;
+	QVERIFY(!changed.valid());
+}
+
 void TestCloudSyncHistory::workspaceReceiveReceipt_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");

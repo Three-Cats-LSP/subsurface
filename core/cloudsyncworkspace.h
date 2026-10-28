@@ -62,6 +62,9 @@ public:
 	QJsonObject latestLegacyAcceptance() const;
 	bool acceptLegacyCopy(const QString &id, const QString &expectedAcceptance, const QString &expectedHead,
 		const QString &copyTicket, const CloudWorkspaceCopySource &observed);
+	// The caller must freshly verify absence before and after its CAS and
+	// treat a subsequently appearing source as a branch requiring review.
+	bool acceptLegacyAbsence(const QString &id, const QString &expectedAcceptance, const QString &expectedHead);
 	bool registerCopy(const QString &id, const QString &expectedHead, const CloudWorkspaceCopySource &source);
 	bool registerUpload(const QString &id, const QString &expectedHead, const QString &hash, qint64 bytes,
 		const QString &restoreSource = {}, const QString &reservation = {});
