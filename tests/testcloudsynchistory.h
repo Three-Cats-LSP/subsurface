@@ -50,6 +50,8 @@ private slots:
 	void workspaceAcceptanceIntent();
 	void workspaceAcceptanceWorkflow_data();
 	void workspaceAcceptanceWorkflow();
+	void workspaceBinding_data();
+	void workspaceBinding();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();

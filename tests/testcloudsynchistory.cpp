@@ -5,6 +5,7 @@
 #include "core/cloudsyncworkspacesource.h"
 #include "core/cloudsyncworkspacecopy.h"
 #include "core/cloudsyncworkspaceacceptance.h"
+#include "core/cloudsyncworkspacebinding.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
 #include "core/cloudsyncworkspaceapply.h"
@@ -1472,6 +1473,60 @@ void TestCloudSyncHistory::workspaceAcceptanceWorkflow()
 	QCOMPARE(n.files[1].data, original[1].data); QCOMPARE(n.files[3].data, mode == 8 ? B : original[3].data);
 	if (!changed && mode != 7) QCOMPARE(n.files[0].data, original[0].data);
 	QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
+}
+
+void TestCloudSyncHistory::workspaceBinding_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"activate-advance-restart", "foreign-choice", "foreign-root", "no-acceptance", "wrong-raw", "different-initial-model",
+		"invalid-xml", "corrupt-binding", "locked-binding", "wrong-revision", "missing-upload-proof", "uncommitted-upload-proof",
+		"wrong-upload-identity", "legacy-changed", "checkpoint-rollback", "unknown-baseline", "different-upload-model", "existing-binding-preserved", "remote-advanced-before-own-upload", "stale-activation-checkpoint"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-binding-%2").arg(g).arg(cases[m]))) << g << m;
+}
+void TestCloudSyncHistory::workspaceBinding()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
+	const auto provider = QString(google ? "google-drive" : "dropbox"), choice = uid(), copy = uid(), event = uid(), revision = uid();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "root" : "id:root");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	QVERIFY(root.registerCopy(copy, {}, source)); QVERIFY(root.completeUpload(copy, google ? "object-a" : "id:object-a", "rev-a")); QVERIFY(root.publish(copy, {}));
+	const auto withoutAcceptance = root; QVERIFY(root.acceptLegacyCopy(event, {}, copy, copy, source)); const auto baseline = root;
+	QTemporaryDir dir; QVERIFY(dir.isValid()); const auto file = dir.filePath("binding.json"); CloudWorkspaceBinding binding(file, ref, choice);
+	if (mode == 3) { QVERIFY(!binding.activate(withoutAcceptance, withoutAcceptance, A, A, revision)); return; }
+	if (mode == 19) { QVERIFY(!binding.activate(root, withoutAcceptance, A, A, revision)); return; }
+	if (mode == 4 || mode == 5 || mode == 6) {
+		const auto raw = mode == 4 ? B : mode == 6 ? QByteArray("bad xml") : A;
+		const auto model = mode == 5 ? B : raw; QVERIFY(!binding.activate(root, root, raw, model, revision)); return;
+	}
+	if (mode == 7) { QFile f(file); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("unknown"); f.close(); QVERIFY(!binding.activate(root, root, A, A, revision)); return; }
+	if (mode == 8) { QLockFile lock(file + ".lock"); QVERIFY(lock.tryLock(0)); QVERIFY(!binding.activate(root, root, A, A, revision)); return; }
+	QVERIFY(binding.activate(root, root, A, A, revision)); QCOMPARE(binding.commit(), copy); QCOMPARE(binding.acceptance(), event); QVERIFY(binding.matchesModel(A)); QVERIFY(!binding.matchesModel(B));
+	const auto saved = binding.value();
+	if (mode == 1 || mode == 2) {
+		const auto other = mode == 2 ? CloudWorkspaceReference::create(provider, Account, uid(), google ? "other" : "id:other") : ref;
+		CloudWorkspaceBinding foreign(file, other, mode == 1 ? uid() : choice); QVERIFY(!foreign.load()); QVERIFY(!foreign.activate(root, root, A, A, uid())); QCOMPARE(binding.value(), saved); return;
+	}
+	if (mode == 17) { QVERIFY(!binding.activate(root, root, A, A, uid())); QCOMPARE(binding.value(), saved); return; }
+	QString uploadParent = copy;
+	if (mode == 18) {
+		const auto other = uid(); QVERIFY(root.registerUpload(other, copy, CloudSyncManifest::sha256(A), A.size()));
+		QVERIFY(root.completeUpload(other, google ? "object-other" : "id:object-other", "rev-other")); QVERIFY(root.publish(other, copy)); uploadParent = other;
+	}
+	const auto upload = uid(), nextRevision = uid(); QVERIFY(root.registerUpload(upload, uploadParent, CloudSyncManifest::sha256(B), B.size()));
+	const auto object = QString(google ? "object-b" : "id:object-b"); QVERIFY(root.completeUpload(upload, object, "rev-b")); QVERIFY(root.publish(upload, uploadParent));
+	const auto proofFile = dir.filePath("upload.json"); CloudWorkspaceUploadIntent proof(proofFile, ref, CloudSyncManifest::sha256(B), B.size(), upload, uploadParent);
+	QVERIFY(proof.prepare()); QVERIFY(proof.beginRegistration()); QVERIFY(proof.registerTicket()); QVERIFY(proof.submit());
+	QVERIFY(proof.identify(mode == 12 ? (google ? "foreign" : "id:foreign") : object)); QVERIFY(proof.verify("rev-b")); QVERIFY(proof.upload());
+	if (mode != 11) QVERIFY(proof.commit());
+	if (mode == 13) QVERIFY(root.acceptLegacyCopy(uid(), event, upload, copy, source));
+	if (mode == 15) { auto journal = root.value["journal"].toObject(); auto tickets = journal["tickets"].toObject(); auto old = tickets[copy].toObject(); old["sha256"] = CloudSyncManifest::sha256(B); tickets[copy] = old; journal["tickets"] = tickets; root.value["journal"] = journal; }
+	const bool ok = binding.advanceOwnedUpload(mode == 9 ? uid() : revision, root, mode == 14 ? withoutAcceptance : baseline, B,
+		mode == 16 ? A : B, mode == 10 ? dir.filePath("missing.json") : proofFile, nextRevision);
+	if (mode == 0) {
+		QVERIFY(ok); QCOMPARE(binding.commit(), upload); QCOMPARE(binding.revision(), nextRevision); QVERIFY(binding.matchesModel(B));
+		CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), binding.value());
+		QVERIFY(!restarted.advanceOwnedUpload(revision, root, baseline, B, B, proofFile, uid()));
+	} else { QVERIFY(!ok); CloudWorkspaceBinding restarted(file, ref, choice); QVERIFY(restarted.load()); QCOMPARE(restarted.value(), saved); }
 }
 
 void TestCloudSyncHistory::workspaceCopyIntent_data()
