@@ -164,3 +164,30 @@ bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, con
 	auto nextBody = body; nextBody["previous"] = QJsonObject{{"revision", old.value("revision")}, {"commit", old.value("commit")}, {"raw", old.value("raw")}, {"model", old.value("model")}};
 	return replay ? saved == nextBody : write(nextBody);
 }
+bool CloudWorkspaceBinding::ownsReceived(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+	CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader)
+{
+	if (fileName.isEmpty()) return false;
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !receipt.reload() || receipt.state() != "persisted" ||
+	    !root.valid() || !checkpoint.valid() || !root.follows(checkpoint) || root.reference().value != reference.value ||
+	    checkpoint.reference().value != reference.value) return false;
+	const auto proof = receipt.proof(), old = saved.value("previous").toObject();
+	const auto target = text(proof, "target"), baseline = text(proof, "baseline"), reservation = text(proof, "reservation");
+	const auto before = receipt.before(), raw = receipt.raw(), after = receipt.after();
+	const QJsonObject beforeDigest{{"sha256", CloudSyncManifest::sha256(before)}, {"bytes", double(before.size())}};
+	const QJsonObject afterDigest{{"sha256", CloudSyncManifest::sha256(after)}, {"bytes", double(after.size())}};
+	if (old.isEmpty() || proof.value("workspace") != reference.value || proof.value("choice_version") != scope.value("choice_version") ||
+	    text(proof, "binding_revision") != text(old, "revision") || text(proof, "next_revision") != revision() ||
+	    baseline != text(old, "commit") || target != commit() || proof.value("acceptance") != saved.value("legacy_acceptance") ||
+	    proof.value("baseline_pin") != old.value("raw") || proof.value("target_pin") != saved.value("raw") ||
+	    old.value("raw").toObject() != pin(root.ticket(baseline)) || old.value("raw").toObject() != pin(checkpoint.ticket(baseline)) ||
+	    saved.value("raw").toObject() != pin(root.ticket(target)) || old.value("model").toObject() != beforeDigest ||
+	    saved.value("model").toObject() != afterDigest || !validXml(raw) ||
+	    !reader.matches(reference, target, reservation) || !reader.reload() || reader.snapshot() != saved.value("raw").toObject()) return false;
+	const auto r = root.value.value("journal").toObject().value("reservations").toObject().value(reservation).toObject();
+	if (text(r, "commit") != target || !r.value("active").isBool()) return false;
+	if (reader.state() == "verified") return r.value("active") == QJsonValue(true);
+	if (reader.state() == "releasing") return true;
+	return reader.state() == "released" && r.value("active") == QJsonValue(false);
+}

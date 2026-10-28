@@ -19,6 +19,10 @@ public:
 		const QByteArray &raw, const QByteArray &model, const QString &uploadIntentFile, const QString &revision);
 	bool advanceReceived(const QString &expectedRevision, const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader, const QByteArray &currentModel, const QString &revision);
+	// Recognize a persisted receive after the binding was saved, including
+	// interrupted reservation release. This does not authorize a new sync.
+	bool ownsReceived(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+		CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader);
 	QJsonObject value() const { return saved; }
 	QString revision() const;
 	QString commit() const;
