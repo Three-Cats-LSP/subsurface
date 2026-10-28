@@ -1533,7 +1533,7 @@ void TestCloudSyncManager::testWorkspaceRouteFence_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"legacy-lock-excludes-second-process", "required-marker-missing", "corrupt-marker", "live-route-lock",
-		"workspace-excludes-legacy", "route-changes-during-sync", "protected-raw-upload-excludes-legacy", "unrelated-raw-upload", "durable-required-flag"};
+		"workspace-excludes-legacy", "route-changes-during-sync", "protected-raw-upload-excludes-legacy", "unrelated-raw-upload", "durable-required-flag", "false-required-flag"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-route-fence-%2").arg(google).arg(mode))) << google << mode;
 }
@@ -1551,6 +1551,10 @@ void TestCloudSyncManager::testWorkspaceRouteFence()
 	other.tokens.insert(provider, token); other.verifiedAccountTokens.insert(provider, token.accessToken);
 	const auto routePath = manager.workspaceRoutePath(provider), key = QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + provider;
 	const auto original = manager.serializeCurrentDiveLog();
+	if (mode == 9) {
+		QSettings().setValue(key, false); QVERIFY(manager.workspaceRouteRequired(provider)); QVERIFY(!manager.workspaceRouteConfirmed(provider));
+		manager.syncDiveLog(provider); QVERIFY(!manager.syncInProgress()); QCOMPARE(network.requests, 0); return;
+	}
 	if (mode == 8) {
 		QVERIFY(!manager.requireWorkspaceRoute(provider)); QVERIFY(manager.acquireCloudRoute(provider, false));
 		QVERIFY(manager.requireWorkspaceRoute(provider)); QVERIFY(manager.workspaceRouteRequired(provider)); QVERIFY(manager.workspaceRouteConfirmed(provider));
@@ -2052,7 +2056,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2092,7 +2096,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 		QVERIFY(root.completeUpload(ticket, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(ticket, initial));
 		network.files[0].data = root.json(); network.files[0].version = "remote-head";
 	}
-	if (mode == 1 || mode == 3 || mode == 6 || mode == 10) ::divelog.dives[0]->notes = "Local workspace version";
+	if (mode == 1 || mode == 3 || mode == 6 || mode == 10 || mode == 11 || mode == 12) ::divelog.dives[0]->notes = "Local workspace version";
 	if (mode == 4) { auto manifest = CloudSyncManifest::forPayload(original); manifest.schemaVersion = 2; manifest.payloadFile = "subsurface-neo-" + manifest.revisionId + ".xml"; network.add("subsurface-neo-sync.json", manifest.toJson()); network.add(manifest.payloadFileName(), original); }
 	if (mode == 5) QVERIFY(QFile::remove(manager.workspaceRoutePath(provider) + ".json"));
 	if (mode == 8) { const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "other" : "id:other"); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), other)); QVERIFY(choice.select(choice.version(), ref)); }
@@ -2107,17 +2111,35 @@ void TestCloudSyncManager::testWorkspaceSync()
 	else manager.syncDiveLog(provider);
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 	if (mode == 7) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); allowSave = true; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000); }
+	if (mode == 11) {
+		QCOMPARE(finished.size(), 1);
+		const auto active = QDir(directory).filePath("sync-uploads/" + ref.key());
+		const auto attempts = QDir(active).entryList(QDir::Dirs | QDir::NoDotAndDotDot); QCOMPARE(attempts.size(), 1);
+		::divelog.dives[0]->notes = "Second workspace version"; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QCOMPARE(finished.size(), 2); const auto archive = QDir(directory).filePath("sync-completed/sync-uploads/" + ref.key() + "/" + attempts[0]);
+		QVERIFY(QFileInfo::exists(QDir(archive).filePath("plan/plan.json"))); QVERIFY(QFileInfo::exists(QDir(archive).filePath("plan/payload.xml")));
+	}
+	if (mode == 12) {
+		QCOMPARE(finished.size(), 1); const auto active = QDir(directory).filePath("sync-uploads/" + ref.key());
+		const auto attempts = QDir(active).entryList(QDir::Dirs | QDir::NoDotAndDotDot); QCOMPARE(attempts.size(), 1);
+		const auto collision = QDir(directory).filePath("sync-completed/sync-uploads/" + ref.key() + "/" + attempts[0]);
+		QVERIFY(QDir().mkpath(collision)); QFile sentinel(QDir(collision).filePath("unrelated")); QVERIFY(sentinel.open(QIODevice::WriteOnly)); QCOMPARE(sentinel.write("kept"), qint64(4)); sentinel.close();
+		const auto writesAfter = network.puts; const auto filesAfter = network.files.size(); const auto headAfter = network.files[0].data;
+		manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(finished.size(), 1); QCOMPARE(network.puts, writesAfter); QCOMPARE(network.files.size(), filesAfter); QCOMPARE(network.files[0].data, headAfter);
+		QVERIFY(sentinel.open(QIODevice::ReadOnly)); QCOMPARE(sentinel.readAll(), QByteArray("kept")); QVERIFY(QFileInfo::exists(QDir(active).filePath(attempts[0] + "/plan/payload.xml"))); return;
+	}
 	if (mode == 10) {
-		QVERIFY(!manager.lastError().isEmpty()); const auto files = network.files.size(), writesAfter = network.puts; const auto rootAfter = network.files[0].data;
+		QVERIFY(!manager.lastError().isEmpty()); const auto files = network.files.size(); const auto writesAfter = network.puts; const auto rootAfter = network.files[0].data;
 		network.workspacePayloadAckLost = false; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(network.files.size(), files); QCOMPARE(network.puts, writesAfter); QCOMPARE(network.files[0].data, rootAfter);
 	}
-	const bool success = mode == 0 || mode == 1 || mode == 2 || mode == 6 || mode == 7;
-	QCOMPARE(finished.size(), success ? 1 : 0);
+	const bool success = mode == 0 || mode == 1 || mode == 2 || mode == 6 || mode == 7 || mode == 11;
+	QCOMPARE(finished.size(), success ? (mode == 11 ? 2 : 1) : 0);
 	if (success) {
 		QVERIFY2(manager.lastError().isEmpty(), qPrintable(manager.lastError()));
 		if (mode == 2 || mode == 7) { QCOMPARE(saves, mode == 7 ? 2 : 1); QCOMPARE(persisted, CloudWorkspaceModel::currentXml()); QVERIFY(persisted != original); }
-		else QCOMPARE(CloudWorkspaceModel::currentXml(), before);
+		else if (mode != 11) QCOMPARE(CloudWorkspaceModel::currentXml(), before);
 		if (mode == 1 || mode == 6) { root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.head() != initial); QCOMPARE(network.content(ref.payloadName(root.head())), before); }
 		if (mode == 0) QCOMPARE(network.puts, writes);
 	} else { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), before); if (mode != 10) { QCOMPARE(network.files[0].data, rootBefore); QCOMPARE(network.puts, writes); } }

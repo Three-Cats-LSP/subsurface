@@ -101,26 +101,49 @@ bool CloudSyncManager::resumeWorkspaceSync()
 		const auto base = QDir(workspaceSyncPath).filePath(type), scope = QDir(base).filePath(workspaceSyncReference.key());
 		if (!safePath({workspaceSyncPath, base, scope})) { setError(tr("Workspace recovery storage needs review. All records were kept.")); clearSyncOperation(); return true; }
 		QDir directory(scope); const auto entries = directory.entryInfoList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
-		if (entries.size() > 64) { setError(tr("Workspace recovery reached its safety limit. All records were kept.")); clearSyncOperation(); return true; }
-		for (const auto &entry : entries) {
+		const bool limited = entries.size() > 64;
+		for (int index = 0; index < qMin(64, int(entries.size())); ++index) {
+			const auto entry = entries[index];
 			const auto attempt = entry.fileName();
 			if (!entry.isDir() || entry.isSymLink() || !CloudHistoryRecord::validEpoch(attempt)) { setError(tr("Workspace recovery records need review. All records were kept.")); clearSyncOperation(); return true; }
 			const auto dir = QDir(entry.filePath()).filePath("plan");
 			if (!safePath({entry.filePath(), dir})) { setError(tr("Workspace recovery records need review. All records were kept.")); clearSyncOperation(); return true; }
 			const auto body = readPlan(QDir(dir).filePath("plan.json"));
-			bool valid = false; QString state;
+			bool valid = false, completedProof = false; QString state;
+			CloudWorkspaceAuthority authority(workspaceSyncCheckpointFile, workspaceSyncReference);
+			CloudWorkspaceBinding binding(workspaceSyncBindingFile, workspaceSyncReference, workspaceSyncChoiceVersion);
 			if (type == "sync-uploads") {
 				CloudWorkspaceUploadPlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, field(body, "binding_revision"), field(body, "next_revision"), field(body, "baseline"), field(body, "ticket"), attempt);
 				valid = plan.reload(); state = plan.state();
+				if (valid && state == "completed" && authority.load() && binding.load())
+					completedProof = plan.complete(binding, authority.record(), authority.record(), QDir(entry.filePath()).filePath("intent.json"));
 			} else {
 				CloudWorkspaceReceivePlan plan(dir, workspaceSyncReference, workspaceSyncChoiceVersion, field(body, "binding_revision"), field(body, "next_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), attempt);
 				valid = plan.reload(); state = plan.state();
+				if (valid && state == "completed" && authority.load() && binding.load()) {
+					CloudWorkspaceReceiveReceipt receipt(QDir(entry.filePath()).filePath("recovery"), workspaceSyncReference, workspaceSyncChoiceVersion,
+						field(body, "binding_revision"), field(body, "baseline"), field(body, "target"), field(body, "reservation"), field(body, "next_revision"));
+					CloudWorkspaceReadIntent reader(QDir(entry.filePath()).filePath("read.json"), workspaceSyncReference, field(body, "target"), field(body, "reservation"));
+					completedProof = plan.complete(binding, authority.record(), authority.record(), receipt, reader);
+				}
 			}
 			if (!valid) { setError(tr("Workspace recovery records need review. All records were kept.")); clearSyncOperation(); return true; }
-			if (state == "completed") continue;
+			if (state == "completed") {
+				if (!completedProof) { setError(tr("Completed workspace records need review. All recovery files were kept.")); clearSyncOperation(); return true; }
+				// Keep completed recovery records, but move them out of the
+				// bounded active scan. Rename within the same local volume;
+				// an interrupted move leaves either location intact.
+				const auto archive = QDir(workspaceSyncPath).filePath("sync-completed"), kind = QDir(archive).filePath(type);
+				const auto destination = QDir(kind).filePath(workspaceSyncReference.key()), target = QDir(destination).filePath(attempt);
+				if (!safePath({archive, kind, destination, target}) || QFileInfo::exists(target) || !QDir().mkpath(destination) || !QDir().rename(entry.filePath(), target)) {
+					setError(tr("Completed workspace records could not be archived. All recovery files were kept.")); clearSyncOperation(); return true;
+				}
+				continue;
+			}
 			if (!pending.isEmpty()) { setError(tr("Multiple workspace sync attempts need review. All records were kept.")); clearSyncOperation(); return true; }
 			pending = body; pendingDir = entry.filePath(); kind = type;
 		}
+		if (limited) { setError(tr("More workspace records need review. Completed records were kept; try syncing again.")); clearSyncOperation(); return true; }
 	}
 	if (pending.isEmpty()) return false;
 	const auto dir = QDir(pendingDir).filePath("plan"), choice = QDir(workspaceSyncPath).filePath("selection.json");
