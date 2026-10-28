@@ -104,7 +104,11 @@ not a claim that the visible planner switch or the Windows release is complete.
 Implementation `b2d1df52b` is pushed; initial validation source `ba0db8dc2` ran
 in **40705358571**. Source reproduction and the hosted C++ regression passed
 **55/55**. The Windows executable compiled but exited before test output;
-its failed aggregate and LastTest log are retained. Repair `91e130b5c` deploys
-the Qt runtime before testing and adds direct startup exit diagnostics. Resume
-**40706143649** before claiming Windows C++ acceptance. Windows app/package
-**40705358568** is validating the same functional LSP source separately.
+its failed aggregate and LastTest log are retained. Repair `91e130b5c` added
+runtime deployment, which exposed a missing platform plugin in the reused Qt
+installation (**40706143649**, failed before tests). Source `6c97e7acf` isolates
+the complete Qt cache and verifies its dependencies. Resume **40706743408**
+before claiming Windows C++ acceptance. Windows app/package **40705358568**
+validates the same functional LSP source separately; full linked native app
+regression **40707131405** runs on 6c97. No calculation source/expectations changed
+to repair these CI startup failures.

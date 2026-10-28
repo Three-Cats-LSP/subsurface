@@ -16,14 +16,22 @@ passed, and the hosted native C++ test passed **55/55**. Its Windows C++ build
 passed but the process exited before any test output. Retained initial evidence:
 `work/lsp-adoption-evidence-ba0db8dc2-20261028/{host,windows}/LastTest.log`.
 Do not call that aggregate green or adjust expectations to hide its startup
-failure. Workflow repair **`91e130b5c`** deploys the actual Qt runtime and records
-the direct process exit code if needed; resume LSP run **40706143649**. The first
+failure. Workflow repair **`91e130b5c`** added deployment and direct exit diagnostics;
+its run **40706143649 failed during deployment** with "Unable to find the platform
+plugin", before Windows tests could run. The reused Qt installation was incomplete.
+Source **`6c97e7acf`** uses a separate full-Qt cache and explicit DLL/platform-plugin
+checks. Resume LSP run **40706743408**; source parity and its hosted C++ checks
+have passed, Windows Qt installation was still running at the last observation.
+Neither failed aggregate was reclassified as a pass. The first
 manual dispatch of the new workflow returned 404 before it was registered by a
 non-skipped branch push; it started no run. The repair was successfully dispatched.
 The matching app Windows run **40705358568** and Android compile **40705358554**
 also continue on ba0; do not duplicate them. Physical Android is still deferred.
-After focused Windows checks pass, dispatch the full native application suite
-for the LSP-integrated source (the existing 1cc suite below predates LSP).
+Full native application regression **40707131405** was dispatched on 6c97 to
+exercise the actual linked model/resources in both app targets. The C++ LSP code
+is unchanged since b2d; later commits changed only CI and checkpoints. Resume
+these pending checks without duplicate runs. The existing 1cc suite below
+predates LSP and cannot substitute for the new integrated check.
 
 Continue actual shared UI/save/export adaptation using the finite acceptance
 list in the LSP document, while preserving existing native plan identity. The
@@ -33,8 +41,9 @@ is callable through `calculateLspPlan`; the public page is not routed there yet.
 The previous integrated `1cc711e7f` Windows run **40698501000 passed**, including
 Clean/Modern, launch, export, lifecycle and portable package. Targeted 50e native
 Windows protocol **40696305894 passed**; integrated 1cc protocol jobs in
-**40698333716 both passed**, and its full app job was in mobile tests at the
-last observation. Resume that run, do not duplicate it.
+**40698333716 both passed**. That run's full app job has now **passed all 38
+desktop and 35 mobile-target host suites**, including the 18 native fixtures.
+This closes its own regression gate; no repeat of that unchanged source is needed.
 
 Uncommitted history-page work is preserved separately in `core/cloudsyncworkspacepages.cpp`,
 workspace/history model changes and the provider-paired `workspacePages` cases.
