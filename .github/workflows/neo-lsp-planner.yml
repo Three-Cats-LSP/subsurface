@@ -19,6 +19,7 @@ permissions: read-all
 jobs:
   source-parity:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
@@ -31,6 +32,7 @@ jobs:
       - run: node tools/lsp-planner/capture-reference.cjs --check
   native:
     needs: source-parity
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
