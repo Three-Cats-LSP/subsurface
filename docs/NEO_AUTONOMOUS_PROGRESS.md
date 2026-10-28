@@ -1,5 +1,23 @@
 # Windows cloud reliability continuation
 
+**Focused archive gate passed on the host.**
+**04801c5a5 / 40742412183** passed **70 focused rows**, zero failures, in 70.39 s.
+Actual debug coordinator timings were 1.5–7.6 s across upload, read, copy,
+acceptance, rollover while registration is pending, and upload with 600 retained
+tickets. The Windows half is pending. The earlier timed-out aggregate remains
+failed. This focused run does not substitute for the full protocol/app suites.
+
+Final integration review moved rollover intent files under the checkpoint
+parent's `history-rollovers/<workspace-key>/` tree. Putting them beside an
+acceptance attempt would violate the manager's UUID-only active-attempt scan,
+even though the individual acceptance receipt's own directory remained clean.
+All four coordinators now use one deterministic path helper scoped to the
+operation, exact wire snapshot and provider revision. A new acceptance restart
+assertion checks idempotence and that only the original UUID directory remains
+in its active scope. No existing unrelated files are moved or deleted. Validate
+this final source with full protocol/native and matching Windows/Clean/Modern,
+then fresh isolated Google rollover + history/restore/sync checks.
+
 **Archive failure and repair, 29 October JST.**
 The host in **9db0fa693 / 40738883128** failed two choice-change injections (the
 fixture incorrectly tried selecting an empty reference) and timed out while

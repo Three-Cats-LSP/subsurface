@@ -279,7 +279,7 @@ void CloudWorkspaceUpload::receivedRoot(const QJsonObject &value, const QString 
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
 	if (root.needsArchive()) {
-		const auto archiveIntent = initialIntentFile + ".history-" + CloudSyncManifest::sha256(root.json() + version.toUtf8()) + ".json";
+		const auto archiveIntent = CloudWorkspaceArchive::intentPath(checkpointFile, initialIntentFile, root, version);
 		archiver.start(token, root, version, choiceFile, choiceVersion, checkpointFile, archiveIntent, scopeCurrent); return;
 	}
 	if (step == Step::ConfirmRoot) { pending.value = {}; auto next = std::move(continuation); continuation = {}; next(); return; }

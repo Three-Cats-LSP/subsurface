@@ -240,10 +240,7 @@ void CloudWorkspaceAcceptance::receivedRoot(const QJsonObject &value, const QStr
 	    !authority.observe(observed, version, true) || !current()) { fail(); return; }
 	root = observed; rootVersion = version;
 	if (root.needsArchive()) {
-		// Acceptance keeps a deliberately exclusive operation directory. Archive
-		// metadata belongs in a separate sibling directory, never that receipt.
-		const auto archiveIntent = QFileInfo(intentFile).absolutePath() + ".history/" + QFileInfo(intentFile).fileName() + "-" +
-			CloudSyncManifest::sha256(root.json() + version.toUtf8()) + ".json";
+		const auto archiveIntent = CloudWorkspaceArchive::intentPath(checkpointFile, intentFile, root, version);
 		archiver.start(token, root, version, choiceFile, choiceVersion, checkpointFile, archiveIntent, scopeCurrent); return;
 	}
 	if (step == Step::FinalRoot) {

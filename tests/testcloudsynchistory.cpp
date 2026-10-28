@@ -4372,9 +4372,10 @@ void TestCloudSyncHistory::workspaceAutomaticArchive()
 	n.files[2].data = f.root.json(); const auto original = n.files;
 	n.workspaceUploads = n.workspaceCopies = true;
 	QTemporaryDir directory; QVERIFY(directory.isValid()); const auto provider = QString(google ? "google-drive" : "dropbox");
-	const auto choiceFile = directory.filePath("choice.json"), cpFile = directory.filePath("checkpoint.json"), intentFile = directory.filePath(mode == 3 ? "acceptance/operation.json" : "operation.json");
+	const auto ticket = uid();
+	const auto choiceFile = directory.filePath("choice.json"), cpFile = directory.filePath("checkpoint.json"), intentFile = directory.filePath(mode == 3 ? "acceptances/" + f.reference.key() + "/" + ticket + "/intent.json" : "operation.json");
 	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, f.reference)); const auto choiceVersion = choice.version();
-	CloudWorkspaceAuthority authority(cpFile, f.reference); QVERIFY(authority.observe(f.root, n.files[2].rev)); const auto ticket = uid();
+	CloudWorkspaceAuthority authority(cpFile, f.reference); QVERIFY(authority.observe(f.root, n.files[2].rev));
 	QElapsedTimer elapsed; elapsed.start();
 	if (mode == 0 || mode >= 4) {
 		CloudWorkspaceUpload upload(&n); QSignalSpy done(&upload, &CloudWorkspaceUpload::finished), errors(&upload, &CloudWorkspaceUpload::failed);
@@ -4393,6 +4394,11 @@ void TestCloudSyncHistory::workspaceAutomaticArchive()
 		CloudWorkspaceAcceptance acceptance(&n); QSignalSpy done(&acceptance, &CloudWorkspaceAcceptance::finished), errors(&acceptance, &CloudWorkspaceAcceptance::failed);
 		acceptance.start("token", f.reference, copySource(n, google), choiceFile, choiceVersion, cpFile, intentFile, CloudSyncManifest::sha256(A), ticket, {}, f.head, f.commit, [&] { return n.guard; });
 		QTRY_COMPARE_WITH_TIMEOUT(done.size() + errors.size(), 1, 30000); QCOMPARE(done.size(), 1);
+		const auto mutations = n.mutations;
+		acceptance.start("token", f.reference, copySource(n, google), choiceFile, choiceVersion, cpFile, intentFile, CloudSyncManifest::sha256(A), ticket, {}, f.head, f.commit, [&] { return n.guard; });
+		QTRY_COMPARE_WITH_TIMEOUT(done.size(), 2, 30000); QCOMPARE(n.mutations, mutations);
+		const QDir attempts(directory.filePath("acceptances/" + f.reference.key()));
+		QCOMPARE(attempts.entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{ticket});
 	}
 	qInfo() << "Automatic archive coordinator milliseconds:" << elapsed.elapsed();
 	const auto result = n.workspaceRecord(n.files[2].data); QVERIFY(result.valid()); QVERIFY(result.follows(f.root));

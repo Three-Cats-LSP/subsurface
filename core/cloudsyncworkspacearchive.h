@@ -16,6 +16,8 @@ public:
 		const QString &choiceFile, const QString &choiceVersion, const QString &checkpointFile,
 		const QString &intentFile, const std::function<bool()> &scopeCurrent);
 	void cancel();
+	static QString intentPath(const QString &checkpointFile, const QString &operationFile,
+		const CloudWorkspaceRecord &root, const QString &rootVersion);
 signals:
 	void finished(const QJsonObject &root, const QString &version);
 	void failed(const QString &message, bool tokenRejected);

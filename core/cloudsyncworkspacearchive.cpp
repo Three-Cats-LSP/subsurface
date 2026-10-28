@@ -35,6 +35,13 @@ CloudWorkspaceArchive::CloudWorkspaceArchive(QNetworkAccessManager *network, QOb
 	});
 	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &) { fail(); });
 }
+QString CloudWorkspaceArchive::intentPath(const QString &checkpointFile, const QString &operationFile,
+	const CloudWorkspaceRecord &root, const QString &rootVersion)
+{
+	if (checkpointFile.isEmpty() || operationFile.isEmpty() || !root.valid() || !revision(rootVersion)) return {};
+	const auto key = CloudSyncManifest::sha256(operationFile.toUtf8() + '\0' + root.json() + '\0' + rootVersion.toUtf8());
+	return QDir(QFileInfo(checkpointFile).absolutePath()).filePath("history-rollovers/" + root.reference().key() + "/" + key + ".json");
+}
 CloudWorkspaceArchive::~CloudWorkspaceArchive() { cancel(); }
 void CloudWorkspaceArchive::cancel()
 {
