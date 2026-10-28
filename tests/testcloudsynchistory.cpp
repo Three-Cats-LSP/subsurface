@@ -2057,7 +2057,7 @@ void TestCloudSyncHistory::workspaceSyncReview_data()
 	const QStringList cases = {"unchanged", "local-only", "remote-only", "both-changed", "legacy-changed-before",
 		"legacy-changed-between-reads", "head-changed-between-reads", "local-edit", "scope-changed", "stale-choice",
 		"missing-checkpoint", "missing-binding", "token-rejected", "cancel", "accepted-absence", "source-appears",
-		"provider-failure", "acceptance-changed", "root-rollback", "binding-changed"};
+		"provider-failure", "acceptance-changed", "root-rollback", "binding-changed", "checkpoint-missing-baseline", "binding-body-changed"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-sync-review-%2").arg(g).arg(m))) << g << m;
 }
@@ -2069,6 +2069,7 @@ void TestCloudSyncHistory::workspaceSyncReview()
 	const bool absence = mode == 14 || mode == 15; if (absence) n.files.clear();
 	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "3" : "id:3");
 	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	const auto genesis = root;
 	if (absence) QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
 	else QVERIFY(root.registerCopy(baseline, {}, source));
 	QVERIFY(root.completeUpload(baseline, google ? "4" : "id:4", "rev-4")); QVERIFY(root.publish(baseline, {}));
@@ -2078,7 +2079,7 @@ void TestCloudSyncHistory::workspaceSyncReview()
 	QTemporaryDir temp; QVERIFY(temp.isValid());
 	const auto choiceFile = temp.filePath("choice.json"), checkpointFile = temp.filePath("checkpoint.json"), bindingFile = temp.filePath("binding.json");
 	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, ref)); const auto selectedVersion = choice.version();
-	CloudWorkspaceAuthority authority(checkpointFile, ref); QVERIFY(authority.observe(checkpoint, "rev-3"));
+	CloudWorkspaceAuthority authority(checkpointFile, ref); QVERIFY(authority.observe(mode == 20 ? genesis : checkpoint, "rev-3"));
 	CloudWorkspaceBinding binding(bindingFile, ref, selectedVersion); QVERIFY(binding.activate(root, root, A, A, uid()));
 	const auto appendLater = [&](CloudWorkspaceRecord &record) {
 		const auto later = uid(), parent = record.head(); QVERIFY(record.registerUpload(later, parent, CloudSyncManifest::sha256(B), B.size()));
@@ -2094,6 +2095,11 @@ void TestCloudSyncHistory::workspaceSyncReview()
 		if (mode == 7 && !injected) { local = A == expected ? B : A; injected = true; }
 		if (mode == 8) n.guard = false;
 		if (mode == 19 && !injected) { QFile f(bindingFile); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("changed") == 7); f.close(); injected = true; }
+		if (mode == 21 && !injected) {
+			QFile f(bindingFile); QVERIFY(f.open(QIODevice::ReadOnly)); auto body = QJsonDocument::fromJson(f.readAll()).object(); f.close();
+			body["model"] = QJsonObject{{"sha256", CloudSyncManifest::sha256(B)}, {"bytes", double(B.size())}};
+			QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); const auto bytes = QJsonDocument(body).toJson(); QCOMPARE(f.write(bytes), qint64(bytes.size())); f.close(); injected = true;
+		}
 		QString alias;
 		if (google && r.url().path() == "/drive/v3/files") alias = QUrlQuery(r.url()).queryItemValue("q").section('\'', 1, 1);
 		else if (!google) alias = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["path"].toString().mid(1);

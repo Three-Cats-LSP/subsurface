@@ -34,6 +34,7 @@ private:
 	CloudWorkspaceReference reference;
 	CloudWorkspaceRecord root;
 	CloudWorkspaceCopySource firstSource;
+	QJsonObject bindingValue;
 	Step step = Step::Idle;
 	bool firstMissing = false;
 	quint64 generation = 0;

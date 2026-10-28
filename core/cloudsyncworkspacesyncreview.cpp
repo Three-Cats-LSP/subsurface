@@ -3,6 +3,11 @@
 
 namespace {
 QString text(const QJsonObject &o, const char *key) { return o.value(QLatin1String(key)).toString(); }
+QJsonObject pin(const QJsonObject &ticket)
+{
+	return {{"name", ticket.value("name")}, {"object", ticket.value("object")}, {"version", ticket.value("version")},
+		{"sha256", ticket.value("sha256")}, {"bytes", ticket.value("bytes")}};
+}
 }
 CloudWorkspaceSyncReview::CloudWorkspaceSyncReview(QNetworkAccessManager *network, QObject *parent) :
 	QObject(parent), opener(network, this), sourceReview(network, this)
@@ -19,7 +24,7 @@ CloudWorkspaceSyncReview::~CloudWorkspaceSyncReview() { cancel(); }
 void CloudWorkspaceSyncReview::cancel()
 {
 	++generation; step = Step::Idle; deadline.stop(); opener.cancel(); sourceReview.cancel();
-	reference.value = {}; root.value = {}; firstSource.value = {}; firstMissing = false;
+	reference.value = {}; root.value = {}; firstSource.value = {}; bindingValue = {}; firstMissing = false;
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); bindingFile.clear(); rootVersion.clear(); bindingRevision.clear(); localModel.clear();
 	scopeCurrent = {}; localSnapshot = {};
 }
@@ -39,8 +44,9 @@ void CloudWorkspaceSyncReview::start(const QString &accessToken, const CloudWork
 	    checkpointFile.isEmpty() || bindingFile.isEmpty() || localModel.isEmpty() || localModel.size() > 64 * 1024 * 1024 ||
 	    !CloudHistoryRecord::validXml(localModel) || !scopeCurrent || !localSnapshot || !current()) { fail(); return; }
 	CloudWorkspaceBinding saved(bindingFile, reference, choiceVersion); CloudWorkspaceAuthority authority(checkpointFile, reference);
-	if (!saved.load() || saved.value().isEmpty() || !authority.load() || !authority.record().valid()) { fail(); return; }
-	bindingRevision = saved.revision();
+	if (!saved.load() || saved.value().isEmpty() || !authority.load() || !authority.record().valid() ||
+	    saved.value().value("raw").toObject() != pin(authority.record().ticket(saved.commit()))) { fail(); return; }
+	bindingRevision = saved.revision(); bindingValue = saved.value();
 	deadline.start(); readRoot(Step::FirstRoot);
 }
 bool CloudWorkspaceSyncReview::current()
@@ -53,7 +59,7 @@ bool CloudWorkspaceSyncReview::current()
 	if (!choice.load() || choice.version() != choiceVersion || choice.selected().value != reference.value) { fail(); return false; }
 	if (!bindingRevision.isEmpty()) {
 		CloudWorkspaceBinding binding(bindingFile, reference, choiceVersion);
-		if (!binding.load() || binding.revision() != bindingRevision) { fail(); return false; }
+		if (!binding.load() || binding.revision() != bindingRevision || binding.value() != bindingValue) { fail(); return false; }
 	}
 	const auto snapshot = localSnapshot; const auto actual = snapshot(); if (serial != generation || step == Step::Idle) return false;
 	if (actual != localModel) { fail(); return false; }
