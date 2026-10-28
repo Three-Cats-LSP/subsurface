@@ -23,14 +23,14 @@ ColumnLayout {
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
-		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. You can review versions and cloud branches; turn automatic sync off and clear provider assignments before changing them.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
+		text: panel.report.routeActive ? qsTr("This profile is routed to the selected workspace. You can review versions and cloud branches. Changing or restoring them while workspace sync is active is still being completed.") : qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. Review and activate it before using workspace sync.")
 		color: tokens.textSecondary; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	GridLayout {
 		Layout.fillWidth: true; columns: width > 560 ? 3 : 1; rowSpacing: 8; columnSpacing: 8
 		NeoButton {
 			objectName: "createWorkspace-" + panel.provider.id; text: qsTr("Create empty workspace"); compact: true; Layout.fillWidth: true
-			enabled: panel.available && !panel.report.recoveryRequired && !panel.report.setupLimitReached
+			enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.recoveryRequired && !panel.report.setupLimitReached
 			onClicked: CloudSync.runWorkspace(panel.provider.id, "create")
 		}
 		NeoButton {
@@ -66,7 +66,7 @@ ColumnLayout {
 			Layout.fillWidth: true; columns: width > 560 ? 2 : 1; rowSpacing: 8; columnSpacing: 8
 			NeoButton {
 				objectName: "saveWorkspaceVersion-" + panel.provider.id; text: qsTr("Save current log as a version"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && !panel.report.uploadLimitReached
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.uploadLimitReached
 				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "save")
 			}
 			NeoButton {
@@ -106,7 +106,7 @@ ColumnLayout {
 				}
 				NeoButton {
 					objectName: "restoreWorkspaceVersion-" + panel.provider.id + "-" + modelData.number; text: qsTr("Restore…"); compact: true
-					enabled: panel.available && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
+					enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
 					onClicked: { panel.pendingRestore = { source: modelData.id, number: modelData.number, review: panel.report.versionReview }; restoreDialog.open() }
 				}
 			}
@@ -125,13 +125,13 @@ ColumnLayout {
 		}
 		NeoButton {
 			objectName: "copyCloudToWorkspace-" + panel.provider.id; text: qsTr("Copy reviewed cloud log…"); compact: true; Layout.fillWidth: true
-			visible: !!panel.report.copyReview && !(panel.report.copyReview || {}).missing; enabled: panel.available
+			visible: !!panel.report.copyReview && !(panel.report.copyReview || {}).missing; enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired
 			onClicked: { panel.pendingCopy = panel.report.copyReview; copyDialog.open() }
 		}
 		NeoButton {
 			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: (panel.report.copyReview || {}).missing ? qsTr("Confirm empty cloud account…") : qsTr("Accept copied cloud branch…"); compact: true; Layout.fillWidth: true
 			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).acceptancePossible && !(panel.report.copyReview || {}).alreadyAccepted
-			enabled: panel.available && !panel.report.acceptanceRecoveryRequired && !panel.report.acceptanceLimitReached
+			enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.acceptanceRecoveryRequired && !panel.report.acceptanceLimitReached
 			onClicked: { panel.pendingAcceptance = panel.report.copyReview; acceptanceDialog.open() }
 		}
 		Text {
@@ -192,7 +192,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "selectSavedWorkspace-" + panel.provider.id + "-" + index; text: qsTr("Select"); compact: true
-				enabled: panel.available && !modelData.current; onClicked: CloudSync.runWorkspace(panel.provider.id, "join", modelData.reference)
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !modelData.current; onClicked: CloudSync.runWorkspace(panel.provider.id, "join", modelData.reference)
 			}
 		}
 	}
@@ -209,7 +209,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceRestore-" + panel.provider.id + "-" + index; text: qsTr("Check and resume restore"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && modelData.canResume
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume
 				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-restore", modelData.id)
 			}
 		}
@@ -226,7 +226,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceAcceptance-" + panel.provider.id + "-" + index; text: qsTr("Check and resume acceptance"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && modelData.canResume
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume
 				onClicked: CloudSync.runWorkspace(panel.provider.id, "resume-accept", modelData.id)
 			}
 		}
@@ -260,7 +260,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceVersion-" + panel.provider.id + "-" + index; text: qsTr("Check and resume version"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && modelData.canResume
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume
 				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-save", modelData.id)
 			}
 		}
@@ -277,7 +277,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceCopy-" + panel.provider.id + "-" + index; text: qsTr("Check and resume copy"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && modelData.canResume && !panel.report.copyRecoveryRequired
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume && !panel.report.copyRecoveryRequired
 				onClicked: CloudSync.runWorkspace(panel.provider.id, "resume-copy", modelData.id)
 			}
 		}
@@ -294,7 +294,7 @@ ColumnLayout {
 			}
 			NeoButton {
 				objectName: "resumeWorkspaceSetup-" + panel.provider.id + "-" + index; text: qsTr("Resume setup"); compact: true; Layout.fillWidth: true
-				enabled: panel.available && modelData.canResume; onClicked: CloudSync.runWorkspace(panel.provider.id, "resume", modelData.id)
+				enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && modelData.canResume; onClicked: CloudSync.runWorkspace(panel.provider.id, "resume", modelData.id)
 			}
 		}
 	}
@@ -307,7 +307,7 @@ ColumnLayout {
 	}
 	NeoButton {
 		objectName: "joinWorkspace-" + panel.provider.id; text: qsTr("Verify and join"); compact: true; Layout.fillWidth: true
-		enabled: panel.available && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
+		enabled: panel.available && !panel.report.routeActive && !panel.report.routeRecoveryRequired && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
 	}
 	Popup {

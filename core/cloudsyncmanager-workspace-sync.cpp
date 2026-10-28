@@ -182,7 +182,7 @@ void CloudSyncManager::workspaceSyncReviewed(int result, const QJsonObject &valu
 	const auto action = Action(result); const auto provider = syncProviderId;
 	if (action == Action::InSync) { recordSuccessfulSync(provider); clearSyncOperation(); emit diveLogSyncFinished(provider, "up-to-date"); return; }
 	if (action != Action::Upload && action != Action::Receive) {
-		setError(action == Action::LegacyChanged ? tr("The previous cloud log changed. Review and accept that branch before syncing.") :
+		setError(action == Action::LegacyChanged ? tr("The previous cloud log changed. Both branches were kept; review them before continuing.") :
 			tr("This device and the workspace both changed. Both versions were kept; review them before syncing."));
 		clearSyncOperation(); return;
 	}

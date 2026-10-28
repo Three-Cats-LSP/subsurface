@@ -536,7 +536,7 @@ Kirigami.ScrollablePage {
 		}
 
 		Text {
-			text: qsTr("Choose at most one primary sync provider and one optional backup provider. Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and asks which copy to keep. Every downloaded log is checksum-verified before it replaces the local copy. Backup now is an explicit one-way snapshot operation.")
+			text: qsTr("Choose at most one primary sync provider and one optional backup provider. Sync automatically uploads local-only changes and downloads cloud-only changes. If both sides changed, Neo stops and preserves both copies for review. Every downloaded log is checksum-verified before it replaces the local copy. Backup now is an explicit one-way snapshot operation.")
 			color: tokens.textSecondary
 			font.pixelSize: 12
 			wrapMode: Text.WordWrap

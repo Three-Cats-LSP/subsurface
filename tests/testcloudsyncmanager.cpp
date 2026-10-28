@@ -1914,7 +1914,7 @@ void TestCloudSyncManager::testWorkspaceActivation_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
 	const QStringList cases = {"activate-and-resume", "wrong-review", "local-edit-after-review", "choice-away-back",
-		"legacy-changed", "different-workspace-model", "cancel-and-resume", "foreign-required-flag", "unknown-attempt", "local-edit-during-read", "missing-checkpoint", "missing-local-save"};
+		"legacy-changed", "different-workspace-model", "cancel-and-resume", "foreign-required-flag", "unknown-attempt", "local-edit-during-read", "missing-checkpoint", "missing-local-save", "pending-version", "unknown-restore"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-activation-%2").arg(google).arg(mode))) << google << mode;
 }
@@ -1963,6 +1963,15 @@ void TestCloudSyncManager::testWorkspaceActivation()
 	}
 	if (mode == 10) QVERIFY(QFile::remove(checkpointFile));
 	if (mode == 11) manager.setWorkspacePersistenceHandlers({}, {});
+	if (mode == 12) {
+		const auto ticket = QUuid::createUuid().toString(QUuid::WithoutBraces);
+		const auto file = QDir(directory).filePath("versions/" + ref.key() + "/uploads/" + ticket + "/intent.json");
+		CloudWorkspaceUploadIntent pending(file, ref, CloudSyncManifest::sha256(local), local.size(), ticket, target); QVERIFY(pending.prepare());
+	}
+	if (mode == 13) {
+		const auto dir = QDir(directory).filePath("versions/" + ref.key() + "/restores/" + QUuid::createUuid().toString(QUuid::WithoutBraces));
+		QVERIFY(QDir().mkpath(dir)); QFile bad(QDir(dir).filePath("plan.json")); QVERIFY(bad.open(QIODevice::WriteOnly)); QCOMPARE(bad.write("unknown"), qint64(7)); bad.close();
+	}
 	if (mode == 6 || mode == 9) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
 	manager.runWorkspace(provider, "activate", mode == 1 ? QUuid::createUuid().toString(QUuid::WithoutBraces) : review.id);
 	if (mode == 6 || mode == 9) {
@@ -2056,7 +2065,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2086,6 +2095,14 @@ void TestCloudSyncManager::testWorkspaceSync()
 	manager.runWorkspace(provider, "inspect-copy"); QTRY_COMPARE(workspaceDone.size(), 3);
 	manager.runWorkspace(provider, "activate", manager.workspaceCopyReviews.value(provider).id); QTRY_COMPARE(workspaceDone.size(), 4);
 	QVERIFY(manager.workspaceRouteConfirmed(provider));
+	if (mode == 16) {
+		const auto writes = network.puts; const auto rootBefore = network.files[0].data;
+		manager.runWorkspaceVersion(provider, "save"); QVERIFY(!manager.syncInProgress()); QVERIFY(!manager.lastError().isEmpty());
+		manager.runWorkspace(provider, "create"); QVERIFY(!manager.syncInProgress()); QVERIFY(!manager.lastError().isEmpty());
+		manager.runWorkspace(provider, "join", QString::fromUtf8(ref.json())); QVERIFY(!manager.syncInProgress()); QVERIFY(!manager.lastError().isEmpty());
+		QCOMPARE(network.puts, writes); QCOMPARE(network.files[0].data, rootBefore); QVERIFY(choice.load()); QCOMPARE(choice.selected().value, ref.value);
+		QCOMPARE(CloudWorkspaceModel::currentXml(), original); return;
+	}
 	if (mode == 13 || mode == 14) {
 		manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); const auto writes = network.puts; const auto rootBefore = network.files[0].data;
 		if (mode == 14) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }

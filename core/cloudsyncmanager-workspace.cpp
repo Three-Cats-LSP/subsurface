@@ -321,6 +321,14 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 	}
 	clearStorageReview(providerId); setError({});
 	if (!acquireCloudRoute(providerId, false)) return;
+	CloudWorkspaceRoute existingRoute(workspaceRoutePath(providerId) + ".json", providerId);
+	const bool routeRead = existingRoute.load();
+	const bool routeProtected = workspaceRouteRequired(providerId) || !routeRead || !existingRoute.value().isEmpty();
+	const bool safeWhenRouted = action == "review" || action == "inspect-copy" || action == "version-list" || action == "resume-activation";
+	if (routeProtected && !safeWhenRouted) {
+		routeLease.reset(); routeProvider.clear();
+		setError(tr("This workspace is already routed for sync. Changing versions or branches needs workspace sync recovery; your local and cloud data were kept.")); return;
+	}
 	QJsonObject reviewRoute;
 	if (assignedReview) {
 		CloudWorkspaceRoute route(workspaceRoutePath(providerId) + ".json", providerId);
@@ -384,6 +392,17 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		}
 		if (activating) {
 			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The workspace choice changed. All activation attempts were kept.")); return; }
+			if (action == "activate") {
+				bool limited = false, invalid = false, pending = false;
+				for (const auto &body : workspaceCopies(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "committed";
+				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved cloud-copy attempts before activating workspace sync.")); return; }
+				for (const auto &body : workspaceUploads(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "committed";
+				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved version attempts before activating workspace sync.")); return; }
+				const auto restores = workspaceRestores(workspacePath, workspaceReference, workspaceChoiceVersion, &limited, &invalid);
+				if (limited || invalid || !restores.isEmpty()) { failWorkspace(tr("Finish or review saved restores before activating workspace sync.")); return; }
+				for (const auto &body : workspaceAcceptances(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "completed";
+				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved branch-acceptance attempts before activating workspace sync.")); return; }
+			}
 			bool limited = false, invalid = false; const auto attempts = workspaceActivations(workspacePath, workspaceReference, &limited, &invalid);
 			if (invalid || (action == "activate" && limited)) { failWorkspace(tr("Saved activation records need review or reached their safety limit. All records were kept.")); return; }
 			QString operation = uuid(), revision = uuid(), target = workspaceCopyReview.parent, reservation = uuid(), acceptance = workspaceCopyReview.previousAcceptance;
