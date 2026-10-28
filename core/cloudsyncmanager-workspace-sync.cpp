@@ -197,6 +197,9 @@ void CloudSyncManager::workspaceSyncCompleted(const QJsonObject &, const QString
 	const auto provider = syncProviderId;
 	if (headMatches) recordSuccessfulSync(provider);
 	clearSyncOperation();
-	if (!headMatches) setError(tr("The workspace changed again during sync. The saved versions were kept; sync again to review the latest version."));
+	if (!headMatches) {
+		setError(tr("The workspace changed again during sync. The saved versions were kept; sync again to review the latest version."));
+		return;
+	}
 	emit diveLogSyncFinished(provider, received ? "downloaded" : "uploaded");
 }

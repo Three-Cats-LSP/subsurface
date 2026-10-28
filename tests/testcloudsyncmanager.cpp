@@ -989,6 +989,11 @@ void TestCloudSyncManager::testSimultaneousWriters()
 	QFETCH(bool, initial);
 	MemoryCloud network;
 	CloudSyncManager first(&network), second(&network);
+	// Model two independent devices. Same-profile managers are intentionally
+	// serialized by the route lease and are covered by testWorkspaceRouteFence.
+	QTemporaryDir firstDevice, secondDevice;
+	QVERIFY(firstDevice.isValid()); QVERIFY(secondDevice.isValid());
+	first.workspaceDataRootOverride = firstDevice.path(); second.workspaceDataRootOverride = secondDevice.path();
 	OAuth2TokenSet token;
 	token.accessToken = "synthetic";
 	first.tokens.insert(providerId, token);
