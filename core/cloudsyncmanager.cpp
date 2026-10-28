@@ -96,6 +96,9 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	workspaceCopy(networkManager, this),
 	workspaceAcceptance(networkManager, this),
 	workspaceActivation(networkManager, this),
+	workspaceSyncReview(networkManager, this),
+	workspaceSyncUpload(networkManager, this),
+	workspaceSyncReceive(networkManager, this),
 	workspaceUpload(networkManager, this),
 	workspaceRestoreReader(networkManager, this),
 	workspaceRestoreApply(networkManager, this)
@@ -109,6 +112,29 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceCopy, &CloudWorkspaceCopy::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceAcceptance, &CloudWorkspaceAcceptance::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceActivation, &CloudWorkspaceActivation::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceSyncReview, &CloudWorkspaceSyncReview::failed, this, [this](const QString &message, bool rejected) {
+		if (!workspaceSyncInProgress()) return;
+		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
+		else { setError(message); clearSyncOperation(); }
+	});
+	connect(&workspaceSyncUpload, &CloudWorkspaceSyncUpload::failed, this, [this](const QString &message, bool rejected) {
+		if (!workspaceSyncInProgress()) return;
+		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
+		else { setError(message); clearSyncOperation(); }
+	});
+	connect(&workspaceSyncReceive, &CloudWorkspaceSyncReceive::failed, this, [this](const QString &message, bool rejected) {
+		if (!workspaceSyncInProgress()) return;
+		if (rejected) fileStore.operationError(descriptorForId(syncProviderId)->type, {}, message, true);
+		else { setError(message); clearSyncOperation(); }
+	});
+	connect(&workspaceSyncReview, &CloudWorkspaceSyncReview::finished, this, &CloudSyncManager::workspaceSyncReviewed);
+	connect(&workspaceSyncUpload, &CloudWorkspaceSyncUpload::finished, this, [this](const QJsonObject &root, const QString &version, const QString &ticket, bool head) {
+		workspaceSyncCompleted(root, version, ticket, head, false);
+	});
+	connect(&workspaceSyncReceive, &CloudWorkspaceSyncReceive::applied, this, &CloudSyncManager::workspaceSyncApplied);
+	connect(&workspaceSyncReceive, &CloudWorkspaceSyncReceive::finished, this, [this](const QJsonObject &root, const QString &version, const QString &ticket, bool head) {
+		workspaceSyncCompleted(root, version, ticket, head, true);
+	});
 	connect(&workspaceActivation, &CloudWorkspaceActivation::finished, this, [this](const QJsonObject &, const QString &, const QString &target, bool headMatches) {
 		if (!workspaceInProgress() || (workspaceAction != "activate" && workspaceAction != "resume-activation")) return;
 		const auto provider = syncProviderId;
@@ -460,7 +486,9 @@ bool CloudSyncManager::syncPrimaryIfReady()
 		return false;
 
 	const QString providerId = primaryProviderId();
-	if (providerId.isEmpty() || !descriptorForId(providerId) || !lastSyncManifest(providerId).isValid())
+	const auto *provider = descriptorForId(providerId);
+	if (providerId.isEmpty() || !provider ||
+	    (!(provider->type != CloudSyncProviderType::SubsurfaceCloud && workspaceRouteRequired(providerId)) && !lastSyncManifest(providerId).isValid()))
 		return false;
 
 	// Automatic synchronization must remain silent. In particular, do not
@@ -1293,6 +1321,7 @@ void CloudSyncManager::clearSyncOperation()
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
 	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceActivation.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
+	if (workspaceSyncInProgress()) { workspaceSyncReview.cancel(); workspaceSyncUpload.cancel(); workspaceSyncReceive.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
 	workspaceCopyReview = {}; workspaceReviewedRoot.value = {}; workspaceLegacyChanged = false;
 	workspaceVersionTicket.clear();
@@ -1312,6 +1341,8 @@ void CloudSyncManager::clearSyncOperation()
 	syncRemoteVersion.clear();
 	syncRemoteFileId.clear();
 	routeLease.reset(); routeProvider.clear(); rawProtectedName.clear(); legacyRouteOperation = false;
+	workspaceSyncAccount.clear(); workspaceSyncToken.clear(); workspaceSyncPath.clear(); workspaceSyncChoiceVersion.clear(); workspaceSyncBindingFile.clear(); workspaceSyncCheckpointFile.clear();
+	workspaceSyncReference.value = {}; workspaceSyncRoute = {}; workspaceSyncModel.clear();
 	if (wasActive)
 		emit syncInProgressChanged();
 }
@@ -1373,6 +1404,9 @@ void CloudSyncManager::syncDiveLog(const QString &providerId)
 	if (syncInProgress() || accountCheckInProgress()) {
 		setError(tr("Another cloud operation is already in progress."));
 		return;
+	}
+	if (descriptorForId(providerId)->type != CloudSyncProviderType::SubsurfaceCloud && workspaceRouteRequired(providerId)) {
+		startWorkspaceSync(providerId); return;
 	}
 
 	const QByteArray payload = serializeCurrentDiveLog();

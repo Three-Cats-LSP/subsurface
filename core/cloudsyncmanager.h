@@ -13,6 +13,9 @@
 #include "cloudsyncworkspaceapply.h"
 #include "cloudsyncworkspaceroute.h"
 #include "cloudsyncworkspaceactivation.h"
+#include "cloudsyncworkspacesyncreview.h"
+#include "cloudsyncworkspacesyncupload.h"
+#include "cloudsyncworkspacesyncreceive.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -122,6 +125,7 @@ private:
 		History,
 		Workspace,
 		RawProtectedUpload,
+		WorkspaceSync,
 		BackupUploadPayload,
 		BackupUploadManifest,
 		SyncDownloadManifest,
@@ -165,6 +169,13 @@ private:
 	bool workspaceRouteRequired(const QString &providerId) const;
 	bool workspaceRouteConfirmed(const QString &providerId) const;
 	bool requireWorkspaceRoute(const QString &providerId);
+	bool workspaceSyncInProgress() const { return syncOperation == SyncOperation::WorkspaceSync; }
+	bool workspaceSyncScopeCurrent();
+	void startWorkspaceSync(const QString &providerId);
+	void workspaceSyncReviewed(int action, const QJsonObject &root, const QString &version, const QString &revision);
+	void workspaceSyncApplied(const QString &directory);
+	void workspaceSyncCompleted(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches, bool received);
+	bool resumeWorkspaceSync();
 	static QString syncStateCredentialKey(const QString &providerId);
 	bool localDiveLogUnchanged();
 	void downloadSyncManifest(const QString &providerId);
@@ -209,6 +220,9 @@ private:
 	CloudWorkspaceCopy workspaceCopy;
 	CloudWorkspaceAcceptance workspaceAcceptance;
 	CloudWorkspaceActivation workspaceActivation;
+	CloudWorkspaceSyncReview workspaceSyncReview;
+	CloudWorkspaceSyncUpload workspaceSyncUpload;
+	CloudWorkspaceSyncReceive workspaceSyncReceive;
 	CloudWorkspaceUpload workspaceUpload;
 	CloudWorkspaceRead workspaceRestoreReader;
 	CloudWorkspaceApply workspaceRestoreApply;
@@ -249,6 +263,10 @@ private:
 	std::unique_ptr<CloudWorkspaceRouteLease> routeLease;
 	QString routeProvider, rawProtectedName;
 	bool legacyRouteOperation = false;
+	QString workspaceSyncAccount, workspaceSyncToken, workspaceSyncPath, workspaceSyncChoiceVersion, workspaceSyncBindingFile, workspaceSyncCheckpointFile;
+	CloudWorkspaceReference workspaceSyncReference;
+	QJsonObject workspaceSyncRoute;
+	QByteArray workspaceSyncModel;
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;
 	QPointer<QNetworkReply> accountReply;

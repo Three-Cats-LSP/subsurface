@@ -64,6 +64,7 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncmanager-workspace.cpp
 	cloudsyncmanager-workspace-versions.cpp
 	cloudsyncmanager-workspace-restore.cpp
+	cloudsyncmanager-workspace-sync.cpp
 	cloudsyncmanager-workspace-acceptance.cpp
 	cloudsyncmanager.h
 	cloudsyncmanifest.cpp
