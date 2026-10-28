@@ -66,6 +66,8 @@ private slots:
 	void workspaceRoute();
 	void workspaceSyncDecision_data();
 	void workspaceSyncDecision();
+	void workspaceSyncReview_data();
+	void workspaceSyncReview();
 	void workspaceCopyIntent_data();
 	void workspaceCopyIntent();
 	void workspacePayloadTransport_data();

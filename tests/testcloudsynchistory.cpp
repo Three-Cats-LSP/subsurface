@@ -11,6 +11,7 @@
 #include "core/cloudsyncworkspacereceiveplan.h"
 #include "core/cloudsyncworkspaceroute.h"
 #include "core/cloudsyncworkspacedecision.h"
+#include "core/cloudsyncworkspacesyncreview.h"
 #include "core/cloudsyncworkspaceupload.h"
 #include "core/cloudsyncworkspaceread.h"
 #include "core/cloudsyncworkspaceapply.h"
@@ -2048,6 +2049,79 @@ void TestCloudSyncHistory::workspaceSyncDecision()
 		Action::LegacyChanged, Action::LegacyChanged, Action::Invalid, Action::Invalid, Action::Invalid, Action::Invalid,
 		Action::InSync, Action::LegacyChanged, Action::Upload, Action::Invalid, Action::Invalid, Action::Invalid};
 	QCOMPARE(int(action), int(expected[mode]));
+}
+
+void TestCloudSyncHistory::workspaceSyncReview_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"unchanged", "local-only", "remote-only", "both-changed", "legacy-changed-before",
+		"legacy-changed-between-reads", "head-changed-between-reads", "local-edit", "scope-changed", "stale-choice",
+		"missing-checkpoint", "missing-binding", "token-rejected", "cancel", "accepted-absence", "source-appears",
+		"provider-failure", "acceptance-changed", "root-rollback", "binding-changed"};
+	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
+		QTest::newRow(qPrintable(QString("%1-sync-review-%2").arg(g).arg(m))) << g << m;
+}
+void TestCloudSyncHistory::workspaceSyncReview()
+{
+	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed();
+	const auto source = copySource(n, google); const auto manifest = n.files[0], payload = n.files[1];
+	const auto provider = QString(google ? "google-drive" : "dropbox"), baseline = uid(), event = uid(), choiceVersion = uid();
+	const bool absence = mode == 14 || mode == 15; if (absence) n.files.clear();
+	const auto ref = CloudWorkspaceReference::create(provider, Account, uid(), google ? "3" : "id:3");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
+	if (absence) QVERIFY(root.registerUpload(baseline, {}, CloudSyncManifest::sha256(A), A.size()));
+	else QVERIFY(root.registerCopy(baseline, {}, source));
+	QVERIFY(root.completeUpload(baseline, google ? "4" : "id:4", "rev-4")); QVERIFY(root.publish(baseline, {}));
+	const auto beforeAcceptance = root;
+	if (absence) QVERIFY(root.acceptLegacyAbsence(event, {}, baseline)); else QVERIFY(root.acceptLegacyCopy(event, {}, baseline, baseline, source));
+	const auto checkpoint = root;
+	QTemporaryDir temp; QVERIFY(temp.isValid());
+	const auto choiceFile = temp.filePath("choice.json"), checkpointFile = temp.filePath("checkpoint.json"), bindingFile = temp.filePath("binding.json");
+	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, ref)); const auto selectedVersion = choice.version();
+	CloudWorkspaceAuthority authority(checkpointFile, ref); QVERIFY(authority.observe(checkpoint, "rev-3"));
+	CloudWorkspaceBinding binding(bindingFile, ref, selectedVersion); QVERIFY(binding.activate(root, root, A, A, uid()));
+	const auto appendLater = [&](CloudWorkspaceRecord &record) {
+		const auto later = uid(), parent = record.head(); QVERIFY(record.registerUpload(later, parent, CloudSyncManifest::sha256(B), B.size()));
+		QVERIFY(record.completeUpload(later, google ? "5" : "id:5", "rev-5")); QVERIFY(record.publish(later, parent));
+	};
+	if (mode == 2 || mode == 3) appendLater(root);
+	const int rootIndex = absence ? 0 : 2; n.add(ref.rootName(), (mode == 18 ? beforeAcceptance : root).json());
+	if (mode == 4) n.files[0].rev += "-changed";
+	if (mode == 10) QVERIFY(QFile::remove(checkpointFile)); if (mode == 11) QVERIFY(QFile::remove(bindingFile));
+	if (mode == 12) n.readFailureStatus = 401; if (mode == 13) n.deferReads = true; if (mode == 16) n.readFailureStatus = 503;
+	QByteArray local = mode == 1 || mode == 3 ? B : A; const auto expected = local; int manifestAliases = 0; bool injected = false;
+	n.requested = [&](const QNetworkRequest &r) {
+		if (mode == 7 && !injected) { local = A == expected ? B : A; injected = true; }
+		if (mode == 8) n.guard = false;
+		if (mode == 19 && !injected) { QFile f(bindingFile); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("changed") == 7); f.close(); injected = true; }
+		QString alias;
+		if (google && r.url().path() == "/drive/v3/files") alias = QUrlQuery(r.url()).queryItemValue("q").section('\'', 1, 1);
+		else if (!google) alias = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["path"].toString().mid(1);
+		if (alias == Legacy) ++manifestAliases;
+		if (!injected && mode == 5 && manifestAliases == 3) { n.files[0].rev += "-changed"; injected = true; }
+		if (!injected && mode == 15 && manifestAliases == 3) { n.add(manifest.name, manifest.data); n.add(payload.name, payload.data); injected = true; }
+		if (!injected && (mode == 6 || mode == 17) && manifestAliases >= 2 && alias != Legacy) {
+			auto changed = CloudWorkspaceRecord::parse(n.files[rootIndex].data);
+			if (mode == 6) appendLater(changed); else QVERIFY(changed.acceptLegacyCopy(uid(), event, baseline, baseline, source));
+			n.files[rootIndex].data = changed.json(); n.files[rootIndex].rev += "-changed"; injected = true;
+		}
+	};
+	CloudWorkspaceSyncReview client(&n); QSignalSpy done(&client, &CloudWorkspaceSyncReview::finished), errors(&client, &CloudWorkspaceSyncReview::failed);
+	client.start("token", ref, choiceFile, mode == 9 ? choiceVersion : selectedVersion, checkpointFile, bindingFile, expected,
+		[&] { return n.guard; }, [&] { return local; });
+	if (mode == 13) { QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); QTest::qWait(20); QCOMPARE(done.size() + errors.size(), 0); }
+	else {
+		QTRY_COMPARE(done.size() + errors.size(), 1); const bool success = mode <= 6 || mode == 14 || mode == 15 || mode == 17;
+		QCOMPARE(done.size(), int(success));
+	}
+	if (!done.isEmpty()) {
+		using Action = CloudWorkspaceSyncDecision::Action;
+		const auto expectedAction = mode == 1 ? Action::Upload : mode == 2 || mode == 6 ? Action::Receive :
+			mode == 3 ? Action::Conflict : mode == 4 || mode == 5 || mode == 15 || mode == 17 ? Action::LegacyChanged : Action::InSync;
+		QCOMPARE(done.first()[0].toInt(), int(expectedAction)); QVERIFY(CloudWorkspaceRecord::parse(QJsonDocument(done.first()[1].toJsonObject()).toJson()).valid());
+	}
+	if (mode == 12) QVERIFY(errors.first()[1].toBool());
+	QCOMPARE(n.mutations, 0); QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
 }
 
 void TestCloudSyncHistory::workspaceCopyIntent_data()
