@@ -14,6 +14,18 @@
 namespace {
 QString uuid() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
 QString text(const QJsonObject &o, const char *key) { return o.value(QLatin1String(key)).toString(); }
+bool knownAttempts(const QStringList &parents, const QString &scope, const QString &requiredFile)
+{
+	for (const auto &path : parents) if (path.isEmpty() || QFileInfo(path).isSymLink()) return false;
+	if (scope.isEmpty() || QFileInfo(scope).isSymLink()) return false;
+	const auto entries = QDir(scope).entryInfoList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+	if (entries.size() >= 64) return false;
+	for (const auto &entry : entries) {
+		const QFileInfo proof(QDir(entry.filePath()).filePath(requiredFile));
+		if (!entry.isDir() || entry.isSymLink() || !CloudHistoryRecord::validEpoch(entry.fileName()) || !proof.isFile() || proof.isSymLink()) return false;
+	}
+	return true;
+}
 QJsonObject readCreation(const QString &directory, const QString &provider, const QString &account, const QString &nonce)
 {
 	if (!CloudHistoryRecord::validEpoch(nonce)) return {};
@@ -393,6 +405,14 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 		if (activating) {
 			if (choice.selected().value != workspaceReference.value) { failWorkspace(tr("The workspace choice changed. All activation attempts were kept.")); return; }
 			if (action == "activate") {
+				const auto copies = QDir(workspacePath).filePath("copies"), versions = QDir(workspacePath).filePath("versions"), versionScope = QDir(versions).filePath(workspaceReference.key());
+				const auto uploads = QDir(versionScope).filePath("uploads"), restores = QDir(versionScope).filePath("restores"), acceptances = QDir(workspacePath).filePath("acceptances");
+				if (!knownAttempts({workspacePath, copies}, QDir(copies).filePath(workspaceReference.key()), "intent.json") ||
+				    !knownAttempts({workspacePath, versions, versionScope}, uploads, "intent.json") ||
+				    !knownAttempts({workspacePath, versions, versionScope}, restores, "plan.json") ||
+				    !knownAttempts({workspacePath, acceptances}, QDir(acceptances).filePath(workspaceReference.key()), "intent.json")) {
+					failWorkspace(tr("Saved workspace attempts need review before activating sync. All records were kept.")); return;
+				}
 				bool limited = false, invalid = false, pending = false;
 				for (const auto &body : workspaceCopies(workspacePath, workspaceReference, &limited, &invalid)) pending |= text(body, "state") != "committed";
 				if (limited || invalid || pending) { failWorkspace(tr("Finish or review saved cloud-copy attempts before activating workspace sync.")); return; }
@@ -405,6 +425,9 @@ void CloudSyncManager::runWorkspace(const QString &providerId, const QString &ac
 			}
 			bool limited = false, invalid = false; const auto attempts = workspaceActivations(workspacePath, workspaceReference, &limited, &invalid);
 			if (invalid || (action == "activate" && limited)) { failWorkspace(tr("Saved activation records need review or reached their safety limit. All records were kept.")); return; }
+			if (action == "activate") for (const auto &attempt : attempts) if (text(attempt, "state") != "completed") {
+				failWorkspace(tr("Resume the existing sync setup before starting another. All records were kept.")); return;
+			}
 			QString operation = uuid(), revision = uuid(), target = workspaceCopyReview.parent, reservation = uuid(), acceptance = workspaceCopyReview.previousAcceptance;
 			if (action == "resume-activation") {
 				QJsonObject saved; for (const auto &body : attempts) if (text(body, "operation") == argument) { saved = body; break; }
