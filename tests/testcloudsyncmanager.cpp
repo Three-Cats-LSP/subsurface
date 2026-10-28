@@ -2056,7 +2056,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2120,10 +2120,15 @@ void TestCloudSyncManager::testWorkspaceSync()
 		QVERIFY(QDir().mkpath(attempt)); QFile bad(QDir(attempt).filePath("plan.json")); QVERIFY(bad.open(QIODevice::WriteOnly)); QCOMPARE(bad.write("unknown"), qint64(7)); bad.close();
 	}
 	if (mode == 10) network.workspacePayloadAckLost = true;
+	if (mode == 15) { network.recoveryReply = nullptr; network.workspaceReadDeferred = true; }
 	const auto before = CloudWorkspaceModel::currentXml(), rootBefore = network.files[0].data; const auto writes = network.puts;
 	QSignalSpy finished(&manager, &CloudSyncManager::diveLogSyncFinished);
 	if (mode == 6) { manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); QVERIFY(manager.syncPrimaryIfReady()); }
 	else manager.syncDiveLog(provider);
+	if (mode == 15) {
+		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply; QVERIFY(manager.workspaceReport(provider).isEmpty());
+		network.workspaceReadDeferred = false; late->complete();
+	}
 	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 	if (mode == 7) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(saves, 1); allowSave = true; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000); }
 	if (mode == 11) {
@@ -2149,7 +2154,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 		network.workspacePayloadAckLost = false; manager.syncDiveLog(provider); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 		QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(network.files.size(), files); QCOMPARE(network.puts, writesAfter); QCOMPARE(network.files[0].data, rootAfter);
 	}
-	const bool success = mode == 0 || mode == 1 || mode == 2 || mode == 6 || mode == 7 || mode == 11;
+	const bool success = mode == 0 || mode == 1 || mode == 2 || mode == 6 || mode == 7 || mode == 11 || mode == 15;
 	QCOMPARE(finished.size(), success ? (mode == 11 ? 2 : 1) : 0);
 	if (success) {
 		QVERIFY2(manager.lastError().isEmpty(), qPrintable(manager.lastError()));

@@ -1318,6 +1318,7 @@ bool CloudSyncManager::localDiveLogUnchanged()
 
 void CloudSyncManager::clearSyncOperation()
 {
+	const bool wasWorkspaceSync = workspaceSyncInProgress();
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
 	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceActivation.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
@@ -1346,6 +1347,8 @@ void CloudSyncManager::clearSyncOperation()
 	workspaceSyncReference.value = {}; workspaceSyncRoute = {}; workspaceSyncModel.clear();
 	if (wasActive)
 		emit syncInProgressChanged();
+	if (wasWorkspaceSync)
+		emit providersChanged();
 }
 
 void CloudSyncManager::startUploadSequence(const QString &providerId, const QByteArray &payload,

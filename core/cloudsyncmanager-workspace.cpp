@@ -131,7 +131,7 @@ QVariantMap CloudSyncManager::workspaceReport(const QString &providerId) const
 	if (!workspaceEnabled() || tokens.value(providerId).accountId.isEmpty()) return {};
 	// The running service owns metadata reads/writes. Do not let UI polling
 	// contend with its atomic save/readback or create a lock during termination.
-	if (workspaceInProgress() && syncProviderId == providerId) return {};
+	if ((workspaceInProgress() || workspaceSyncInProgress()) && syncProviderId == providerId) return {};
 	const auto account = CloudSyncManifest::sha256(tokens.value(providerId).accountId.toUtf8()), directory = workspaceDirectory(providerId, account);
 	if (directory.isEmpty()) return {};
 	CloudWorkspaceSelection choice(QDir(directory).filePath("selection.json"), providerId, account);
