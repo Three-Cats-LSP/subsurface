@@ -393,15 +393,23 @@ void CloudSyncManager::workspaceRestoreBindingReviewed(int result, const QJsonOb
 	CloudWorkspaceReadIntent application(path(workspaceRestoreDirectory, "apply-read.json"), workspaceReference,
 		str(workspaceRestorePlan, "ticket"), str(workspaceRestorePlan, "apply_reservation"));
 	const auto prior = workspaceRestoreBindingIntent.value("prior").toObject(), projection = readObject(path(workspaceRestoreDirectory, "projection.json"));
+	const auto intentBytes = readFile(path(workspaceRestoreDirectory, "binding-intent.json"), 16384);
+	if (intentBytes != json(workspaceRestoreBindingIntent)) { failWorkspace(tr("The restore binding record changed. All recovery records were kept.")); return; }
+	const auto currentBinding = binding.value();
+	const QJsonObject previous{{"revision", prior.value("revision")}, {"commit", prior.value("commit")}, {"raw", prior.value("raw")}, {"model", prior.value("model")}};
+	const bool samePrior = currentBinding == prior;
+	const bool sameReplay = binding.revision() == str(workspaceRestoreBindingIntent, "next_revision") && currentBinding.value("previous").toObject() == previous &&
+		currentBinding.value("legacy_acceptance") == prior.value("legacy_acceptance");
+	if (!samePrior && !sameReplay) { failWorkspace(tr("The workspace binding changed during restore. All recovery records were kept.")); return; }
 	if (!authority.load() || !binding.advanceRestored(str(prior, "revision"), root, authority.record(), receipt, source, application,
 	    path(workspaceRestoreDirectory, "upload.json"), workspaceRestoreBefore, workspaceRestoreModelBytes, projection,
 	    CloudSyncManifest::sha256(json(workspaceRestorePlan)), str(workspaceRestoreBindingIntent, "next_revision"))) {
 		failWorkspace(tr("The restored version could not be bound safely. All recovery records were kept.")); return;
 	}
-	const auto intentBytes = readFile(path(workspaceRestoreDirectory, "binding-intent.json"), 16384);
 	const QJsonObject completed{{"schema", 1}, {"format", "neo-workspace-restore-binding-complete-development-1"},
 		{"ticket", str(workspaceRestorePlan, "ticket")}, {"intent_sha256", CloudSyncManifest::sha256(intentBytes)}};
-	if (intentBytes.isEmpty() || !keepFile(path(workspaceRestoreDirectory, "binding-complete.json"), json(completed), 16384)) {
+	if (readFile(path(workspaceRestoreDirectory, "binding-intent.json"), 16384) != intentBytes ||
+	    !keepFile(path(workspaceRestoreDirectory, "binding-complete.json"), json(completed), 16384)) {
 		failWorkspace(tr("The restore acknowledgement needs recovery. All records were kept.")); return;
 	}
 	finishWorkspaceRestoreRelease(value);

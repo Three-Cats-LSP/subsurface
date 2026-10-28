@@ -2071,7 +2071,7 @@ void TestCloudSyncManager::testWorkspaceEmptyAccount()
 void TestCloudSyncManager::testWorkspaceSync_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion"};
+	const QStringList cases = {"in-sync", "upload", "receive", "both-changed", "legacy-changed", "missing-marker", "automatic", "failed-save-retry", "choice-changed", "corrupt-plan", "lost-upload-ack", "retain-completed-attempt", "archive-collision", "assigned-read-only", "assigned-review-setting-change", "report-during-sync", "active-route-mutation-fence", "active-restore", "active-restore-save-retry", "active-restore-legacy-changed", "active-restore-edited-after-failure", "active-restore-unknown-acknowledgement", "active-restore-pending-sync", "active-restore-missing-intent", "active-restore-lost-completion", "active-restore-same-revision-binding-change", "active-restore-intent-changed"};
 	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
 		QTest::newRow(qPrintable(QString("%1-workspace-sync-%2").arg(google).arg(cases[mode]))) << google << mode;
 }
@@ -2107,7 +2107,18 @@ void TestCloudSyncManager::testWorkspaceSync()
 		if (mode != 22) { manager.syncDiveLog(provider); QTRY_COMPARE(synced.size(), 2); }
 		CloudWorkspaceModel expected; QVERIFY(expected.prepare(original, before)); const auto after = expected.normalizedXml();
 		bool allowSave = mode != 18 && mode != 20 && mode != 21 && mode != 23; int saves = 0; QByteArray persisted;
-		manager.setWorkspacePersistenceHandlers([] { return true; }, [&] { ++saves; if (!allowSave) return false; persisted = CloudWorkspaceModel::currentXml(); return true; });
+		manager.setWorkspacePersistenceHandlers([] { return true; }, [&] {
+			++saves; if (!allowSave) return false; persisted = CloudWorkspaceModel::currentXml();
+			if (mode != 25 && mode != 26) return true;
+			const auto file = mode == 25 ? QDir(directory).filePath("bindings/" + ref.key() + ".json") : QDir(manager.workspaceRestoreDirectory).filePath("binding-intent.json");
+			QFile input(file); if (!input.open(QIODevice::ReadOnly)) return false;
+			auto body = QJsonDocument::fromJson(input.readAll()).object(); input.close(); auto owner = mode == 25 ? body : body.value("prior").toObject();
+			auto previous = owner.value("previous").toObject(); auto model = previous.value("model").toObject();
+			if (previous.isEmpty() || model.isEmpty()) return false; model["sha256"] = CloudSyncManifest::sha256("different-prior-model"); previous["model"] = model; owner["previous"] = previous;
+			if (mode == 25) body = owner; else body["prior"] = owner;
+			const auto bytes = QJsonDocument(body).toJson(QJsonDocument::Compact); QSaveFile output(file);
+			return output.open(QIODevice::WriteOnly) && output.write(bytes) == bytes.size() && output.commit();
+		});
 		if (mode == 17) { manager.setPrimaryProvider(provider); manager.setAutoSyncEnabled(true); }
 		manager.runWorkspaceVersion(provider, "list"); QTRY_COMPARE(workspaceDone.size(), 5);
 		const auto review = manager.workspaceVersionReviews.value(provider); QVERIFY(manager.workspaceReport(provider).value("localProtected").toBool());
@@ -2139,7 +2150,7 @@ void TestCloudSyncManager::testWorkspaceSync()
 			allowSave = true; const auto expectedLocal = CloudWorkspaceModel::currentXml(); manager.runWorkspaceVersion(provider, "resume-restore", ticket); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
 			if (mode == 20 || mode == 21 || mode == 23) { QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), expectedLocal); return; }
 		}
-		if (mode == 19) {
+		if (mode == 19 || mode == 25 || mode == 26) {
 			QVERIFY(!manager.lastError().isEmpty()); QCOMPARE(CloudWorkspaceModel::currentXml(), after);
 			CloudWorkspaceBinding binding(QDir(directory).filePath("bindings/" + ref.key() + ".json"), ref, choice.version()); QVERIFY(binding.load()); QVERIFY(binding.matchesModel(before));
 			QVERIFY(!manager.workspaceReport(provider).value("restores").toList().isEmpty()); return;
