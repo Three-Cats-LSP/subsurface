@@ -10,6 +10,7 @@
 #include <QGuiApplication>
 #include <QQmlEngine>
 #include <QMetaObject>
+#include <QPointer>
 #include <QTimer>
 #include <QUrl>
 
@@ -148,6 +149,10 @@ void QMLInterface::setupCloudSyncLifecycle(QMLManager *qmlManager)
 {
 	if (!qmlManager || !neoCloudSync)
 		return;
+	QPointer<QMLManager> workspaceManager(qmlManager);
+	neoCloudSync->setWorkspacePersistenceHandlers(
+		[workspaceManager] { return workspaceManager && workspaceManager->workspaceLocalSaveAvailable(); },
+		[workspaceManager] { return workspaceManager && workspaceManager->persistWorkspaceDiveLog(); });
 
 	connect(neoCloudSync, &CloudSyncManager::diveLogSyncFinished, qmlManager,
 		[qmlManager](const QString &, const QString &result) {

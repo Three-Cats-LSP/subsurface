@@ -94,7 +94,9 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	workspaceCreator(networkManager, this),
 	workspaceSource(networkManager, this),
 	workspaceCopy(networkManager, this),
-	workspaceUpload(networkManager, this)
+	workspaceUpload(networkManager, this),
+	workspaceRestoreReader(networkManager, this),
+	workspaceRestoreApply(networkManager, this)
 {
 	Q_ASSERT(networkManager);
 	connect(&workspaceReader, &CloudWorkspaceOpen::finished, this, &CloudSyncManager::finishWorkspace);
@@ -104,7 +106,16 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceCopy, &CloudWorkspaceCopy::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceUpload, &CloudWorkspaceUpload::failed, this, &CloudSyncManager::failWorkspace);
-	connect(&workspaceUpload, &CloudWorkspaceUpload::finished, this, &CloudSyncManager::finishWorkspaceVersions);
+	connect(&workspaceUpload, &CloudWorkspaceUpload::finished, this, [this](const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches) {
+		if (workspaceRestoreStep == WorkspaceRestoreStep::Publishing) workspaceRestorePublished(root, version, ticket, headMatches);
+		else finishWorkspaceVersions(root, version, ticket, headMatches);
+	});
+	connect(&workspaceRestoreReader, &CloudWorkspaceRead::finished, this, &CloudSyncManager::workspaceRestoreReadFinished);
+	connect(&workspaceRestoreReader, &CloudWorkspaceRead::released, this, &CloudSyncManager::workspaceRestoreReleased);
+	connect(&workspaceRestoreReader, &CloudWorkspaceRead::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceRestoreApply, &CloudWorkspaceApply::applied, this, &CloudSyncManager::workspaceRestoreApplied);
+	connect(&workspaceRestoreApply, &CloudWorkspaceApply::finished, this, &CloudSyncManager::workspaceRestoreCompleted);
+	connect(&workspaceRestoreApply, &CloudWorkspaceApply::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::finished, this, [this](const QJsonObject &source, const QByteArray &) { finishWorkspaceSource(source); });
 	connect(&workspaceCopy, &CloudWorkspaceCopy::finished, this, [this](const QJsonObject &root, const QString &version, const QString &, bool changed) {
 		workspaceLegacyChanged = changed; finishWorkspace(root, version);
@@ -349,6 +360,12 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 CloudSyncManager::~CloudSyncManager()
 {
 	cancelAccountCheck();
+}
+
+void CloudSyncManager::setWorkspacePersistenceHandlers(std::function<bool()> available, std::function<bool()> persist)
+{
+	workspacePersistenceAvailable = std::move(available);
+	workspacePersist = std::move(persist);
 }
 
 QVariantList CloudSyncManager::providers() const
@@ -887,6 +904,7 @@ void CloudSyncManager::checkAccount(const QString &providerId)
 void CloudSyncManager::clearStorageReview(const QString &providerId)
 {
 	workspaceCopyReviews.remove(providerId);
+	workspaceVersionReviews.remove(providerId);
 	if (workspaceReports.remove(providerId)) emit providersChanged();
 	if (historyReports.remove(providerId)) emit providersChanged();
 	if (storageReviews.remove(providerId)) emit providersChanged();
@@ -1238,10 +1256,13 @@ void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
-	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceUpload.cancel(); ++workspaceSerial; }
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
 	workspaceCopyReview = {}; workspaceLegacyChanged = false;
 	workspaceVersionTicket.clear();
+	workspaceRestorePlan = {}; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();
+	workspaceRestoreDirectory.clear(); workspaceRestoreSource.clear(); workspaceRestoreProjected = false; workspaceRestoreHeadMatches = false; workspaceRestoreLocalMatches = false;
+	workspaceRestoreStep = WorkspaceRestoreStep::None;
 	const bool wasActive = syncInProgress();
 	syncOperation = SyncOperation::None;
 	syncProviderId.clear();

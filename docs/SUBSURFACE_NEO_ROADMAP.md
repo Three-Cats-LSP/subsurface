@@ -2,6 +2,8 @@
 
 This document is the working implementation schedule for **Subsurface Neo**. Neo keeps the mature Subsurface dive engine and hardware support while modernizing the user experience and adding carefully selected capabilities from SeaBirds, LSP D-Planner+, and new Neo-specific services.
 
+**Product scope, 28 October 2026:** The owner selected Windows and Android as the supported product targets. Linux desktop and browser/WebAssembly products are outside the current product plan. Their existing upstream and experimental sources remain in the repository; Linux-hosted CI may still build and test shared code and Android artifacts. Prioritize the Windows restore, automatic sync, cloud/data reliability and planner-validation work before the deferred physical Android checks.
+
 ## Guiding principles
 
 - Preserve the mature Subsurface core wherever possible instead of rewriting it.
@@ -759,6 +761,8 @@ The unused [guarded local restore/recovery engine](NEO_CLOUD_WORKSPACES.md#guard
 The shared [manual workspace Save/Review versions/known-upload recovery](NEO_CLOUD_WORKSPACES.md#shared-manual-version-controls-windows-validated) at app source **9c7214aac**, corrected test/CI head **692b5bf48**, passed [all 38 desktop/35 mobile-target suites and 1662 Windows/Linux protocol cases](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40616312314), [exact Windows/default launch/Clean/Modern/lifecycle/package checks](https://github.com/Three-Cats-LSP/subsurface/actions/runs/40616312548) and **22 actual-app live Windows stages**. Pure current-log serialization and isolated model staging preserve ordinary import/export behavior; 17 model and 56 new manager rows passed. Both providers passed repeat-save idempotence, read-only history, second-profile join/list, cancellation, actual termination after a saved payload ID, native incomplete-lock recovery and same-ID resume. Original files/baselines/credentials and all **184** test/probe objects remain protected, including six new small synthetic objects. Actual workspace restore/local persistence/recovery controls, activation/automatic-sync integration and coordinated retention remain next. This does not close Milestone 13 or add physical Android, two-account Dropbox, large/slow-transfer or concurrent two-app-writer evidence. The [checkpoint](NEO_AUTONOMOUS_PROGRESS.md) preserves exact source/runtime scope, preliminary fixture failures and the active automatic continuation.
 
 ## Milestone 14 — Web / WebAssembly & Deployment
+
+**Status:** Outside the current product scope under the owner's Windows/Android decision. The existing prototype and its historical evidence are retained. The description below records the prior roadmap, not a current delivery commitment.
 
 **Goal:** deploy a useful browser version while maximizing code sharing.
 

@@ -195,6 +195,8 @@ public:
 
 	void setErrorMessage(QString text);
 	void displayProgress(int progress);
+	bool workspaceLocalSaveAvailable() const;
+	bool persistWorkspaceDiveLog();
 
 	qreal progress() const;
 	void setProgress(qreal progress);

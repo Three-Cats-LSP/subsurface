@@ -64,6 +64,22 @@ bool CloudWorkspaceModel::install()
 {
 	const auto hash = CloudSyncManifest::sha256(currentXml());
 	if (!prepared || prepared->previousHash != hash || prepared->baselineHash != hash) return false;
+	// Preview remapping against a private copy of the shared tag catalog. An
+	// existing translated-name collision can otherwise change the serialized
+	// model only after replacing the live log. Refuse before any global mutation.
+	{
+		std::vector<std::unique_ptr<divetag>> preview;
+		for (const auto &tag : g_tag_list) preview.push_back(std::make_unique<divetag>(tag->name, tag->source));
+		std::vector<tag_list> previous;
+		for (auto &d : prepared->log.dives) {
+			previous.push_back(d->tags); tag_list mapped;
+			for (const auto *tag : d->tags) taglist_add_tag(mapped, tag->source.empty() ? tag->name : tag->source, preview);
+			d->tags = std::move(mapped);
+		}
+		const bool same = xml(prepared->log, prepared->fingerprints) == prepared->normalized;
+		for (size_t i = 0; i < previous.size(); ++i) prepared->log.dives[i]->tags = std::move(previous[i]);
+		if (!same) return false;
+	}
 	auto candidate = std::move(prepared);
 	// Only an accepted model can add tags to the shared registry. Remap every
 	// private pointer before its staging table is destroyed, keeping old tags.

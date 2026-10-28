@@ -1820,6 +1820,21 @@ void QMLManager::saveCloudDiveLog()
 	saveChangesLocal();
 }
 
+bool QMLManager::workspaceLocalSaveAvailable() const
+{
+	return qPrefCloudStorage::cloud_verification_status() == qPrefCloudStorage::CS_NOCLOUD &&
+		(existing_filename.empty() || existing_filename == nocloud_localstorage().toStdString());
+}
+
+bool QMLManager::persistWorkspaceDiveLog()
+{
+	if (!workspaceLocalSaveAvailable()) return false;
+	mark_divelist_changed(true);
+	emit syncStateChanged();
+	updateAllGlobalLists();
+	return saveChangesLocal();
+}
+
 bool QMLManager::saveChangesCloud(bool forceRemoteSync)
 {
 	if (!unsavedChanges() && !forceRemoteSync) {

@@ -20,6 +20,7 @@
 #include <QTimer>
 #include <QTemporaryFile>
 #include <QTemporaryDir>
+#include <QSaveFile>
 #include <QDir>
 #include <QFile>
 #include <QUrlQuery>
@@ -1738,6 +1739,129 @@ void TestCloudSyncManager::testWorkspaceCopy()
 
 QTEST_GUILESS_MAIN(TestCloudSyncManager)
 
+void TestCloudSyncManager::testWorkspaceRestore_data()
+{
+	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
+	const QStringList cases = {"restore-and-completed-resume", "unreviewed", "wrong-review", "edited-after-review", "choice-away-back", "local-not-protected",
+		"missing-local-save", "failed-save-recovery", "restart-from-before", "edited-after-failed-save", "cancel-before-root", "choice-during-root",
+		"assignment-during-root", "corrupt-projection", "corrupt-source", "unknown-upload-identity", "stale-reviewed-head", "edit-during-local-save",
+		"completed-receipt-keeps-later-edits", "restart-forgets-review", "corrupt-plan-preserved", "normalized-before-restart", "interrupted-reservation-release"};
+	for (bool google : {false, true}) for (int mode = 0; mode < cases.size(); ++mode)
+		QTest::newRow(qPrintable(QString("%1-%2").arg(google).arg(cases[mode]))) << google << mode;
+}
+
+void TestCloudSyncManager::testWorkspaceRestore()
+{
+	QFETCH(bool, google); QFETCH(int, mode);
+	const auto previous = qgetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
+	const auto restoreEnv = qScopeGuard([&] { if (previous.isNull()) qunsetenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH"); else qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", previous); });
+	qputenv("SUBSURFACE_NEO_HISTORY_DEV_EPOCH", QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8());
+	QTemporaryDir temporary; QVERIFY(temporary.isValid()); MemoryCloud network; network.workspaceMode = true;
+	CloudSyncManager manager(&network); manager.workspaceDataRootOverride = temporary.path();
+	const auto provider = QString(google ? "google-drive" : "dropbox"), account = CloudSyncManifest::sha256("test-account");
+	OAuth2TokenSet token; token.accessToken = "synthetic"; token.accountId = "test-account"; token.expiresAt = QDateTime::currentDateTimeUtc().addSecs(3600); manager.tokens.insert(provider, token);
+	const auto directory = manager.workspaceDirectory(provider, account), choiceFile = QDir(directory).filePath("selection.json");
+	const auto ref = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "1" : "id:1");
+	auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis")); network.add(ref.rootName(), root.json()); network.add("original-protected.xml", "original");
+	const auto protectedFile = network.files[1]; CloudWorkspaceAuthority checkpoint(QDir(directory).filePath("roots/" + ref.key() + ".json"), ref); QVERIFY(checkpoint.observe(root, network.files[0].version));
+	CloudWorkspaceSelection choice(choiceFile, provider, account); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), ref));
+	const auto original = CloudWorkspaceModel::currentXml(); manager.saveLastSyncManifest(provider, CloudSyncManifest::forPayload(original));
+	const auto legacy = CloudCredentialStore::load(manager.syncStateCredentialKey(provider)); const auto localFile = temporary.filePath("durable-log.xml");
+	bool allowSave = mode != 7 && mode != 8 && mode != 9 && mode != 13 && mode != 20 && mode != 21; int saves = 0;
+	const auto persist = [&] {
+		++saves; if (!allowSave) return false;
+		if (mode == 17) ::divelog.dives[0]->notes += " Concurrent edit during save.";
+		const auto bytes = CloudWorkspaceModel::currentXml(); QSaveFile file(localFile);
+		return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+	};
+	if (mode != 6) manager.setWorkspacePersistenceHandlers([] { return true; }, persist);
+	const auto saveLocal = [&] (const QByteArray &bytes) { QSaveFile file(localFile); return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit(); };
+	const auto readFile = [] (const QString &file) { QFile f(file); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
+	QSignalSpy done(&manager, &CloudSyncManager::workspaceFinished);
+	manager.runWorkspaceVersion(provider, "save"); QTRY_COMPARE(done.size(), 1); root = CloudWorkspaceRecord::parse(network.files[0].data); const auto source = root.head(); QVERIFY(!source.isEmpty());
+	::divelog.dives[0]->notes = "Second local version before restore.";
+	if (mode == 21) ::divelog.dives[0]->dcs[0].deviceid = 2;
+	const auto before = CloudWorkspaceModel::currentXml(); QVERIFY(saveLocal(before));
+	manager.runWorkspaceVersion(provider, "save"); QTRY_COMPARE(done.size(), 2); root = CloudWorkspaceRecord::parse(network.files[0].data); const auto parent = root.head(); QVERIFY(parent != source);
+	if (mode == 5) ::divelog.dives[0]->notes += " Unprotected edit.";
+	manager.runWorkspaceVersion(provider, "list"); QTRY_COMPARE(done.size(), 3);
+	const auto review = manager.workspaceVersionReviews.value(provider); QVERIFY(!review.id.isEmpty());
+	if (mode != 5) QVERIFY(manager.workspaceReport(provider).value("localProtected").toBool());
+	CloudWorkspaceModel expected; QVERIFY(expected.prepare(original, before)); const auto after = expected.normalizedXml();
+	if (mode == 3) ::divelog.dives[0]->notes += " Edit after review.";
+	if (mode == 4) {
+		const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "another" : "id:another");
+		QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), other)); QVERIFY(choice.select(choice.version(), ref));
+	}
+	if (mode == 14) { const auto i = network.byName(ref.payloadName(source)); QVERIFY(i >= 0); network.files[i].data = "damaged source"; }
+	if (mode == 15) network.workspacePayloadAckLost = true;
+	if (mode == 16) {
+		const auto peer = QUuid::createUuid().toString(QUuid::WithoutBraces); QVERIFY(root.registerUpload(peer, parent, CloudSyncManifest::sha256(before), before.size()));
+		network.add(ref.payloadName(peer), before); QVERIFY(root.completeUpload(peer, google ? network.files.last().id : "id:" + network.files.last().id, network.files.last().version)); QVERIFY(root.publish(peer, parent)); network.files[0].data = root.json(); network.files[0].version = "peer-head";
+	}
+	if (mode == 10 || mode == 11 || mode == 12) network.workspaceReadDeferred = true;
+	if (mode == 22) network.requested = [&] (const QNetworkRequest &request) { if (!isAccountRequest(request) && manager.workspaceRestoreStep == CloudSyncManager::WorkspaceRestoreStep::ReleaseSource) network.workspaceReadDeferred = true; };
+	const auto currentBefore = CloudWorkspaceModel::currentXml(); const auto putsBefore = network.puts;
+	const auto request = QJsonDocument(QJsonObject{{"review", mode == 1 || mode == 2 ? QUuid::createUuid().toString(QUuid::WithoutBraces) : review.id}, {"source", source}}).toJson(QJsonDocument::Compact);
+	if (mode == 1) manager.workspaceVersionReviews.remove(provider);
+	if (mode == 19) {
+		CloudSyncManager restarted(&network); restarted.workspaceDataRootOverride = temporary.path(); restarted.tokens.insert(provider, manager.tokens.value(provider)); restarted.setWorkspacePersistenceHandlers([] { return true; }, persist);
+		const int requests = network.accountRequests; restarted.runWorkspaceVersion(provider, "restore", QString::fromUtf8(request)); QCOMPARE(network.accountRequests, requests); QVERIFY(!restarted.syncInProgress()); QCOMPARE(network.puts, putsBefore); return;
+	}
+	manager.runWorkspaceVersion(provider, "restore", QString::fromUtf8(request));
+	if (mode == 10 || mode == 11 || mode == 12) {
+		QTRY_VERIFY(network.recoveryReply); auto *late = network.recoveryReply;
+		if (mode == 10) manager.cancelWorkspace();
+		if (mode == 11) { const auto other = CloudWorkspaceReference::create(provider, account, QUuid::createUuid().toString(QUuid::WithoutBraces), google ? "other" : "id:other"); QVERIFY(choice.load()); QVERIFY(choice.select(choice.version(), other)); QVERIFY(choice.select(choice.version(), ref)); }
+		if (mode == 12) manager.setPrimaryProvider(provider);
+		network.workspaceReadDeferred = false; late->complete();
+	}
+	if (mode == 22) {
+		QTRY_VERIFY_WITH_TIMEOUT(network.recoveryReply && manager.workspaceRestoreStep == CloudSyncManager::WorkspaceRestoreStep::ReleaseSource, 15000);
+		auto *late = network.recoveryReply; manager.cancelWorkspace(); network.workspaceReadDeferred = false; network.requested = {}; late->complete();
+	}
+	QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+	const bool initiallyCompleted = mode == 0 || mode == 18;
+	if (initiallyCompleted) {
+		QCOMPARE(done.size(), 4); QCOMPARE(saves, 1); QCOMPARE(CloudWorkspaceModel::currentXml(), after); QCOMPARE(readFile(localFile), after);
+		root = CloudWorkspaceRecord::parse(network.files[0].data); QVERIFY(root.valid()); QCOMPARE(root.value["journal"].toObject()["history"].toArray().size(), 3);
+		const auto restored = root.head(); QCOMPARE(root.ticket(restored).value("restore_source").toString(), source); QCOMPARE(root.ticket(restored).value("parent").toString(), parent);
+		const auto reservations = root.value["journal"].toObject()["reservations"].toObject(); QCOMPARE(reservations.size(), 2);
+		for (const auto &entry : reservations) QVERIFY(!entry.toObject().value("active").toBool());
+		if (mode == 18) {
+			::divelog.dives[0]->notes += " Newer local edit."; const auto edited = CloudWorkspaceModel::currentXml();
+			manager.runWorkspaceVersion(provider, "save"); QTRY_COMPARE(done.size(), 5); const auto laterRoot = network.files[0].data; const auto puts = network.puts;
+			manager.runWorkspaceVersion(provider, "resume-restore", restored); QTRY_COMPARE(done.size(), 6); QCOMPARE(CloudWorkspaceModel::currentXml(), edited); QCOMPARE(network.files[0].data, laterRoot); QCOMPARE(network.puts, puts); QCOMPARE(saves, 1);
+			QVERIFY(!manager.workspaceReport(provider).value("restoreHeadMatches").toBool()); QVERIFY(!manager.workspaceReport(provider).value("restoreLocalMatches").toBool());
+		} else {
+			const auto puts = network.puts; manager.runWorkspaceVersion(provider, "resume-restore", restored); QTRY_COMPARE(done.size(), 5); QCOMPARE(network.puts, puts); QCOMPARE(saves, 1); QCOMPARE(CloudWorkspaceModel::currentXml(), after);
+		}
+	} else if (mode == 7 || mode == 8 || mode == 9 || mode == 13 || mode == 17 || mode == 20 || mode == 21 || mode == 22) {
+		const auto attempts = manager.workspaceReport(provider).value("restores").toList(); QCOMPARE(attempts.size(), 1); const auto ticket = attempts[0].toMap().value("id").toString();
+		const auto attemptDir = QDir(directory).filePath("versions/" + ref.key() + "/restores/" + ticket); QVERIFY(!ticket.isEmpty());
+		if (mode == 13) { QFile file(QDir(attemptDir).filePath("model.xml")); QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate)); file.write("corrupt projection"); file.close(); }
+		if (mode == 20) { QFile file(QDir(attemptDir).filePath("plan.json")); QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate)); file.write("unknown plan"); file.close(); }
+		if (mode == 9) ::divelog.dives[0]->notes += " New user edit.";
+		if (mode == 8 || mode == 21) {
+			CloudWorkspaceModel reloaded; QVERIFY(reloaded.prepare(before, CloudWorkspaceModel::currentXml())); const auto normalizedBefore = reloaded.normalizedXml(); QVERIFY(reloaded.install());
+			QCOMPARE(CloudWorkspaceModel::currentXml(), normalizedBefore); QCOMPARE(normalizedBefore, readFile(QDir(attemptDir).filePath("before-model.xml")));
+			if (mode == 21) QVERIFY(normalizedBefore != before);
+		}
+		const auto current = CloudWorkspaceModel::currentXml(); const auto writes = network.puts; allowSave = true;
+		manager.runWorkspaceVersion(provider, "resume-restore", ticket); QTRY_VERIFY_WITH_TIMEOUT(!manager.syncInProgress(), 15000);
+		if (mode == 7 || mode == 8 || mode == 21 || mode == 22) {
+			QCOMPARE(done.size(), 4); QCOMPARE(CloudWorkspaceModel::currentXml(), after); QCOMPARE(readFile(localFile), after);
+			if (mode != 22) QCOMPARE(saves, 2); else QCOMPARE(saves, 1);
+		} else { QCOMPARE(done.size(), 3); QCOMPARE(CloudWorkspaceModel::currentXml(), current); QCOMPARE(network.puts, writes); }
+		if (mode == 20) QCOMPARE(readFile(QDir(attemptDir).filePath("plan.json")), QByteArray("unknown plan"));
+	} else {
+		QCOMPARE(done.size(), 3); QCOMPARE(CloudWorkspaceModel::currentXml(), currentBefore); QCOMPARE(readFile(localFile), before);
+		if (mode != 14 && mode != 15) QCOMPARE(network.puts, putsBefore);
+		if (mode == 15) { const auto attempts = manager.workspaceReport(provider).value("restores").toList(); QCOMPARE(attempts.size(), 1); QVERIFY(attempts[0].toMap().value("uncertain").toBool()); const auto puts = network.puts; manager.runWorkspaceVersion(provider, "resume-restore", attempts[0].toMap().value("id").toString()); QTRY_VERIFY(!manager.syncInProgress()); QCOMPARE(network.puts, puts); }
+	}
+	QCOMPARE(network.files[1].data, protectedFile.data); QCOMPARE(network.files[1].version, protectedFile.version); QCOMPARE(CloudCredentialStore::load(manager.syncStateCredentialKey(provider)), legacy);
+}
+
 void TestCloudSyncManager::testWorkspaceVersions_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
@@ -1846,7 +1970,7 @@ void TestCloudSyncManager::testWorkspaceVersions()
 void TestCloudSyncManager::testWorkspaceModel_data()
 {
 	QTest::addColumn<int>("mode");
-	const QStringList cases={"staged-real-model-install", "private-tags", "private-fingerprints", "normalized-xml-representation", "truncated", "dtd", "future-format", "changed-local-before-install", "different-explicit-baseline", "discarded-preview", "single-install", "invalid-new-preview-clears-old", "changed-fingerprints-before-install", "pure-trip-serialization", "stable-baseline-projection", "future-baseline", "unreadable-dive-preserved"};
+	const QStringList cases={"staged-real-model-install", "private-tags", "private-fingerprints", "normalized-xml-representation", "truncated", "dtd", "future-format", "changed-local-before-install", "different-explicit-baseline", "discarded-preview", "single-install", "invalid-new-preview-clears-old", "changed-fingerprints-before-install", "pure-trip-serialization", "stable-baseline-projection", "future-baseline", "unreadable-dive-preserved", "shared-tag-collision-refused"};
 	for(int mode=0;mode<cases.size();++mode) QTest::newRow(qPrintable(cases[mode])) << mode;
 }
 void TestCloudSyncManager::testWorkspaceModel()
@@ -1869,6 +1993,13 @@ void TestCloudSyncManager::testWorkspaceModel()
 	if(mode==5) payload="<!DOCTYPE divelog><divelog/>";
 	if(mode==6) payload.replace("version='3'","version='999'");
 	if(mode==16) payload="<divelog><dives><dive/></dives></divelog>";
+	if(mode==17) {
+		const std::string name="workspace-collision-test";
+		auto position=std::lower_bound(g_tag_list.begin(),g_tag_list.end(),name,[](const auto &tag,const auto &key) { return tag->name < key; });
+		QVERIFY(position==g_tag_list.end() || (*position)->name!=name);
+		g_tag_list.insert(position,std::make_unique<divetag>(name,"another-source-tag"));
+		payload.replace("<dive ","<dive tags='workspace-collision-test' ");
+	}
 	auto baseline=original;
 	if(mode==8) ::divelog.dives[0]->notes+=" Later local edit.";
 	if(mode==15) baseline.replace("version='3'","version='999'");
@@ -1878,12 +2009,14 @@ void TestCloudSyncManager::testWorkspaceModel()
 		QVERIFY(!prepared); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),original); QCOMPARE(fpBytes(),originalFp); QCOMPARE(current_dive,selected); QCOMPARE(last_xml_version,oldVersion); QCOMPARE(get_min_datafile_version(),oldMinimum); return;
 	}
 	QVERIFY(prepared); const auto normalized=staged.normalizedXml(); QVERIFY(!normalized.isEmpty());
-	QCOMPARE(fpBytes(),originalFp); QCOMPARE(g_tag_list.size(),oldTags.size()); for(size_t i=0;i<oldTags.size();++i) QCOMPARE(g_tag_list[i].get(),oldTags[i]);
+	QCOMPARE(fpBytes(),originalFp); QCOMPARE(g_tag_list.size(),oldTags.size()+(mode==17 ? 1 : 0));
+	for(const auto *oldTag:oldTags) QVERIFY(std::any_of(g_tag_list.begin(),g_tag_list.end(),[oldTag](const auto &tag) { return tag.get()==oldTag; }));
 	QCOMPARE(last_xml_version,oldVersion); QCOMPARE(get_min_datafile_version(),oldMinimum); QCOMPARE(current_dive,selected);
 	if(mode!=8) QCOMPARE(CloudWorkspaceModel::currentXml(),original);
 	if(mode==13) QVERIFY(!::divelog.trips[0]->saved);
 	FullTextQuery query; query=QStringLiteral("survive"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dive_matches(selected));
 	if(mode==3) QVERIFY(normalized!=payload);
+	if(mode==17) { QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),original); QCOMPARE(current_dive,selected); QCOMPARE(fpBytes(),originalFp); return; }
 	if(mode==7) { ::divelog.dives[0]->notes+=" Later local edit."; const auto edited=CloudWorkspaceModel::currentXml(); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),edited); QCOMPARE(g_tag_list.size(),oldTags.size()); return; }
 	if(mode==8) { const auto edited=CloudWorkspaceModel::currentXml(); QVERIFY(!staged.install()); QCOMPARE(CloudWorkspaceModel::currentXml(),edited); return; }
 	if(mode==9) { QVERIFY(!normalized.isEmpty()); QCOMPARE(fpBytes(),originalFp); QCOMPARE(g_tag_list.size(),oldTags.size()); return; }

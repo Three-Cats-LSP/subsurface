@@ -9,6 +9,7 @@ ColumnLayout {
 	required property var provider
 	property string draft: ""
 	property var pendingCopy: ({})
+	property var pendingRestore: ({})
 	signal draftEdited(string value)
 	readonly property var report: provider.workspace || ({})
 	readonly property bool available: !CloudSync.syncInProgress && !CloudSync.authorizationInProgress && !CloudSync.accountCheckInProgress
@@ -20,7 +21,7 @@ ColumnLayout {
 		color: tokens.textPrimary; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	Text {
-		text: qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Create an empty workspace or join one with its reference. Your local dive log stays unchanged. These workspaces do not yet replace existing cloud sync.")
+		text: qsTr("Use an isolated test profile with automatic sync off and no provider assignments. Creating or joining a workspace preserves your local log. These workspaces do not yet replace existing cloud sync.")
 		color: tokens.textSecondary; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
 	}
 	GridLayout {
@@ -79,13 +80,33 @@ ColumnLayout {
 				panel.report.savedVersionIsHead ? qsTr("Current log saved and verified. Workspace sync is not yet active.") : qsTr("Saved version verified. A later version is now current; all versions were kept.")
 			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
 		}
+		Text {
+			visible: !!panel.report.versionReview && !panel.report.empty && !panel.report.localProtected
+			text: qsTr("Save the current local log as a version before restoring an earlier version.")
+			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
+		Text {
+			objectName: "workspaceRestoreStatus-" + panel.provider.id
+			visible: !!panel.report.restoredVersion || !!panel.report.restoreRecoveryRequired || !!panel.report.restoreLimitReached
+			text: panel.report.restoreRecoveryRequired || panel.report.restoreLimitReached ? qsTr("Some restore records need review or have reached their safety limit. All recovery copies were kept.") :
+				panel.report.restoreHeadMatches && panel.report.restoreLocalMatches ? qsTr("Version restored and saved on this device.") : qsTr("The saved restore was verified. Newer local or workspace changes were kept.")
+			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
 		Repeater {
 			model: panel.report.versionRows || []
-			delegate: Text {
+			delegate: RowLayout {
 				required property var modelData
-				objectName: "workspaceVersionRow-" + panel.provider.id + "-" + modelData.number
-				text: qsTr("Version %1 · %2 bytes%3%4").arg(modelData.number).arg(modelData.bytes).arg(modelData.head ? qsTr(" · Current") : "").arg(modelData.restored ? qsTr(" · Restored copy") : "")
-				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+				Layout.fillWidth: true
+				Text {
+					objectName: "workspaceVersionRow-" + panel.provider.id + "-" + modelData.number
+					text: qsTr("Version %1 · %2 bytes%3%4").arg(modelData.number).arg(modelData.bytes).arg(modelData.head ? qsTr(" · Current") : "").arg(modelData.restored ? qsTr(" · Restored copy") : "")
+					color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+				}
+				NeoButton {
+					objectName: "restoreWorkspaceVersion-" + panel.provider.id + "-" + modelData.number; text: qsTr("Restore…"); compact: true
+					enabled: panel.available && !!panel.report.versionReview && !!panel.report.localProtected && !panel.report.restoreLimitReached
+					onClicked: { panel.pendingRestore = { source: modelData.id, number: modelData.number, review: panel.report.versionReview }; restoreDialog.open() }
+				}
 			}
 		}
 		NeoButton {
@@ -138,6 +159,24 @@ ColumnLayout {
 			NeoButton {
 				objectName: "selectSavedWorkspace-" + panel.provider.id + "-" + index; text: qsTr("Select"); compact: true
 				enabled: panel.available && !modelData.current; onClicked: CloudSync.runWorkspace(panel.provider.id, "join", modelData.reference)
+			}
+		}
+	}
+	Repeater {
+		model: panel.report.restores || []
+		delegate: ColumnLayout {
+			required property var modelData
+			required property int index
+			Layout.fillWidth: true
+			Text {
+				text: modelData.uncertain ? qsTr("Restore %1 has no confirmed upload identity. Its recovery files were kept; review versions to start a separate restore.").arg(index + 1) :
+					modelData.choiceChanged ? qsTr("Restore %1 belongs to an earlier workspace choice. Its recovery files were kept.").arg(index + 1) : qsTr("Restore %1 has saved recovery information and can be checked again.").arg(index + 1)
+				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+			}
+			NeoButton {
+				objectName: "resumeWorkspaceRestore-" + panel.provider.id + "-" + index; text: qsTr("Check and resume restore"); compact: true; Layout.fillWidth: true
+				enabled: panel.available && modelData.canResume
+				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-restore", modelData.id)
 			}
 		}
 	}
@@ -202,6 +241,27 @@ ColumnLayout {
 		objectName: "joinWorkspace-" + panel.provider.id; text: qsTr("Verify and join"); compact: true; Layout.fillWidth: true
 		enabled: panel.available && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
+	}
+	Popup {
+		id: restoreDialog; objectName: "workspaceRestoreDialog-" + panel.provider.id
+		parent: Overlay.overlay; anchors.centerIn: parent; modal: true; focus: true; padding: 16
+		closePolicy: Popup.CloseOnEscape
+		width: Math.max(280, Math.min(460, parent ? parent.width - 32 : panel.width))
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Rectangle {
+			objectName: "workspaceRestoreBody-" + panel.provider.id; color: tokens.surfaceRaised; implicitHeight: restoreContent.implicitHeight
+			Accessible.role: Accessible.Dialog; Accessible.name: restoreTitle.text
+			ColumnLayout {
+				id: restoreContent; width: parent.width; spacing: 12
+				Text { id: restoreTitle; text: qsTr("Restore version %1?").arg(panel.pendingRestore.number || 0); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: qsTr("The current log is kept as a workspace version. The selected version will be saved as a new version and replace the local log on this device."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				NeoButton { objectName: "cancelWorkspaceRestore-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: restoreDialog.close() }
+				NeoButton {
+					objectName: "confirmWorkspaceRestore-" + panel.provider.id; text: qsTr("Restore version"); Layout.fillWidth: true; enabled: panel.available
+					onClicked: { var request = JSON.stringify({review: panel.pendingRestore.review || "", source: panel.pendingRestore.source || ""}); restoreDialog.close(); CloudSync.runWorkspaceVersion(panel.provider.id, "restore", request) }
+				}
+			}
+		}
 	}
 	Popup {
 		id: copyDialog; objectName: "workspaceCopyDialog-" + panel.provider.id

@@ -26,6 +26,8 @@ private slots:
 	void testWorkspaceModel();
 	void testWorkspaceVersions_data();
 	void testWorkspaceVersions();
+	void testWorkspaceRestore_data();
+	void testWorkspaceRestore();
 	void testAccountIdentity_data();
 	void testAccountIdentity();
 	void testAccountLookupFailure_data();

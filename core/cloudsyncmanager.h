@@ -9,6 +9,7 @@
 #include "cloudsyncworkspace.h"
 #include "cloudsyncworkspacecopy.h"
 #include "cloudsyncworkspaceupload.h"
+#include "cloudsyncworkspaceapply.h"
 #include "oauth2pkce.h"
 #include "oauth2tokenclient.h"
 
@@ -85,6 +86,9 @@ public:
 	Q_INVOKABLE bool syncPrimaryIfReady();
 	void handleAndroidGoogleAccessToken(const QString &accessToken);
 	void handleAndroidGoogleAuthorizationError(const QString &message);
+	// C++ lifecycle hooks: the UI must check the owned local destination before
+	// replacing a model and acknowledge only a successful durable local save.
+	void setWorkspacePersistenceHandlers(std::function<bool()> available, std::function<bool()> persist);
 
 signals:
 	void providersChanged();
@@ -162,7 +166,18 @@ private:
 	QList<QJsonObject> workspaceCreations(const QString &directory, const QString &providerId, const QString &account, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceCopies(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceUploads(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QVariantList workspaceRestores(const QString &directory, const CloudWorkspaceReference &reference, const QString &choiceVersion, bool *limited = nullptr, bool *invalid = nullptr) const;
 	void finishWorkspaceVersions(const QJsonObject &record, const QString &version, const QString &ticket = {}, bool headMatches = false);
+	void startWorkspaceRestore(const QJsonObject &root);
+	void workspaceRestoreReadFinished(const QJsonObject &root, const QString &version, const QString &commit, const QString &reservation, const QByteArray &payload);
+	void workspaceRestorePublished(const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches);
+	void workspaceRestoreApplied(const QString &directory);
+	void workspaceRestoreCompleted(const QJsonObject &root, const QString &version, const QString &commit, bool headMatches, bool localMatches);
+	void workspaceRestoreReleased(const QJsonObject &root, const QString &version, const QString &reservation);
+	void beginWorkspaceRestoreApply();
+	QByteArray workspaceRestoreSnapshot() const;
+	bool prepareWorkspaceRestoreProjection(const QByteArray &payload);
+	bool loadWorkspaceRestoreProjection();
 	QVariantMap workspaceReport(const QString &providerId) const;
 	bool workspaceScopeCurrent();
 	void finishWorkspace(const QJsonObject &record, const QString &version);
@@ -179,6 +194,8 @@ private:
 	CloudWorkspaceSourceReview workspaceSource;
 	CloudWorkspaceCopy workspaceCopy;
 	CloudWorkspaceUpload workspaceUpload;
+	CloudWorkspaceRead workspaceRestoreReader;
+	CloudWorkspaceApply workspaceRestoreApply;
 	const QString historyEpoch = qEnvironmentVariable("SUBSURFACE_NEO_HISTORY_DEV_EPOCH");
 	QHash<QString, QVariantMap> historyReports;
 	QHash<QString, QVariantMap> storageReviews;
@@ -195,6 +212,20 @@ private:
 	QHash<QString, WorkspaceCopyReview> workspaceCopyReviews;
 	WorkspaceCopyReview workspaceCopyReview;
 	bool workspaceLegacyChanged = false;
+	std::function<bool()> workspacePersistenceAvailable, workspacePersist;
+	struct WorkspaceVersionReview {
+		QString id, choiceVersion, localSha256, parent;
+		CloudWorkspaceReference reference;
+		QStringList commits;
+	};
+	QHash<QString, WorkspaceVersionReview> workspaceVersionReviews;
+	WorkspaceVersionReview workspaceRestoreReview;
+	QJsonObject workspaceRestorePlan;
+	QByteArray workspaceRestoreBefore, workspaceRestoreBeforeModel, workspaceRestoreSourceBytes, workspaceRestoreModelBytes;
+	QString workspaceRestoreDirectory, workspaceRestoreSource;
+	bool workspaceRestoreProjected = false, workspaceRestoreHeadMatches = false, workspaceRestoreLocalMatches = false;
+	enum class WorkspaceRestoreStep { None, Source, Publishing, Applying, ReleaseApply, ReleaseSource };
+	WorkspaceRestoreStep workspaceRestoreStep = WorkspaceRestoreStep::None;
 	QString workspaceDataRootOverride; // Friend tests use a temporary storage root.
 	QHash<QString, OAuth2TokenSet> tokens;
 	QHash<QString, QString> verifiedAccountTokens;

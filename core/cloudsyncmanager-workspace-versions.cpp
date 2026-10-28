@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "cloudsyncmanager.h"
+#include "cloudsyncworkspacemodel.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -34,7 +35,7 @@ QList<QJsonObject> CloudSyncManager::workspaceUploads(const QString &directory, 
 
 void CloudSyncManager::runWorkspaceVersion(const QString &providerId, const QString &action, const QString &argument)
 {
-	if (action != "list" && action != "save" && action != "resume-save") { setError(tr("Choose a valid workspace version action.")); return; }
+	if (action != "list" && action != "save" && action != "resume-save" && action != "restore" && action != "resume-restore") { setError(tr("Choose a valid workspace version action.")); return; }
 	runWorkspace(providerId, "version-" + action, argument);
 }
 
@@ -50,6 +51,7 @@ void CloudSyncManager::finishWorkspaceVersions(const QJsonObject &value, const Q
 	const auto checkpointFile = QDir(workspacePath).filePath("roots/" + reference.key() + ".json");
 	CloudWorkspaceAuthority checkpoint(checkpointFile, reference);
 	if (!checkpoint.observe(root, version, true)) { failWorkspace(tr("The workspace recovery record could not be updated. All versions were kept.")); return; }
+	if (workspaceAction == "version-restore" || workspaceAction == "version-resume-restore") { startWorkspaceRestore(value); return; }
 	if (completedTicket.isEmpty() && workspaceAction != "version-list") {
 		bool limited = false;
 		const auto uploads = workspaceUploads(workspacePath, reference, &limited);
@@ -80,8 +82,14 @@ void CloudSyncManager::finishWorkspaceVersions(const QJsonObject &value, const Q
 		rows.append(QVariantMap{{"id", id}, {"number", i + 1}, {"head", id == root.head()}, {"bytes", ticket.value("bytes").toVariant()},
 			{"restored", !text(ticket, "restore_source").isEmpty()}});
 	}
+	WorkspaceVersionReview review; review.id = QUuid::createUuid().toString(QUuid::WithoutBraces); review.choiceVersion = workspaceChoiceVersion;
+	review.reference = reference; review.parent = root.head(); const auto local = CloudWorkspaceModel::currentXml(); review.localSha256 = CloudSyncManifest::sha256(local);
+	for (const auto &entry : history) review.commits.append(entry.toString());
+	workspaceVersionReviews[syncProviderId] = review;
+	const auto head = root.ticket(root.head());
+	const bool localProtected = !root.head().isEmpty() && head.value("sha256") == QJsonValue(review.localSha256) && head.value("bytes") == QJsonValue(double(local.size()));
 	workspaceReports[syncProviderId] = {{"verified", true}, {"choiceVersion", workspaceChoiceVersion}, {"verifiedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-		{"versions", history.size()}, {"empty", root.head().isEmpty()}, {"versionRows", rows}};
+		{"versions", history.size()}, {"empty", root.head().isEmpty()}, {"versionRows", rows}, {"versionReview", review.id}, {"localProtected", localProtected}};
 	if (!completedTicket.isEmpty()) {
 		workspaceReports[syncProviderId]["savedVersion"] = completedTicket;
 		workspaceReports[syncProviderId]["savedVersionIsHead"] = headMatches;
