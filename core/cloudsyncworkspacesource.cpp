@@ -95,13 +95,22 @@ CloudWorkspaceSourceReview::CloudWorkspaceSourceReview(QNetworkAccessManager *ne
 		[this](CloudSyncProviderType, const QString &name, const QByteArray &bytes, const QString &version, const QString &id) { received(name, bytes, version, id); });
 	connect(&files, &CloudSyncFileStore::operationError, this, [this](CloudSyncProviderType, const QString &, const QString &, bool rejected) { fail(rejected); });
 	connect(&files, &CloudSyncFileStore::writeConflict, this, [this](CloudSyncProviderType, const QString &) { fail(); });
-	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType, const QString &) { fail(); });
+	connect(&files, &CloudSyncFileStore::fileNotFound, this, [this](CloudSyncProviderType actual, const QString &name) {
+		if (!current()) return;
+		if (!allowMissing || actual != provider || name != Legacy) { fail(); return; }
+		if (step == Step::Manifest) {
+			step = Step::MissingConfirm; files.downloadVersioned(provider, token, Legacy);
+		} else if (step == Step::MissingConfirm) {
+			cancel(); emit absent();
+		} else fail();
+	});
 }
 CloudWorkspaceSourceReview::~CloudWorkspaceSourceReview() { cancel(); }
 void CloudWorkspaceSourceReview::cancel()
 {
 	step = Step::Idle; deadline.stop(); files.cancel(provider); scopeCurrent = {};
 	token.clear(); providerId.clear(); account.clear(); manifestId.clear(); manifestVersion.clear(); payloadId.clear(); payloadVersion.clear(); payloadName.clear(); manifest.clear(); payload.clear();
+	allowMissing = false;
 }
 void CloudWorkspaceSourceReview::fail(bool rejected)
 {
@@ -114,9 +123,9 @@ bool CloudWorkspaceSourceReview::current()
 	if (!scopeCurrent || !scopeCurrent()) { fail(); return false; }
 	return true;
 }
-void CloudWorkspaceSourceReview::start(const QString &accessToken, const QString &id, const QString &hash, const std::function<bool()> &guard)
+void CloudWorkspaceSourceReview::start(const QString &accessToken, const QString &id, const QString &hash, const std::function<bool()> &guard, bool missingAllowed)
 {
-	cancel(); step = Step::Manifest; token = accessToken; providerId = id; account = hash; scopeCurrent = guard;
+	cancel(); step = Step::Manifest; token = accessToken; providerId = id; account = hash; scopeCurrent = guard; allowMissing = missingAllowed;
 	if (token.isEmpty() || (id != "google-drive" && id != "dropbox") || !QRegularExpression("^[a-f0-9]{64}$").match(hash).hasMatch()) { fail(); return; }
 	provider = id == "google-drive" ? CloudSyncProviderType::GoogleDrive : CloudSyncProviderType::Dropbox;
 	if (current()) { deadline.start(); files.setResponseLimit(ManifestLimit); files.downloadVersioned(provider, token, Legacy); }

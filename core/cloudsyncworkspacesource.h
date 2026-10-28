@@ -29,13 +29,16 @@ class CloudWorkspaceSourceReview : public QObject {
 public:
 	explicit CloudWorkspaceSourceReview(QNetworkAccessManager *network, QObject *parent = nullptr);
 	~CloudWorkspaceSourceReview() override;
-	void start(const QString &token, const QString &provider, const QString &account, const std::function<bool()> &scopeCurrent);
+	void start(const QString &token, const QString &provider, const QString &account, const std::function<bool()> &scopeCurrent, bool allowMissing = false);
 	void cancel();
 signals:
 	void finished(const QJsonObject &source, const QByteArray &payload);
+	// Only emitted after two strict missing-manifest observations. It is an
+	// observation, not a durable acceptance or permission to activate sync.
+	void absent();
 	void failed(const QString &message, bool tokenRejected);
 private:
-	enum class Step { Idle, Manifest, Payload, ExactManifest, ExactPayload, AliasManifest, AliasPayload };
+	enum class Step { Idle, Manifest, MissingConfirm, Payload, ExactManifest, ExactPayload, AliasManifest, AliasPayload };
 	bool current();
 	void fail(bool rejected = false);
 	void received(const QString &name, const QByteArray &bytes, const QString &version, const QString &id);
@@ -46,5 +49,6 @@ private:
 	QString token, providerId, account, manifestId, manifestVersion, payloadId, payloadVersion, payloadName;
 	QByteArray manifest, payload;
 	std::function<bool()> scopeCurrent;
+	bool allowMissing = false;
 };
 #endif
