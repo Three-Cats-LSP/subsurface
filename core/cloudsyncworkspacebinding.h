@@ -23,6 +23,10 @@ public:
 	// interrupted reservation release. This does not authorize a new sync.
 	bool ownsReceived(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
 		CloudWorkspaceReceiveReceipt &receipt, CloudWorkspaceReadIntent &reader);
+	// Recognize an already saved owned upload even if a later head exists.
+	// This is recovery evidence only, not authority for another sync.
+	bool ownsUpload(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+		const QString &expectedPreviousRevision, const QString &ticket, const QString &uploadIntentFile, const QByteArray &uploadedModel);
 	QJsonObject value() const { return saved; }
 	QString revision() const;
 	QString commit() const;

@@ -98,6 +98,8 @@ set(SUBSURFACE_CORE_LIB_SRCS
 	cloudsyncworkspacesyncreview.h
 	cloudsyncworkspaceupload.cpp
 	cloudsyncworkspaceupload.h
+	cloudsyncworkspaceuploadplan.cpp
+	cloudsyncworkspaceuploadplan.h
 	cloudsyncworkspaceread.cpp
 	cloudsyncworkspaceread.h
 	cloudsyncworkspaceapply.cpp

@@ -191,3 +191,23 @@ bool CloudWorkspaceBinding::ownsReceived(const CloudWorkspaceRecord &root, const
 	if (reader.state() == "releasing") return true;
 	return reader.state() == "released" && r.value("active") == QJsonValue(false);
 }
+bool CloudWorkspaceBinding::ownsUpload(const CloudWorkspaceRecord &root, const CloudWorkspaceRecord &checkpoint,
+	const QString &expectedPreviousRevision, const QString &ticket, const QString &uploadIntentFile, const QByteArray &uploadedModel)
+{
+	if (fileName.isEmpty() || uploadIntentFile.isEmpty() || !CloudHistoryRecord::validEpoch(expectedPreviousRevision)) return false;
+	QLockFile lock(fileName + ".lock");
+	if (!lock.tryLock(0) || !read() || saved.isEmpty() || !root.valid() || !checkpoint.valid() ||
+	    !root.follows(checkpoint) || root.reference().value != reference.value || checkpoint.reference().value != reference.value ||
+	    commit() != ticket || !matchesModel(uploadedModel)) return false;
+	const auto old = saved.value("previous").toObject(), t = root.ticket(ticket); const auto previousCommit = text(old, "commit");
+	if (old.isEmpty() || text(old, "revision") != expectedPreviousRevision || old.value("raw").toObject() != pin(root.ticket(previousCommit)) ||
+	    old.value("raw").toObject() != pin(checkpoint.ticket(previousCommit)) || saved.value("raw").toObject() != pin(t) ||
+	    text(t, "state") != "committed" || text(t, "parent") != previousCommit || !text(t, "restore_source").isEmpty() ||
+	    root.copySource(ticket).valid() || text(t, "sha256") != CloudSyncManifest::sha256(uploadedModel) ||
+	    t.value("bytes").toDouble() != uploadedModel.size()) return false;
+	const auto history = root.value.value("journal").toObject().value("history").toArray(); int oldIndex = -1, newIndex = -1;
+	for (int i = 0; i < history.size(); ++i) { if (history[i].toString() == previousCommit) oldIndex = i; if (history[i].toString() == ticket) newIndex = i; }
+	if (oldIndex < 0 || newIndex != oldIndex + 1) return false;
+	CloudWorkspaceUploadIntent proof(uploadIntentFile, reference, text(t, "sha256"), qint64(t.value("bytes").toDouble()), ticket, previousCommit);
+	return proof.reload() && proof.state() == "committed" && proof.id() == text(t, "object") && proof.version() == text(t, "version");
+}
