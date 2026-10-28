@@ -50,6 +50,15 @@ jobs:
           version: '6.8.3'
           arch: win64_msvc2022_64
           cache: true
+          cache-key-prefix: neo-lsp-complete-qt-v1
+      - name: Verify complete Windows Qt runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($relative in @('bin/Qt6Core.dll', 'bin/Qt6Network.dll', 'bin/Qt6Qml.dll', 'bin/Qt6Test.dll', 'plugins/platforms/qwindows.dll')) {
+            $dependency = Join-Path $env:QT_ROOT_DIR $relative
+            if (-not (Test-Path -LiteralPath $dependency)) { throw "Incomplete Qt runtime: $dependency" }
+          }
       - name: Configure native LSP regression
         run: cmake -S tests/lsp-planner -B build-lsp
       - name: Build native LSP regression
