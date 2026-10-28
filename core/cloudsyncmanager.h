@@ -8,6 +8,7 @@
 #include "cloudsynchistory.h"
 #include "cloudsyncworkspace.h"
 #include "cloudsyncworkspacecopy.h"
+#include "cloudsyncworkspaceacceptance.h"
 #include "cloudsyncworkspaceupload.h"
 #include "cloudsyncworkspaceapply.h"
 #include "oauth2pkce.h"
@@ -166,6 +167,7 @@ private:
 	QList<QJsonObject> workspaceCreations(const QString &directory, const QString &providerId, const QString &account, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceCopies(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QList<QJsonObject> workspaceUploads(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
+	QList<QJsonObject> workspaceAcceptances(const QString &directory, const CloudWorkspaceReference &reference, bool *limited = nullptr, bool *invalid = nullptr) const;
 	QVariantList workspaceRestores(const QString &directory, const CloudWorkspaceReference &reference, const QString &choiceVersion, bool *limited = nullptr, bool *invalid = nullptr) const;
 	void finishWorkspaceVersions(const QJsonObject &record, const QString &version, const QString &ticket = {}, bool headMatches = false);
 	void startWorkspaceRestore(const QJsonObject &root);
@@ -194,6 +196,7 @@ private:
 	CloudWorkspaceCreate workspaceCreator;
 	CloudWorkspaceSourceReview workspaceSource;
 	CloudWorkspaceCopy workspaceCopy;
+	CloudWorkspaceAcceptance workspaceAcceptance;
 	CloudWorkspaceUpload workspaceUpload;
 	CloudWorkspaceRead workspaceRestoreReader;
 	CloudWorkspaceApply workspaceRestoreApply;
@@ -206,12 +209,13 @@ private:
 	bool workspaceCheckpointRequired = false;
 	quint64 workspaceSerial = 0;
 	struct WorkspaceCopyReview {
-		QString id, choiceVersion, localSha256, parent;
+		QString id, choiceVersion, localSha256, parent, previousAcceptance, copyTicket;
 		CloudWorkspaceReference reference;
 		CloudWorkspaceCopySource source;
 	};
 	QHash<QString, WorkspaceCopyReview> workspaceCopyReviews;
 	WorkspaceCopyReview workspaceCopyReview;
+	CloudWorkspaceRecord workspaceReviewedRoot;
 	bool workspaceLegacyChanged = false;
 	std::function<bool()> workspacePersistenceAvailable, workspacePersist;
 	struct WorkspaceVersionReview {

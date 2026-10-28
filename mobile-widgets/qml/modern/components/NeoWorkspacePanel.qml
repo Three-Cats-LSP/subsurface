@@ -9,6 +9,7 @@ ColumnLayout {
 	required property var provider
 	property string draft: ""
 	property var pendingCopy: ({})
+	property var pendingAcceptance: ({})
 	property var pendingRestore: ({})
 	signal draftEdited(string value)
 	readonly property var report: provider.workspace || ({})
@@ -124,6 +125,24 @@ ColumnLayout {
 			visible: !!panel.report.copyReview; enabled: panel.available
 			onClicked: { panel.pendingCopy = panel.report.copyReview; copyDialog.open() }
 		}
+		NeoButton {
+			objectName: "acceptWorkspaceLegacy-" + panel.provider.id; text: qsTr("Accept copied cloud branch…"); compact: true; Layout.fillWidth: true
+			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).acceptancePossible && !(panel.report.copyReview || {}).alreadyAccepted
+			enabled: panel.available && !panel.report.acceptanceRecoveryRequired && !panel.report.acceptanceLimitReached
+			onClicked: { panel.pendingAcceptance = panel.report.copyReview; acceptanceDialog.open() }
+		}
+		Text {
+			visible: !!panel.report.copyReview && !!(panel.report.copyReview || {}).alreadyAccepted
+			text: qsTr("This copied cloud branch is already the latest accepted branch.")
+			color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
+		Text {
+			objectName: "workspaceAcceptanceStatus-" + panel.provider.id
+			visible: !!panel.report.acceptedLegacy || !!panel.report.acceptanceRecoveryRequired || !!panel.report.acceptanceLimitReached
+			text: panel.report.acceptanceRecoveryRequired || panel.report.acceptanceLimitReached ? qsTr("Saved branch acceptance records need review or reached their safety limit. All records were kept.") :
+				panel.report.legacyChanged || !panel.report.acceptanceLatest ? qsTr("The accepted branch was recorded, but a newer branch or acceptance appeared. Review it before syncing.") : qsTr("Copied cloud branch accepted. Workspace sync is not yet active.")
+			color: tokens.textPrimary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+		}
 		Text {
 			objectName: "workspaceCopyStatus-" + panel.provider.id
 			visible: !!panel.report.copied || !!panel.report.copyRecoveryRequired || !!panel.report.copyLimitReached
@@ -177,6 +196,23 @@ ColumnLayout {
 				objectName: "resumeWorkspaceRestore-" + panel.provider.id + "-" + index; text: qsTr("Check and resume restore"); compact: true; Layout.fillWidth: true
 				enabled: panel.available && modelData.canResume
 				onClicked: CloudSync.runWorkspaceVersion(panel.provider.id, "resume-restore", modelData.id)
+			}
+		}
+	}
+	Repeater {
+		model: panel.report.acceptances || []
+		delegate: ColumnLayout {
+			required property var modelData
+			required property int index
+			Layout.fillWidth: true
+			Text {
+				text: modelData.choiceChanged ? qsTr("Branch acceptance %1 belongs to an earlier workspace choice. Its record was kept.").arg(index + 1) : qsTr("Branch acceptance %1 has saved recovery information and can be checked again.").arg(index + 1)
+				color: tokens.textSecondary; Layout.fillWidth: true; wrapMode: Text.WordWrap
+			}
+			NeoButton {
+				objectName: "resumeWorkspaceAcceptance-" + panel.provider.id + "-" + index; text: qsTr("Check and resume acceptance"); compact: true; Layout.fillWidth: true
+				enabled: panel.available && modelData.canResume
+				onClicked: CloudSync.runWorkspace(panel.provider.id, "resume-accept", modelData.id)
 			}
 		}
 	}
@@ -241,6 +277,27 @@ ColumnLayout {
 		objectName: "joinWorkspace-" + panel.provider.id; text: qsTr("Verify and join"); compact: true; Layout.fillWidth: true
 		enabled: panel.available && !panel.report.recoveryRequired && referenceInput.text.trim().length > 0 && referenceInput.text.length <= 2048
 		onClicked: CloudSync.runWorkspace(panel.provider.id, "join", referenceInput.text.trim())
+	}
+	Popup {
+		id: acceptanceDialog; objectName: "workspaceAcceptanceDialog-" + panel.provider.id
+		parent: Overlay.overlay; anchors.centerIn: parent; modal: true; focus: true; padding: 16
+		closePolicy: Popup.CloseOnEscape
+		width: Math.max(280, Math.min(460, parent ? parent.width - 32 : panel.width))
+		background: Rectangle { color: tokens.surfaceRaised; radius: tokens.radius16; border.color: tokens.border }
+		contentItem: Rectangle {
+			objectName: "workspaceAcceptanceBody-" + panel.provider.id; color: tokens.surfaceRaised; implicitHeight: acceptanceContent.implicitHeight
+			Accessible.role: Accessible.Dialog; Accessible.name: acceptanceTitle.text
+			ColumnLayout {
+				id: acceptanceContent; width: parent.width; spacing: 12
+				Text { id: acceptanceTitle; text: qsTr("Accept this cloud branch?"); color: tokens.textPrimary; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				Text { text: qsTr("Neo will verify the original cloud log and its protected workspace copy, then record this branch as accepted. Your local log stays unchanged; workspace sync is not started."); color: tokens.textSecondary; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+				NeoButton { objectName: "cancelWorkspaceAcceptance-" + panel.provider.id; text: qsTr("Cancel"); variant: "ghost"; Layout.fillWidth: true; onClicked: acceptanceDialog.close() }
+				NeoButton {
+					objectName: "confirmWorkspaceAcceptance-" + panel.provider.id; text: qsTr("Accept branch"); Layout.fillWidth: true; enabled: panel.available
+					onClicked: { var review = panel.pendingAcceptance.id || ""; acceptanceDialog.close(); CloudSync.runWorkspace(panel.provider.id, "accept-copy", review) }
+				}
+			}
+		}
 	}
 	Popup {
 		id: restoreDialog; objectName: "workspaceRestoreDialog-" + panel.provider.id

@@ -94,6 +94,7 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	workspaceCreator(networkManager, this),
 	workspaceSource(networkManager, this),
 	workspaceCopy(networkManager, this),
+	workspaceAcceptance(networkManager, this),
 	workspaceUpload(networkManager, this),
 	workspaceRestoreReader(networkManager, this),
 	workspaceRestoreApply(networkManager, this)
@@ -105,6 +106,13 @@ CloudSyncManager::CloudSyncManager(QNetworkAccessManager *networkManager, QObjec
 	connect(&workspaceCreator, &CloudWorkspaceCreate::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceSource, &CloudWorkspaceSourceReview::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceCopy, &CloudWorkspaceCopy::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceAcceptance, &CloudWorkspaceAcceptance::failed, this, &CloudSyncManager::failWorkspace);
+	connect(&workspaceAcceptance, &CloudWorkspaceAcceptance::finished, this, [this](const QJsonObject &, const QString &, const QString &event, bool latest, bool changed) {
+		if (!workspaceInProgress() || (workspaceAction != "accept-copy" && workspaceAction != "resume-accept")) return;
+		const auto provider = syncProviderId;
+		workspaceReports[provider] = {{"verified", true}, {"choiceVersion", workspaceChoiceVersion}, {"acceptedLegacy", event}, {"acceptanceLatest", latest}, {"legacyChanged", changed}};
+		clearSyncOperation(); emit providersChanged(); emit workspaceFinished(provider);
+	});
 	connect(&workspaceUpload, &CloudWorkspaceUpload::failed, this, &CloudSyncManager::failWorkspace);
 	connect(&workspaceUpload, &CloudWorkspaceUpload::finished, this, [this](const QJsonObject &root, const QString &version, const QString &ticket, bool headMatches) {
 		if (workspaceRestoreStep == WorkspaceRestoreStep::Publishing) workspaceRestorePublished(root, version, ticket, headMatches);
@@ -1256,9 +1264,9 @@ void CloudSyncManager::clearSyncOperation()
 {
 	if (storageReviewInProgress()) storageReviewClient.cancel();
 	if (historyInProgress()) historyClient.cancel();
-	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
+	if (workspaceInProgress()) { workspaceReader.cancel(); workspaceCreator.cancel(); workspaceSource.cancel(); workspaceCopy.cancel(); workspaceAcceptance.cancel(); workspaceUpload.cancel(); workspaceRestoreReader.cancel(); workspaceRestoreApply.cancel(); ++workspaceSerial; }
 	workspaceAction.clear(); workspaceAccount.clear(); workspaceToken.clear(); workspacePath.clear(); workspaceChoiceVersion.clear(); workspaceReference.value = {}; workspaceCheckpointRequired = false;
-	workspaceCopyReview = {}; workspaceLegacyChanged = false;
+	workspaceCopyReview = {}; workspaceReviewedRoot.value = {}; workspaceLegacyChanged = false;
 	workspaceVersionTicket.clear();
 	workspaceRestorePlan = {}; workspaceRestoreReview = {}; workspaceRestoreBefore.clear(); workspaceRestoreBeforeModel.clear(); workspaceRestoreSourceBytes.clear(); workspaceRestoreModelBytes.clear();
 	workspaceRestoreDirectory.clear(); workspaceRestoreSource.clear(); workspaceRestoreProjected = false; workspaceRestoreHeadMatches = false; workspaceRestoreLocalMatches = false;

@@ -1370,7 +1370,7 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 void TestCloudSyncHistory::workspaceAcceptanceIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"restart", "different-choice", "different-source", "different-event", "different-previous", "different-head", "different-copy", "corrupt", "locked", "future-state"};
+	const QStringList cases = {"restart", "different-choice", "different-source", "different-event", "different-previous", "different-head", "different-copy", "corrupt", "locked", "future-state", "different-local"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-accept-intent-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceAcceptanceIntent()
@@ -1378,11 +1378,11 @@ void TestCloudSyncHistory::workspaceAcceptanceIntent()
 	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
 	const auto ref = CloudWorkspaceReference::create(google ? "google-drive" : "dropbox", Account, uid(), google ? "root" : "id:root");
 	const auto choice = uid(), event = uid(), previous = uid(), head = uid(), copy = uid(); QTemporaryDir dir; QVERIFY(dir.isValid());
-	const auto file = dir.filePath("intent.json"); CloudWorkspaceAcceptanceIntent intent(file, ref, choice, source, event, previous, head, copy);
+	const auto file = dir.filePath("intent.json"); CloudWorkspaceAcceptanceIntent intent(file, ref, choice, source, CloudSyncManifest::sha256(B), event, previous, head, copy);
 	QVERIFY(intent.prepare()); QCOMPARE(intent.state(), QString("prepared")); const auto original = intent.proof();
-	if (mode >= 1 && mode <= 6) {
+	if ((mode >= 1 && mode <= 6) || mode == 10) {
 		auto otherSource = source; if (mode == 2) { auto m = otherSource.value["manifest"].toObject(); m["version"] = "other-revision"; otherSource.value["manifest"] = m; }
-		CloudWorkspaceAcceptanceIntent other(file, ref, mode == 1 ? uid() : choice, otherSource, mode == 3 ? uid() : event,
+		CloudWorkspaceAcceptanceIntent other(file, ref, mode == 1 ? uid() : choice, otherSource, CloudSyncManifest::sha256(mode == 10 ? A : B), mode == 3 ? uid() : event,
 			mode == 4 ? uid() : previous, mode == 5 ? uid() : head, mode == 6 ? uid() : copy);
 		QVERIFY(!other.prepare()); QVERIFY(!other.inspect()); QVERIFY(intent.inspect()); QCOMPARE(intent.proof(), original); return;
 	}
@@ -1392,9 +1392,9 @@ void TestCloudSyncHistory::workspaceAcceptanceIntent()
 		f.close(); QVERIFY(!intent.prepare()); QVERIFY(!intent.inspect()); return;
 	}
 	if (mode == 8) { QLockFile lock(file + ".lock"); QVERIFY(lock.tryLock(0)); QVERIFY(!intent.submitted()); QVERIFY(intent.inspect()); QCOMPARE(intent.proof(), original); return; }
-	QVERIFY(!intent.committed()); QVERIFY(intent.submitted()); QVERIFY(intent.submitted()); QVERIFY(intent.committed()); QVERIFY(intent.committed());
-	CloudWorkspaceAcceptanceIntent restarted(file, ref, choice, source, event, previous, head, copy);
-	QVERIFY(restarted.inspect()); QCOMPARE(restarted.state(), QString("committed"));
+	QVERIFY(!intent.committed()); QVERIFY(intent.submitted()); QVERIFY(intent.submitted()); QVERIFY(intent.committed()); QVERIFY(intent.committed()); QVERIFY(intent.completed()); QVERIFY(intent.completed());
+	CloudWorkspaceAcceptanceIntent restarted(file, ref, choice, source, CloudSyncManifest::sha256(B), event, previous, head, copy);
+	QVERIFY(restarted.inspect()); QCOMPARE(restarted.state(), QString("completed"));
 	QFile f(file); QVERIFY(f.open(QIODevice::ReadOnly)); QVERIFY(!f.readAll().contains("access_token"));
 }
 
@@ -1437,7 +1437,7 @@ void TestCloudSyncHistory::workspaceAcceptanceWorkflow()
 	};
 	if (mode == 11) n.deferReads = true;
 	CloudWorkspaceAcceptance client(&n); QSignalSpy done(&client, &CloudWorkspaceAcceptance::finished), errors(&client, &CloudWorkspaceAcceptance::failed);
-	const auto start = [&] { client.start("token", ref, source, choiceFile, choiceVersion, checkpoint, intent, event,
+	const auto start = [&] { client.start("token", ref, source, choiceFile, choiceVersion, checkpoint, intent, CloudSyncManifest::sha256(B), event,
 		mode == 6 ? uid() : QString(), mode == 5 ? uid() : copy, mode == 18 ? uid() : copy, [&] { return n.guard; }); };
 	start();
 	if (mode == 11 || mode == 16) {

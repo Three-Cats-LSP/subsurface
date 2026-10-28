@@ -14,12 +14,13 @@ class QLockFile;
 class CloudWorkspaceAcceptanceIntent {
 public:
 	CloudWorkspaceAcceptanceIntent(const QString &path, const CloudWorkspaceReference &workspace,
-		const QString &choiceVersion, const CloudWorkspaceCopySource &source, const QString &event,
+		const QString &choiceVersion, const CloudWorkspaceCopySource &source, const QString &localHash, const QString &event,
 		const QString &previous, const QString &head, const QString &copyTicket);
 	bool inspect();
 	bool prepare();
 	bool submitted();
 	bool committed();
+	bool completed();
 	QString state() const;
 	QJsonObject proof() const { return saved; }
 private:
@@ -40,7 +41,7 @@ public:
 	~CloudWorkspaceAcceptance() override;
 	void start(const QString &token, const CloudWorkspaceReference &workspace, const CloudWorkspaceCopySource &source,
 		const QString &choiceFile, const QString &choiceVersion, const QString &checkpointFile, const QString &intentFile,
-		const QString &event, const QString &previous, const QString &head, const QString &copyTicket,
+		const QString &localHash, const QString &event, const QString &previous, const QString &head, const QString &copyTicket,
 		const std::function<bool()> &scopeCurrent);
 	void cancel();
 signals:
@@ -69,7 +70,7 @@ private:
 	Step step = Step::Idle;
 	bool sourceChanged = false;
 	quint64 generation = 0;
-	QString token, choiceFile, choiceVersion, checkpointFile, intentFile, event, previous, expectedHead, copyTicket, rootVersion;
+	QString token, choiceFile, choiceVersion, checkpointFile, intentFile, localHash, event, previous, expectedHead, copyTicket, rootVersion;
 	std::function<bool()> scopeCurrent;
 };
 #endif
