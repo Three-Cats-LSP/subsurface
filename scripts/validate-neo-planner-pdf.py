@@ -45,6 +45,10 @@ def validate(output):
         actual = "\n".join(page.extract_text() or "" for page in reader.pages[1:])
         normalize = lambda value: re.sub(r"\s+", "", value)
         normalized = normalize(actual)
+        if not all(label in actual for label in ("DIVE SETTINGS", "Algorithm:", "Gradient factors:", "Circuit:", "Descent:", "GASES")):
+            raise RuntimeError(f"{name}: missing readable dive settings")
+        if any(label in actual for label in ("Resolved LSP settings", "Effective LSP calculation", "Source:", "gfLo", "altSurfaceP")):
+            raise RuntimeError(f"{name}: internal engine data leaked into the report")
         missing = [line for line in text.splitlines() if line.strip() and normalize(line) not in normalized]
         if missing:
             raise RuntimeError(f"{name}: {len(missing)} TXT lines are missing from the PDF schedule")

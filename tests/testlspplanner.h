@@ -14,5 +14,7 @@ private slots:
 	void physicalProjection_data();
 	void physicalProjection();
 	void ndlReference();
+	void readableDiveSettings_data();
+	void readableDiveSettings();
 };
 #endif

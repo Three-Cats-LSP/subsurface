@@ -1,5 +1,27 @@
 # Windows cloud reliability continuation
 
+**Owner correction: readable dive settings in plan exports.**
+The owner approved the plan header/schedules but rejected the internal engine
+JSON displayed as settings. The current presentation change uses one formatter
+for saved and preview LSP plans: named algorithm, GF/conservatism, circuit,
+planned start, water/surface pressure, descent/ascent rates, stop settings,
+oxygen limits, relevant rebreather setpoints, SAC/reserve and labelled gas roles,
+cylinder types and fills. Exact engine/source/request data stays in the hidden
+metadata marker. Existing version-2 saved plans are formatted from their saved
+request/input without rewriting their notes or recomputing the schedule. New
+plans retain canonical gas-supply values for unit conversion. Native planner
+exports keep their existing dive settings. Six new native formatter cases cover
+old metadata, metric/imperial, CCR gases/setpoints, VPM and missing data; model
+save and actual TXT/PDF gates now require readable settings and reject raw dumps.
+
+Prior integrated history source **84d1c7b28** is running full cloud/native
+**40743204807** and matching Windows **40743210731**; resume those checks and
+retain their exact-source scope. Focused archive **04801c5a5 / 40742412183 passed
+all 70 rows on both host and Windows**. The new report formatter needs its own
+focused LSP/native and matching Windows/PDF checks before presentation acceptance.
+Metadata-sync preparation remains next; no new metadata storage changes have
+been started. No Google writes or credentials changed during this report fix.
+
 **Focused archive gate passed on the host.**
 **04801c5a5 / 40742412183** passed **70 focused rows**, zero failures, in 70.39 s.
 Actual debug coordinator timings were 1.5–7.6 s across upload, read, copy,

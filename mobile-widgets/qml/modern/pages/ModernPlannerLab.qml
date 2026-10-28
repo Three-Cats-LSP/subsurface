@@ -20,6 +20,7 @@ Kirigami.ScrollablePage {
 	property bool useLspPlanner: true
 	property var lspParameters: ({})
 	property var lastLspRequest: ({})
+	property string lastLspReportHeader: ""
 	property real totalPlanCns: -1
 	property bool plannerReady: false
 	onVisibleChanged: { if (visible && plannerReady) generatePlan(false, true) }
@@ -268,9 +269,7 @@ Kirigami.ScrollablePage {
 
     function activeProfileLimitations() { return "" }
     function profileExportIdentity() {
-        var lines=[qsTr("Profile: %1").arg(profileLabel()),useLspPlanner?qsTr("Engine: LSP D-Planner+ %1").arg(Backend.divePlannerPointsModel.lspPlannerIdentity().version):qsTr("Engine: Subsurface native")]
-        if(useLspPlanner&&lastLspRequest.schema===1)lines.push(qsTr("Effective LSP calculation: %1").arg(JSON.stringify(lastLspRequest)))
-        return lines
+        return [qsTr("Profile: %1").arg(profileLabel())]
     }
     function plannerValue(name) {
         if(!useLspPlanner)return Backend[name]
@@ -505,6 +504,7 @@ Kirigami.ScrollablePage {
 		var salinity = waterType.currentIndex === 0 ? 10300 : waterType.currentIndex === 1 ? 10000 : waterType.currentIndex === 2 ? 10200 : customSalinity
         var result=calculateEnginePlan(cylinderData,segmentData,savePlan)
         lastLspRequest=useLspPlanner?(result.engineRequest||{}):({})
+        lastLspReportHeader=useLspPlanner?(result.reportHeader||""):""
         totalPlanCns=useLspPlanner&&result.cns!==undefined?result.cns:-1
 		planNotes = result.notes || ""
 		updateGasReference(result)
@@ -710,11 +710,16 @@ Kirigami.ScrollablePage {
 	}
 	function fullPlanExport() {
 		var modelSettings = page.plannerValue("planner_deco_mode") === Enums.BUEHLMANN ? qsTr("GF %1/%2").arg(page.plannerValue("planner_gflow")).arg(page.plannerValue("planner_gfhigh")) : page.plannerValue("planner_deco_mode") === Enums.VPMB ? qsTr("Conservatism %1").arg(page.plannerValue("vpmb_conservatism")) : qsTr("NDL planning")
-		var lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(page.plannerValue("bottomsac"))).arg(sacText(page.plannerValue("decosac"))).arg(sacUnit), qsTr("Reserve: %1 %2").arg(page.plannerValue("reserve_gas")).arg(pressureUnit), "", qsTr("GASES")])
-		lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
-		for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
-			var cylinder = cylinders.get(gasIndex)
-			lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(gasDisplayLabel(cylinder.mix)).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
+		var lines
+		if (useLspPlanner && lastLspReportHeader.length > 0) {
+			lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), lastLspReportHeader]
+		} else {
+			lines = [qsTr("SUBSURFACE NEO DIVE PLAN"), qsTr("Planned start: %1 %2").arg(plannedDate).arg(plannedTime), qsTr("Surface pressure: %1 bar").arg(surfacePressureBar.toFixed(3)), qsTr("Model: %1 — %2").arg(algorithmName()).arg(modelSettings)].concat(profileExportIdentity(), [qsTr("Mode: %1").arg(diveMode.currentText), qsTr("Water: %1").arg(waterDescription()), qsTr("Bottom/deco SAC: %1 / %2 %3").arg(sacText(page.plannerValue("bottomsac"))).arg(sacText(page.plannerValue("decosac"))).arg(sacUnit), qsTr("Reserve: %1 %2").arg(page.plannerValue("reserve_gas")).arg(pressureUnit), "", qsTr("GASES")])
+			lines.splice(3, 0, qsTr("Altitude: %1 m").arg(manager.plannerAltitudeForSurfacePressure(surfacePressureBar).toFixed(0)))
+			for (var gasIndex = 0; gasIndex < cylinders.count; ++gasIndex) {
+				var cylinder = cylinders.get(gasIndex)
+				lines.push(qsTr("Gas %1: %2 — %3, %4 %5").arg(gasIndex + 1).arg(gasDisplayLabel(cylinder.mix)).arg(cylinder.type).arg(cylinder.pressure).arg(pressureUnit))
+			}
 		}
 		for (var analysisIndex = 0; analysisIndex < gasAnalysis.length; ++analysisIndex) {
 			var gas = gasAnalysis[analysisIndex]

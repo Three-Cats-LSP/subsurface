@@ -188,7 +188,7 @@ static QPair<QString, QString> neoPlanReportParts(const struct dive *d)
 {
 	const auto metadata = neoPlanMetadata(d->notes);
 	if (metadata.value(QStringLiteral("engine")).toMap().value(QStringLiteral("id")).toString() == QLatin1String("lsp-d-planner-plus"))
-		return {metadata.value(QStringLiteral("reportHeader")).toString(), metadata.value(QStringLiteral("reportFooter")).toString()};
+		return {neoLspDiveSettings(metadata, prefs.units.length == units::METERS, prefs.units.pressure == units::BAR, prefs.units.volume == units::LITER), metadata.value(QStringLiteral("reportFooter")).toString()};
 	QTextDocument document;
 	document.setHtml(neoPlanNotesWithoutMetadata(d->notes));
 	const QString report = document.toPlainText().trimmed();

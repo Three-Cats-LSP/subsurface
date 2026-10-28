@@ -296,11 +296,6 @@ QVariantMap DivePlannerPointsModel::calculateNeoLspPlan(const QVariantMap &input
 	candidate->maxdepth.mm=maximumDepth;candidate->dcs[0].maxdepth=candidate->maxdepth;
 	candidate->duration.seconds = projection.value("runtimeSeconds").toInt(); candidate->dcs[0].duration = candidate->duration;
 	candidate->otu = projection.value("otu").toInt(); candidate->cns = std::lround(projection.value("cns").toDouble());
-	QStringList header{QStringLiteral("Engine: LSP D-Planner+ %1").arg(LspPlanner::identity().value("version").toString()),
-		QStringLiteral("Source: %1").arg(LspPlanner::identity().value("sourceCommit").toString()),
-		QStringLiteral("Model: %1").arg(model), QStringLiteral("GF: %1/%2").arg(number("gfLowInput")).arg(number("gfHighInput")),
-		QStringLiteral("Planned start: %1 %2").arg(input.value("date").toString(), input.value("time").toString()),
-		QStringLiteral("Resolved LSP settings: %1").arg(QString::fromUtf8(QJsonDocument(projection.value("engineRequest").toObject()).toJson(QJsonDocument::Compact)))};
 	QStringList footer{QStringLiteral("CNS: %1%  OTU: %2").arg(projection.value("cns").toDouble()).arg(candidate->otu)};
 	for (const auto &warning : projection.value("warnings").toArray()) footer.append(warning.toString());
 	for (const auto &gas : gasAnalysis) {
@@ -309,11 +304,14 @@ QVariantMap DivePlannerPointsModel::calculateNeoLspPlan(const QVariantMap &input
 	QVariantMap metadata = projection.toVariantMap(); metadata.remove("raw"); metadata.remove("error"); metadata.remove("gasVolumes");
 	metadata["version"] = 2; metadata["engine"] = LspPlanner::identity().toVariantMap(); metadata["input"] = input;
 	metadata["priorInputsSha256"] = QString::fromLatin1(QCryptographicHash::hash(priorWire,QCryptographicHash::Sha256).toHex());
-	metadata["reportHeader"] = header.join(QLatin1Char('\n')); metadata["reportFooter"] = footer.join(QLatin1Char('\n')); metadata["gasAnalysis"] = gasAnalysis;
-	const QString notes = header.join(QLatin1Char('\n')) + QLatin1Char('\n') + footer.join(QLatin1Char('\n'));
+	metadata["gasAnalysis"] = gasAnalysis; metadata["gasSupplies"] = cylinders.toVariantList();
+	metadata["diveSettings"] = QVariantMap{{"sacBottom", number("sacBottom")}, {"sacDeco", number("sacDeco")}, {"reserveBar", reserve}};
+	const QString header = neoLspDiveSettings(metadata, prefs.units.length == units::METERS, prefs.units.pressure == units::BAR, prefs.units.volume == units::LITER);
+	metadata["reportHeader"] = header; metadata["reportFooter"] = footer.join(QLatin1Char('\n'));
+	const QString notes = header + QLatin1Char('\n') + footer.join(QLatin1Char('\n'));
 	candidate->notes = (QStringLiteral("<pre>")+notes.toHtmlEscaped()+QStringLiteral("</pre>")+neoPlanMetadataMarker(metadata)).toStdString();
 	QVariantMap result = projection.toVariantMap(); result.remove("raw"); result["notes"] = notes; result["engine"] = LspPlanner::identity().toVariantMap();
-	result["gasAnalysis"] = gasAnalysis; result["dateTimeValid"] = true; result["newDiveId"] = -1;
+	result["reportHeader"] = header; result["gasAnalysis"] = gasAnalysis; result["dateTimeValid"] = true; result["newDiveId"] = -1;
 	if (shouldSave && projection.value("planSaveAllowed").toBool()) {
 		auto saved = std::make_unique<dive>(); copy_dive(candidate.get(), saved.get()); result["newDiveId"] = saved->id;
 		Command::addDive(std::move(saved), false, true);

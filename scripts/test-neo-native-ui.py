@@ -211,7 +211,8 @@ DRIVER = r'''
                     neoPlannerLab.loadPreset(0)
                     smokeCheck(Math.abs(neoPlannerLab.lspParameters.ascentRate-9.876543)<1e-9, "preset retains precise SI rates")
 					smokeCheck(neoPlannerLab.planSaveAllowed && neoPlannerLab.lastLspRequest.levels[0].depth===30, "preset retains owned gas and level rows: " + neoPlannerLab.planNotes)
-                    smokeCheck(neoPlannerLab.fullPlanExport().indexOf("Engine: LSP D-Planner+") >= 0, "LSP export source")
+                    smokeCheck(neoPlannerLab.fullPlanExport().indexOf("Algorithm:") >= 0 && neoPlannerLab.fullPlanExport().indexOf("GASES") >= 0, "readable calculated dive settings")
+                    smokeCheck(neoPlannerLab.fullPlanExport().indexOf("Effective LSP") < 0 && neoPlannerLab.fullPlanExport().indexOf("Source:") < 0, "no internal settings dump in preview export")
                     smokeLspRuntime=neoPlannerLab.runtimeSeconds
                     smokeLspProfile=JSON.parse(JSON.stringify(neoPlannerLab.profileData))
                     smokeCheck(manager.exportNeoPlannerText(smokeConfig.lspPreview, neoPlannerLab.fullPlanExport()).length > 0, "LSP TXT export")
@@ -281,7 +282,8 @@ DRIVER = r'''
                     var saved=pageStack.currentItem.currentItem
                     smokeCheck(saved && saved.isLspPlan, "saved LSP identity selects its own view")
                     smokeCheck(JSON.stringify(saved.modelData.planProfile) === JSON.stringify(smokeLspProfile), "saved LSP chart matches calculation")
-                    smokeCheck(saved.modelData.planReportHeader.indexOf("LSP D-Planner+")>=0, "saved report retains engine source")
+                    smokeCheck(saved.modelData.planReportHeader.indexOf("Algorithm:")>=0 && saved.modelData.planReportHeader.indexOf("GASES")>=0, "saved report shows dive settings and gases")
+                    smokeCheck(saved.modelData.planReportHeader.indexOf("Resolved LSP")<0 && saved.modelData.planReportHeader.indexOf("Source:")<0, "saved report hides internal calculation dump")
                     smokeCheck(smokeFind(saved,"NeoSavedLspProfile").visible, "saved LSP chart rendered")
                     var report=pageStack.currentItem.planReportText(saved.modelData)
                     smokeCheck(manager.exportNeoPlannerText(smokeConfig.lspSaved, report).length>0, "reopened LSP TXT")
@@ -427,7 +429,8 @@ def main():
         pdfs = list(lsp_folders[name].glob("*.pdf"))
         if len(texts) != 1 or len(pdfs) != 1 or not pdfs[0].read_bytes().startswith(b"%PDF-"):
             raise RuntimeError(f"Missing actual LSP TXT/PDF exports: {name}")
-        if "LSP D-Planner+" not in texts[0].read_text(encoding="utf-8"):
+        contents = texts[0].read_text(encoding="utf-8")
+        if not all(label in contents for label in ("Algorithm:", "Gradient factors:", "Descent:", "GASES", "Air")):
             raise RuntimeError(f"LSP source identity missing from {name}")
     (output / "lsp-saved-metadata.json").write_text(json.dumps(plan_data, indent=2), encoding="utf-8")
     print(f"Native UI checks passed; logs and screenshots: {output}")

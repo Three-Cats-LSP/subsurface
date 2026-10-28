@@ -893,7 +893,10 @@ void TestDivePlannerModel::testNeoLspFlow()
 	const auto savedMetadata=neoPlanMetadata(lastSavedPlannerDive->notes);
 	QCOMPARE(savedMetadata.value("profile").toList(),result.value("profile").toList());
 	QCOMPARE(savedMetadata.value("engineRequest").toMap().value("settings").toMap().value("gfLo").toInt(),20);
-	QVERIFY(savedMetadata.value("reportHeader").toString().contains("LSP D-Planner+"));
+	QVERIFY(savedMetadata.value("reportHeader").toString().contains("Algorithm:"));
+	QVERIFY(savedMetadata.value("reportHeader").toString().contains("GASES"));
+	QVERIFY(!savedMetadata.value("reportHeader").toString().contains("Resolved LSP"));
+	QVERIFY(!savedMetadata.value("reportHeader").toString().contains("Source:"));
 	QTemporaryDir directory;QVERIFY(directory.isValid());const QString filename=directory.filePath("lsp plan.ssrf");
 	divelog.dives.record_dive(std::move(lastSavedPlannerDive));QCOMPARE(save_dives(filename.toUtf8().constData()),0);
 	struct divelog reloaded;QCOMPARE(parse_file(filename.toUtf8().constData(),&reloaded),0);

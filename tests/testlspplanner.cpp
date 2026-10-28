@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "testlspplanner.h"
 #include "qt-models/lspplanner.h"
+#include "qt-models/neoplanmetadata.h"
 #include <QCryptographicHash>
 #include <QFile>
 #include <QJsonDocument>
@@ -194,6 +195,44 @@ void TestLspPlanner::ndlReference()
 	QVERIFY(!LspPlanner::ndlReference(input).value("ok").toBool());
 	input["request"]=request;input["depthsMetres"]=QJsonArray{-1};
 	QVERIFY(!LspPlanner::ndlReference(input).value("ok").toBool());
+}
+
+void TestLspPlanner::readableDiveSettings_data()
+{
+	QTest::addColumn<int>("mode");
+	const QStringList modes = {"old-saved-metric", "canonical-imperial-supplies", "ccr-trimix-and-oxygen", "vpm-conservatism", "hybrid-gf", "missing-request"};
+	for (int i = 0; i < modes.size(); ++i) QTest::newRow(qPrintable(modes[i])) << i;
+}
+void TestLspPlanner::readableDiveSettings()
+{
+	QFETCH(int, mode);
+	QFile fixture(QStringLiteral(SUBSURFACE_TEST_DATA "/tests/data/neo-lsp-report-v2.json")); QVERIFY(fixture.open(QIODevice::ReadOnly));
+	auto metadata = QJsonDocument::fromJson(fixture.readAll()).toVariant().toMap();
+	auto request = metadata.value("engineRequest").toMap(), input = metadata.value("input").toMap(), settings = request.value("settings").toMap();
+	if (mode == 1) metadata["gasSupplies"] = QVariantList{QVariantMap{{"startBar", 200}, {"sizeLitres", 24}, {"role", 0}}};
+	if (mode == 2) {
+		settings["circuit"] = "CCR";
+		input["cylinders"] = QVariantList{QVariantMap{{"mix", "18/45"}, {"use", 1}, {"type", "Twin 12 L"}}, QVariantMap{{"mix", "100/0"}, {"use", 2}, {"type", "3 L oxygen"}}, QVariantMap{{"mix", "50/0"}, {"use", 0}, {"type", "7 L bailout"}}};
+	}
+	if (mode == 3 || mode == 4) { request["model"] = mode == 3 ? "VPMBE" : "VPMB_GFS"; settings["conservatism"] = 3; }
+	request["settings"] = settings; metadata["engineRequest"] = request; metadata["input"] = input;
+	if (mode == 5) metadata.remove("engineRequest");
+	const auto before = metadata;
+	const auto report = neoLspDiveSettings(metadata, mode != 1, mode != 1, mode != 1);
+	QCOMPARE(metadata, before); // Rendering an old plan must not rewrite it.
+	if (mode == 5) { QVERIFY(report.isEmpty()); return; }
+	for (const auto &label : {"DIVE SETTINGS", "Algorithm:", "Circuit:", "GASES", "Descent:", "Stop spacing:", "Gas consumption (SAC):", "Gas reserve:"})
+		QVERIFY2(report.contains(QLatin1String(label)), label);
+	for (const auto &internal : {"Resolved LSP", "Effective LSP", "Source:", "Engine:", "gfLo", "altSurfaceP", "{", "}"})
+		QVERIFY2(!report.contains(QLatin1String(internal)), internal);
+	if (mode == 1) { QVERIFY(report.contains("ft/min")); QVERIFY(report.contains("psi")); QVERIFY(report.contains("cu ft/min")); }
+	else QVERIFY(report.contains("m/min"));
+	if (mode == 2) {
+		for (const auto &label : {"Closed circuit", "Setpoints:", "Trimix 18/45", "Diluent", "Loop oxygen", "Bailout gas", "Nitrox 50"}) QVERIFY2(report.contains(QLatin1String(label)), label);
+	} else { QVERIFY(!report.contains("Setpoints:")); QVERIFY(report.contains("Air (21% oxygen)")); }
+	if (mode == 3) { QVERIFY(report.contains("VPM-B/E")); QVERIFY(report.contains("Conservatism: 3")); QVERIFY(!report.contains("Gradient factors:")); }
+	else QVERIFY(report.contains("Gradient factors: 20/85"));
+	if (mode == 0) { QVERIFY(report.contains("fill 200 bar")); QVERIFY(report.contains("Ascent: 9.88 m/min")); }
 }
 
 QTEST_GUILESS_MAIN(TestLspPlanner)
