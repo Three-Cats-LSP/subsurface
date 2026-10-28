@@ -49,7 +49,9 @@ jobs:
 
   native-cloud-sync-tests:
     name: Native Qt 6 cloud sync tests
-    needs: [history-protocol, windows-history-protocol]
+    # The full Linux application suite can run alongside the independent
+    # Windows protocol job after its own fast protocol compile/test gate.
+    needs: [history-protocol]
     if: ${{ inputs.protocol_only != true }}
     uses: ./.github/workflows/linux-debian-generic-qt6.yml
     with:

@@ -1864,9 +1864,6 @@ void TestCloudSyncManager::testWorkspaceModel()
 	auto payload=original; payload.replace("Local notes must survive cloud failures.","Workspace staged replacement.");
 	if(mode==1 || mode==7 || mode==9 || mode==14) payload.replace("<dive ","<dive tags='private-workspace-staging-tag' ");
 	if(mode==2 || mode==9 || mode==14) payload.replace("</settings>","<fingerprint model='00001234' serial='00005678' deviceid='00000002' diveid='00000003' data='01020304'/></settings>");
-	// Fingerprint reuse deliberately requires a matching computer in the log.
-	// Bind the staged fixture to those IDs instead of weakening that policy.
-	if(mode==2 || mode==9 || mode==14) payload.replace("<divecomputer model=", "<divecomputer deviceid='00000002' diveid='00000003' model=");
 	if(mode==3) payload.prepend("\n");
 	if(mode==4) payload="<divelog><dives>";
 	if(mode==5) payload="<!DOCTYPE divelog><divelog/>";
@@ -1900,5 +1897,12 @@ void TestCloudSyncManager::testWorkspaceModel()
 	QCOMPARE(::divelog.dives.size(),1); QCOMPARE(QString::fromStdString(::divelog.dives[0]->notes),QString("Workspace staged replacement.")); QCOMPARE(current_dive,::divelog.dives[0].get());
 	query=QStringLiteral("replacement"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dive_matches(current_dive)); query=QStringLiteral("survive"); QVERIFY(fulltext_find_dives(query,StringFilterMode::EXACT).dives.empty());
 	if(mode==1) QCOMPARE(QString::fromStdString(taglist_get_tagstring(::divelog.dives[0]->tags)),QString("private-workspace-staging-tag"));
-	if(mode==2) { const auto value=get_fingerprint_data(fingerprints,0x1234,0x5678); QCOMPARE(value.first,4); QCOMPARE(value.second[0],(unsigned char)1); }
+	if(mode==2) {
+		const auto stored=std::find_if(fingerprints.begin(),fingerprints.end(),[](const auto &f) { return f.model==0x1234 && f.serial==0x5678; });
+		QVERIFY(stored!=fingerprints.end()); QCOMPARE(stored->fsize,4u); QCOMPARE(stored->get_data(),std::string("01020304"));
+		QCOMPARE(stored->fdeviceid,2u); QCOMPARE(stored->fdiveid,3u);
+		// Storage preservation and reuse eligibility are separate. These IDs do
+		// not belong to the installed computer; the existing guard must refuse.
+		QCOMPARE(get_fingerprint_data(fingerprints,0x1234,0x5678).first,0);
+	}
 }

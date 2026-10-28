@@ -81,7 +81,7 @@ jobs:
         echo "running tests for desktop"
         cd build/tests
         # xvfb-run --auto-servernum ./TestGitStorage -v2
-        xvfb-run --auto-servernum make check
+        CTEST_OUTPUT_ON_FAILURE=1 xvfb-run --auto-servernum make check
         if [ $? -ne 0 ]; then
           echo "Tests failed - adding the build output as artifacts"
           exit 1
@@ -113,7 +113,7 @@ jobs:
 
         cd build-mobile/tests
         # xvfb-run --auto-servernum ./TestGitStorage -v2
-        xvfb-run --auto-servernum make check
+        CTEST_OUTPUT_ON_FAILURE=1 xvfb-run --auto-servernum make check
         if [ $? -ne 0 ]; then
           echo "Tests failed - adding the build output as artifacts"
           exit 1
