@@ -103,9 +103,9 @@ claim that the C++ application build or package passed.
    package. Continue remaining cloud/metadata work independently. Physical
    Android and external compatibility claims retain their documented gates.
 
-The app's existing public planner still calls the Subsurface path until steps
-2–6 are implemented and validated. This checkpoint is concrete engine reuse,
-not a claim that the visible planner switch or the Windows release is complete.
+The initial engine-only checkpoint did not route the public planner. The later
+0c167b879 candidate below implements that routing; integrated acceptance and
+the Windows release remain gated by their explicit pending checks.
 
 ## CI checkpoint
 
@@ -126,8 +126,9 @@ successful headless runner deploys its four actual Qt libraries directly.
 The original integrated app source `ba0db8dc2` passed Windows launch,
 Clean/Modern, lifecycle and package run **40705358568**, plus Android compile
 **40705358554**. Those builds predate the JSON fix and do not exercise a public
-LSP planner flow. Full native app **40707131405** remains pending on 6c97 and
-also predates the JSON fix. Preserve these source-specific results; final
+LSP planner flow. Full native app **40707131405** failed at 6c97: its desktop
+LSP suite had 16 passes/39 refusals (38 of 39 full suites passed), before the
+JSON fix. Preserve these source-specific results; final
 matching-source app/package validation follows the actual UI/save/export work.
 
 ## Actual app integration candidate, 28 October
@@ -169,3 +170,12 @@ and Windows Qt 6.8.3. Full linked-app builds **40716874078 / 40718841109** faile
 before app-flow assertions (owning-table pointer, then missing sample include);
 both corrections are retained. Matching-source UI and full-app acceptance must
 pass before calling the visible adoption complete.
+
+The actual app candidate is **0c167b879**. Focused source/native run
+**40721651443 PASSED**, including **90 checks** on Windows Qt 6.8.3 and the
+shared-code host. Full linked app **40721658217** and matching Windows
+Clean/Modern/package **40721665308** are pending; resume them rather than
+repeating dispatch. The Windows tests now exercise actual page presets, both
+units, contingency/NDL, refused save, the Save button, canonical XML export,
+recorded saved chart/report, TXT/PDF and application restart. No Google writes
+are needed for these offline tests.

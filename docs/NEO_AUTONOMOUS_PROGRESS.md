@@ -1,5 +1,16 @@
 # Windows cloud reliability continuation
 
+**CURRENT SOURCE: `0c167b8799612d020194b5410c10fde8cb063927` (pushed).**
+Focused native/source gate **40721651443 PASSED** on Windows Qt 6.8.3 and the
+host: **90 checks**, including the new original-LSP NDL action and malformed
+input refusal. Original 38-case Node reproduction and source generation passed.
+Resume the already-dispatched matching **full app 40721658217** and **Windows
+Clean/Modern/package 40721665308**; both are still running. Do not dispatch
+another copy. Windows includes actual LSP presets, unit conversion, refused
+Save, contingency, two styles, Save/reopen, TXT/PDF, canonical export and restart
+assertions. Passing focused checks alone is not integrated acceptance.
+Local Qt 6.10.3 NDL probe and QML parsing also passed. No owner action is needed.
+
 **LSP actual app integration candidate (28 October, pending matching validation).**
 The shared Clean/Modern planner now routes its default, six full presets,
 contingencies and Save action to `calculateNeoLspPlan`. Its native adapter
@@ -37,7 +48,7 @@ engine bundles and full presets imported, syntax translation reproducible,
 38 original-engine cases matched locally in Windows Qt 6.10.3. Shared C++
 comparison has now passed on Windows and the host. UI/save/export integration
 and final integrated package validation remain open.
-Do not relabel the still-native public planner as LSP before wiring it.
+The later `0c167b879` candidate above wires the public path; final app gates remain pending.
 
 **LSP native gate PASSED: `40708771596`, source `151e53b2f`.** Source/evidence
 hashes, reproducible syntax generation, original-Node reference reproduction
@@ -48,7 +59,7 @@ retained at `work/lsp-adoption-evidence-151e53b2f-20261028/windows/Testing/Tempo
 The hosted QtTest log records 55/55. Windows QtTest does not print its passing
 rows into CTest's console capture. Do not rerun the unchanged complete sequence.
 
-The latest functional boundary is **`aa0f20f70`**: plain `JSON.parse` input
+The earlier engine-only functional boundary is **`aa0f20f70`**: plain `JSON.parse` input
 replaces version-dependent QVariant sequences. The following workflow commit
 quotes the CMake version argument (locally proven: PowerShell split unquoted
 `6.8.3` into `6` and `.8.3`). No LSP calculation or reference expectation changed.
@@ -71,15 +82,17 @@ Clean/Modern, launch, lifecycle and package checks; Android compile
 **40705358554 passed**. They predate the plain-JSON fix and public LSP UI routing;
 they are preservation/compile evidence for their own source, not final LSP flow
 acceptance. Physical Android remains deferred. Full native linked-app run
-**40707131405** is still pending on 6c97, which also predates the JSON fix. Retain
-its result; do not substitute it for final matching-source UI/save/export gates
-or duplicate it while pending. Broader final candidate checks follow the actual
+**40707131405** at 6c97 failed its desktop TestLspPlanner: 16 passes / 39
+refusals, 38 of 39 full suites passed. It predates the plain-JSON fix; the later
+focused fixed-source runs passed. Preserve this failed aggregate, and do not
+substitute an older run for the pending current full-app gate. Broader final candidate checks follow the actual
 shared planner integration, using the already-passed focused tests during coding.
 
 Continue actual shared UI/save/export adaptation using the finite acceptance
 list in the LSP document, while preserving existing native plan identity. The
 original complete LSP preset library is exposed by the model, and the calculator
-is callable through `calculateLspPlan`; the public page is not routed there yet.
+was initially callable through `calculateLspPlan`; the later public routing and
+current validation boundary are recorded at the top.
 
 The previous integrated `1cc711e7f` Windows run **40698501000 passed**, including
 Clean/Modern, launch, export, lifecycle and portable package. Targeted 50e native
