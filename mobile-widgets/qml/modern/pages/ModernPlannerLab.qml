@@ -861,7 +861,7 @@ Kirigami.ScrollablePage {
 			Layout.fillWidth: true
 			Text { text: qsTr("Plan mode & environment"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold }
 			GridLayout {
-				visible: page.useLspPlanner; Layout.fillWidth: true; columns: page.width>=700?2:1
+				visible: page.useLspPlanner && page.advancedSettingsExpanded; Layout.fillWidth: true; columns: page.width>=700?2:1
 				Repeater {
 					model: [
 						{key:"waterVapor",label:qsTr("Water vapour pressure (bar)"),minimum:0,maximum:0.1,group:-1},
@@ -922,16 +922,29 @@ Kirigami.ScrollablePage {
 			RowLayout { Layout.fillWidth: true; Text { text: qsTr("Gases & cylinders"); color: tokens.textPrimary; font.pixelSize: 18; font.weight: Font.DemiBold; Layout.fillWidth: true }
  Components.NeoButton { text: qsTr("Add gas"); onClicked: page.addCylinder() } }
 			Repeater { model: cylinders; delegate: GridLayout {
+				id: plannerCylinderRow
 				required property int index; required property string type; required property string mix; required property real pressure; required property int use
 				property int oxygen: page.mixOxygen(mix)
 				property int helium: page.mixHelium(mix)
-				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
+				Layout.fillWidth: true; columns: page.width >= 1000 ? 6 : 2
 				Label { text: qsTr("Gas %1").arg(index + 1); color: tokens.textMuted }
-				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Cylinder type for gas %1").arg(index + 1); model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: { cylinders.setProperty(index, "type", currentText); page.generatePlan() } }
+				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Cylinder type for gas %1").arg(index + 1); model: page.cylinderTypes; currentIndex: page.cylinderTypes.indexOf(type); onActivated: function(selectedType) { cylinders.setProperty(plannerCylinderRow.index, "type", page.cylinderTypes[selectedType]); page.generatePlan() } }
 				RowLayout { Layout.preferredWidth: 126; Layout.maximumWidth: 126; spacing: tokens.space8; Label { text: qsTr("O₂ %"); color: tokens.textMuted } Components.NeoTextField { Layout.preferredWidth: 78; Layout.maximumWidth: 78; accessibleName: qsTr("Oxygen percentage for gas %1").arg(index + 1); text: String(oxygen); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, value, helium) } } }
 				RowLayout { Layout.preferredWidth: 126; Layout.maximumWidth: 126; spacing: tokens.space8; Label { text: qsTr("He %"); color: tokens.textMuted } Components.NeoTextField { Layout.preferredWidth: 78; Layout.maximumWidth: 78; accessibleName: qsTr("Helium percentage for gas %1").arg(index + 1); text: String(helium); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { var value = Number(text); if (!isNaN(value)) page.setCylinderMix(index, oxygen, value) } } }
 				Components.NeoTextField { Layout.preferredWidth: 150; Layout.maximumWidth: 150; text: pressure; inputMethodHints: Qt.ImhDigitsOnly; placeholderText: page.pressureUnit; onEditingFinished: { cylinders.setProperty(index, "pressure", Number(text)); page.generatePlan() } }
-				RowLayout { CheckBox { visible: diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }
+				RowLayout {
+					Layout.fillWidth: true
+					Layout.columnSpan: plannerCylinderRow.columns === 6 ? 1 : 2
+					Components.NeoComboBox {
+						visible: page.useLspPlanner
+						Layout.fillWidth: true
+						objectName: "NeoPlannerGasRole" + index
+						accessibleName: qsTr("Role for gas %1").arg(index + 1)
+						model: [qsTr("OC / bailout"), qsTr("Diluent"), qsTr("Loop oxygen"), qsTr("Not used")]
+						currentIndex: use >= 0 && use <= 3 ? use : -1
+						onActivated: function(selectedRole) { cylinders.setProperty(plannerCylinderRow.index, "use", selectedRole); page.generatePlan() }
+					}
+					CheckBox { visible: !page.useLspPlanner && diveMode.currentIndex === 1; text: qsTr("Diluent"); checked: use === 1; onToggled: { cylinders.setProperty(index, "use", checked ? 1 : 0); page.generatePlan() } }
  Components.NeoButton { text: qsTr("Remove"); enabled: cylinders.count > 1; onClicked: { cylinders.remove(index); page.updateGasNames(); page.generatePlan() } } }
 			} }
 			Text { visible: page.gasReference.length > 0; text: qsTr("Gas depth reference"); color: tokens.textSecondary; font.weight: Font.DemiBold }
@@ -946,12 +959,13 @@ Kirigami.ScrollablePage {
  Components.NeoButton { text: qsTr("Add segment"); onClicked: page.addSegment() } }
 			Text { text: qsTr("Each row is a target depth and the runtime when that segment ends. Neo inserts travel within that runtime, matching Subsurface's native planner. Use separate rows for multilevel profiles and requested gas changes."); color: tokens.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 			Repeater { model: segments; delegate: GridLayout {
+				id: plannerLevelRow
 				required property int index; required property real depth; required property real duration; required property int gas; required property real setpoint; required property int divemode
 				Layout.fillWidth: true; columns: page.width >= 700 ? 6 : 2
 				Label { text: qsTr("%1").arg(index + 1); color: tokens.textMuted }
 				Components.NeoTextField { Layout.fillWidth: true; text: depth; placeholderText: qsTr("Depth (%1)").arg(page.depthUnit); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "depth", Number(text)); page.generatePlan() } }
 				Components.NeoTextField { Layout.fillWidth: true; text: duration; placeholderText: qsTr("Runtime at segment end (min)"); inputMethodHints: Qt.ImhDigitsOnly; onEditingFinished: { segments.setProperty(index, "duration", Number(text)); page.generatePlan() } }
-				Components.NeoComboBox { Layout.fillWidth: true; accessibleName: qsTr("Gas for segment %1").arg(index + 1); model: page.gasNames; currentIndex: gas; onActivated: { segments.setProperty(index, "gas", currentIndex); page.generatePlan() } }
+				Components.NeoComboBox { objectName: "NeoPlannerSegmentGas" + index; Layout.fillWidth: true; accessibleName: qsTr("Gas for segment %1").arg(index + 1); model: page.gasNames; currentIndex: gas; onActivated: function(selectedGas) { segments.setProperty(plannerLevelRow.index, "gas", selectedGas); page.generatePlan() } }
 				Components.NeoTextField { visible: !page.useLspPlanner && diveMode.currentIndex === 1; Layout.fillWidth: true; text: (setpoint / 1000.0).toFixed(2); placeholderText: qsTr("Setpoint bar"); inputMethodHints: Qt.ImhFormattedNumbersOnly; onEditingFinished: { segments.setProperty(index, "setpoint", Math.round(Number(text) * 1000)); page.generatePlan() } }
 				Components.NeoButton { text: qsTr("Remove"); enabled: segments.count > 1; onClicked: { segments.remove(index); page.generatePlan() } }
 			} }

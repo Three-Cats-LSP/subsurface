@@ -231,7 +231,18 @@ DRIVER = r'''
                 case 17:
                     neoPlannerLab.selectDiveMode(1)
                     smokeCheck(!neoPlannerLab.planSaveAllowed, "CCR without complete supplies refuses save")
+                    neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"21/0",pressure:200,use:1}, {type:"AL80",mix:"100/0",pressure:200,use:0}, {type:"D12 232 bar",mix:"21/0",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:1300,divemode:1}])
+                    var oxygenRole=smokeFind(neoPlannerLab,"NeoPlannerGasRole1")
+                    smokeCheck(oxygenRole !== null, "actual gas-role control")
+                    oxygenRole.currentIndex=2
+                    oxygenRole.activated(2)
+                    smokeCheck(neoPlannerLab.planSaveAllowed && neoPlannerLab.lastLspRequest.settings.circuit==="CCR", "CCR with explicit oxygen, diluent and bailout supplies: " + neoPlannerLab.planNotes)
                     neoPlannerLab.selectDiveMode(0)
+                    neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"21/0",pressure:200,use:0}, {type:"AL80",mix:"50/0",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}, {depth:18,duration:40,gas:0,setpoint:0,divemode:0}])
+                    var segmentGas=smokeFind(neoPlannerLab,"NeoPlannerSegmentGas1")
+                    segmentGas.currentIndex=1
+                    segmentGas.activated(1)
+                    smokeCheck(neoPlannerLab.planSaveAllowed && neoPlannerLab.lastLspRequest.levels[1].o2===50, "actual multilevel gas selection: " + neoPlannerLab.planNotes)
                     neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"80/80",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}])
                     smokeCheck(!neoPlannerLab.planSaveAllowed && !smokeFind(neoPlannerLab,"NeoSavePlannerPlan").enabled, "invalid gas disables actual Save action")
                     neoPlannerLab.neoSmokeInputs([{type:"D12 232 bar",mix:"21/0",pressure:200,use:0}], [{depth:30,duration:25,gas:0,setpoint:0,divemode:0}])

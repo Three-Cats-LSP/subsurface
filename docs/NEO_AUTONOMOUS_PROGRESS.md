@@ -1,5 +1,24 @@
 # Windows cloud reliability continuation
 
+**Resume Windows snapshot-fix run 40725165511, source 3456995ae.**
+The complete native **0c167b879** desktop build/tests have passed; the same run
+**40721658217** is now building the mobile-target host suites. C++ and engines
+are unchanged by the subsequent QML correction. Do not repeat those focused or
+full native runs while pending.
+
+Additional shared-page work now exposes explicit OC/bailout, diluent, loop
+oxygen and unused gas roles. This lets a real CCR user provide the oxygen supply
+required by the LSP adapter. Gas-role, cylinder-type and segment-gas activation
+now use the owning row index explicitly, avoiding the ComboBox signal's `index`
+shadowing the model row. Actual-app tests add the oxygen-role action, a valid
+CCR preview and multilevel gas selection. These later QML changes are **not** in
+the 3456995ae package. After that package is available, use its unchanged C++
+with the current disposable `--testqml` test copy to verify and repair the later
+QML flow before one final matching-source package/native acceptance. If 345
+fails, its updated workflow retains the exact staged runtime under an explicitly
+failed/unvalidated artifact; do not treat that artifact or a development-QML
+pass as final embedded-package acceptance. No releases or Google writes.
+
 **Windows actual-flow failure and correction, 28 October 16:18 UTC.**
 Windows **40721665308 at 0c167b879** passed compilation, packaged launch,
 Clean/Modern baseline flows and the six actual LSP preset calculations, then
