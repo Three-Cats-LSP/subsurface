@@ -1,0 +1,62 @@
+name: Neo LSP planner adoption
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [modern-ui]
+    paths:
+      - '.github/workflows/neo-lsp-planner.yml'
+      - 'third-party/lsp-planner/**'
+      - 'tools/lsp-planner/**'
+      - 'qt-models/lspplanner*'
+      - 'tests/testlspplanner.*'
+      - 'tests/lsp-planner/**'
+      - 'tests/data/neo-lsp-regression.json'
+      - 'tests/data/lsp-planner/**'
+
+permissions: read-all
+
+jobs:
+  source-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/lsp-planner/package-lock.json
+      - run: npm ci --prefix tools/lsp-planner
+      - run: node tools/lsp-planner/build-runtime.cjs --check
+      - run: node tools/lsp-planner/capture-reference.cjs --check
+  native:
+    needs: source-parity
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install host Qt dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev qt6-declarative-dev
+      - name: Install Windows Qt
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configure native LSP regression
+        run: cmake -S tests/lsp-planner -B build-lsp
+      - name: Build native LSP regression
+        run: cmake --build build-lsp --config Release --parallel 2
+      - name: Compare native engine with pinned upstream results
+        run: ctest --test-dir build-lsp --build-config Release --output-on-failure
+      - name: Retain native comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Neo-LSP-native-${{ runner.os }}
+          path: build-lsp/Testing/Temporary/*.log

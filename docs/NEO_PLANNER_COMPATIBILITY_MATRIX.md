@@ -1,5 +1,12 @@
 # Neo planner compatibility-profile matrix
 
+**Historical native-mapping inventory:** the owner chose actual LSP+ adoption
+on 28 October. The six complete 3.2.0 upstream definitions now live in
+`third-party/lsp-planner/presets.json`; [the adoption checkpoint](NEO_LSP_PLANNER_ADOPTION.md)
+tracks native engine verification and the remaining shared UI/persistence work.
+Do not apply the representability restrictions below to the LSP engine itself,
+or relabel the existing partial Subsurface mappings as complete LSP presets.
+
 ## Source baseline
 
 This matrix audits `Three-Cats-LSP/LSP_D-planner-plus` revision

@@ -1,5 +1,11 @@
 # Subsurface Neo — Planner Compatibility Profiles
 
+**Current implementation direction, 28 October 2026:** use our existing LSP+
+planner and its complete upstream presets, source studies and regression suite.
+[LSP+ adoption](NEO_LSP_PLANNER_ADOPTION.md) supersedes the earlier Subsurface-only
+translation approach. Preserve the identity of older native-mapping presets;
+do not silently reinterpret saved version-1 plans when the engine changes.
+
 ## Purpose
 
 Subsurface Neo should let divers moving from established decompression planners continue planning with the assumptions and schedule behavior they already know.

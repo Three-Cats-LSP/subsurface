@@ -17,6 +17,12 @@ The owner has deferred Dropbox sync to a possible future version. Product
 choices, new acceptance runs and production access target Google Drive only;
 retain existing Dropbox credentials, cloud data and implementation.
 
+**Planner direction, renewed 28 October:** use our LSP+ production planner and
+its earlier algorithms, studies and validation software. Follow the concrete
+[LSP+ adoption gates](NEO_LSP_PLANNER_ADOPTION.md), including actual shared UI,
+save/reopen and export integration; repeating Subsurface-only reference captures
+does not complete this newly requested work.
+
 The current workspace implementation, including save, restore, interrupted
 recovery and automatic sync, remains development-gated. Windows tests on Google
 Drive and Dropbox used two profiles on one account per provider. The original

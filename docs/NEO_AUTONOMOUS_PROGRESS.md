@@ -1,5 +1,28 @@
 # Windows cloud reliability continuation
 
+**LATEST OWNER STEERING: reuse our LSP+ planner.** The owner explicitly chose the
+existing LSP+ software/algorithms and previous studies. This supersedes the
+Subsurface-only/no-JavaScript-import planner notes below. Follow
+[LSP+ adoption](NEO_LSP_PLANNER_ADOPTION.md): source 3.2.0 at `05fef18`, original
+engine bundles and full presets imported, syntax translation reproducible,
+38 original-engine cases matched locally in Windows Qt 6.10.3. Shared C++
+comparison, UI/save/export integration and package validation remain open.
+Do not relabel the still-native public planner as LSP before wiring it.
+
+The previous integrated `1cc711e7f` Windows run **40698501000 passed**, including
+Clean/Modern, launch, export, lifecycle and portable package. Targeted 50e native
+Windows protocol **40696305894 passed**; integrated 1cc protocol jobs in
+**40698333716 both passed**, and its full app job was in mobile tests at the
+last observation. Resume that run, do not duplicate it.
+
+Uncommitted history-page work is preserved separately in `core/cloudsyncworkspacepages.cpp`,
+workspace/history model changes and the provider-paired `workspacePages` cases.
+It is an unvalidated codec foundation only: recursive exact-ID reads, durable
+page cache/checkpoints, publication and app integration are unfinished. No live
+segmented root was written. Do not mix it into the LSP commit or present history
+growth as complete. The new tests' two accidental `text(ref.value, ...)` calls
+were corrected to direct JSON string reads before compile validation.
+
 **ACTIVE WINDOWS COMPLETION (owner renewed 28 October):** continue the latest
 report's steps **1, 2, 3, 4 and Windows portions of 6** automatically: sustainable
 history, Neo metadata sync, remaining Windows reliability, broader planner

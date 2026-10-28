@@ -1,5 +1,13 @@
 # Neo planner external-reference audit
 
+**Superseded implementation boundary, 28 October 2026:** the owner now requests
+using our LSP+ planner and previous software/studies. Neo is adopting the actual
+LSP+ 3.2.0 production bundles at `05fef18bade6354cebcc60df01f83e0ac4cc3b27` through
+the native Qt boundary described in [the adoption checkpoint](NEO_LSP_PLANNER_ADOPTION.md).
+The Subsurface-only/no-import statements below describe the earlier approach,
+not a restriction on this authorized work. Its native regression evidence remains
+valid for the old calculation path and existing plans.
+
 ## Audited source
 
 The external comparison source is [Three-Cats-LSP/LSP_D-planner-plus](https://github.com/Three-Cats-LSP/LSP_D-planner-plus), revision `30a04edb6ed258c3b1c4ae37b7a326d0ee934dc0` (2026-08-12 audit). It is MIT licensed and provides CCR differential fixtures and `subsurface`-labelled comparison goldens for CCR baseline, altitude, bailout, lost-gas, repetitive, setpoint, GF and precision scenarios.

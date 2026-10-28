@@ -2,7 +2,15 @@
 # with the views.
 
 # models used both mobile and desktop builds
+if(USINGQT6)
+	qt_add_resources(NEO_LSP_RESOURCES ../third-party/lsp-planner/neo_lsp_planner.qrc)
+else()
+	qt5_add_resources(NEO_LSP_RESOURCES ../third-party/lsp-planner/neo_lsp_planner.qrc)
+endif()
 set(SUBSURFACE_GENERIC_MODELS_LIB_SRCS
+	${NEO_LSP_RESOURCES}
+	lspplanner.cpp
+	lspplanner.h
 	cleanertablemodel.cpp
 	cleanertablemodel.h
 	completionmodels.cpp

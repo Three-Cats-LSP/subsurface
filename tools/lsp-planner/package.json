@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@babel/core": "7.28.5",
+    "@babel/preset-env": "7.28.5"
+  },
+  "name": "neo-lsp-runtime-build",
+  "private": true,
+  "scripts": {
+    "check": "node build-runtime.cjs --check",
+    "build": "node build-runtime.cjs"
+  }
+}

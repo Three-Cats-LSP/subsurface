@@ -7,3 +7,10 @@ theme/jquery.jqplot.min.js binary
 theme/jquery.min.js binary
 # This sampled input is pinned by SHA-256 in the planner reference manifest.
 tests/data/neo-planner-repetitive.ssrf text eol=lf
+
+# LSP upstream byte hashes and reproducible syntax translation.
+third-party/lsp-planner/** text eol=lf
+# Preserve whitespace in checksum-pinned upstream source verbatim.
+third-party/lsp-planner/*.js -whitespace
+qt-models/lspplannerhost.js text eol=lf
+tests/data/lsp-planner/** text eol=lf

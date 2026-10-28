@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="/lsp-planner">
+    <file>SOURCE.json</file>
+    <file>presets.json</file>
+    <file>qt-runtime/SOURCE.json</file>
+    <file>qt-runtime/zhl-engine-bundle.js</file>
+    <file>qt-runtime/vpm-engine-bundle.js</file>
+    <file>qt-runtime/schedule-runner-core.js</file>
+    <file>qt-runtime/zhl-headless-adapter.js</file>
+    <file alias="host.js">../../qt-models/lspplannerhost.js</file>
+  </qresource>
+</RCC>

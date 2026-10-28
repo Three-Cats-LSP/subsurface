@@ -305,9 +305,9 @@ SeaBirds demonstrates usable browser dive-computer transport and is the referenc
 
 ## Milestone 8 — Advanced Dive Planner & Decompression Lab
 
-**Goal:** retain Subsurface's mature planner/decompression core while incorporating the strongest technical-planning workflows proven in LSP D-Planner+.
+**Goal (owner decision, 28 October 2026):** use the existing LSP D-Planner+ planner, algorithms and validation material for Neo's planner. Preserve Subsurface log/hardware support and the identity and readability of existing native plans.
 
-LSP D-Planner+ is MIT-licensed and can be used as a reference/source where appropriate. Do not create a parallel calculation engine merely to reproduce a feature that the Subsurface C++ planner already performs. New algorithm code must be isolated, documented and regression-tested.
+Reuse the pinned LSP+ production calculations rather than reimplementing their mathematics. The earlier restriction to Subsurface-only planner calculations is superseded by this owner decision. See [LSP+ adoption and acceptance](NEO_LSP_PLANNER_ADOPTION.md) for the exact source, reused studies, native boundary and remaining UI/save/export gates. Keep existing Subsurface calculations available for their existing callers until the integrated LSP paths preserve their features; never silently relabel a Subsurface result as LSP.
 
 ### 8A. Existing Subsurface planner capabilities to preserve/reuse
 
@@ -325,7 +325,7 @@ Audit and expose the mature native capabilities before replacing anything, inclu
 - plan segments/setpoints/gas changes,
 - planner warnings and failure states.
 
-Neo should primarily provide a better shared planner UI over this engine.
+Preserve these capabilities while connecting the shared planner UI to LSP+, including explicit loading of prior dive state and complete engine identity in saved plans.
 
 ### 8B. Profile Builder
 

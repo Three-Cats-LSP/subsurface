@@ -9,6 +9,7 @@
 #include "core/subsurface-string.h"
 #include "qt-models/cylindermodel.h"
 #include "qt-models/neoplanmetadata.h"
+#include "qt-models/lspplanner.h"
 #include "core/metrics.h" // For defaultModelFont().
 #include "core/planner.h"
 #include "core/profile.h"
@@ -1979,6 +1980,21 @@ QVariantMap DivePlannerPointsModel::calculatePlan(const QVariantList &cylindersD
 	emit planPreviewChanged();
 
 	return results;
+}
+
+QVariantMap DivePlannerPointsModel::calculateLspPlan(const QVariantMap &request)
+{
+	return LspPlanner::calculate(QJsonObject::fromVariantMap(request)).toVariantMap();
+}
+
+QVariantList DivePlannerPointsModel::lspPlannerPresets() const
+{
+	return LspPlanner::presets().toVariantList();
+}
+
+QVariantMap DivePlannerPointsModel::lspPlannerIdentity() const
+{
+	return LspPlanner::identity().toVariantMap();
 }
 
 QVariantList DivePlannerPointsModel::calculateGasInfo(const QString &cylinderType, int o2_permille, int he_permille)
