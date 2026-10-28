@@ -47,14 +47,33 @@ are rendered from their saved metadata without rewriting/recalculating them.
   This development retry does not turn the failed aggregate into a package pass.
 - **40745740061**, full cloud/native at **b7d5b7425**: host protocol **PASSED all
   2,599 checks** (270 s). Matching Windows protocol **PASSED 2,631 checks**. Full native job
-  **123022651637 PASSED** desktop and mobile-target host suites. Exact suite counts
-  are being extracted from its completed log; do not dispatch a duplicate.
+  **123022651637 PASSED** desktop and mobile-target host suites. **39 desktop + 36 mobile-target
+  host suites passed**; do not dispatch a duplicate for b7d.
   b7d changes only corrected old barrier expectations and a test error message
   after f864; product C++/QML is unchanged.
 - **40745170718**, LSP native at **f86436550**: **PASSED** original-source parity
   plus **96 native checks on both Windows Qt 6.8.3 and host**, including six
   readable-report cases (old saved metadata, imperial units, CCR roles/setpoints,
   VPM/hybrid settings and unavailable input). Do not repeat unchanged.
+
+- **40753650677**, focused metadata at **f72d11540**: host **PASSED 160 rows**;
+  matching Windows job **123046671852** is pending. Includes versioned profile
+  codec/XML extraction, immutable metadata hash claims, legacy capability
+  upgrade, two archive pages/checkpoint restart, old-format refusal, corrupt
+  fields and unchanged old ticket facts. This is foundation validation, not
+  application metadata-sync acceptance.
+- **40754381172**, full native/protocol at **f72d11540**: pending, including
+  the new full-log XML and Git-commit round trips; resume this run.
+- **40754388166**, Windows/Clean/Modern/package at **f72d11540**: pending,
+  including the corrected human report restart/exact hidden-input test. Resume
+  this run. No release was published.
+- Current live Google sequence **work/native-workspace-rollover-google-ui-b7d-f864-20261029-a**
+  is running with verified f864 product bytes (identical C++/QML to the full
+  b7d regression above). It has already passed create, app rollover/save beyond
+  the 512-pending-ticket fixture, restart/history and same-head repeat-save.
+  Do not start another namespace while this run is active; inspect its result
+  and continue owned recovery if needed. All fixture seeding is restricted by
+  exact physical ID and CAS to the fresh root created by this sequence.
 
 ## Completed evidence and preserved failures
 
@@ -113,7 +132,7 @@ This is a synthetic component report, not a 605-version live Google test.
    failures. No mathematics changed. Keep unsupported external-parity claims off.
 2. Run fresh Google rollover + post-limit real application save/history/restart
    and interruption checks after regression passes. Prepared, Python-compiled
-   **`work/test-native-workspace-rollover-ui.py` has not run**. It uses fresh
+   **`work/test-native-workspace-rollover-ui.py` is running** in the fresh namespace recorded above. It uses fresh
    disposable profiles/root, conditionally seeds only that new empty root with
    512 synthetic pending tickets, then leaves archival and actual publication
    to Neo. Expected retained objects: root + archive + two actual payloads. It
@@ -149,10 +168,8 @@ Metadata foundation code is being committed for focused development checks; it i
 TestGitStorage source/header pairs. Preserve and resume these changes. They add
 an opaque log-owned metadata string, full-log XML and Git-commit preservation,
 clear/reset handling and XML/Git round-trip tests; selected/anonymized exports
-exclude it. **Not compiled or accepted yet**, no UI/settings capture or cloud
-metadata feature is enabled by this foundation. The new `core/neologmetadata.h/.cpp` adds 4 MiB, versioned JSON
-validation and explicit profile-cache capture/projection; it is also uncompiled
-and not called by production flows yet. The development-5 workspace capability and immutable per-ticket metadata hash map are implemented in the record/page codecs, with paired protocol cases, but no production writer enables them yet. Deterministic legacy normalization,
+exclude it. **Host codec checks have passed; matching Windows and full XML/Git application checks are pending.** No UI/settings capture or complete cloud metadata feature is enabled by this foundation. The new `core/neologmetadata.h/.cpp` adds 4 MiB, versioned JSON
+validation, strict side-effect-free extraction from XML and explicit profile-cache capture/projection; it is not called by production flows yet. The development-5 workspace capability and immutable per-ticket metadata hash map are implemented in the record/page codecs, with paired protocol cases, but no production writer enables them yet. Deterministic legacy normalization,
 UI cache notifications and restart-safe local-baseline migration still need
 integration. Do not claim metadata sync complete or publish the WIP as such.
 
@@ -166,8 +183,7 @@ is needed for this engineering work.
 
 ## Workspace and secrets
 
-All commits above are pushed to `modern-ui`. No live Google writes have occurred
-in these history/report increments yet. Full b7d regression is now green; the prepared isolated live rollover driver is the next acceptance action. The original saved Google test access token
+All commits above are pushed to `modern-ui`. A fresh disposable Google rollover sequence is now active after the full b7d regression passed. It created only its isolated root/archive/payloads so far; final inventory and credential preservation checks remain pending. Do not claim live completion before its result and audit pass. The original saved Google test access token
 is expired, but refresh credentials exist; the read-only expiry check changed
 nothing. Obtain a fresh token in memory through the existing helper when live
 checks start; never log tokens/JSON contents or mutate original credentials.
