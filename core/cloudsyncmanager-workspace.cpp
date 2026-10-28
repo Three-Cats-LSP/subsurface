@@ -68,6 +68,12 @@ bool CloudSyncManager::workspaceRouteRequired(const QString &providerId) const
 	QSettings settings; settings.sync();
 	return settings.status() != QSettings::NoError || settings.contains(QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId);
 }
+bool CloudSyncManager::workspaceRouteConfirmed(const QString &providerId) const
+{
+	if (providerId != "google-drive" && providerId != "dropbox") return false;
+	QSettings settings; settings.sync();
+	return settings.status() == QSettings::NoError && settings.contains(QStringLiteral("subsurface-neo/cloud/workspace-route-required/") + providerId);
+}
 bool CloudSyncManager::requireWorkspaceRoute(const QString &providerId)
 {
 	if (!routeLease || !routeLease->held() || routeProvider != providerId || legacyRouteOperation) return false;

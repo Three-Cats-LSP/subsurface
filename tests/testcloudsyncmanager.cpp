@@ -1548,7 +1548,7 @@ void TestCloudSyncManager::testWorkspaceRouteFence()
 	const auto original = manager.serializeCurrentDiveLog();
 	if (mode == 8) {
 		QVERIFY(!manager.requireWorkspaceRoute(provider)); QVERIFY(manager.acquireCloudRoute(provider, false));
-		QVERIFY(manager.requireWorkspaceRoute(provider)); QVERIFY(manager.workspaceRouteRequired(provider));
+		QVERIFY(manager.requireWorkspaceRoute(provider)); QVERIFY(manager.workspaceRouteRequired(provider)); QVERIFY(manager.workspaceRouteConfirmed(provider));
 		manager.routeLease.reset(); manager.routeProvider.clear(); manager.disconnectProvider(provider);
 		QVERIFY(manager.workspaceRouteRequired(provider)); other.syncDiveLog(provider); QVERIFY(!other.syncInProgress()); QCOMPARE(otherNetwork.requests, 0); return;
 	}

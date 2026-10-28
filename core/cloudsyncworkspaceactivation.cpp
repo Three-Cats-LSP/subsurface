@@ -38,7 +38,7 @@ CloudWorkspaceActivation::~CloudWorkspaceActivation() { cancel(); }
 void CloudWorkspaceActivation::cancel()
 {
 	++generation; step = Step::Idle; deadline.stop(); opener.cancel(); sourceReview.cancel(); reader.cancel(); plan.reset(); operationLock.reset();
-	reference.value = {}; root.value = {}; firstSource.value = {}; firstMissing = false; routePrepared = false; routeRequiredSet = false;
+	reference.value = {}; root.value = {}; firstSource.value = {}; firstMissing = false; routePrepared = false; routeRequiredSet = false; routeFlagObserved = false;
 	token.clear(); choiceFile.clear(); choiceVersion.clear(); checkpointFile.clear(); bindingFile.clear(); routeFile.clear(); revision.clear();
 	target.clear(); reservation.clear(); operation.clear(); acceptance.clear(); planDirectory.clear(); readFile.clear(); rootVersion.clear(); model.clear();
 	requireRoute = {}; routeRequired = {}; scopeCurrent = {}; localSnapshot = {};
@@ -66,12 +66,15 @@ void CloudWorkspaceActivation::start(const QString &accessToken, const CloudWork
 	operationLock = std::make_unique<QLockFile>(planDirectory + ".operation.lock"); operationLock->setStaleLockTime(0); if (!operationLock->tryLock(0)) { fail(); return; }
 	plan = std::make_unique<CloudWorkspaceActivationPlan>(planDirectory, reference, choiceVersion, revision, target, reservation, operation, acceptance);
 	if (!plan->prepare(model) || !current()) { fail(); return; }
-	const auto serial = generation; const auto requireFn = requireRoute; const bool required = requireFn(); if (serial != generation || step == Step::Idle) return;
-	if (!required) { fail(); return; }
-	routeRequiredSet = true; if (!current()) return;
+	const auto serial = generation; const auto requiredFn = routeRequired; const bool required = requiredFn(); if (serial != generation || step == Step::Idle) return;
+	routeRequiredSet = required; routeFlagObserved = true;
 	CloudWorkspaceRoute routeRecord(routeFile, text(reference.value, "provider"));
-	if (!routeRecord.prepare(reference, choiceVersion, revision, operation)) { fail(); return; }
-	routePrepared = true; if (!current()) return;
+	if (required) {
+		if ((plan->state() != "requiring" && plan->state() != "completed") ||
+		    !routeRecord.prepare(reference, choiceVersion, revision, operation)) { fail(); return; }
+		routePrepared = true;
+	} else if (!routeRecord.legacyAllowed()) { fail(); return; }
+	if (!current()) return;
 	deadline.start(); readRoot(Step::InitialRoot);
 }
 bool CloudWorkspaceActivation::current()
@@ -80,10 +83,10 @@ bool CloudWorkspaceActivation::current()
 	const auto serial = generation; const auto guard = scopeCurrent; const bool allowed = guard && guard();
 	if (serial != generation || step == Step::Idle) return false;
 	if (!allowed) { fail(); return false; }
-	if (routeRequiredSet) {
+	if (routeFlagObserved) {
 		const auto check = routeRequired; const bool required = check && check();
 		if (serial != generation || step == Step::Idle) return false;
-		if (!required) { fail(); return false; }
+		if (required != routeRequiredSet) { fail(); return false; }
 	}
 	CloudWorkspaceSelection choice(choiceFile, text(reference.value, "provider"), text(reference.value, "account"));
 	if (!choice.load() || choice.version() != choiceVersion || choice.selected().value != reference.value || !plan || !plan->reload() || plan->model() != model) { fail(); return false; }
@@ -118,7 +121,15 @@ void CloudWorkspaceActivation::opened(const QJsonObject &value, const QString &v
 	if (root.head() != target || !matchesLegacy(root, acceptance, firstSource, firstMissing) ||
 	    text(r, "commit") != target || r.value("active") != QJsonValue(true) ||
 	    !owned.reload() || owned.state() != "verified" || owned.snapshot() != pin(root.ticket(target)) || !authority.load() || authority.record().json() != root.json() ||
-	    !binding.activate(root, authority.record(), model, model, revision) || !routeRecord.activate(binding) || !current()) { fail(); return; }
+	    !current()) { fail(); return; }
+	if (!routePrepared) {
+		if (!plan->beginRequire()) { fail(); return; }
+		const auto serial = generation; const auto requireFn = requireRoute; const bool required = requireFn(); if (serial != generation || step == Step::Idle) return;
+		if (!required) { fail(); return; }
+		routeRequiredSet = true; if (!current() || !routeRecord.prepare(reference, choiceVersion, revision, operation)) { fail(); return; }
+		routePrepared = true;
+	}
+	if (!binding.activate(root, authority.record(), model, model, revision) || !routeRecord.activate(binding) || !current()) { fail(); return; }
 	release();
 }
 void CloudWorkspaceActivation::readSource(Step next)
@@ -140,7 +151,7 @@ void CloudWorkspaceActivation::observedSource(const QJsonObject &value, bool mis
 	CloudWorkspaceReadIntent owned(readFile, reference, target, reservation);
 	if (!authority.load() || !binding.load()) { fail(); return; }
 	if (!binding.value().isEmpty()) {
-		if (!binding.ownsActivation(root, authority.record(), model, model, revision, target) || !owned.reload() ||
+		if (!routePrepared || !binding.ownsActivation(root, authority.record(), model, model, revision, target) || !owned.reload() ||
 		    (owned.state() != "verified" && owned.state() != "releasing" && owned.state() != "released")) { fail(); return; }
 		CloudWorkspaceRoute routeRecord(routeFile, text(reference.value, "provider"));
 		if (!routeRecord.activate(binding) || !current()) { fail(); return; }

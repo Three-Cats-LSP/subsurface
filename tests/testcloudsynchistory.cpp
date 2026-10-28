@@ -2092,6 +2092,7 @@ void TestCloudSyncHistory::workspaceActivationPlan()
 	const auto t = root.ticket(target); const QJsonObject pin = {{"name", t["name"]}, {"object", t["object"]}, {"version", t["version"]}, {"sha256", t["sha256"]}, {"bytes", t["bytes"]}};
 	CloudWorkspaceReadIntent reader(temp.filePath("reader.json"), ref, target, reservation);
 	QVERIFY(reader.prepare()); QVERIFY(reader.pin(pin)); QVERIFY(reader.markReserved()); QVERIFY(reader.markVerified());
+	QVERIFY(plan.beginRequire()); QCOMPARE(plan.state(), QString("requiring")); QVERIFY(plan.beginRequire());
 	CloudWorkspaceBinding binding(temp.filePath("binding.json"), ref, choice); QVERIFY(binding.activate(root, root, A, A, revision));
 	CloudWorkspaceRoute route(temp.filePath("route.json"), provider); QVERIFY(route.prepare(ref, choice, revision, operation));
 	if (mode != 11) QVERIFY(route.activate(binding)); QVERIFY(reader.beginRelease()); QVERIFY(reader.markReleased()); if (mode != 12) QVERIFY(root.release(reservation));
@@ -2110,7 +2111,8 @@ void TestCloudSyncHistory::workspaceActivationWorkflow_data()
 	const QStringList cases = {"activate-restart", "accepted-absence", "stale-choice", "scope-changed", "local-model-changed",
 		"legacy-changed-before", "legacy-changed-after-reservation", "later-head-before-read", "cancel-before-read",
 		"cancel-release-and-resume", "lost-reservation-ack", "required-flag-write-failed", "required-flag-disappears",
-		"corrupt-plan", "foreign-binding", "token-rejected", "later-head-after-activation", "wrong-remote-payload"};
+		"corrupt-plan", "foreign-binding", "token-rejected", "later-head-after-activation", "wrong-remote-payload",
+		"foreign-required-flag-without-marker", "recover-between-flag-and-marker"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-activation-workflow-%2").arg(g).arg(m))) << g << m;
 }
@@ -2134,13 +2136,13 @@ void TestCloudSyncHistory::workspaceActivationWorkflow()
 	if (mode == 5) n.files[0].rev += "-changed"; if (mode == 8) n.deferReads = true; if (mode == 10) n.loseWriteAck = true; if (mode == 15) n.readFailureStatus = 401;
 	if (mode == 13) { QVERIFY(QDir().mkpath(planDir)); QFile f(QDir(planDir).filePath("plan.json")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("corrupt") == 7); f.close(); }
 	if (mode == 14) { QFile f(bindingFile); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("foreign") == 7); f.close(); }
-	QByteArray local = mode == 4 ? B : A; bool required = false, injected = false; int aliases = 0;
+	QByteArray local = mode == 4 ? B : A; bool required = mode == 18, injected = false; int aliases = 0;
 	const auto appendLater = [&](CloudWorkspaceRecord &record) {
 		const auto later = uid(), parent = record.head(); QVERIFY(record.registerUpload(later, parent, CloudSyncManifest::sha256(B), B.size()));
 		QVERIFY(record.completeUpload(later, google ? "other" : "id:other", "later-rev")); QVERIFY(record.publish(later, parent));
 	};
 	n.requested = [&](const QNetworkRequest &r) {
-		if (mode == 12 && !injected) { required = false; injected = true; }
+		if (mode == 12 && required && !injected) { required = false; injected = true; }
 		QString alias;
 		if (google && r.url().path() == "/drive/v3/files") alias = QUrlQuery(r.url()).queryItemValue("q").section('\'', 1, 1);
 		else if (!google) alias = QJsonDocument::fromJson(r.rawHeader("Dropbox-API-Arg")).object()["path"].toString().mid(1);
@@ -2160,7 +2162,7 @@ void TestCloudSyncHistory::workspaceActivationWorkflow()
 	const auto start = [&] {
 		client.start("token", ref, choiceFile, mode == 2 ? uid() : choiceVersion, checkpointFile, bindingFile, routeFile, revision,
 			target, reservation, operation, event, planDir, readFile, A,
-			[&] { if (mode == 11) return false; required = true; return true; }, [&] { return required; },
+			[&] { if (mode == 11) return false; required = true; if (mode == 19 && !injected) { injected = true; return false; } return true; }, [&] { return required; },
 			[&] { return mode != 3 && n.guard; }, [&] { return local; });
 	};
 	start();
@@ -2168,6 +2170,8 @@ void TestCloudSyncHistory::workspaceActivationWorkflow()
 		QTRY_VERIFY(n.deferred); client.cancel(); if (n.deferred) n.deferred->complete(); n.deferReads = false; n.wrote = {}; QTest::qWait(20);
 		QCOMPARE(done.size() + errors.size(), 0);
 		if (mode == 9) { start(); QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), 1); }
+	} else if (mode == 19) {
+		QTRY_COMPARE(errors.size(), 1); QVERIFY(required); QVERIFY(!QFileInfo::exists(routeFile)); start(); QTRY_COMPARE(done.size(), 1);
 	} else {
 		QTRY_COMPARE(done.size() + errors.size(), 1); QCOMPARE(done.size(), int(mode == 0 || mode == 1 || mode == 10 || mode == 16));
 	}
@@ -2184,6 +2188,8 @@ void TestCloudSyncHistory::workspaceActivationWorkflow()
 		}
 	}
 	if (mode == 15) QVERIFY(errors.first()[1].toBool());
+	if (mode == 5 || mode == 17) { QVERIFY(!required); QVERIFY(!QFileInfo::exists(routeFile)); }
+	if (mode == 18) { QVERIFY(required); QVERIFY(!QFileInfo::exists(routeFile)); }
 	if (!absence) { QCOMPARE(n.files[0].data, originalManifest); QCOMPARE(n.files[1].data, A); }
 	QCOMPARE(n.renames, 0); QVERIFY(n.allowed);
 }

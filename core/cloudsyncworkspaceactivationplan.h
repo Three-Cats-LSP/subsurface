@@ -12,6 +12,7 @@ public:
 		const QString &revision, const QString &target, const QString &reservation, const QString &operation, const QString &acceptance);
 	bool reload();
 	bool prepare(const QByteArray &model);
+	bool beginRequire();
 	bool complete(CloudWorkspaceRoute &route, CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root,
 		const CloudWorkspaceRecord &checkpoint, CloudWorkspaceReadIntent &reader);
 	QString state() const;

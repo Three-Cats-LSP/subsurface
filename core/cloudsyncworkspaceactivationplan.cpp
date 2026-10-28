@@ -48,7 +48,7 @@ bool CloudWorkspaceActivationPlan::read()
 	const auto bytes = file.read(16385); const auto body = QJsonDocument::fromJson(bytes).object(); auto fixed = body;
 	fixed.remove("state"); fixed.remove("model");
 	if (file.error() != QFileDevice::NoError || bytes.size() > 16384 || fixed != scope ||
-	    !QStringList({"prepared", "ready", "completed"}).contains(text(body, "state")) || !validDigest(body.value("model").toObject())) return false;
+	    !QStringList({"prepared", "ready", "requiring", "completed"}).contains(text(body, "state")) || !validDigest(body.value("model").toObject())) return false;
 	const QFileInfo modelFile(QDir(directory).filePath("model.xml"));
 	if (!(text(body, "state") == "prepared" && !modelFile.exists() && !modelFile.isSymLink()) &&
 	    readXml(modelFile.filePath(), body.value("model").toObject()).isEmpty()) return false;
@@ -85,6 +85,14 @@ bool CloudWorkspaceActivationPlan::prepare(const QByteArray &value)
 	if (state() != "prepared") return true;
 	next = saved; next["state"] = "ready"; return write(next);
 }
+bool CloudWorkspaceActivationPlan::beginRequire()
+{
+	QLockFile lock(QDir(directory).filePath("plan.json.lock")); lock.setStaleLockTime(0);
+	if (!lock.tryLock(0) || !read() || saved.isEmpty()) return false;
+	if (state() == "requiring" || state() == "completed") return true;
+	if (state() != "ready") return false;
+	auto next = saved; next["state"] = "requiring"; return write(next);
+}
 bool CloudWorkspaceActivationPlan::complete(CloudWorkspaceRoute &route, CloudWorkspaceBinding &binding, const CloudWorkspaceRecord &root,
 	const CloudWorkspaceRecord &checkpoint, CloudWorkspaceReadIntent &reader)
 {
@@ -98,6 +106,6 @@ bool CloudWorkspaceActivationPlan::complete(CloudWorkspaceRoute &route, CloudWor
 	    !binding.ownsActivation(root, checkpoint, bytes, bytes, text(scope, "binding_revision"), text(scope, "target")) || binding.acceptance() != text(scope, "acceptance") ||
 	    reader.snapshot() != binding.value().value("raw").toObject()) return false;
 	if (state() == "completed") return true;
-	if (state() != "ready") return false;
+	if (state() != "requiring") return false;
 	auto next = saved; next["state"] = "completed"; return write(next);
 }

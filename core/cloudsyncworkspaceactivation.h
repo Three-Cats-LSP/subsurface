@@ -46,7 +46,7 @@ private:
 	CloudWorkspaceRecord root;
 	CloudWorkspaceCopySource firstSource;
 	Step step = Step::Idle;
-	bool firstMissing = false, routePrepared = false, routeRequiredSet = false;
+	bool firstMissing = false, routePrepared = false, routeRequiredSet = false, routeFlagObserved = false;
 	quint64 generation = 0;
 	QString token, choiceFile, choiceVersion, checkpointFile, bindingFile, routeFile, revision, target, reservation, operation, acceptance;
 	QString planDirectory, readFile, rootVersion;

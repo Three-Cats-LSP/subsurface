@@ -162,6 +162,7 @@ private:
 	bool acquireCloudRoute(const QString &providerId, bool legacy);
 	bool legacyRouteCurrent();
 	bool workspaceRouteRequired(const QString &providerId) const;
+	bool workspaceRouteConfirmed(const QString &providerId) const;
 	bool requireWorkspaceRoute(const QString &providerId);
 	static QString syncStateCredentialKey(const QString &providerId);
 	bool localDiveLogUnchanged();
