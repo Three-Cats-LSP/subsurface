@@ -53,6 +53,9 @@ bool CloudWorkspaceAcceptanceIntent::prepare()
 	const QFileInfo parent(QFileInfo(fileName).absolutePath());
 	if (scope.isEmpty() || fileName.isEmpty() || parent.isSymLink() || !QDir().mkpath(parent.filePath())) return false;
 	QLockFile lock(fileName + ".lock"); if (!lock.tryLock(0) || !read()) return false;
+	const auto name = QFileInfo(fileName).fileName();
+	for (const auto &entry : QDir(parent.filePath()).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
+		if (entry != name && entry != name + ".lock" && entry != name + ".operation.lock") return false;
 	if (!saved.isEmpty()) return true;
 	auto body = scope; body["state"] = "prepared"; return write(body);
 }

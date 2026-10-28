@@ -1370,7 +1370,7 @@ void TestCloudSyncHistory::workspaceLegacyAcceptance()
 void TestCloudSyncHistory::workspaceAcceptanceIntent_data()
 {
 	QTest::addColumn<bool>("google"); QTest::addColumn<int>("mode");
-	const QStringList cases = {"restart", "different-choice", "different-source", "different-event", "different-previous", "different-head", "different-copy", "corrupt", "locked", "future-state", "different-local"};
+	const QStringList cases = {"restart", "different-choice", "different-source", "different-event", "different-previous", "different-head", "different-copy", "corrupt", "locked", "future-state", "different-local", "unknown-neighbor"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m) QTest::newRow(qPrintable(QString("%1-accept-intent-%2").arg(g).arg(cases[m]))) << g << m;
 }
 void TestCloudSyncHistory::workspaceAcceptanceIntent()
@@ -1378,7 +1378,12 @@ void TestCloudSyncHistory::workspaceAcceptanceIntent()
 	QFETCH(bool, google); QFETCH(int, mode); Network n; n.seed(); const auto source = copySource(n, google);
 	const auto ref = CloudWorkspaceReference::create(google ? "google-drive" : "dropbox", Account, uid(), google ? "root" : "id:root");
 	const auto choice = uid(), event = uid(), previous = uid(), head = uid(), copy = uid(); QTemporaryDir dir; QVERIFY(dir.isValid());
-	const auto file = dir.filePath("intent.json"); CloudWorkspaceAcceptanceIntent intent(file, ref, choice, source, CloudSyncManifest::sha256(B), event, previous, head, copy);
+	const auto file = dir.filePath("acceptance/intent.json"); CloudWorkspaceAcceptanceIntent intent(file, ref, choice, source, CloudSyncManifest::sha256(B), event, previous, head, copy);
+	if (mode == 11) {
+		QVERIFY(QDir().mkpath(QFileInfo(file).absolutePath())); QFile neighbor(dir.filePath("acceptance/unknown"));
+		QVERIFY(neighbor.open(QIODevice::WriteOnly)); neighbor.write("preserve"); neighbor.close(); QVERIFY(!intent.prepare());
+		QVERIFY(neighbor.open(QIODevice::ReadOnly)); QCOMPARE(neighbor.readAll(), QByteArray("preserve")); return;
+	}
 	QVERIFY(intent.prepare()); QCOMPARE(intent.state(), QString("prepared")); const auto original = intent.proof();
 	if ((mode >= 1 && mode <= 6) || mode == 10) {
 		auto otherSource = source; if (mode == 2) { auto m = otherSource.value["manifest"].toObject(); m["version"] = "other-revision"; otherSource.value["manifest"] = m; }
@@ -1412,13 +1417,13 @@ void TestCloudSyncHistory::workspaceAcceptanceWorkflow()
 	const auto copy = uid(), event = uid(); auto root = CloudWorkspaceRecord::create(ref, CloudSyncManifest::sha256("genesis"));
 	QVERIFY(root.registerCopy(copy, {}, source)); QVERIFY(root.completeUpload(copy, google ? "4" : "id:4", "rev-4")); QVERIFY(root.publish(copy, {}));
 	n.add(ref.rootName(), root.json()); n.add(ref.payloadName(copy), A); const auto original = n.files;
-	QTemporaryDir dir; QVERIFY(dir.isValid()); const auto choiceFile = dir.filePath("choice.json"), checkpoint = dir.filePath("checkpoint.json"), intent = dir.filePath("intent.json");
+	QTemporaryDir dir; QVERIFY(dir.isValid()); const auto choiceFile = dir.filePath("choice.json"), checkpoint = dir.filePath("checkpoint.json"), intent = dir.filePath("acceptance/intent.json");
 	CloudWorkspaceSelection choice(choiceFile, provider, Account); QVERIFY(choice.select({}, ref)); const auto choiceVersion = choice.version();
 	CloudWorkspaceAuthority authority(checkpoint, ref); QVERIFY(authority.observe(root, "rev-3"));
 	if (mode == 1) n.guard = false; if (mode == 2) QVERIFY(QFile::remove(choiceFile)); if (mode == 4) QVERIFY(QFile::remove(checkpoint));
 	if (mode == 7) n.files[0].rev += "-changed"; if (mode == 8) n.files[3].data = B;
 	if (mode == 9) n.loseWriteAck = true; if (mode == 12) n.writeFailureStatus = 401; if (mode == 19) n.fault = 4;
-	if (mode == 14) { QFile f(intent); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("unknown intent"); f.close(); }
+	if (mode == 14) { QVERIFY(QDir().mkpath(QFileInfo(intent).absolutePath())); QFile f(intent); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("unknown intent"); f.close(); }
 	bool changed = false, mutatedChoice = false;
 	const auto changeChoice = [&](bool back) {
 		CloudWorkspaceSelection c(choiceFile, provider, Account); QVERIFY(c.load());
