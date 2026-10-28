@@ -1,5 +1,27 @@
 # Windows cloud reliability continuation
 
+**Planner Windows/PDF evidence, 29 October JST.**
+Windows **40732903652 at 844260acd PASSED** packaged launch, Clean/Modern,
+actual LSP Save/reopen/restart and TXT/PDF content checks. Verified UI evidence
+artifact **12837306436**, SHA-256
+`4c13652011e06406b96d3bf9235b6a81b3f666c1cc3d728fb28f97266ca3e8d6`,
+and package artifact **12836208547**, SHA-256
+`af79871ee5ba5bc7dd12383e7f364d6300f5c773e93493d3dff1a44370571d46`
+are retained under `work/lsp-ui-evidence-844260acd-20261029` and
+`work/lsp-integrated-844260acd-20261029`. Both exported PDFs retain two pages
+and every schedule line. Rendering all four pages caught double-applied painter
+margins: the profile frame reached the physical right edge. The following fix
+uses the writer's already margin-relative viewport and adds an actual PDF
+geometry check. The strengthened validator fails the retained 844 output for
+this specific defect. 844 is not final visual acceptance. Full native
+**40732896718** passed desktop and is testing the mobile-target host build;
+resume it rather than duplicate. No algorithm changes in this PDF correction.
+
+Archive reader/checkpoint source **129527e1a**, targeted run **40734458337**,
+passed **2,531 host protocol checks**; matching Windows protocol is pending.
+Root-writing coordinator/page workflow integration is being developed separately.
+No Google writes, credentials or original logs changed.
+
 **Pending planner/PDF candidate: `844260acd86e09a9bc8c2cdc77b007705ddc5e8e`.**
 Resume **full native 40732896718** and **Windows 40732903652**. They validate the
 actual disk-save hook, settled Clean navigation and one-painter PDF correction,

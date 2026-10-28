@@ -20,7 +20,24 @@ def validate(output):
         reader = PdfReader(pdf)
         if len(reader.pages) < 2:
             raise RuntimeError(f"{name}: profile page was lost; expected profile plus schedule pages")
-        profile = reader.pages[0].extract_text() or ""
+        page = reader.pages[0]
+        frames = []
+        def check_frame(operator, arguments, ctm, _text_matrix):
+            if operator != b"re" or len(arguments) != 4:
+                return
+            x, y, width, height = map(float, arguments)
+            if width < float(page.mediabox.width) / 2 or height < 50:
+                return
+            a, b, c, d, e, f = map(float, ctm)
+            corners = [(a * px + c * py + e, b * px + d * py + f)
+                       for px in (x, x + width) for py in (y, y + height)]
+            if any(px < 17 or px > float(page.mediabox.width) - 17 or
+                   py < 17 or py > float(page.mediabox.height) - 17 for px, py in corners):
+                raise RuntimeError(f"{name}: profile chart extends outside the printable page margin")
+            frames.append(corners)
+        profile = page.extract_text(visitor_operand_before=check_frame) or ""
+        if len(frames) < 2:
+            raise RuntimeError(f"{name}: expected depth and calculated surface-GF charts")
         if "SUBSURFACE NEO PLAN PROFILE" not in profile:
             raise RuntimeError(f"{name}: first page is not the calculated profile")
         if "Surface GF at calculated checkpoints" not in profile or "Tissue loading" in profile:
@@ -32,7 +49,7 @@ def validate(output):
         if missing:
             raise RuntimeError(f"{name}: {len(missing)} TXT lines are missing from the PDF schedule")
         results.append({"file": pdf.name, "sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
-                        "pages": len(reader.pages), "profilePage": True, "allScheduleTextPreserved": True})
+                        "pages": len(reader.pages), "profilePage": True, "profileWithinMargins": True, "allScheduleTextPreserved": True})
     (output / "pdf-validation.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     return results
 

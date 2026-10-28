@@ -2396,7 +2396,8 @@ static bool writeNeoPdfText(QPdfWriter &writer, QPainter &painter, const QString
 		return false;
 	QFont font = painter.font();
 	font.setPointSize(10);
-	const QRect pageRect = writer.pageLayout().paintRectPixels(writer.resolution());
+	// QPdfWriter already places the painter origin at the printable margin.
+	const QRect pageRect(0, 0, writer.width(), writer.height());
 	QTextDocument document;
 	document.documentLayout()->setPaintDevice(&writer);
 	document.setDefaultFont(font);
@@ -2434,7 +2435,7 @@ static bool drawNeoPlannerProfile(QPdfWriter &writer, QPainter &painter, const Q
 		samples.append(sample);
 	}
 	if (!painter.isActive()) return false;
-	const QRect page = writer.pageLayout().paintRectPixels(writer.resolution());
+	const QRect page(0, 0, writer.width(), writer.height());
 	QFont font = painter.font(); font.setPointSize(16); font.setBold(true);
 	painter.setFont(font); painter.setPen(QColor("#0f172a"));
 	painter.drawText(page.left(), page.top() + 28, QMLManager::tr("SUBSURFACE NEO PLAN PROFILE"));
