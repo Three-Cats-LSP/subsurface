@@ -1618,7 +1618,8 @@ void TestCloudSyncHistory::workspaceReceiveReceipt_data()
 		"corrupt-recovery-file", "wrong-apply-observation", "wrong-persist-observation", "changed-legacy-acceptance",
 		"stale-checkpoint", "prepared-recovery", "locked-receipt", "advance-persisted-and-replay",
 		"advance-wrong-revision", "advance-released-reader", "advance-with-later-head",
-		"advance-changed-acceptance", "advance-corrupt-recovery", "advance-not-persisted", "advance-released-reservation", "advance-later-local-edit"};
+		"advance-changed-acceptance", "advance-corrupt-recovery", "advance-not-persisted", "advance-released-reservation", "advance-later-local-edit",
+		"advance-different-recovery-revision", "receive-revision-reuse"};
 	for (bool g : {false, true}) for (int m = 0; m < cases.size(); ++m)
 		QTest::newRow(qPrintable(QString("%1-receive-receipt-%2").arg(g).arg(cases[m]))) << g << m;
 }
@@ -1644,15 +1645,15 @@ void TestCloudSyncHistory::workspaceReceiveReceipt()
 		QVERIFY(root.completeUpload(later, google ? "object-c" : "id:object-c", "rev-c")); QVERIFY(root.publish(later, target));
 	}
 	if (mode == 13) QVERIFY(root.acceptLegacyCopy(uid(), event, target, baseline, source));
-	const auto dir = temp.filePath("receive"), intent = QDir(dir).filePath("intent.json");
+	const auto dir = temp.filePath("receive"), intent = QDir(dir).filePath("intent.json"), nextRevision = uid();
 	const auto readReceipt = [](const QString &path) { QFile f(path); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); };
 	if (mode == 9) { QVERIFY(QDir().mkpath(dir)); QFile f(QDir(dir).filePath("unknown")); QVERIFY(f.open(QIODevice::WriteOnly)); QVERIFY(f.write("keep") == 4); f.close(); }
 	if (mode == 16) QVERIFY(QDir().mkpath(dir));
-	CloudWorkspaceReceiveReceipt receipt(dir, ref, mode == 3 ? uid() : choice, mode == 4 ? uid() : revision, baseline, target, reservation);
+	CloudWorkspaceReceiveReceipt receipt(dir, ref, mode == 3 ? uid() : choice, mode == 4 ? uid() : revision, baseline, target, reservation, mode == 27 ? revision : nextRevision);
 	std::unique_ptr<QLockFile> held;
 	if (mode == 16) { held = std::make_unique<QLockFile>(intent + ".lock"); QVERIFY(held->tryLock(0)); }
 	const auto prepare = [&] { return receipt.prepare(binding, root, mode == 14 ? stale : checkpoint, reader, mode == 1 ? B : A, mode == 2 ? A : B, B); };
-	if ((mode >= 1 && mode <= 9) || mode == 13 || mode == 14 || mode == 16) { QVERIFY(!prepare()); QVERIFY(!QFileInfo::exists(intent)); return; }
+	if ((mode >= 1 && mode <= 9) || mode == 13 || mode == 14 || mode == 16 || mode == 27) { QVERIFY(!prepare()); QVERIFY(!QFileInfo::exists(intent)); return; }
 	QVERIFY(prepare()); QCOMPARE(receipt.state(), QString("ready")); QCOMPARE(receipt.before(), A); QCOMPARE(receipt.raw(), B); QCOMPARE(receipt.after(), B);
 	const auto initial = readReceipt(intent);
 	if (mode == 10) { QFile f(QDir(dir).filePath("raw.xml")); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("foreign") == 7); f.close(); QVERIFY(!receipt.reload()); QVERIFY(!receipt.beginApply()); QCOMPARE(readReceipt(intent), initial); return; }
@@ -1667,7 +1668,7 @@ void TestCloudSyncHistory::workspaceReceiveReceipt()
 	if (mode == 12) { QVERIFY(!receipt.persisted(A)); QCOMPARE(receipt.state(), QString("applied")); return; }
 	if (mode == 23) { QVERIFY(!binding.advanceReceived(revision, root, checkpoint, receipt, reader, B, uid())); QCOMPARE(binding.commit(), baseline); return; }
 	QVERIFY(receipt.persisted(B)); QVERIFY(receipt.persisted(B)); QVERIFY(!receipt.beginApply());
-	CloudWorkspaceReceiveReceipt restarted(dir, ref, choice, revision, baseline, target, reservation);
+	CloudWorkspaceReceiveReceipt restarted(dir, ref, choice, revision, baseline, target, reservation, nextRevision);
 	QVERIFY(restarted.reload()); QCOMPARE(restarted.state(), QString("persisted")); QCOMPARE(restarted.before(), A); QCOMPARE(restarted.raw(), B); QCOMPARE(restarted.after(), B);
 	if (mode < 17) return;
 	if (mode == 19) { QVERIFY(reader.beginRelease()); QVERIFY(reader.markReleased()); }
@@ -1678,7 +1679,7 @@ void TestCloudSyncHistory::workspaceReceiveReceipt()
 	if (mode == 21) QVERIFY(root.acceptLegacyCopy(uid(), event, target, baseline, source));
 	if (mode == 22) { QFile f(QDir(dir).filePath("after.xml")); QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate)); QVERIFY(f.write("foreign") == 7); f.close(); }
 	if (mode == 24) QVERIFY(root.release(reservation));
-	const auto newRevision = uid(); const auto advanced = binding.advanceReceived(mode == 18 ? uid() : revision, root, checkpoint, restarted, reader, mode == 25 ? A : B, newRevision);
+	const auto newRevision = mode == 26 ? uid() : nextRevision; const auto advanced = binding.advanceReceived(mode == 18 ? uid() : revision, root, checkpoint, restarted, reader, mode == 25 ? A : B, newRevision);
 	if (mode == 17 || mode == 20) {
 		QVERIFY(advanced); QCOMPARE(binding.commit(), target); QCOMPARE(binding.revision(), newRevision); QVERIFY(binding.matchesModel(B));
 		QVERIFY(binding.advanceReceived(revision, root, checkpoint, restarted, reader, B, newRevision));

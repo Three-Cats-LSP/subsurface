@@ -65,14 +65,16 @@ bool saveXml(const QString &path, const QJsonObject &d, const QByteArray &bytes)
 }
 
 CloudWorkspaceReceiveReceipt::CloudWorkspaceReceiveReceipt(const QString &path, const CloudWorkspaceReference &ref,
-	const QString &choice, const QString &revision, const QString &baseline, const QString &target, const QString &reservation) :
+	const QString &choice, const QString &revision, const QString &baseline, const QString &target, const QString &reservation, const QString &nextRevision) :
 	directory(path), reference(ref)
 {
 	if (ref.valid() && CloudHistoryRecord::validEpoch(choice) && CloudHistoryRecord::validEpoch(revision) &&
 	    CloudHistoryRecord::validEpoch(baseline) && CloudHistoryRecord::validEpoch(target) &&
-	    CloudHistoryRecord::validEpoch(reservation) && baseline != target && reservation != baseline && reservation != target)
+	    CloudHistoryRecord::validEpoch(reservation) && CloudHistoryRecord::validEpoch(nextRevision) && revision != nextRevision &&
+	    baseline != target && reservation != baseline && reservation != target)
 		scope = {{"schema", 1}, {"format", "neo-workspace-receive-development-1"}, {"workspace", ref.value},
-			{"choice_version", choice}, {"binding_revision", revision}, {"baseline", baseline}, {"target", target}, {"reservation", reservation}};
+			{"choice_version", choice}, {"binding_revision", revision}, {"next_revision", nextRevision},
+			{"baseline", baseline}, {"target", target}, {"reservation", reservation}};
 }
 QString CloudWorkspaceReceiveReceipt::state() const { return text(saved, "state"); }
 QByteArray CloudWorkspaceReceiveReceipt::before() const { return saved.isEmpty() ? QByteArray() : loadXml(QDir(directory).filePath("before.xml"), saved.value("before").toObject()); }

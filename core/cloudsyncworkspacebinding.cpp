@@ -145,7 +145,7 @@ bool CloudWorkspaceBinding::advanceReceived(const QString &expectedRevision, con
 	const auto body = nextAt(root, target, raw, after, newRevision);
 	if (body.isEmpty() || currentModel != after || !checkpoint.valid() || !root.follows(checkpoint) || checkpoint.reference().value != reference.value ||
 	    proof.value("workspace") != reference.value || proof.value("choice_version") != scope.value("choice_version") ||
-	    text(proof, "binding_revision") != expectedRevision || text(proof, "baseline") != baseline ||
+	    text(proof, "binding_revision") != expectedRevision || text(proof, "next_revision") != newRevision || text(proof, "baseline") != baseline ||
 	    proof.value("acceptance") != saved.value("legacy_acceptance") || body.value("legacy_acceptance") != saved.value("legacy_acceptance") ||
 	    text(checkpoint.latestLegacyAcceptance(), "id") != acceptance() ||
 	    proof.value("baseline_pin") != old.value("raw") || old.value("raw").toObject() != pin(root.ticket(baseline)) ||
